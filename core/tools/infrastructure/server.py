@@ -53,6 +53,45 @@ from tools.strategy.strategy_manager import governor
 
 mcp = FastMCP("Kenbun Tools")
 
+# ========================================================
+# 📡 DOCKER LOG TAILER DAEMON FOR REAL-TIME DOZZLE LOGGING
+# ========================================================
+def _tail_mcp_debug_log():
+    """
+    Background daemon function that tails mcp_debug.log and streams host-side events to stderr.
+    """
+    log_path = Path(settings.PROJECT_ROOT) / "mcp_debug.log"
+    # Wait for file to exist
+    for _ in range(15):
+        if log_path.exists():
+            break
+        time.sleep(1)
+    if not log_path.exists():
+        return
+    
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+            # Go to the end of the file
+            f.seek(0, 2)
+            while True:
+                line = f.readline()
+                if not line:
+                    time.sleep(0.5)
+                    continue
+                # Stream terminal chat events directly to container standard error
+                if "[TERMCHAT]" in line:
+                    sys.stderr.write(line)
+                    sys.stderr.flush()
+    except Exception as e:
+        sys.stderr.write(f"DEBUG: Log tailer daemon error: {e}\n")
+        sys.stderr.flush()
+
+# Spawn the log tailer daemon immediately on server startup
+import threading
+import time
+_tail_thread = threading.Thread(target=_tail_mcp_debug_log, daemon=True)
+_tail_thread.start()
+
 
 PC_IP = settings.SWARM_PC_IP
 CHROMA_PORT = settings.CHROMA_PORT
