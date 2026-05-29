@@ -1120,6 +1120,10 @@ def launch_docker_swarm():
             print("│ ⚠️  SECURITY NOTICE: Adding a user to the 'docker' group  │")
             print("│    grants root-equivalent access to the host system.   │")
             print(f"└─────────────────────────────────────────────────────────┘{c_r}\n")
+
+            if daemon_check.stderr:
+                print(f"{c_y}Raw Docker System Error Output:{c_r}")
+                print(f"  {c_c}{daemon_check.stderr.strip()}{c_r}\n")
             return
     except subprocess.TimeoutExpired:
         print(f"\n{c_y}❌ Timeout expired while querying Docker daemon (server hung).{c_r}\n")

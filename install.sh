@@ -247,11 +247,13 @@ audit_dependencies() {
             *"permission denied"*)
                 log_warn "Docker is running, but you do not have permission to access the socket."
                 log_warn "  ➔ Linux (Permissions): Run ${BOLD}sudo usermod -aG docker \$USER && newgrp docker${NC}"
+                log_warn "  ➔ Raw System Error: ${GRAY}${docker_output}${NC}"
                 ;;
             *"Cannot connect to the Docker daemon"*|*"error during connect"*)
                 log_warn "Docker CLI is active, but the Docker Daemon is not running or not enabled."
                 log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
                 log_warn "  ➔ macOS: Open the Docker Desktop application"
+                log_warn "  ➔ Raw System Error: ${GRAY}${docker_output}${NC}"
                 ;;
             *)
                 if docker info >/dev/null 2>&1; then
@@ -260,6 +262,7 @@ audit_dependencies() {
                     log_warn "Docker CLI is active, but the Docker Daemon connection is failing."
                     log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
                     log_warn "  ➔ macOS: Open the Docker Desktop application"
+                    log_warn "  ➔ Raw System Error: ${GRAY}${docker_output}${NC}"
                 fi
                 ;;
         esac
