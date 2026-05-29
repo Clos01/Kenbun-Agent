@@ -217,9 +217,75 @@ async def _tier_3_fallback(user_proposal: str, code_snippet: str, memory_context
         else:
             return {"status": "REJECTED", "critique": f"Parse failure: {raw_result[:200]}"}
 
-async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = ""):
+async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = "", recovery_attempts_left: int = 2):
     """
     Executes a high-fidelity System 2 Executive Audit.
+    Includes the Autonomic "Ralph-Loop" Recovery Engine for self-healing rejected snippets.
+    """
+    res = await _run_supervisor_audit_raw(user_proposal, code_snippet, memory_context, tech_key)
+    
+    # If the verdict is REJECTED, and we have recovery attempts left, and the code snippet is not empty:
+    if res and res.get("status") == "REJECTED" and code_snippet.strip() and recovery_attempts_left > 0:
+        critique = res.get("critique", "No critique details provided.")
+        print(f"🔄 [RALPH-LOOP] Security/Compliance audit rejected the snippet. Initiating autonomic healing loop...")
+        print(f"🔄 [RALPH-LOOP] Critique: {critique}")
+        
+        # Speculatively adjust the prompt and ask the Local Senior/Defendant to correct the code
+        system_prompt = (
+            "You are the autonomic 'Ralph-Loop' self-healing agent in Kenbun-Agent.\n"
+            "A code snippet you wrote was REJECTED by the supervisor audit because it violated security, design, or compliance rules.\n"
+            "Your task is to heal/fix the code snippet to address the critique completely while preserving its original functional intent.\n"
+            "CRITICAL: Output ONLY the raw corrected code block (e.g. wrapped in ```python ... ``` or raw if no markdown, preferably wrapped in code fence block). "
+            "Do NOT include any explanations, introduction, markdown text, or other wrappers. Just the executable healed code."
+        )
+        user_message = (
+            f"ORIGINAL PROPOSAL: {user_proposal}\n\n"
+            f"REJECTED CODE SNIPPET:\n```python\n{code_snippet}\n```\n\n"
+            f"AUDIT CRITIQUE:\n{critique}\n\n"
+            f"Please output the corrected/healed code snippet now:"
+        )
+        
+        healed_raw, err = _call_local_senior(system_prompt, user_message)
+        if not err and healed_raw:
+            # Parse code from fenced block if returned
+            healed_code = healed_raw
+            if "```python" in healed_raw:
+                parts = healed_raw.split("```python", 1)[1].split("```", 1)
+                healed_code = parts[0].strip()
+            elif "```" in healed_raw:
+                parts = healed_raw.split("```", 1)[1].split("```", 1)
+                healed_code = parts[0].strip()
+            
+            healed_code = healed_code.strip()
+            if healed_code and healed_code != code_snippet.strip():
+                print(f"🔄 [RALPH-LOOP] Code successfully healed (Attempt {3 - recovery_attempts_left}/2). Re-submitting for audit...")
+                # Re-submit the healed code snippet
+                recovery_res = await run_supervisor_audit(
+                    user_proposal=user_proposal,
+                    code_snippet=healed_code,
+                    memory_context=memory_context,
+                    tech_key=tech_key,
+                    recovery_attempts_left=recovery_attempts_left - 1
+                )
+                if recovery_res and recovery_res.get("status") == "APPROVED":
+                    print(f"🌸 [RALPH-LOOP] Autonomic recovery SUCCESSFUL! Healed code passed security audit.")
+                    # Embed the healed code into the response
+                    recovery_res["healed_code"] = healed_code
+                    recovery_res["recovered_from_rejection"] = True
+                    return recovery_res
+                else:
+                    print(f"❌ [RALPH-LOOP] Autonomic recovery failed. Healed code was also rejected.")
+                    res = recovery_res  # update res with the latest rejection
+            else:
+                print(f"⚠️ [RALPH-LOOP] Healer model returned identical or empty code. Cannot recover.")
+        else:
+            print(f"⚠️ [RALPH-LOOP] Healer model call failed: {err}")
+
+    return res
+
+async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = ""):
+    """
+    Executes a high-fidelity System 2 Executive Audit (Internal raw runner).
     Automatically triages between CRITICAL and UI_STYLE.
     """
     category = TriageManager.triage(user_proposal, code_snippet)

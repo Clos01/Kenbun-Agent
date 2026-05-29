@@ -867,6 +867,39 @@ def configure_local_models():
     current_pull = env_vars.get("OLLAMA_PULL_MODELS", "llama3.2:3b deepseek-r1:8b")
     current_primary = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
 
+    # 2.5 Dynamic Hardware VRAM & RAM Sensing Autopilot
+    total_ram_gb = 8.0
+    vram_gb = 0.0
+    try:
+        import sys
+        import subprocess
+        if sys.platform == "darwin":
+            # macOS memory detection via sysctl
+            res = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
+            total_ram_gb = int(res.stdout.strip()) / (1024**3)
+            # Unified memory VRAM allocation pool is up to 75% for macOS
+            vram_gb = total_ram_gb * 0.75
+        else:
+            # Linux RAM detection
+            total_ram_gb = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024**3)
+            # Linux Nvidia VRAM detection via nvidia-smi
+            try:
+                res = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True)
+                vram_gb = int(res.stdout.strip()) / 1024
+            except Exception:
+                vram_gb = 0.0
+    except Exception:
+        pass
+
+    # Pick recommended profile based on hardware sensing
+    recommended_profile_idx = 1 # Fallback to Standard
+    if vram_gb >= 16.0 or total_ram_gb >= 32.0:
+        recommended_profile_idx = 2 # Pro
+    elif total_ram_gb >= 16.0:
+        recommended_profile_idx = 1 # Standard
+    else:
+        recommended_profile_idx = 0 # Ultra-Light
+
     profiles = [
         {
             "name": "Ultra-Light (8GB RAM / ~2.5GB Disk)",
@@ -900,8 +933,24 @@ def configure_local_models():
         }
     ]
 
+    rec_name = profiles[recommended_profile_idx]["name"]
+    autopilot_profile = {
+        "name": f"✨ Autopilot Recommended Profile ({rec_name.split(' (')[0]})",
+        "desc": f"Automatically selects '{rec_name}' based on detected hardware profile.",
+        "pull": profiles[recommended_profile_idx]["pull"],
+        "primary": profiles[recommended_profile_idx]["primary"]
+    }
+    # Prepend Autopilot
+    profiles.insert(0, autopilot_profile)
+
     print(f"\n{c_m}🌸 CONFIGURE LOCAL AI MODELS & HARDWARE PROFILE{c_r}")
     print(f"{c_g}Choose a profile that fits your hardware specs. Underpowered specs will experience slow execution times.{c_r}\n")
+    print(f"🖥️  {c_c}DYNAMIC HARDWARE SENSING AUDIT:{c_r}")
+    print(f"   ➔ Detected System RAM: {c_w}{total_ram_gb:.2f} GB{c_r}")
+    if vram_gb > 0.0:
+        print(f"   ➔ Detected VRAM / Unified Memory Pool: {c_w}{vram_gb:.2f} GB{c_r}")
+    print(f"   ➔ Recommended Hardware Profile: {c_m}{rec_name.split(' (')[0]}{c_r}\n")
+    
     print(f"Current Configured Models: {c_c}{current_pull}{c_r}")
     print(f"Current Primary Local Model: {c_c}{current_primary}{c_r}\n")
 
