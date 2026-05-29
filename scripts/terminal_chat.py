@@ -175,12 +175,18 @@ def main():
     llm_url = env.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
     llm_model = env.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
     
+    # Proactive URL Normalization for standard local/tailscale APIs (Ollama compatibility endpoint)
+    if ("localhost" in llm_url or "127.0.0.1" in llm_url or ".ts.net" in llm_url or "100." in llm_url or "192.168." in llm_url) and not llm_url.endswith("/v1"):
+        if not llm_url.endswith("/"):
+            llm_url += "/"
+        llm_url += "v1"
+        
     # Print beautiful banner
     print(f"\n{C_P}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗")
     print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
     print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
     print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.1")
+    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.2")
     print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
     print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
     print(f"│ 🌸 Active Agent:      {C_W}{llm_model:<34}{C_G}│")
@@ -372,6 +378,53 @@ def main():
                         feedback = f"[SYSTEM NOTICE: The user explicitly REJECTED the execution of command: '{cmd}']"
                         history.append({"role": "user", "content": feedback})
                         
+        except requests.exceptions.HTTPError as http_err:
+            response_obj = http_err.response
+            err_msg = ""
+            if response_obj is not None:
+                try:
+                    err_msg = response_obj.text
+                    err_json = response_obj.json()
+                    if isinstance(err_json, dict):
+                        err_msg = err_json.get("error", err_json.get("message", response_obj.text))
+                        if isinstance(err_msg, dict):
+                            err_msg = err_msg.get("message", str(err_msg))
+                except Exception:
+                    err_msg = response_obj.text
+            
+            print(f"\n\n{C_Y}❌ API Server Error (HTTP {response_obj.status_code if response_obj else 'Unknown'}): {C_W}{err_msg or http_err}{C_R}")
+            
+            # Check for missing model trigger (Self-Healing Autopilot)
+            if err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
+                print(f"\n{C_G}┌─────────────────────────────────────────────────────────┐")
+                print(f"│ 🛠️  {C_Y}AUTONOMIC SELF-HEALING: MODEL NOT FOUND{C_G}              │")
+                print(f"├─────────────────────────────────────────────────────────┤")
+                print(f"│ Kenbun has detected that '{llm_model}' is not pulled.  │")
+                print(f"│ Proposing automatic model pull...                       │")
+                print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+                
+                # Propose dynamic pull command inside compose container or host
+                pull_cmd = f"docker exec -i portable_ollama ollama pull {llm_model} || ollama pull {llm_model}"
+                print(f"\n{C_G}┌─────────────────────────────────────────────────────────┐")
+                print(f"│ 🚨 {C_Y}PROPOSED SELF-HEALING ACTION{C_G}                          │")
+                print(f"├─────────────────────────────────────────────────────────┤")
+                print(f"│ {C_W}{pull_cmd[:53]:<53}{C_G} │")
+                if len(pull_cmd) > 53:
+                    print(f"│ {C_W}{pull_cmd[53:106]:<53}{C_G} │")
+                print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+                
+                confirm = input(f"{C_Y}Authorize model pull execution? [y/N]: {C_R}").strip().lower()
+                if confirm == "y":
+                    code, out = run_proposed_command(pull_cmd)
+                    print(f"\n{C_G}─── Output (Exit Code: {code}) ────────────────────────────────{C_R}")
+                    print(f"{C_W}{out.strip()}{C_R}")
+                    print(f"{C_G}────────────────────────────────────────────────────────────{C_R}\n")
+                    print(f"{C_G}✓ Model pull completed. Please retry your message!{C_R}\n")
+                    # Pop the last user message to let the user clean retry
+                    if history and history[-1]["role"] == "user":
+                        history.pop()
+            auto_trigger = False
+            
         except KeyboardInterrupt:
             print(f"\n\n{C_P}🌸 Dialogue interrupted. Type /exit to close termchat.{C_R}\n")
             auto_trigger = False
