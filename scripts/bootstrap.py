@@ -1465,10 +1465,11 @@ def run_interactive_wizard():
         print(f"5. 🐳 Start Swarm Stack (Docker Compose up)")
         print(f"6. 🔌 Register MCP Server in Claude Desktop & Cursor (Auto)")
         print(f"7. 📊 Showcase Telemetry Dashboard (Access guidelines)")
-        print(f"8. ❌ Exit")
+        print(f"8. 🌸 Start Kenbun Cognitive Agentic Shell (Termchat)")
+        print(f"9. ❌ Exit")
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
         try:
-            choice = input(f"{c_c}Select an option [1-8]: {c_r}").strip()
+            choice = input(f"{c_c}Select an option [1-9]: {c_r}").strip()
         except (EOFError, KeyboardInterrupt):
             print(f"\n\n{c_y}⚠️ Standard input was closed or interrupted. Exiting wizard.{c_r}")
             print(f"{c_c}➔ Type {c_m}\"source ~/.bashrc\"{c_c} and press ENTER to reload your profile.{c_r}")
@@ -1494,10 +1495,21 @@ def run_interactive_wizard():
         elif choice == "7":
             showcase_dashboard()
         elif choice == "8":
+            # Launch Kenbun Cognitive Shell (Termchat) in-place
+            termchat_path = get_project_root() / "scripts" / "terminal_chat.py"
+            if termchat_path.exists():
+                print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
+                try:
+                    subprocess.run([sys.executable, str(termchat_path)])
+                except Exception as e:
+                    print(f"\n❌ Failed to start terminal chat subprocess: {e}")
+            else:
+                print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+        elif choice == "9":
             print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
             break
         else:
-            print(f"\n{c_y}⚠️ Invalid choice. Please select 1 to 8.{c_r}")
+            print(f"\n{c_y}⚠️ Invalid choice. Please select 1 to 9.{c_r}")
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--express":

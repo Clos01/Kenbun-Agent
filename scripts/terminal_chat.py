@@ -52,6 +52,65 @@ def decrypt_value(val):
         pass
     return val
 
+def update_env_value(key, new_value):
+    """Safely updates a specific key-value pair in .env file, symmetrically encrypting it if needed."""
+    possible_paths = [
+        Path.cwd() / ".env",
+        Path.cwd() / "core" / ".env",
+        Path(__file__).parent.parent / ".env",
+        Path(__file__).parent.parent / "core" / ".env"
+    ]
+    target_path = None
+    for path in possible_paths:
+        if path.exists():
+            target_path = path
+            break
+            
+    if not target_path:
+        target_path = Path.cwd() / ".env"
+        
+    lines = []
+    updated = False
+    
+    # Read existing lines
+    if target_path.exists():
+        try:
+            with open(target_path, "r") as f:
+                lines = f.readlines()
+        except PermissionError:
+            print(f"\n{C_Y}❌ Permission Denied when trying to open {target_path}. Run with appropriate permissions.{C_R}")
+            return False
+            
+    # Symmetrically encrypt the new value using the master key
+    encrypted_val = new_value
+    try:
+        # Resolve the tools module to load secret_manager
+        sys.path.insert(0, str(target_path.parent / "core"))
+        from tools.utils.secret_manager import encrypt_value
+        encrypted_val = "enc:" + encrypt_value(new_value)
+    except Exception:
+        pass
+        
+    new_lines = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith(f"{key}="):
+            new_lines.append(f"{key}={encrypted_val}\n")
+            updated = True
+        else:
+            new_lines.append(line)
+            
+    if not updated:
+        new_lines.append(f"{key}={encrypted_val}\n")
+        
+    try:
+        with open(target_path, "w") as f:
+            f.writelines(new_lines)
+        return True
+    except Exception as e:
+        print(f"\n{C_Y}❌ Failed to write back env configuration: {e}{C_R}")
+        return False
+
 def load_env_vars():
     """Manually parse .env file to load active configurations securely."""
     env = {}
@@ -144,6 +203,80 @@ def gather_system_telemetry():
         
     return "\n".join(telemetry)
 
+def detect_configuration_mismatch(llm_url, llm_model):
+    """Detects mismatch between cloud provider URLs and local Ollama model names."""
+    is_cloud_url = any(domain in llm_url.lower() for domain in ["api.deepseek.com", "api.openai.com", "api.anthropic.com", "googleapis.com"])
+    
+    # Local model indicators
+    local_keywords = ["llama", "qwen", "mistral", "gemma", "phi3", "orca", "deepseek-r1:1.5b", "deepseek-r1:8b", "deepseek-r1:70b"]
+    is_local_model = any(kw in llm_model.lower() for kw in local_keywords)
+    
+    # Mismatch is active when calling a Cloud Provider but specifying a Local model
+    if is_cloud_url and is_local_model:
+        return True, "cloud_url_with_local_model"
+    return False, None
+
+def check_and_heal_mismatch(llm_url, llm_model):
+    """Audits configuration mismatch and prompts the developer for dynamic self-healing fixes."""
+    has_mismatch, reason = detect_configuration_mismatch(llm_url, llm_model)
+    if not has_mismatch:
+        return llm_url, llm_model
+        
+    print(f"\n{C_Y}┌─────────────────────────────────────────────────────────┐")
+    print(f"│ ⚠️  {C_Y}CONFIGURATION MISMATCH AUDIT TRIGGERED{C_G}               │")
+    print(f"├─────────────────────────────────────────────────────────┤")
+    print(f"│ Kenbun has detected a routing conflict in your config:  │")
+    print(f"│                                                         │")
+    print(f"│ ⚡ Active Provider URL: {C_W}{llm_url[:31]:<31}{C_G} │")
+    print(f"│ 🌸 Active model:        {C_W}{llm_model[:31]:<31}{C_G} │")
+    print(f"├─────────────────────────────────────────────────────────┤")
+    print(f"│ Cloud gateways (like api.deepseek.com) cannot execute   │")
+    print(f"│ local model weights (like {llm_model}).                  │")
+    print(f"│                                                         │")
+    print(f"│ Select an Autonomic Self-Healing patch:                 │")
+    print(f"│ {C_C}[1] Switch Model{C_G} - Swap model to target cloud model    │")
+    print(f"│                  (e.g., 'deepseek-chat' for DeepSeek)   │")
+    print(f"│ {C_C}[2] Switch URL{C_G}   - Route back to local Ollama server    │")
+    print(f"│                  (http://localhost:11434/v1)            │")
+    print(f"│ {C_C}[3] Bypass{C_G}       - Ignore and boot anyway               │")
+    print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+    
+    while True:
+        try:
+            choice = input(f"{C_C}Select self-healing action [1-3]: {C_R}").strip()
+            if choice == "1":
+                # Determine ideal cloud model name
+                target_model = "deepseek-chat"
+                if "openai" in llm_url.lower():
+                    target_model = "gpt-4o-mini"
+                elif "anthropic" in llm_url.lower():
+                    target_model = "claude-3-5-sonnet-latest"
+                elif "googleapis" in llm_url.lower():
+                    target_model = "gemini-2.5-flash"
+                
+                print(f"\n⚙️  Applying Autopilot patch: Setting model to '{target_model}'...")
+                if update_env_value("PRIMARY_LLM_MODEL", target_model):
+                    print(f"✓ Model successfully corrected in '.env'.")
+                    return llm_url, target_model
+                break
+            elif choice == "2":
+                target_url = "http://localhost:11434/v1"
+                print(f"\n⚙️  Applying Autopilot patch: Re-routing URL to local Ollama stack...")
+                if update_env_value("PRIMARY_LLM_URL", target_url):
+                    print(f"✓ Gateway URL successfully re-routed in '.env'.")
+                    return target_url, llm_model
+                break
+            elif choice == "3" or not choice:
+                print(f"\n⚠️ Bypassing mismatch safeguards. Booting stack in raw mode...")
+                break
+            else:
+                print(f"{C_Y}⚠️ Invalid option. Select 1, 2, or 3.{C_R}")
+        except (KeyboardInterrupt, EOFError):
+            print(f"\n⚠️ Mismatch audit interrupted. Proceeding with raw config.")
+            break
+            
+    return llm_url, llm_model
+
 def run_proposed_command(cmd):
     """Executes a proposed system shell command safely with stdout/stderr capture."""
     print(f"\n{C_Y}⚙️  Executing: {C_C}{cmd}{C_R}")
@@ -175,6 +308,9 @@ def main():
     llm_url = env.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
     llm_model = env.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
     
+    # Audit and dynamically self-heal cloud/local mismatches before displaying banner
+    llm_url, llm_model = check_and_heal_mismatch(llm_url, llm_model)
+    
     # Proactive URL Normalization for standard local/tailscale APIs (Ollama compatibility endpoint)
     if ("localhost" in llm_url or "127.0.0.1" in llm_url or ".ts.net" in llm_url or "100." in llm_url or "192.168." in llm_url) and not llm_url.endswith("/v1"):
         if not llm_url.endswith("/"):
@@ -186,7 +322,7 @@ def main():
     print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
     print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
     print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.2")
+    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.5")
     print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
     print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
     print(f"│ 🌸 Active Agent:      {C_W}{llm_model:<34}{C_G}│")
@@ -249,8 +385,10 @@ def main():
                         continue
                         
                     elif cmd == "/system":
-                        print(f"\n{C_G}🏛️  Active Configuration Check:{C_R}")
-                        for k, v in env.items():
+                        # Fetch fresh config from loaded env
+                        fresh_env = load_env_vars()
+                        print(f"\n{C_G}🏛  Active Configuration Check:{C_R}")
+                        for k, v in fresh_env.items():
                             if "KEY" in k or "SECRET" in k or "TOKEN" in k:
                                 v = "******** (Masked Securely)"
                             print(f"  • {C_C}{k:<24}{C_R}= {v}")
@@ -392,7 +530,16 @@ def main():
                 except Exception:
                     err_msg = response_obj.text
             
-            print(f"\n\n{C_Y}❌ API Server Error (HTTP {response_obj.status_code if response_obj else 'Unknown'}): {C_W}{err_msg or http_err}{C_R}")
+            # Cleanly print the client error box
+            print(f"\n{C_Y}┌─────────────────────────────────────────────────────────┐")
+            print(f"│ ❌ {C_R}API SERVER ERROR (HTTP {response_obj.status_code if response_obj else 'Unknown'})                   {C_Y}│")
+            print(f"├─────────────────────────────────────────────────────────┤")
+            # Format and wrap error message cleanly
+            err_wrap = err_msg or str(http_err)
+            err_lines = [err_wrap[i:i+53] for i in range(0, len(err_wrap), 53)]
+            for el in err_lines:
+                print(f"│ {C_W}{el:<53}{C_Y} │")
+            print(f"└─────────────────────────────────────────────────────────┘{C_R}\n")
             
             # Check for missing model trigger (Self-Healing Autopilot)
             if err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
@@ -429,8 +576,18 @@ def main():
             print(f"\n\n{C_P}🌸 Dialogue interrupted. Type /exit to close termchat.{C_R}\n")
             auto_trigger = False
         except Exception as e:
-            print(f"\n\n{C_Y}❌ Failed to query API: {e}{C_R}")
-            print(f"{C_D}Please ensure the container stack is active.{C_R}\n")
+            # Format generic connection failures cleanly
+            print(f"\n{C_Y}┌─────────────────────────────────────────────────────────┐")
+            print(f"│ ❌ {C_R}API CONNECTION FAILURE                                {C_Y}│")
+            print(f"├─────────────────────────────────────────────────────────┤")
+            e_lines = [str(e)[i:i+53] for i in range(0, len(str(e)), 53)]
+            for el in e_lines:
+                print(f"│ {C_W}{el:<53}{C_Y} │")
+            print(f"├─────────────────────────────────────────────────────────┤")
+            print(f"│ Recommended Actions:                                    │")
+            print(f"│ ➔ Verify the LLM Server URL is correct and active.     │")
+            print(f"│ ➔ Run: docker compose up -d --build (if using Ollama)   │")
+            print(f"└─────────────────────────────────────────────────────────┘{C_R}\n")
             auto_trigger = False
 
 if __name__ == "__main__":
