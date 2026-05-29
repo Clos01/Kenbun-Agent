@@ -145,9 +145,31 @@ audit_dependencies() {
                 "This often happens on macOS when Xcode license terms are not accepted.\n     ➔ Run: ${BOLD}git --version${NC} manually in your terminal to see/resolve the prompt."
         fi
     else
+        local git_advice="Please install git and retry."
+        if [ "$OS" = "macos" ]; then
+            git_advice="Install git using Homebrew: ${BOLD}brew install git${NC}"
+        elif [ "$OS" = "linux" ]; then
+            case "$DISTRO" in
+                ubuntu|debian|raspbian|pop)
+                    git_advice="Install git using apt:\n       Run: ${BOLD}sudo apt update && sudo apt install -y git${NC}"
+                    ;;
+                fedora|rhel|centos|rocky|almalinux)
+                    git_advice="Install git using dnf:\n       Run: ${BOLD}sudo dnf install -y git${NC}"
+                    ;;
+                alpine)
+                    git_advice="Install git using apk:\n       Run: ${BOLD}apk add git${NC}"
+                    ;;
+                arch)
+                    git_advice="Install git using pacman:\n       Run: ${BOLD}sudo pacman -S git${NC}"
+                    ;;
+                *)
+                    git_advice="Please install git using your package manager (${BOLD}apt, dnf, pacman, apk${NC}) and retry."
+                    ;;
+            esac
+        fi
         exit_with_error "$ERR_001_GIT_MISSING" \
             "Git is missing from this system." \
-            "Please install git via your system package manager (e.g., brew, apt, dnf, pacman, apk) and retry."
+            "$git_advice"
     fi
 
     # Check Python3
@@ -176,12 +198,22 @@ audit_dependencies() {
 
     # Check Docker
     if command -v docker &>/dev/null; then
-        if docker info &>/dev/null; then
+        # Capture stderr to distinguish permissions error from stopped service
+        local docker_output
+        docker_output=$(docker info 2>&1 || true)
+        
+        if [[ "$docker_output" == *"permission denied"* ]]; then
+            log_warn "Docker is running, but you do not have permission to access the socket."
+            log_warn "  ➔ Linux (Permissions): Run ${BOLD}sudo usermod -aG docker \$USER && newgrp docker${NC}"
+        elif [[ "$docker_output" == *"Cannot connect to the Docker daemon"* || "$docker_output" == *"error during connect"* ]]; then
+            log_warn "Docker CLI is active, but the Docker Daemon is not running or not enabled."
+            log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
+            log_warn "  ➔ macOS: Open the Docker Desktop application"
+        elif docker info &>/dev/null; then
             log_success "Docker Engine is active and running ($(docker --version | head -n 1))"
         else
-            log_warn "Docker CLI is active, but the Docker Daemon is not running."
-            log_warn "To run local swarm stacks in containerized mode, make sure to start Docker."
-            log_warn "  ➔ Linux: Run ${BOLD}sudo systemctl start docker${NC}"
+            log_warn "Docker CLI is active, but the Docker Daemon connection is failing."
+            log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
             log_warn "  ➔ macOS: Open the Docker Desktop application"
         fi
     else

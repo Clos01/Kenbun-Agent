@@ -1048,8 +1048,8 @@ def launch_docker_swarm():
         print(f"\n{c_y}⚠️ Environment file (.env) not found. Auto-generating from template...{c_r}")
         bootstrap_core(silent=True)
     
-    # 1. Proactive Docker CLI Check (Zero-Friction Audit)
-    if not shutil.which("docker"):
+    docker_bin = shutil.which("docker")
+    if not docker_bin:
         print(f"\n{c_y}┌─────────────────────────────────────────────────────────┐")
         print("│             🐋 DOCKER NOT DETECTED                      │")
         print("├─────────────────────────────────────────────────────────┤")
@@ -1062,22 +1062,79 @@ def launch_docker_swarm():
         print(f"└─────────────────────────────────────────────────────────┘{c_r}\n")
         return
 
-    # 2. Proactive Docker Daemon Health Check (Self-Healing)
+    # 2. Proactive Docker Daemon Health Check (Self-Healing & Secure)
     try:
-        daemon_check = subprocess.run(["docker", "info"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        import getpass
+        import urllib.parse
+        import stat
+        
+        # Determine socket location for permission auditing (locale-independent check)
+        socket_path = "/var/run/docker.sock"
+        docker_host = os.environ.get("DOCKER_HOST", "")
+        if docker_host.startswith("unix://"):
+            try:
+                parsed = urllib.parse.urlparse(docker_host)
+                if parsed.path:
+                    # Resolve path absolutely to prevent traversal
+                    resolved_path = os.path.abspath(parsed.path)
+                    # Limit path probing to standard locations to prevent arbitrary side-channel leaks
+                    allowed_prefixes = ("/var/run/", "/run/", "/tmp/", "/Users/", "/home/")
+                    if any(resolved_path.startswith(pref) for pref in allowed_prefixes):
+                        socket_path = resolved_path
+            except Exception:
+                pass
+            
+        has_socket = False
+        has_write_access = False
+        try:
+            if os.path.exists(socket_path):
+                mode = os.stat(socket_path).st_mode
+                if stat.S_ISSOCK(mode) or stat.S_ISFIFO(mode) or stat.S_REG(mode):
+                    has_socket = True
+                    has_write_access = os.access(socket_path, os.W_OK)
+        except Exception:
+            pass
+        
+        # Query daemon info using resolved absolute path and timeout to avoid hanging indefinitely
+        daemon_check = subprocess.run([docker_bin, "info"], capture_output=True, text=True, timeout=5)
+        
         if daemon_check.returncode != 0:
+            is_permission_denied = False
+            if has_socket and not has_write_access:
+                is_permission_denied = True
+            elif "permission denied" in (daemon_check.stderr or "").lower():
+                is_permission_denied = True
+                
+            raw_user = getpass.getuser()
+            # Strict regex sanitization to remove any ANSI sequences or special chars to prevent UI spoofing
+            current_user = re.sub(r'[^a-zA-Z0-9_-]', '', strip_ansi(raw_user))
+            
             print(f"\n{c_y}┌─────────────────────────────────────────────────────────┐")
-            print("│             🚨 DOCKER DAEMON INACTIVE                   │")
+            print("│             🚨 DOCKER DAEMON INACTIVE / ACCESS DENIED   │")
             print("├─────────────────────────────────────────────────────────┤")
-            print("│ Docker CLI is active, but the Daemon is not running.   │")
+            if is_permission_denied:
+                print(f"│ Docker socket exists, but user '{current_user}' lacks access. │")
+            else:
+                print("│ Docker CLI is active, but the Daemon is not running.   │")
             print("├─────────────────────────────────────────────────────────┤")
             print("│ Recommended Action:                                     │")
             print("│ ➔ macOS: Start the Docker Desktop application          │")
-            print("│ ➔ Linux: Run command: sudo systemctl start docker       │")
+            print("│ ➔ Linux (Start & Enable):                               │")
+            print("│    Run:  sudo systemctl enable --now docker            │")
+            print("│ ➔ Linux (Permissions - run if socket access is denied): │")
+            print(f"│    Run:  sudo usermod -aG docker {current_user}         ")
+            print("│    Then log out & back in, or run: newgrp docker       │")
+            print("├─────────────────────────────────────────────────────────┤")
+            print("│ ⚠️  SECURITY NOTICE: Adding a user to the 'docker' group  │")
+            print("│    grants root-equivalent access to the host system.   │")
             print(f"└─────────────────────────────────────────────────────────┘{c_r}\n")
             return
-    except Exception:
-        pass
+    except subprocess.TimeoutExpired:
+        print(f"\n{c_y}❌ Timeout expired while querying Docker daemon (server hung).{c_r}\n")
+        return
+    except (subprocess.SubprocessError, OSError) as e:
+        print(f"\n{c_y}❌ Failed to query Docker daemon health: {e}{c_r}\n")
+        return
 
     return_code = -1
     try:
