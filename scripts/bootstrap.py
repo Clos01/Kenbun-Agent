@@ -1496,7 +1496,9 @@ def run_interactive_wizard():
             showcase_dashboard()
         elif choice == "8":
             # Launch Kenbun Cognitive Shell (Termchat) in-place
-            termchat_path = get_project_root() / "scripts" / "terminal_chat.py"
+            script_dir = Path(__file__).parent.resolve()
+            project_root = script_dir.parent
+            termchat_path = project_root / "scripts" / "terminal_chat.py"
             if termchat_path.exists():
                 print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
                 try:
