@@ -23,6 +23,9 @@ C_W = "\033[97m" # White
 C_D = "\033[90m" # Grey
 C_R = "\033[0m"  # Reset
 
+# Global tracking variable for active memory directory
+active_brain_health_dir = None
+
 def decrypt_value(val):
     """Decrypts values that are encrypted with 'enc:' prefix using the repository master key."""
     if not val.startswith("enc:"):
@@ -157,6 +160,16 @@ def get_design_suggestions(query):
             pass
     return None
 
+def get_active_project_root():
+    """Robust helper matching config.py path discovery."""
+    if os.getenv("PROJECT_ROOT"):
+        return Path(os.getenv("PROJECT_ROOT"))
+    docker_path = Path("/app")
+    if docker_path.exists() and (docker_path / "tools").exists():
+        return docker_path
+    current = Path(__file__).resolve().parent.parent
+    return current
+
 def gather_system_telemetry():
     """Gathers real-time diagnostic and environment telemetry (Zero-overhead)."""
     telemetry = []
@@ -277,9 +290,67 @@ def check_and_heal_mismatch(llm_url, llm_model):
             
     return llm_url, llm_model
 
+def check_and_migrate_project_memory(old_dirs):
+    """Detects if a new workspace project was created, and attaches active memories/WAL DB to it."""
+    global active_brain_health_dir
+    if not active_brain_health_dir:
+        return
+        
+    cwd = Path.cwd().resolve()
+    current_dirs = {p for p in cwd.iterdir() if p.is_dir()}
+    new_dirs = current_dirs - old_dirs
+    
+    if not new_dirs:
+        return
+        
+    for nd in new_dirs:
+        # Ignore standard hidden dirs
+        if nd.name.startswith(".") or nd.name == "venv" or nd.name == "node_modules":
+            continue
+            
+        print(f"\n{C_G}┌─────────────────────────────────────────────────────────┐")
+        print(f"│ 📂 {C_Y}NEW PROJECT WORKSPACE DETECTED{C_G}                        │")
+        print(f"├─────────────────────────────────────────────────────────┤")
+        print(f"│ Folder: {C_W}{nd.name[:45]:<45}{C_G} │")
+        print(f"├─────────────────────────────────────────────────────────┤")
+        print(f"│ Would you like to bind this chat's active memories and   │")
+        print(f"│ intelligence database directly to this new project?     │")
+        print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+        
+        confirm = input(f"{C_Y}Bind memories to '{nd.name}'? [Y/n]: {C_R}").strip().lower()
+        if confirm != "n":
+            # 1. Create target brain_health dir inside new folder
+            target_bh = nd / "brain_health"
+            target_bh.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                # Copy WAL database files if they exist
+                for f_name in ["kenbun_intelligence.db", "chat_sessions.json"]:
+                    old_f = active_brain_health_dir / f_name
+                    if old_f.exists():
+                        shutil.copy2(old_f, target_bh / f_name)
+                        
+                print(f"\n{C_G}✓ Successfully migrated active memories and database to:{C_R}")
+                print(f"  {C_C}{target_bh.resolve()}{C_R}\n")
+                
+                # 2. Change active directory context and reload variables!
+                os.chdir(str(nd))
+                active_brain_health_dir = target_bh
+                
+                # Proactively create a .kenbun workspace marker
+                (nd / ".kenbun").mkdir(exist_ok=True)
+                break
+            except Exception as e:
+                print(f"\n{C_Y}❌ Failed to migrate memories: {e}{C_R}\n")
+
 def run_proposed_command(cmd):
     """Executes a proposed system shell command safely with stdout/stderr capture."""
     print(f"\n{C_Y}⚙️  Executing: {C_C}{cmd}{C_R}")
+    
+    # Store directory list state before execution
+    cwd = Path.cwd().resolve()
+    old_dirs = {p for p in cwd.iterdir() if p.is_dir()}
+    
     try:
         result = subprocess.run(
             cmd,
@@ -288,6 +359,10 @@ def run_proposed_command(cmd):
             text=True,
             timeout=45
         )
+        
+        # Check if a new folder was created and prompt for memory migration!
+        check_and_migrate_project_memory(old_dirs)
+        
         output = ""
         if result.stdout:
             output += result.stdout
@@ -302,11 +377,21 @@ def run_proposed_command(cmd):
         return -1, f"[Execution Error: Failed to start command: {e}]"
 
 def main():
+    global active_brain_health_dir
     env = load_env_vars()
     
     # Extract configs
     llm_url = env.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
     llm_model = env.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
+    
+    # Resolve initial brain health dir per v2.8.0 specification
+    cwd = Path.cwd().resolve()
+    system_root = get_active_project_root()
+    if cwd != system_root and ((cwd / ".git").exists() or (cwd / ".kenbun").exists()):
+        active_brain_health_dir = cwd / "brain_health"
+    else:
+        active_brain_health_dir = system_root / "brain_health"
+    active_brain_health_dir.mkdir(parents=True, exist_ok=True)
     
     # Audit and dynamically self-heal cloud/local mismatches before displaying banner
     llm_url, llm_model = check_and_heal_mismatch(llm_url, llm_model)
@@ -322,7 +407,7 @@ def main():
     print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
     print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
     print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.5")
+    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.8.5")
     print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
     print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
     print(f"│ 🌸 Active Agent:      {C_W}{llm_model:<34}{C_G}│")
@@ -349,7 +434,12 @@ def main():
         "```\n"
         "Keep commands safe, highly relevant, and direct. The user must manually approve each command via a y/N prompt before it executes. "
         "Once executed, the terminal client will automatically feed back the command's stdout/stderr and exit code directly into your context, "
-        "allowing you to analyze the result and continue your self-healing loop or system configuration!"
+        "allowing you to analyze the result and continue your self-healing loop or system configuration!\n\n"
+        "AST HARVESTED TOOL RUNNER:\n"
+        "You can execute any of Kenbun's harvested agent tools globally by running standard 'kenbun <command>' wrappers directly via the execute block. "
+        "If the user asks you to create a new project directory (e.g. `mkdir my-new-project`), once created, your terminal chat client will automatically "
+        "detect the folder birth, prompt the user for approval, and seamlessly MIGRATE and ATTACH all your active chat memories, SQLite databases, "
+        "and logs straight inside the new project's local 'brain_health' directory!"
     )
 
     history = [
