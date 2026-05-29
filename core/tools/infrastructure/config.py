@@ -272,7 +272,18 @@ class KenbunSettings(BaseSettings):
     @field_validator("BRAIN_HEALTH_DIR", mode="before")
     @classmethod
     def assemble_brain_health_dir(cls, v, info):
-        return get_project_root() / "brain_health"
+        cwd = Path.cwd().resolve()
+        system_root = get_project_root()
+        # If the user is running tools from a separate git project folder, 
+        # save all memories, SQLite logs, and chat sessions locally within that project.
+        if cwd != system_root and ((cwd / ".git").exists() or (cwd / ".kenbun").exists()):
+            target_dir = cwd / "brain_health"
+            try:
+                target_dir.mkdir(parents=True, exist_ok=True)
+                return target_dir
+            except Exception:
+                pass
+        return system_root / "brain_health"
 
     @property
     def INTELLIGENCE_DB_PATH(self) -> Path:
