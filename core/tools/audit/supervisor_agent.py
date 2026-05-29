@@ -221,7 +221,111 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
     """
     Executes a high-fidelity System 2 Executive Audit.
     Includes the Autonomic "Ralph-Loop" Recovery Engine for self-healing rejected snippets.
+    Respects Hook Gateway settings in ~/.kenbun/config.yaml.
     """
+    import sys
+    from tools.infrastructure.config import settings
+    
+    sec_cfg = settings.security
+    
+    # 1. Check Cron / Unattended Mode
+    is_unattended = not sys.stdout.isatty() or os.getenv("CRON") == "1" or os.getenv("UNATTENDED") == "1"
+    if is_unattended and sec_cfg.cron_mode == "deny":
+        category = TriageManager.triage(user_proposal, code_snippet)
+        if category == "CRITICAL" and code_snippet.strip():
+            print("🛑 [GATEWAY] Unattended cron run detected with dangerous code snippet. Blocking execution per security policy.")
+            return {
+                "status": "REJECTED",
+                "critique": "[SECURITY BLOCK] Blocked unattended execution under cron_mode: deny policy.",
+                "tier": "System 2 Gateway: Hook Interceptor"
+            }
+
+    # 2. Check Approval Mode
+    approval_mode = sec_cfg.approval_mode
+    
+    if approval_mode == "off":
+        print("🔓 [GATEWAY] Security check bypassed (approval_mode: off).")
+        return {
+            "status": "APPROVED",
+            "critique": "Bypassed via approval_mode: off",
+            "tier": "System 2 Gateway: Hook Interceptor"
+        }
+        
+    elif approval_mode == "manual":
+        print("\n⚖️ [GATEWAY] MANUAL APPROVAL REQUEST REQUIRED:")
+        print(f"   ➔ User Proposal: {user_proposal}")
+        if code_snippet.strip():
+            print(f"   ➔ Proposed Code:\n{code_snippet}")
+        
+        try:
+            import select
+            print(f"   ➔ Fail-closed in {sec_cfg.approval_timeout} seconds if no keyboard response...")
+            sys.stdout.write("❓ Approve this execution? (y/N): ")
+            sys.stdout.flush()
+            rlist, _, _ = select.select([sys.stdin], [], [], sec_cfg.approval_timeout)
+            if rlist:
+                response = sys.stdin.readline().strip().lower()
+                if response in ["y", "yes"]:
+                    print("✅ [GATEWAY] Approved manually by developer.")
+                    return {
+                        "status": "APPROVED",
+                        "critique": "Manually approved by developer.",
+                        "tier": "System 2 Gateway: Hook Interceptor"
+                    }
+            print("\n🛑 [GATEWAY] Fail-closed: No response or manual rejection.")
+        except Exception as e:
+            print(f"⚠️ [GATEWAY] Manual TTY prompt failed: {e}. Defaulting to REJECTED.")
+            
+        return {
+            "status": "REJECTED",
+            "critique": "[SECURITY LOCK] Manual verification failed or timed out.",
+            "tier": "System 2 Gateway: Hook Interceptor"
+        }
+        
+    elif approval_mode == "custom" and sec_cfg.custom_hook_path:
+        hook_script = Path(sec_cfg.custom_hook_path).resolve()
+        if not hook_script.exists():
+            hook_script = (settings.PROJECT_ROOT / sec_cfg.custom_hook_path).resolve()
+            
+        if hook_script.exists():
+            print(f"🔌 [GATEWAY] Running custom security hook gateway: {hook_script}")
+            try:
+                import subprocess
+                payload = json.dumps({"proposal": user_proposal, "code": code_snippet})
+                res = subprocess.run(
+                    [str(hook_script)],
+                    input=payload,
+                    capture_output=True,
+                    text=True,
+                    timeout=sec_cfg.approval_timeout
+                )
+                if res.returncode == 0:
+                    print("✅ [GATEWAY] Custom security hook verified successfully.")
+                    return {
+                        "status": "APPROVED",
+                        "critique": f"Passed custom hook: {res.stdout.strip()}",
+                        "tier": "System 2 Gateway: Hook Interceptor"
+                    }
+                else:
+                    crit = f"Custom hook rejected with code {res.returncode}. Error: {res.stderr.strip()}"
+                    print(f"🛑 [GATEWAY] Custom hook REJECTED: {crit}")
+                    return {
+                        "status": "REJECTED",
+                        "critique": crit,
+                        "tier": "System 2 Gateway: Hook Interceptor"
+                    }
+            except subprocess.TimeoutExpired:
+                print("🛑 [GATEWAY] Custom hook timed out (fail-closed).")
+                return {
+                    "status": "REJECTED",
+                    "critique": f"[TIMEOUT] Custom hook timed out after {sec_cfg.approval_timeout}s.",
+                    "tier": "System 2 Gateway: Hook Interceptor"
+                }
+            except Exception as hook_err:
+                print(f"⚠️ [GATEWAY] Custom hook failed to execute: {hook_err}")
+        else:
+            print(f"⚠️ [GATEWAY] Custom hook script not found at {sec_cfg.custom_hook_path}. Defaulting to smart mode.")
+
     res = await _run_supervisor_audit_raw(user_proposal, code_snippet, memory_context, tech_key)
     
     # If the verdict is REJECTED, and we have recovery attempts left, and the code snippet is not empty:

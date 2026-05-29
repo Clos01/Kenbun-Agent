@@ -190,6 +190,12 @@ class DeploymentSettings(BaseModel):
     ssh_key_path: str = "~/.ssh/kenbun_pc"
     training_dir: str = "/root/kenbun_training" # Default internal docker path
 
+class SecurityHookSettings(BaseModel):
+    approval_mode: str = "smart"  # manual | smart | off | custom
+    cron_mode: str = "deny"       # allow | deny
+    approval_timeout: int = 45    # timeout in seconds
+    custom_hook_path: Optional[str] = None
+
 # --- 2. MAIN CONFIGURATION HUB ---
 
 class KenbunSettings(BaseSettings):
@@ -203,6 +209,11 @@ class KenbunSettings(BaseSettings):
         extra='ignore'
     )
 
+    SECURITY_APPROVAL_MODE: str = Field(default="smart")
+    SECURITY_CRON_MODE: str = Field(default="deny")
+    SECURITY_APPROVAL_TIMEOUT: int = Field(default=45)
+    SECURITY_CUSTOM_HOOK_PATH: Optional[str] = None
+
     # --- PROJECT PATHS ---
     PROJECT_ROOT: Path = Field(default_factory=get_project_root)
     DEV_ROOT: Path = Field(default_factory=lambda: Path.home() / "Dev")
@@ -211,6 +222,36 @@ class KenbunSettings(BaseSettings):
     OBSIDIAN_VAULT_PATH: Optional[Path] = None
     CODEX_HOME: Path = Field(default_factory=lambda: Path.home() / ".codex")
     OPENAI_API_KEY: Optional[SecretStr] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def load_yaml_config(cls, data: dict) -> dict:
+        import yaml
+        yaml_paths = [
+            Path.home() / ".kenbun" / "config.yaml",
+            get_project_root() / ".kenbun" / "config.yaml"
+        ]
+        
+        yaml_data = {}
+        for path in yaml_paths:
+            if path.exists():
+                try:
+                    with open(path, "r", encoding="utf-8") as f:
+                        raw_yaml = yaml.safe_load(f)
+                        if raw_yaml and "kenbun_agent" in raw_yaml:
+                            yaml_data = raw_yaml["kenbun_agent"]
+                            break
+                except Exception as e:
+                    print(f"⚠️ Failed to parse YAML config at {path}: {e}")
+                    
+        security_config = yaml_data.get("security", {})
+        if security_config:
+            data["SECURITY_APPROVAL_MODE"] = security_config.get("approval_mode", "smart")
+            data["SECURITY_CRON_MODE"] = security_config.get("cron_mode", "deny")
+            data["SECURITY_APPROVAL_TIMEOUT"] = int(security_config.get("approval_timeout", 45))
+            data["SECURITY_CUSTOM_HOOK_PATH"] = security_config.get("custom_hook_path", None)
+            
+        return data
 
     @model_validator(mode='before')
     @classmethod
@@ -371,6 +412,15 @@ class KenbunSettings(BaseSettings):
             pc_remote_path=self.PC_REMOTE_PATH,
             ssh_key_path=self.SSH_KEY_PATH,
             training_dir=self.TRAINING_DIR
+        )
+
+    @property
+    def security(self) -> SecurityHookSettings:
+        return SecurityHookSettings(
+            approval_mode=self.SECURITY_APPROVAL_MODE,
+            cron_mode=self.SECURITY_CRON_MODE,
+            approval_timeout=self.SECURITY_APPROVAL_TIMEOUT,
+            custom_hook_path=self.SECURITY_CUSTOM_HOOK_PATH
         )
 
     # --- WATCHDOG ---

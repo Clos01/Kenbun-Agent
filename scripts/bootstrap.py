@@ -827,6 +827,32 @@ def configure_api_keys():
         else:
             print(f"\n{c_y}⚠️ Invalid choice. Select 1 to 3.{c_r}")
 
+def detect_hardware():
+    total_ram_gb = 8.0
+    vram_gb = 0.0
+    try:
+        import sys
+        import subprocess
+        if sys.platform == "darwin":
+            # macOS memory detection via sysctl
+            res = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
+            total_ram_gb = int(res.stdout.strip()) / (1024**3)
+            # Unified memory VRAM allocation pool is up to 75% for macOS
+            vram_gb = total_ram_gb * 0.75
+        else:
+            # Linux RAM detection
+            import os
+            total_ram_gb = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024**3)
+            # Linux Nvidia VRAM detection via nvidia-smi
+            try:
+                res = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True)
+                vram_gb = int(res.stdout.strip()) / 1024
+            except Exception:
+                vram_gb = 0.0
+    except Exception:
+        pass
+    return total_ram_gb, vram_gb
+
 def configure_local_models():
     import getpass
     import tempfile
@@ -868,28 +894,7 @@ def configure_local_models():
     current_primary = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
 
     # 2.5 Dynamic Hardware VRAM & RAM Sensing Autopilot
-    total_ram_gb = 8.0
-    vram_gb = 0.0
-    try:
-        import sys
-        import subprocess
-        if sys.platform == "darwin":
-            # macOS memory detection via sysctl
-            res = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
-            total_ram_gb = int(res.stdout.strip()) / (1024**3)
-            # Unified memory VRAM allocation pool is up to 75% for macOS
-            vram_gb = total_ram_gb * 0.75
-        else:
-            # Linux RAM detection
-            total_ram_gb = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024**3)
-            # Linux Nvidia VRAM detection via nvidia-smi
-            try:
-                res = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True)
-                vram_gb = int(res.stdout.strip()) / 1024
-            except Exception:
-                vram_gb = 0.0
-    except Exception:
-        pass
+    total_ram_gb, vram_gb = detect_hardware()
 
     # Pick recommended profile based on hardware sensing
     recommended_profile_idx = 1 # Fallback to Standard
