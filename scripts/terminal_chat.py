@@ -9,10 +9,231 @@ import os
 import sys
 import json
 import re
+import time
 import requests
 import subprocess
 import shutil
+import threading
+import tempfile
+import signal
+import unicodedata
 from pathlib import Path
+
+# Thread lock to guarantee safe parallel writes
+_backup_lock = threading.Lock()
+
+# Common keywords/placeholders that should NOT be redacted
+EXCLUSIONS = {
+    "true", "false", "null", "none", "default", "undefined",
+    "yes", "no", "active", "inactive", "enabled", "disabled",
+    "localhost", "127.0.0.1", "root", "admin", "password", "secret"
+}
+
+def scrub_secrets(text: str) -> str:
+    """
+    Analyzes, detects, and redacts high-entropy credentials, tokens, API keys,
+    passwords, and database connection strings from dialogue, console logs,
+    and session backups.
+    """
+    if not isinstance(text, str) or not text:
+        return text
+
+    # 1. Redact Private Keys (RSA, EC, etc.)
+    private_key_pattern = r'(?s)-----BEGIN [A-Z ]+ PRIVATE KEY-----.*?-----END [A-Z ]+ PRIVATE KEY-----'
+    text = re.sub(private_key_pattern, '******** [REDACTED PRIVATE KEY]', text)
+
+    # 2. Redact Bearer Tokens
+    text = re.sub(r'\bBearer\s+[a-zA-Z0-9\-\._~+/]+=*', 'Bearer ******** [REDACTED]', text)
+
+    # 3. Redact Specific API Keys
+    # OpenAI legacy keys
+    text = re.sub(r'\bsk-[a-zA-Z0-9]{48}\b', '******** [REDACTED]', text)
+    # OpenAI modern keys (sk-proj-...)
+    text = re.sub(r'\bsk-proj-[a-zA-Z0-9\-_]{40,100}\b', '******** [REDACTED]', text)
+    # DeepSeek keys (often sk- followed by hex or alphanumeric)
+    text = re.sub(r'\bsk-[a-fA-F0-9]{32}\b', '******** [REDACTED]', text)
+    text = re.sub(r'\bsk-[a-zA-Z0-9]{32}\b', '******** [REDACTED]', text)
+    # Gemini API keys (AIzaSy...)
+    text = re.sub(r'\bAIzaSy[a-zA-Z0-9\-_]{33}\b', '******** [REDACTED]', text)
+    # Slack tokens (xoxb, xoxp, xoxr, xoxs)
+    text = re.sub(r'\bxox[baprs]-[a-zA-Z0-9\-]{10,100}\b', '******** [REDACTED]', text)
+    # AWS Access Key IDs
+    text = re.sub(r'\bAKIA[A-Z0-9]{16}\b', '******** [REDACTED]', text)
+
+    # 4. Redact Passwords in Database Connection Strings / URIs
+    # E.g., postgresql://user:password@host:port/db
+    conn_string_pattern = r'\b([a-zA-Z\+]+://)([^:\s]+):([^@\s]+)(@[^\s]+)\b'
+    def replace_conn_string(match):
+        protocol = match.group(1)
+        user = match.group(2)
+        password = match.group(3)
+        host_part = match.group(4)
+        
+        # Don't redact if the password looks like a placeholder
+        if password.lower() in EXCLUSIONS or "redacted" in password.lower() or all(c == '*' for c in password):
+            return match.group(0)
+            
+        return f"{protocol}{user}:******** [REDACTED]{host_part}"
+        
+    text = re.sub(conn_string_pattern, replace_conn_string, text)
+
+    # 5. Heuristic Key-Value Assignment Scanner (variables, envs, json fields)
+    # Handles: key="value", secret: 'value', password=value, API_KEY: value, etc.
+    def replace_heuristic(match):
+        keyword = match.group(1)
+        quote = match.group(2) or ''
+        value = match.group(3)
+        
+        val_lower = value.lower()
+        # Avoid redacting already redacted tokens, empty values, very short values, or common placeholders
+        if (len(value) < 6 or
+            val_lower in EXCLUSIONS or 
+            "redacted" in val_lower or 
+            all(c == '*' for c in value) or
+            all(c == 'x' for c in val_lower)):
+            return match.group(0)
+            
+        # Match pattern formatting exactly
+        sep = ":" if ":" in match.group(0) else "="
+        
+        # Preserve original spacing around '=' or ':'
+        orig_match = match.group(0)
+        # Split by separator to get the prefix before separator
+        parts = orig_match.split(sep, 1)
+        prefix_part = parts[0]
+        
+        return f"{prefix_part}{sep}{quote}******** [REDACTED]{quote}"
+
+    # Quoted heuristic values: key = "value"
+    quoted_pattern = r'(?i)\b(key|secret|token|password|pass|pwd|auth_key|private_key|api_key|client_secret)\s*[:=]\s*(["\'])(.*?)\2'
+    text = re.sub(quoted_pattern, replace_heuristic, text)
+
+    # Unquoted heuristic values: key=value
+    unquoted_pattern = r'(?i)\b(key|secret|token|password|pass|pwd|auth_key|private_key|api_key|client_secret)\s*[:=]\s*()([^\s"\',;]+)'
+    text = re.sub(unquoted_pattern, replace_heuristic, text)
+
+    return text
+
+def sanitize_input(text):
+    """
+    Strips dangerous invisible Unicode characters, control sequences, and non-printable
+    sequences from user raw terminal inputs before logging or appending them to history.
+    Keeps only standard ASCII and printable UTF-8.
+    """
+    if not isinstance(text, str):
+        return ""
+    
+    # 1. Strip ANSI escape sequences to prevent raw terminal control code bypasses
+    ansi_pattern = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    text = ansi_pattern.sub('', text)
+    
+    sanitized_chars = []
+    for char in text:
+        cat = unicodedata.category(char)
+        # Cc (Control) is filtered except for \n, \r, \t
+        if cat == 'Cc':
+            if char in ('\n', '\r', '\t'):
+                sanitized_chars.append(char)
+            continue
+        # Cf (Format), Cs (Surrogate), Co (Private Use), Cn (Unassigned) are stripped
+        if cat in ('Cf', 'Cs', 'Co', 'Cn'):
+            continue
+        sanitized_chars.append(char)
+        
+    return "".join(sanitized_chars)
+
+def prune_dialog_history(history, max_turns=20, max_chars=32000):
+    """
+    Sliding-window context history pruner.
+    - Always preserves the system prompt at index 0 (history[0]).
+    - If the len(history) > max_turns, prune the oldest turns (matching pairs of user-assistant messages).
+    - If the sum of characters of all messages in history exceeds max_chars, prune the oldest turns.
+    """
+    if not history:
+        return []
+    if len(history) <= 1:
+        return history
+        
+    def get_char_count(hist):
+        return sum(len(m.get("content", "")) for m in hist)
+        
+    # Prune by max_turns (pruning matching pairs of user-assistant messages)
+    while len(history) > max_turns:
+        if len(history) >= 3:
+            # Pop index 1 and 2 (the oldest user-assistant turn after system prompt)
+            history.pop(1)
+            history.pop(1)
+        else:
+            break
+            
+    # Prune by max_chars (pruning matching pairs of user-assistant messages)
+    while get_char_count(history) > max_chars:
+        if len(history) >= 3:
+            history.pop(1)
+            history.pop(1)
+        else:
+            break
+            
+    return history
+
+def save_session_backup(history, cwd, llm_url, llm_model):
+    """
+    Serializes the active chat session state atomically and thread-safely
+    to avoid file corruption on sudden terminal crashes or process terminations.
+    All dialogue history is scrubbed defensively before serializing to disk.
+    """
+    global active_brain_health_dir
+    if not active_brain_health_dir:
+        return
+    
+    backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
+    
+    # Scrub the dialogue history copy defensively before persisting
+    scrubbed_history = []
+    for msg in history:
+        scrubbed_msg = msg.copy()
+        if "content" in scrubbed_msg:
+            scrubbed_msg["content"] = scrubbed_secrets(scrubbed_msg["content"])
+        scrubbed_history.append(scrubbed_msg)
+    
+    data = {
+        "history": scrubbed_history,
+        "cwd": str(cwd),
+        "llm_url": scrubbed_secrets(llm_url),
+        "llm_model": llm_model
+    }
+    
+    with _backup_lock:
+        temp_fd = None
+        temp_path = None
+        try:
+            # Create a temp file in the same directory to guarantee atomic rename (same partition)
+            fd, temp_path = tempfile.mkstemp(dir=str(active_brain_health_dir), suffix=".tmp")
+            temp_fd = os.fdopen(fd, 'w')
+            json.dump(data, temp_fd, indent=2)
+            
+            # Ensure physical write to disk before atomic replace (crash prevention)
+            temp_fd.flush()
+            os.fsync(fd)
+            temp_fd.close()
+            temp_fd = None
+            
+            Path(temp_path).replace(backup_path)
+        except Exception as e:
+            # Cleanup temporary file if it failed
+            if temp_fd:
+                try:
+                    temp_fd.close()
+                except Exception:
+                    pass
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                except Exception:
+                    pass
+            # Graceful warning printed to terminal
+            print(f"\n{C_Y}⚠️  Dialogue Persistence Warning: Atomic session backup failed: {e}{C_R}\n")
+
 
 # Color palettes (Limestone & Sakura themed)
 C_P = "\033[95m" # Pink (Sakura)
@@ -23,7 +244,241 @@ C_W = "\033[97m" # White
 C_D = "\033[90m" # Grey
 C_R = "\033[0m"  # Reset
 
+# Helper functions for clean terminal display and dynamic layout
+ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+
+def visible_len(text):
+    """Calculates the printable length of a string, ignoring ANSI escape sequences."""
+    return len(ANSI_ESCAPE.sub('', text))
+
+def get_columns():
+    """Gets the active terminal columns, defaulting to 80."""
+    try:
+        cols = shutil.get_terminal_size(fallback=(80, 24)).columns
+        return cols if cols > 0 else 80
+    except Exception:
+        return 80
+
+def clean_wrap_text(text, width):
+    """
+    Word-wraps long text to fit a given width cleanly, preserving original line breaks.
+    If a single word exceeds the width, it is broken up into segments of length `width`.
+    """
+    if not text:
+        return ""
+    if width <= 0:
+        width = 80
+        
+    wrapped_lines = []
+    for line in text.splitlines():
+        if not line.strip():
+            wrapped_lines.append("")
+            continue
+        
+        words = line.split(" ")
+        current_line = []
+        current_len = 0
+        
+        for word in words:
+            word_len = visible_len(word)
+            if word_len > width:
+                # First flush current line
+                if current_line:
+                    wrapped_lines.append(" ".join(current_line))
+                    current_line = []
+                    current_len = 0
+                
+                # Split the long word into chunks of width while keeping ANSI codes intact
+                has_ansi = bool(ANSI_ESCAPE.search(word))
+                if not has_ansi:
+                    for i in range(0, len(word), width):
+                        wrapped_lines.append(word[i:i+width])
+                else:
+                    tokens = []
+                    last_idx = 0
+                    for m in ANSI_ESCAPE.finditer(word):
+                        start, end = m.start(), m.end()
+                        for c in word[last_idx:start]:
+                            tokens.append((c, False))
+                        tokens.append((word[start:end], True))
+                        last_idx = end
+                    for c in word[last_idx:]:
+                        tokens.append((c, False))
+                    
+                    chunk_str = ""
+                    chunk_len = 0
+                    for tok, is_escape in tokens:
+                        if is_escape:
+                            chunk_str += tok
+                        else:
+                            if chunk_len >= width:
+                                wrapped_lines.append(chunk_str)
+                                chunk_str = tok
+                                chunk_len = 1
+                            else:
+                                chunk_str += tok
+                                chunk_len += 1
+                    if chunk_str:
+                        wrapped_lines.append(chunk_str)
+            else:
+                added_len = word_len + (1 if current_line else 0)
+                if current_len + added_len <= width:
+                    current_line.append(word)
+                    current_len += added_len
+                else:
+                    if current_line:
+                        wrapped_lines.append(" ".join(current_line))
+                    current_line = [word]
+                    current_len = word_len
+        if current_line:
+            wrapped_lines.append(" ".join(current_line))
+    return "\n".join(wrapped_lines)
+
+def draw_box(lines, title=None, border_color=C_G, text_color=C_W):
+    """
+    Draws a clean Limestone/Sakura styled box dynamically adjusted to terminal width.
+    Each line in `lines` can contain ANSI escape codes. They will be wrapped cleanly.
+    """
+    cols = get_columns()
+    box_width = min(cols, 80)
+    if box_width < 40:
+        box_width = cols
+        
+    content_width = box_width - 4  # 2 for border and spaces on each side
+    if content_width <= 0:
+        content_width = 36  # safe fallback
+        
+    # Border characters
+    top_left = "┌"
+    top_right = "┐"
+    bottom_left = "└"
+    bottom_right = "┘"
+    horizontal = "─"
+    horizontal_top = "─"
+    horizontal_bottom = "─"
+    vertical = "│"
+    divider = "├"
+    divider_right = "┤"
+    
+    # Print top border with title if present
+    if title:
+        vis_title = visible_len(title)
+        if vis_title + 6 <= box_width:
+            left_dash_count = (box_width - 2 - vis_title - 2) // 2
+            right_dash_count = box_width - 2 - vis_title - 2 - left_dash_count
+            top_border = f"{border_color}{top_left}{horizontal_top * left_dash_count} {title} {horizontal_top * right_dash_count}{top_right}{C_R}"
+        else:
+            top_border = f"{border_color}{top_left}{horizontal_top * (box_width - 2)}{top_right}{C_R}"
+    else:
+        top_border = f"{border_color}{top_left}{horizontal_top * (box_width - 2)}{top_right}{C_R}"
+        
+    print(top_border)
+    
+    for line in lines:
+        if line == "---":
+            print(f"{border_color}{divider}{horizontal * (box_width - 2)}{divider_right}{C_R}")
+        else:
+            wrapped_sublines = clean_wrap_text(line, content_width).splitlines()
+            if not wrapped_sublines:
+                print(f"{border_color}{vertical}{C_R} {' ' * content_width} {border_color}{vertical}{C_R}")
+            for subline in wrapped_sublines:
+                vis_len = visible_len(subline)
+                padding = content_width - vis_len
+                if padding < 0:
+                    padding = 0
+                print(f"{border_color}{vertical}{C_R} {text_color}{subline}{C_R}{' ' * padding} {border_color}{vertical}{C_R}")
+                
+    print(f"{border_color}{bottom_left}{horizontal_bottom * (box_width - 2)}{bottom_right}{C_R}")
+
+def graceful_exit_handler(signum, frame):
+    """
+    POSIX signal handler to gracefully exit when Ctrl+C (SIGINT) or SIGTERM is received.
+    It prints a beautiful Sakura/Limestone closing card, restores terminal text color,
+    deletes the active_session_backup.json if it was a clean exit, and exits cleanly.
+    """
+    global active_brain_health_dir
+    
+    # Finish any unfinished prompt line
+    sys.stdout.write("\n")
+    
+    # Draw a professional Limestone/Sakura styled closing card
+    closing_message = [
+        "🌸 Thank you for using Kenbun Agent!",
+        "Restoring terminal session state and performing diagnostics cleanup...",
+        "---",
+        "Sayonara! 👋"
+    ]
+    draw_box(closing_message, title="🌸 KENBUN DISCONNECTING", border_color=C_P, text_color=C_G)
+    
+    # Restore terminal text color (ANSI Reset)
+    sys.stdout.write(C_R)
+    sys.stdout.flush()
+    
+    # Cleanly delete active_session_backup.json
+    if active_brain_health_dir:
+        backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
+        if backup_path.exists():
+            try:
+                backup_path.unlink()
+            except Exception:
+                pass
+                
+    sys.exit(0)
+
+class StreamingWordWrapper:
+    def __init__(self, width):
+        self.width = width if width > 0 else 80
+        self.current_line_len = 0
+        self.word_buffer = ""
+        self.word_visible_len = 0
+        
+    def write(self, chunk):
+        for char in chunk:
+            if char == '\n':
+                if self.word_buffer:
+                    if self.current_line_len + self.word_visible_len > self.width:
+                        sys.stdout.write("\n" + self.word_buffer)
+                    else:
+                        sys.stdout.write(self.word_buffer)
+                    self.word_buffer = ""
+                    self.word_visible_len = 0
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+                self.current_line_len = 0
+            elif char.isspace():
+                if self.word_buffer:
+                    if self.current_line_len + self.word_visible_len > self.width:
+                        sys.stdout.write("\n" + self.word_buffer)
+                        self.current_line_len = self.word_visible_len
+                    else:
+                        sys.stdout.write(self.word_buffer)
+                        self.current_line_len += self.word_visible_len
+                    self.word_buffer = ""
+                    self.word_visible_len = 0
+                
+                if self.current_line_len + 1 > self.width:
+                    sys.stdout.write("\n")
+                    self.current_line_len = 0
+                else:
+                    sys.stdout.write(char)
+                    self.current_line_len += 1
+                sys.stdout.flush()
+            else:
+                self.word_buffer += char
+                self.word_visible_len = visible_len(self.word_buffer)
+                
+    def flush(self):
+        if self.word_buffer:
+            if self.current_line_len + self.word_visible_len > self.width:
+                sys.stdout.write("\n" + self.word_buffer)
+            else:
+                sys.stdout.write(self.word_buffer)
+            self.word_buffer = ""
+            self.word_visible_len = 0
+        sys.stdout.flush()
+
 # Global tracking variable for active memory directory
+
 active_brain_health_dir = None
 
 def decrypt_value(val):
@@ -235,24 +690,21 @@ def check_and_heal_mismatch(llm_url, llm_model):
     if not has_mismatch:
         return llm_url, llm_model
         
-    print(f"\n{C_Y}┌─────────────────────────────────────────────────────────┐")
-    print(f"│ ⚠️  {C_Y}CONFIGURATION MISMATCH AUDIT TRIGGERED{C_G}               │")
-    print(f"├─────────────────────────────────────────────────────────┤")
-    print(f"│ Kenbun has detected a routing conflict in your config:  │")
-    print(f"│                                                         │")
-    print(f"│ ⚡ Active Provider URL: {C_W}{llm_url[:31]:<31}{C_G} │")
-    print(f"│ 🌸 Active model:        {C_W}{llm_model[:31]:<31}{C_G} │")
-    print(f"├─────────────────────────────────────────────────────────┤")
-    print(f"│ Cloud gateways (like api.deepseek.com) cannot execute   │")
-    print(f"│ local model weights (like {llm_model}).                  │")
-    print(f"│                                                         │")
-    print(f"│ Select an Autonomic Self-Healing patch:                 │")
-    print(f"│ {C_C}[1] Switch Model{C_G} - Swap model to target cloud model    │")
-    print(f"│                  (e.g., 'deepseek-chat' for DeepSeek)   │")
-    print(f"│ {C_C}[2] Switch URL{C_G}   - Route back to local Ollama server    │")
-    print(f"│                  (http://localhost:11434/v1)            │")
-    print(f"│ {C_C}[3] Bypass{C_G}       - Ignore and boot anyway               │")
-    print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+    mismatch_lines = [
+        "Kenbun has detected a routing conflict in your config:",
+        "",
+        f"⚡ Active Provider URL: {C_W}{llm_url}{C_G}",
+        f"🌸 Active model:        {C_W}{llm_model}{C_G}",
+        "---",
+        f"Cloud gateways (like api.deepseek.com) cannot execute local model weights (like {llm_model}).",
+        "",
+        "Select an Autonomic Self-Healing patch:",
+        f"{C_C}[1] Switch Model{C_G} - Swap model to target cloud model (e.g., 'deepseek-chat' for DeepSeek)",
+        f"{C_C}[2] Switch URL{C_G}   - Route back to local Ollama server (http://localhost:11434/v1)",
+        f"{C_C}[3] Bypass{C_G}       - Ignore and boot anyway"
+    ]
+    print()
+    draw_box(mismatch_lines, title=f"⚠️  {C_Y}CONFIGURATION MISMATCH AUDIT TRIGGERED", border_color=C_Y, text_color=C_G)
     
     while True:
         try:
@@ -308,14 +760,14 @@ def check_and_migrate_project_memory(old_dirs):
         if nd.name.startswith(".") or nd.name == "venv" or nd.name == "node_modules":
             continue
             
-        print(f"\n{C_G}┌─────────────────────────────────────────────────────────┐")
-        print(f"│ 📂 {C_Y}NEW PROJECT WORKSPACE DETECTED{C_G}                        │")
-        print(f"├─────────────────────────────────────────────────────────┤")
-        print(f"│ Folder: {C_W}{nd.name[:45]:<45}{C_G} │")
-        print(f"├─────────────────────────────────────────────────────────┤")
-        print(f"│ Would you like to bind this chat's active memories and   │")
-        print(f"│ intelligence database directly to this new project?     │")
-        print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+        box_lines = [
+            f"Folder: {C_W}{nd.name}",
+            "---",
+            "Would you like to bind this chat's active memories and",
+            "intelligence database directly to this new project?"
+        ]
+        print()
+        draw_box(box_lines, title=f"📂 {C_Y}NEW PROJECT WORKSPACE DETECTED", border_color=C_G)
         
         confirm = input(f"{C_Y}Bind memories to '{nd.name}'? [Y/n]: {C_R}").strip().lower()
         if confirm != "n":
@@ -345,7 +797,8 @@ def check_and_migrate_project_memory(old_dirs):
 
 def run_proposed_command(cmd):
     """Executes a proposed system shell command safely with stdout/stderr capture."""
-    print(f"\n{C_Y}⚙️  Executing: {C_C}{cmd}{C_R}")
+    cols = get_columns()
+    print(f"\n{C_Y}⚙️  Executing: {C_C}{clean_wrap_text(scrub_secrets(cmd), cols - 15)}{C_R}")
     
     # Store directory list state before execution
     cwd = Path.cwd().resolve()
@@ -370,7 +823,7 @@ def run_proposed_command(cmd):
             output += f"\n[stderr]\n{result.stderr}"
         if not output.strip():
             output = "[Success: Command executed with zero stdout/stderr output]"
-        return result.returncode, output
+        return result.returncode, scrub_secrets(output)
     except subprocess.TimeoutExpired:
         return -1, "[Timeout Error: The system command exceeded the 45-second execution limit]"
     except Exception as e:
@@ -378,7 +831,15 @@ def run_proposed_command(cmd):
 
 def main():
     global active_brain_health_dir
+    
+    # Configure proper POSIX signal handlers to protect term state
+    signal.signal(signal.SIGINT, graceful_exit_handler)
+    signal.signal(signal.SIGTERM, graceful_exit_handler)
+    
     env = load_env_vars()
+    
+    # Initialize connection pooling session
+    session = requests.Session()
     
     # Extract configs
     llm_url = env.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
@@ -403,24 +864,31 @@ def main():
         llm_url += "v1"
         
     # Print beautiful banner
-    print(f"\n{C_P}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗")
-    print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
-    print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
-    print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.8.5")
-    print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
-    print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
-    print(f"│ 🌸 Active Agent:      {C_W}{llm_model:<34}{C_G}│")
-    print(f"│ ⚡ Ollama Gateway URL: {C_W}{llm_url:<34}{C_G}│")
-    print(f"│ 🧠 RAG Rerouter:      {C_G}ACTIVE (Telemetry & Grounding)     │")
-    print(f"│ ⚙️  Reflex Status:     {C_Y}ACTIVE (Human-in-the-Loop Safe)    {C_G}│")
-    print(f"│                                                         │")
-    print(f"│ {C_Y}Commands & Capabilities:{C_G}                                │")
-    print(f"│   {C_C}/exit{C_G}     - Gracefully close Termchat                 │")
-    print(f"│   {C_C}/reset{C_G}    - Clear dialogue history                    │")
-    print(f"│   {C_C}/system{C_G}   - Dump active environment parameters        │")
-    print(f"│   {C_C}/search{C_G}   - Direct search on UI-UX Pro Max database  │")
-    print(f"└─────────────────────────────────────────────────────────┘{C_R}\n")
+    cols = get_columns()
+    if cols >= 70:
+        print(f"\n{C_P}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗")
+        print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
+        print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
+        print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
+        print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.8.5")
+        print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
+    else:
+        print(f"\n{C_P}🌸 KENBUN COGNITIVE AGENT SHELL v2.8.5{C_R}")
+        
+    banner_lines = [
+        f"🌸 Active Agent:      {C_W}{llm_model}",
+        f"⚡ Ollama Gateway URL: {C_W}{llm_url}",
+        f"🧠 RAG Rerouter:      {C_G}ACTIVE (Telemetry & Grounding)",
+        f"⚙️  Reflex Status:     {C_Y}ACTIVE (Human-in-the-Loop Safe)",
+        "",
+        f"{C_Y}Commands & Capabilities:",
+        f"  {C_C}/exit{C_G}     - Gracefully close Termchat",
+        f"  {C_C}/reset{C_G}    - Clear dialogue history",
+        f"  {C_C}/system{C_G}   - Dump active environment parameters",
+        f"  {C_C}/search{C_G}   - Direct search on UI-UX Pro Max database"
+    ]
+    draw_box(banner_lines, title=f"🌸 {C_Y}COGNITIVE AGENT SHELL", border_color=C_G, text_color=C_G)
+    print()
 
     system_prompt = (
         "You are Kenbun, an autonomous local AI system diagnostician, coding engineer, and design expert. "
@@ -446,239 +914,426 @@ def main():
         {"role": "system", "content": system_prompt}
     ]
 
+    # Startup scanner for interrupted session
+    backup_path = active_brain_health_dir / "active_session_backup.json"
+    if backup_path.exists():
+        try:
+            with open(backup_path, "r") as f:
+                backup_data = json.load(f)
+            
+            backup_history = backup_data.get("history", [])
+            has_messages = len([m for m in backup_history if m.get("role") != "system"]) > 0
+            
+            if has_messages:
+                print()
+                draw_box([
+                    "Kenbun has detected a previously interrupted chat",
+                    "session. Would you like to restore and resume?"
+                ], title="🌸 KENBUN SESSION RECOVERY DETECTED", border_color=C_P, text_color=C_W)
+                
+                confirm = input(f'{C_P}🌸 Restore and resume session? [Y/n]: {C_R}').strip().lower()
+                if confirm != "n":
+                    history = []
+                    for msg in backup_history:
+                        scrubbed_msg = msg.copy()
+                        if "content" in scrubbed_msg:
+                            scrubbed_msg["content"] = scrubbed_secrets(scrubbed_msg["content"])
+                        history.append(scrubbed_msg)
+                    saved_cwd = backup_data.get("cwd")
+                    if saved_cwd and os.path.exists(saved_cwd):
+                        try:
+                            os.chdir(saved_cwd)
+                            cwd = Path.cwd().resolve()
+                            if cwd != system_root and ((cwd / ".git").exists() or (cwd / ".kenbun").exists()):
+                                active_brain_health_dir = cwd / "brain_health"
+                            else:
+                                active_brain_health_dir = system_root / "brain_health"
+                            active_brain_health_dir.mkdir(parents=True, exist_ok=True)
+                            print(f"\n{C_G}✓ Restored active directory context: {C_C}{saved_cwd}{C_R}")
+                        except Exception as e:
+                            print(f"\n{C_Y}⚠️ Failed to restore directory context: {e}{C_R}")
+                    
+                    if "llm_url" in backup_data:
+                        llm_url = backup_data["llm_url"]
+                    if "llm_model" in backup_data:
+                        llm_model = backup_data["llm_model"]
+                        
+                    print(f"{C_G}✓ Session state and dialogue history successfully restored!{C_R}\n")
+                else:
+                    try:
+                        backup_path.unlink()
+                    except Exception:
+                        pass
+        except Exception as e:
+            print(f"\n{C_Y}⚠️ Failed to load or restore session backup: {e}{C_R}\n")
+
+
     username = os.environ.get("USER", "amontano")
     auto_trigger = False
 
-    while True:
-        try:
-            # If auto_trigger is set, the system feeds back command output automatically without waiting for user input
-            if auto_trigger:
-                user_input = ""
-                auto_trigger = False
-            else:
-                user_input = input(f"{C_P}{username}@kenbun-agent{C_R}:{C_G}~{C_R}$ ").strip()
-                if not user_input:
-                    continue
-                
-                # Handle Slash Commands
-                if user_input.startswith("/"):
-                    cmd_parts = user_input.split(" ", 1)
-                    cmd = cmd_parts[0].lower()
+    # Top-Level Exception Catcher to intercept unexpected system/OS crashes gracefully
+    try:
+        while True:
+            try:
+                # If auto_trigger is set, the system feeds back command output automatically without waiting for user input
+                if auto_trigger:
+                    user_input = ""
+                    auto_trigger = False
+                else:
+                    user_input = input(f"{C_P}{username}@kenbun-agent{C_R}:{C_G}~{C_R}$ ").strip()
+                    user_input = sanitize_input(user_input)
+                    if not user_input:
+                        continue
                     
-                    if cmd == "/exit":
-                        print(f"\n{C_P}🌸 Sayonara! Terminating agent session...{C_R}\n")
-                        break
+                    # Handle Slash Commands
+                    if user_input.startswith("/"):
+                        cmd_parts = user_input.split(" ", 1)
+                        cmd = cmd_parts[0].lower()
                         
-                    elif cmd == "/reset":
-                        history = [history[0]]
-                        print(f"\n{C_Y}🧹 Dialogue history purged.{C_R}\n")
-                        continue
-                        
-                    elif cmd == "/system":
-                        # Fetch fresh config from loaded env
-                        fresh_env = load_env_vars()
-                        print(f"\n{C_G}🏛  Active Configuration Check:{C_R}")
-                        for k, v in fresh_env.items():
-                            if "KEY" in k or "SECRET" in k or "TOKEN" in k:
-                                v = "******** (Masked Securely)"
-                            print(f"  • {C_C}{k:<24}{C_R}= {v}")
-                        print()
-                        continue
-                        
-                    elif cmd == "/search":
-                        if len(cmd_parts) < 2:
-                            print(f"\n{C_Y}⚠️ Usage: /search <design topic / style / palette>{C_R}\n")
-                            continue
-                        query = cmd_parts[1]
-                        print(f"\n{C_G}🔍 Searching UI-UX Pro Max database for: '{query}'...{C_R}")
-                        res = get_design_suggestions(query)
-                        if res:
-                            print(f"\n{C_W}{res}{C_R}\n")
-                        else:
-                            print(f"\n{C_Y}❌ No matches or search scripts found.{C_R}\n")
-                        continue
-                        
-                    else:
-                        print(f"\n{C_Y}❌ Unknown command: {cmd}. Available commands: /exit, /reset, /search, /system{C_R}\n")
-                        continue
-
-                # ========================================================
-                # 🧠 INTENT-BASED DYNAMIC RAG & TELEMETRY PRE-FLIGHT
-                # ========================================================
-                grounding_context = []
-                
-                # A. Design / UI / Style Intent Grounding
-                design_keywords = ["color", "palette", "font", "css", "theme", "design", "style", "ui", "ux", "brutalism", "minimalism", "bento", "chart"]
-                if any(kw in user_input.lower() for kw in design_keywords):
-                    print(f"{C_D}🔍 RAG: Fetching canonical UI-UX Pro Max tokens for query...{C_R}", end="\r")
-                    suggestions = get_design_suggestions(user_input)
-                    if suggestions:
-                        grounding_context.append(f"[DESIGN SYSTEM GROUNDING (Canonical UI-UX Pro Max reference)]:\n{suggestions}")
-                
-                # B. Diagnostic / System Intent Grounding
-                system_keywords = ["docker", "status", "port", "compose", "ip", "run", "daemon", "permission", "error", "fail", "ufw", "firewall", "logs", "active"]
-                if any(kw in user_input.lower() for kw in system_keywords):
-                    print(f"{C_D}⚙️  RAG: Collecting real-time VM system & container telemetry...{C_R}", end="\r")
-                    telemetry = gather_system_telemetry()
-                    if telemetry:
-                        grounding_context.append(f"[REAL-TIME SYSTEM DIAGNOSTIC TELEMETRY (Current VM status)]:\n{telemetry}")
-
-                # Compile final grounded input
-                final_input = user_input
-                if grounding_context:
-                    # Clean the terminal line where progress was printed
-                    print(" " * 80, end="\r") 
-                    context_str = "\n\n".join(grounding_context)
-                    final_input = f"{context_str}\n\n[USER INSTRUCTION]:\n{user_input}"
-
-                history.append({"role": "user", "content": final_input})
-
-            # Prepare streaming request
-            headers = {"Content-Type": "application/json"}
-            if "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
-                headers["Authorization"] = f"Bearer {env['OPENAI_API_KEY']}"
-            elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
-                headers["Authorization"] = f"Bearer {env['DEEPSEEK_API_KEY']}"
-            elif "GEMINI_API_KEY" in env and "gemini" in llm_url.lower():
-                headers["Authorization"] = f"Bearer {env['GEMINI_API_KEY']}"
-
-            payload = {
-                "model": llm_model,
-                "messages": history,
-                "temperature": 0.2,
-                "stream": True
-            }
-            
-            endpoint = f"{llm_url}/chat/completions"
-            print(f"\n{C_P}Kenbun 🌸:{C_R} ", end="", flush=True)
-            
-            response = requests.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
-            response.raise_for_status()
-            
-            full_reply = ""
-            for line in response.iter_lines():
-                if line:
-                    decoded = line.decode("utf-8").strip()
-                    if decoded.startswith("data: "):
-                        data_str = decoded[6:]
-                        if data_str == "[DONE]":
+                        if cmd == "/exit":
+                            print(f"\n{C_P}🌸 Sayonara! Terminating agent session...{C_R}\n")
+                            if active_brain_health_dir:
+                                backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
+                                if backup_path.exists():
+                                    try:
+                                        backup_path.unlink()
+                                    except Exception:
+                                        pass
                             break
-                        try:
-                            data_json = json.loads(data_str)
-                            chunk = data_json["choices"][0]["delta"].get("content", "")
-                            print(chunk, end="", flush=True)
-                            full_reply += chunk
-                        except Exception:
-                            pass
-            print("\n")
-            
-            # Register response
-            history.append({"role": "assistant", "content": full_reply})
-            
-            # Check for execute blocks: ```execute\n<command>\n```
-            execute_blocks = re.findall(r"```execute\n(.*?)\n```", full_reply, re.DOTALL)
-            if execute_blocks:
-                for block in execute_blocks:
-                    cmd = block.strip()
-                    print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
-                    print(f"│ 🚨 {C_Y}PROPOSED REFLEX ACTION DETECTED{C_G}                       │")
-                    print(f"├─────────────────────────────────────────────────────────┤")
-                    # Safe layout printing
-                    lines = [cmd[i:i+53] for i in range(0, len(cmd), 53)]
-                    for l in lines:
-                        print(f"│ {C_W}{l:<53}{C_G} │")
-                    print(f"└─────────────────────────────────────────────────────────┘{C_R}")
+                            
+                        elif cmd == "/reset":
+                            history = [history[0]]
+                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            print(f"\n{C_Y}🧹 Dialogue history purged.{C_R}\n")
+                            continue
+                            
+                        elif cmd == "/system":
+                            # Fetch fresh config from loaded env
+                            fresh_env = load_env_vars()
+                            cols = get_columns()
+                            print(f"\n{C_G}🏛  Active Configuration Check:{C_R}")
+                            for k, v in fresh_env.items():
+                                if "KEY" in k or "SECRET" in k or "TOKEN" in k:
+                                    v = "******** (Masked Securely)"
+                                else:
+                                    v = scrub_secrets(v)
+                                prefix = f"  • {C_C}{k:<24}{C_R}= "
+                                pref_len = visible_len(prefix)
+                                wrapped_val = clean_wrap_text(v, cols - pref_len - 2)
+                                wrapped_lines = wrapped_val.splitlines()
+                                if wrapped_lines:
+                                    print(f"{prefix}{wrapped_lines[0]}")
+                                    for wl in wrapped_lines[1:]:
+                                        print(f"{' ' * pref_len}{wl}")
+                                else:
+                                    print(f"{prefix}")
+                            print()
+                            continue
+                            
+                        elif cmd == "/search":
+                            if len(cmd_parts) < 2:
+                                print(f"\n{C_Y}⚠️ Usage: /search <design topic / style / palette>{C_R}\n")
+                                continue
+                            query = cmd_parts[1]
+                            print(f"\n{C_G}🔍 Searching UI-UX Pro Max database for: '{query}'...{C_R}")
+                            res = get_design_suggestions(query)
+                            if res:
+                                cols = get_columns()
+                                wrapped_res = clean_wrap_text(res, cols - 2)
+                                print(f"\n{C_W}{wrapped_res}{C_R}\n")
+                            else:
+                                print(f"\n{C_Y}❌ No matches or search scripts found.{C_R}\n")
+                            continue
+                            
+                        else:
+                            print(f"\n{C_Y}❌ Unknown command: {cmd}. Available commands: /exit, /reset, /search, /system{C_R}\n")
+                            continue
+
+                    # ========================================================
+                    # 🧠 INTENT-BASED DYNAMIC RAG & TELEMETRY PRE-FLIGHT
+                    # ========================================================
+                    grounding_context = []
                     
-                    confirm = input(f"{C_Y}Authorize execution of this command? [y/N]: {C_R}").strip().lower()
-                    if confirm == "y":
-                        code, out = run_proposed_command(cmd)
-                        print(f"\n{C_G}─── Output (Exit Code: {code}) ────────────────────────────────{C_R}")
-                        print(f"{C_W}{out.strip()}{C_R}")
-                        print(f"{C_G}────────────────────────────────────────────────────────────{C_R}\n")
-                        
-                        # Feed the action result back to the LLM and trigger another turn immediately!
-                        feedback = f"[SYSTEM OUT (Command: '{cmd}', Exit Code: {code})]\n{out}"
-                        history.append({"role": "user", "content": feedback})
-                        auto_trigger = True
-                        break # Executed one, loop again to let the LLM think about this step's output
-                    else:
-                        print(f"\n{C_Y}⚠️ Command execution rejected by user. Bypassing.{C_R}\n")
-                        feedback = f"[SYSTEM NOTICE: The user explicitly REJECTED the execution of command: '{cmd}']"
-                        history.append({"role": "user", "content": feedback})
-                        
-        except requests.exceptions.HTTPError as http_err:
-            response_obj = http_err.response
-            err_msg = ""
-            if response_obj is not None:
+                    # A. Design / UI / Style Intent Grounding
+                    design_keywords = ["color", "palette", "font", "css", "theme", "design", "style", "ui", "ux", "brutalism", "minimalism", "bento", "chart"]
+                    if any(kw in user_input.lower() for kw in design_keywords):
+                        print(f"{C_D}🔍 RAG: Fetching canonical UI-UX Pro Max tokens for query...{C_R}", end="\r")
+                        suggestions = get_design_suggestions(user_input)
+                        if suggestions:
+                            grounding_context.append(f"[DESIGN SYSTEM GROUNDING (Canonical UI-UX Pro Max reference)]:\n{suggestions}")
+                    
+                    # B. Diagnostic / System Intent Grounding
+                    system_keywords = ["docker", "status", "port", "compose", "ip", "run", "daemon", "permission", "error", "fail", "ufw", "firewall", "logs", "active"]
+                    if any(kw in user_input.lower() for kw in system_keywords):
+                        print(f"{C_D}⚙️  RAG: Collecting real-time VM system & container telemetry...{C_R}", end="\r")
+                        telemetry = gather_system_telemetry()
+                        if telemetry:
+                            grounding_context.append(f"[REAL-TIME SYSTEM DIAGNOSTIC TELEMETRY (Current VM status)]:\n{telemetry}")
+
+                    # Compile final grounded input
+                    final_input = user_input
+                    if grounding_context:
+                        # Clean the terminal line where progress was printed
+                        cols = get_columns()
+                        print(" " * cols, end="\r") 
+                        context_str = "\n\n".join(grounding_context)
+                        final_input = f"{context_str}\n\n[USER INSTRUCTION]:\n{user_input}"
+
+                    final_input = scrub_secrets(final_input)
+                    history.append({"role": "user", "content": final_input})
+                    history = prune_dialog_history(history)
+                    save_session_backup(history, Path.cwd(), llm_url, llm_model)
+
+                # Prepare streaming request and execute with fallback logic
+                response = None
+                max_retries = 3
+                is_fallback = False
+                
                 try:
-                    err_msg = response_obj.text
-                    err_json = response_obj.json()
-                    if isinstance(err_json, dict):
-                        err_msg = err_json.get("error", err_json.get("message", response_obj.text))
-                        if isinstance(err_msg, dict):
-                            err_msg = err_msg.get("message", str(err_msg))
+                    # Primary request parameters
+                    endpoint = f"{llm_url}/chat/completions"
+                    headers = {"Content-Type": "application/json"}
+                    if "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
+                    elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
+                    elif "GEMINI_API_KEY" in env and "gemini" in llm_url.lower():
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+
+                    payload = {
+                        "model": llm_model,
+                        "messages": history,
+                        "temperature": 0.2,
+                        "stream": True
+                    }
+                    
+                    print(f"\n{C_P}Kenbun 🌸:{C_R} ", end="", flush=True)
+                    
+                    # Retry loop with exponential backoff for primary LLM endpoint
+                    for attempt in range(max_retries + 1):
+                        try:
+                            response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                            break
+                        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                            if attempt < max_retries:
+                                backoff = 2 ** attempt
+                                print(f"\n{C_Y}⚠️ Connection/Timeout on primary LLM: {e}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
+                                time.sleep(backoff)
+                            else:
+                                raise e
+                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as primary_err:
+                    # Catch primary connection failure, and trigger fallback gateway
+                    fallback_url = env.get("FALLBACK_LLM_URL", "").strip()
+                    fallback_model = env.get("FALLBACK_LLM_MODEL", "").strip()
+                    
+                    if not fallback_url or not fallback_model:
+                        # No fallback configured, re-raise the original error
+                        raise primary_err
+                    
+                    is_fallback = True
+                    print() # Advance line from "Kenbun 🌸:" prefix
+                    
+                    # Display warning card
+                    fallback_lines = [
+                        "Kenbun failed to connect to primary LLM after retries.",
+                        "",
+                        f"➔ Failed URL: {C_W}{llm_url}{C_Y}",
+                        f"➔ Error:      {C_W}{str(primary_err)}{C_Y}",
+                        "---",
+                        "Switching to FALLBACK GATEWAY automatically...",
+                        f"⚡ Fallback URL:   {C_G}{fallback_url}{C_Y}",
+                        f"📦 Fallback Model: {C_G}{fallback_model}{C_Y}"
+                    ]
+                    draw_box(fallback_lines, title="🚨 PRIMARY GATEWAY OFFLINE (FALLBACK DETECTED)", border_color=C_Y, text_color=C_Y)
+                    print()
+                    
+                    # Permanently transition to the fallback configuration for the duration of session
+                    llm_url = fallback_url
+                    llm_model = fallback_model
+                    
+                    # Prepare headers and payload for fallback LLM
+                    endpoint = f"{llm_url}/chat/completions"
+                    headers = {"Content-Type": "application/json"}
+                    if "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
+                    elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
+                    elif "GEMINI_API_KEY" in env and "gemini" in llm_url.lower():
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+
+                    payload = {
+                        "model": llm_model,
+                        "messages": history,
+                        "temperature": 0.2,
+                        "stream": True
+                    }
+                    
+                    print(f"{C_P}Kenbun 🌸 (Fallback):{C_R} ", end="", flush=True)
+                    
+                    # Retry loop with exponential backoff for fallback LLM endpoint
+                    for attempt in range(max_retries + 1):
+                        try:
+                            response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                            break
+                        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
+                            if attempt < max_retries:
+                                backoff = 2 ** attempt
+                                print(f"\n{C_Y}⚠️ Connection/Timeout on fallback LLM: {fallback_err}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
+                                time.sleep(backoff)
+                            else:
+                                raise fallback_err
+
+                response.raise_for_status()
+                
+                cols = get_columns()
+                wrapper = StreamingWordWrapper(cols - 2)
+                wrapper.current_line_len = 22 if is_fallback else 11  # Fallback prefix is 22 chars, Primary is 11
+                
+                full_reply = ""
+                for line in response.iter_lines():
+                    if line:
+                        decoded = line.decode("utf-8").strip()
+                        if decoded.startswith("data: "):
+                            data_str = decoded[6:]
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                data_json = json.loads(data_str)
+                                chunk = data_json["choices"][0]["delta"].get("content", "")
+                                wrapper.write(chunk)
+                                full_reply += chunk
+                            except Exception:
+                                pass
+                wrapper.flush()
+                print("\n")
+                
+                # Register response
+                history.append({"role": "assistant", "content": scrub_secrets(full_reply)})
+                history = prune_dialog_history(history)
+                save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                
+                # Check for execute blocks: ```execute\n<command>\n```
+                execute_blocks = re.findall(r"```execute\n(.*?)\n```", full_reply, re.DOTALL)
+                if execute_blocks:
+                    for block in execute_blocks:
+                        cmd = block.strip()
+                        draw_box([scrub_secrets(cmd)], title=f"🚨 {C_Y}PROPOSED REFLEX ACTION DETECTED", border_color=C_G, text_color=C_W)
+                        
+                        confirm = input(f"{C_Y}Authorize execution of this command? [y/N]: {C_R}").strip().lower()
+                        if confirm == "y":
+                            code, out = run_proposed_command(cmd)
+                            cols = get_columns()
+                            title = f"─── Output (Exit Code: {code}) "
+                            dash_len = max(0, cols - len(title) - 1)
+                            print(f"\n{C_G}{title}{'─' * dash_len}{C_R}")
+                            wrapped_out = clean_wrap_text(out.strip(), cols - 2)
+                            print(f"{C_W}{wrapped_out}{C_R}")
+                            print(f"{C_G}{'─' * cols}{C_R}\n")
+                            
+                            # Feed the action result back to the LLM and trigger another turn immediately!
+                            feedback = f"[SYSTEM OUT (Command: '{scrub_secrets(cmd)}', Exit Code: {code})]\n{out}"
+                            history.append({"role": "user", "content": scrub_secrets(feedback)})
+                            history = prune_dialog_history(history)
+                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            auto_trigger = True
+                            break # Executed one, loop again to let the LLM think about this step's output
+                        else:
+                            print(f"\n{C_Y}⚠️ Command execution rejected by user. Bypassing.{C_R}\n")
+                            feedback = f"[SYSTEM NOTICE: The user explicitly REJECTED the execution of command: '{scrub_secrets(cmd)}']"
+                            history.append({"role": "user", "content": scrub_secrets(feedback)})
+                            history = prune_dialog_history(history)
+                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            
+            except requests.exceptions.HTTPError as http_err:
+                response_obj = http_err.response
+                err_msg = ""
+                if response_obj is not None:
+                    try:
+                        err_msg = response_obj.text
+                        err_json = response_obj.json()
+                        if isinstance(err_json, dict):
+                            err_msg = err_json.get("error", err_json.get("message", response_obj.text))
+                            if isinstance(err_msg, dict):
+                                err_msg = err_msg.get("message", str(err_msg))
+                    except Exception:
+                        err_msg = response_obj.text
+                
+                # Cleanly print the client error box
+                status_code = response_obj.status_code if response_obj else 'Unknown'
+                print()
+                draw_box([err_msg or str(http_err)], title=f"❌ API SERVER ERROR (HTTP {status_code})", border_color=C_Y, text_color=C_W)
+                print()
+                
+                # Check for missing model trigger (Self-Healing Autopilot)
+                if err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
+                    draw_box([
+                        f"Kenbun has detected that '{llm_model}' is not pulled.",
+                        "Proposing automatic model pull..."
+                    ], title=f"🛠️  {C_Y}AUTONOMIC SELF-HEALING: MODEL NOT FOUND", border_color=C_G, text_color=C_G)
+                    print()
+                    
+                    # Propose dynamic pull command inside compose container or host
+                    pull_cmd = f"docker exec -i portable_ollama ollama pull {llm_model} || ollama pull {llm_model}"
+                    draw_box([pull_cmd], title=f"🚨 {C_Y}PROPOSED SELF-HEALING ACTION", border_color=C_G, text_color=C_W)
+                    print()
+                    
+                    confirm = input(f"{C_Y}Authorize model pull execution? [y/N]: {C_R}").strip().lower()
+                    if confirm == "y":
+                        code, out = run_proposed_command(pull_cmd)
+                        cols = get_columns()
+                        title = f"─── Output (Exit Code: {code}) "
+                        dash_len = max(0, cols - len(title) - 1)
+                        print(f"\n{C_G}{title}{'─' * dash_len}{C_R}")
+                        wrapped_out = clean_wrap_text(out.strip(), cols - 2)
+                        print(f"{C_W}{wrapped_out}{C_R}")
+                        print(f"{C_G}{'─' * cols}{C_R}\n")
+                        print(f"{C_G}✓ Model pull completed. Please retry your message!{C_R}\n")
+                        # Pop the last user message to let the user clean retry
+                        if history and history[-1]["role"] == "user":
+                            history.pop()
+                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                auto_trigger = False
+                
+            except KeyboardInterrupt:
+                # KeyboardInterrupt will not trigger normally under signal.signal(SIGINT),
+                # but we preserve it for any libraries that raise it manually
+                print(f"\n\n{C_P}🌸 Dialogue interrupted. Type /exit to close termchat.{C_R}\n")
+                auto_trigger = False
+            except Exception as e:
+                # Format generic connection failures cleanly
+                print()
+                draw_box([
+                    str(e),
+                    "---",
+                    "Recommended Actions:",
+                    "➔ Verify the LLM Server URL is correct and active.",
+                    "➔ Run: docker compose up -d --build (if using Ollama)"
+                ], title="❌ API CONNECTION FAILURE", border_color=C_Y, text_color=C_W)
+                print()
+                auto_trigger = False
+    except Exception as err:
+        sys.stdout.write("\n")
+        error_lines = [
+            "An unexpected system exception bypassed the inner shell execution context.",
+            "",
+            f"➔ Exception: {C_W}{type(err).__name__}: {err}{C_P}",
+            "---",
+            "Restoring terminal configuration before aborting.",
+            "Please check logs or report this error if it persists."
+        ]
+        draw_box(error_lines, title="🚨 CRITICAL SYSTEM SHIELD TRIGGERED", border_color=C_P, text_color=C_G)
+        sys.stdout.write(C_R)
+        sys.stdout.flush()
+        
+        # Cleanly delete active_session_backup.json on error crash to prevent corrupted bootloop
+        if active_brain_health_dir:
+            backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
+            if backup_path.exists():
+                try:
+                    backup_path.unlink()
                 except Exception:
-                    err_msg = response_obj.text
-            
-            # Cleanly print the client error box
-            print(f"\n{C_Y}┌─────────────────────────────────────────────────────────┐")
-            print(f"│ ❌ {C_R}API SERVER ERROR (HTTP {response_obj.status_code if response_obj else 'Unknown'})                   {C_Y}│")
-            print(f"├─────────────────────────────────────────────────────────┤")
-            # Format and wrap error message cleanly
-            err_wrap = err_msg or str(http_err)
-            err_lines = [err_wrap[i:i+53] for i in range(0, len(err_wrap), 53)]
-            for el in err_lines:
-                print(f"│ {C_W}{el:<53}{C_Y} │")
-            print(f"└─────────────────────────────────────────────────────────┘{C_R}\n")
-            
-            # Check for missing model trigger (Self-Healing Autopilot)
-            if err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
-                print(f"\n{C_G}┌─────────────────────────────────────────────────────────┐")
-                print(f"│ 🛠️  {C_Y}AUTONOMIC SELF-HEALING: MODEL NOT FOUND{C_G}              │")
-                print(f"├─────────────────────────────────────────────────────────┤")
-                print(f"│ Kenbun has detected that '{llm_model}' is not pulled.  │")
-                print(f"│ Proposing automatic model pull...                       │")
-                print(f"└─────────────────────────────────────────────────────────┘{C_R}")
-                
-                # Propose dynamic pull command inside compose container or host
-                pull_cmd = f"docker exec -i portable_ollama ollama pull {llm_model} || ollama pull {llm_model}"
-                print(f"\n{C_G}┌─────────────────────────────────────────────────────────┐")
-                print(f"│ 🚨 {C_Y}PROPOSED SELF-HEALING ACTION{C_G}                          │")
-                print(f"├─────────────────────────────────────────────────────────┤")
-                print(f"│ {C_W}{pull_cmd[:53]:<53}{C_G} │")
-                if len(pull_cmd) > 53:
-                    print(f"│ {C_W}{pull_cmd[53:106]:<53}{C_G} │")
-                print(f"└─────────────────────────────────────────────────────────┘{C_R}")
-                
-                confirm = input(f"{C_Y}Authorize model pull execution? [y/N]: {C_R}").strip().lower()
-                if confirm == "y":
-                    code, out = run_proposed_command(pull_cmd)
-                    print(f"\n{C_G}─── Output (Exit Code: {code}) ────────────────────────────────{C_R}")
-                    print(f"{C_W}{out.strip()}{C_R}")
-                    print(f"{C_G}────────────────────────────────────────────────────────────{C_R}\n")
-                    print(f"{C_G}✓ Model pull completed. Please retry your message!{C_R}\n")
-                    # Pop the last user message to let the user clean retry
-                    if history and history[-1]["role"] == "user":
-                        history.pop()
-            auto_trigger = False
-            
-        except KeyboardInterrupt:
-            print(f"\n\n{C_P}🌸 Dialogue interrupted. Type /exit to close termchat.{C_R}\n")
-            auto_trigger = False
-        except Exception as e:
-            # Format generic connection failures cleanly
-            print(f"\n{C_Y}┌─────────────────────────────────────────────────────────┐")
-            print(f"│ ❌ {C_R}API CONNECTION FAILURE                                {C_Y}│")
-            print(f"├─────────────────────────────────────────────────────────┤")
-            e_lines = [str(e)[i:i+53] for i in range(0, len(str(e)), 53)]
-            for el in e_lines:
-                print(f"│ {C_W}{el:<53}{C_Y} │")
-            print(f"├─────────────────────────────────────────────────────────┤")
-            print(f"│ Recommended Actions:                                    │")
-            print(f"│ ➔ Verify the LLM Server URL is correct and active.     │")
-            print(f"│ ➔ Run: docker compose up -d --build (if using Ollama)   │")
-            print(f"└─────────────────────────────────────────────────────────┘{C_R}\n")
-            auto_trigger = False
+                    pass
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
