@@ -11,6 +11,7 @@ import json
 import re
 import requests
 import subprocess
+import shutil
 from pathlib import Path
 
 # Color palettes (Limestone & Sakura themed)
@@ -33,16 +34,19 @@ def load_env_vars():
     ]
     for path in possible_paths:
         if path.exists():
-            with open(path, "r") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#"):
-                        parts = line.split("=", 1)
-                        if len(parts) == 2:
-                            # Strip quotes
-                            val = parts[1].strip().strip('"').strip("'")
-                            env[parts[0].strip()] = val
-            break
+            try:
+                with open(path, "r") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#"):
+                            parts = line.split("=", 1)
+                            if len(parts) == 2:
+                                val = parts[1].strip().strip('"').strip("'")
+                                env[parts[0].strip()] = val
+                break
+            except PermissionError:
+                # Catch permission errors gracefully during pre-flight diagnostics
+                pass
     return env
 
 def get_design_suggestions(query):
@@ -63,11 +67,56 @@ def get_design_suggestions(query):
             pass
     return None
 
+def gather_system_telemetry():
+    """Gathers real-time diagnostic and environment telemetry (Zero-overhead)."""
+    telemetry = []
+    
+    # 1. Check Docker socket permissions
+    sock_path = "/var/run/docker.sock"
+    has_sock = os.path.exists(sock_path)
+    has_access = os.access(sock_path, os.W_OK) if has_sock else False
+    
+    telemetry.append(f"Docker Socket: Exists={has_sock}, WriteAccess={has_access}")
+    
+    # 2. Check Docker daemon status quickly
+    docker_bin = shutil.which("docker")
+    if docker_bin:
+        try:
+            res = subprocess.run([docker_bin, "info"], capture_output=True, text=True, timeout=2)
+            telemetry.append(f"Docker Daemon Status: Active={res.returncode == 0}")
+        except Exception:
+            telemetry.append("Docker Daemon Status: Unresponsive/Offline")
+    else:
+        telemetry.append("Docker Daemon Status: CLI Not Installed")
+        
+    # 3. Check active containers
+    if docker_bin:
+        try:
+            res = subprocess.run([docker_bin, "ps", "--format", "{{.Names}}: {{.Status}}"], capture_output=True, text=True, timeout=2)
+            if res.returncode == 0 and res.stdout.strip():
+                containers = res.stdout.strip().replace("\n", ", ")
+                telemetry.append(f"Active Containers: [{containers}]")
+            else:
+                telemetry.append("Active Containers: None running")
+        except Exception:
+            pass
+            
+    # 4. Check active ports
+    try:
+        # Check if UFW is active
+        ufw_check = subprocess.run(["sudo", "-n", "ufw", "status"], capture_output=True, text=True, timeout=1)
+        if ufw_check.returncode == 0:
+            status = "active" if "active" in ufw_check.stdout.lower() else "inactive"
+            telemetry.append(f"UFW Firewall: Status={status}")
+    except Exception:
+        pass
+        
+    return "\n".join(telemetry)
+
 def run_proposed_command(cmd):
     """Executes a proposed system shell command safely with stdout/stderr capture."""
     print(f"\n{C_Y}⚙️  Executing: {C_C}{cmd}{C_R}")
     try:
-        # Run command with 45s timeout to prevent locking up
         result = subprocess.run(
             cmd,
             shell=True,
@@ -100,11 +149,12 @@ def main():
     print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
     print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
     print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 AGENTIC SHELL v2.6.0")
+    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.0")
     print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
     print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
     print(f"│ 🌸 Active Agent:      {C_W}{llm_model:<34}{C_G}│")
     print(f"│ ⚡ Ollama Gateway URL: {C_W}{llm_url:<34}{C_G}│")
+    print(f"│ 🧠 RAG Rerouter:      {C_G}ACTIVE (Telemetry & Grounding)     │")
     print(f"│ ⚙️  Reflex Status:     {C_Y}ACTIVE (Human-in-the-Loop Safe)    {C_G}│")
     print(f"│                                                         │")
     print(f"│ {C_Y}Commands & Capabilities:{C_G}                                │")
@@ -112,11 +162,6 @@ def main():
     print(f"│   {C_C}/reset{C_G}    - Clear dialogue history                    │")
     print(f"│   {C_C}/system{C_G}   - Dump active environment parameters        │")
     print(f"│   {C_C}/search{C_G}   - Direct search on UI-UX Pro Max database  │")
-    print(f"│                                                         │")
-    print(f"│ {C_P}Reflex Action Loop:{C_R}                                     │")
-    print(f"│   Kenbun can propose shell scripts or VM command fixes  │")
-    print(f"│   by responding in ````execute\\n<command>\\n``` blocks.   │")
-    print(f"│   You can approve or deny command runs with {C_Y}[y/n]{C_P}.      │")
     print(f"└─────────────────────────────────────────────────────────┘{C_R}\n")
 
     system_prompt = (
@@ -140,7 +185,6 @@ def main():
 
     username = os.environ.get("USER", "amontano")
     auto_trigger = False
-    last_user_prompt = ""
 
     while True:
         try:
@@ -193,8 +237,36 @@ def main():
                         print(f"\n{C_Y}❌ Unknown command: {cmd}. Available commands: /exit, /reset, /search, /system{C_R}\n")
                         continue
 
-                history.append({"role": "user", "content": user_input})
-                last_user_prompt = user_input
+                # ========================================================
+                # 🧠 INTENT-BASED DYNAMIC RAG & TELEMETRY PRE-FLIGHT
+                # ========================================================
+                grounding_context = []
+                
+                # A. Design / UI / Style Intent Grounding
+                design_keywords = ["color", "palette", "font", "css", "theme", "design", "style", "ui", "ux", "brutalism", "minimalism", "bento", "chart"]
+                if any(kw in user_input.lower() for kw in design_keywords):
+                    print(f"{C_D}🔍 RAG: Fetching canonical UI-UX Pro Max tokens for query...{C_R}", end="\r")
+                    suggestions = get_design_suggestions(user_input)
+                    if suggestions:
+                        grounding_context.append(f"[DESIGN SYSTEM GROUNDING (Canonical UI-UX Pro Max reference)]:\n{suggestions}")
+                
+                # B. Diagnostic / System Intent Grounding
+                system_keywords = ["docker", "status", "port", "compose", "ip", "run", "daemon", "permission", "error", "fail", "ufw", "firewall", "logs", "active"]
+                if any(kw in user_input.lower() for kw in system_keywords):
+                    print(f"{C_D}⚙️  RAG: Collecting real-time VM system & container telemetry...{C_R}", end="\r")
+                    telemetry = gather_system_telemetry()
+                    if telemetry:
+                        grounding_context.append(f"[REAL-TIME SYSTEM DIAGNOSTIC TELEMETRY (Current VM status)]:\n{telemetry}")
+
+                # Compile final grounded input
+                final_input = user_input
+                if grounding_context:
+                    # Clean the terminal line where progress was printed
+                    print(" " * 80, end="\r") 
+                    context_str = "\n\n".join(grounding_context)
+                    final_input = f"{context_str}\n\n[USER INSTRUCTION]:\n{user_input}"
+
+                history.append({"role": "user", "content": final_input})
 
             # Prepare streaming request
             headers = {"Content-Type": "application/json"}
