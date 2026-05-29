@@ -91,6 +91,9 @@ docker compose up -d --build
 Open your browser and navigate to the local dashboard interface:
 [http://localhost:3000](http://localhost:3000)
 
+> [!NOTE]
+> **VM or Cloud Deployments:** If hosting Kenbun-Agent on a cloud VM or local VM instance (VirtualBox, Proxmox, VMware, Hyper-V), default NAT adapters and firewalls will block traffic. You must transition your VM network adapter to **Bridged Mode** and open UFW ports (3000, 8000, 8001, 8888). Refer to the comprehensive **[VM & Firewall Networking Guide](docs/VM_NETWORKING.md)** for step-by-step instructions.
+
 When you first open the dashboard, it automatically runs a **System Diagnostics Check** to ensure your vector index (ChromaDB) and local inference engine (Ollama) are connected properly.
 
 *Note on Zero-Config local models:* Kenbun automatically bundles a Dockerized Ollama container! When you run `docker compose up`, it will boot up the local engine and pull `llama3.2` and `deepseek-r1` in the background.
