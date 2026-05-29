@@ -1502,6 +1502,7 @@ def run_interactive_wizard():
             if termchat_path.exists():
                 print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
                 try:
+                    import subprocess
                     subprocess.run([sys.executable, str(termchat_path)])
                 except Exception as e:
                     print(f"\n❌ Failed to start terminal chat subprocess: {e}")
