@@ -1,0 +1,140 @@
+@import url('https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-space-mono);
+  --font-heading: "Public Sans", sans-serif;
+  --font-data: "Space Grotesk", sans-serif;
+
+  --color-primary: var(--primary);
+  --color-secondary: var(--secondary);
+  --color-tertiary: var(--tertiary);
+  --color-neutral: var(--neutral);
+  --color-card: var(--card);
+  --color-border: var(--border);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border-muted: var(--border-muted);
+  --color-gold: var(--gold);
+  --color-sand: var(--sand);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+
+  --z-index-grain: 1;
+}
+
+:root {
+  --primary: #0F2537;       /* Deep Oceanic Blue (Midnight) */
+  --secondary: rgba(15, 37, 55, 0.65); /* Translucent ink instead of slate gray */
+  --tertiary: #00885F;      /* Planhat Premium Emerald Green */
+  --neutral: #FFFFFF;       /* Pure white backdrop */
+  
+  --background: var(--neutral);
+  --foreground: var(--primary);
+  
+  --border: rgba(15, 37, 55, 0.08); /* Ultra-thin minimalist borders */
+  --border-muted: rgba(15, 37, 55, 0.04);
+  --card: #FFFFFF;
+  --sand: rgba(0, 136, 95, 0.04);   /* Soft emerald interactive hover wash */
+  --grain-opacity: 0.00;            /* Zero texture for absolute vector clarity */
+  
+  /* Backward-compatibility mappings */
+  --gold: var(--tertiary);
+}
+
+.light {
+  --primary: #0F2537;
+  --secondary: rgba(15, 37, 55, 0.65);
+  --tertiary: #00885F;
+  --neutral: #FFFFFF;
+  
+  --background: var(--neutral);
+  --foreground: var(--primary);
+  
+  --border: rgba(15, 37, 55, 0.08);
+  --border-muted: rgba(15, 37, 55, 0.04);
+  --card: #FFFFFF;
+  --sand: rgba(0, 136, 95, 0.04);
+  --grain-opacity: 0.00;
+  
+  /* Backward-compatibility mappings */
+  --gold: var(--tertiary);
+}
+
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  @apply antialiased;
+}
+
+/* Interactivity Mandate */
+button, a, [role="button"], .cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Journalistic Headlines */
+h1, h2, h3, .pub-title {
+  font-family: var(--font-heading);
+  @apply font-semibold tracking-tight text-primary;
+}
+
+/* Data & Labels */
+.label-caps {
+  font-family: var(--font-data);
+  @apply text-[0.75rem] uppercase tracking-widest text-secondary;
+}
+
+/* Layout Container */
+.fluid-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-md);
+}
+
+/* Heritage Utilities */
+.artisan-shadow {
+  box-shadow: 0 4px 20px -5px rgba(26, 28, 30, 0.05), 0 1px 3px rgba(26, 28, 30, 0.02);
+}
+
+/* Dynamic High-Tech Grid Overlays */
+.high-tech-grid {
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px),
+                    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  opacity: 0.12;
+  transition: opacity 0.5s ease;
+}
+
+.light .high-tech-grid {
+  opacity: 0.35;
+}
+
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='1' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  pointer-events: none;
+  z-index: var(--z-index-grain);
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grain-overlay {
+    display: none !important;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: rgba(26, 28, 30, 0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+

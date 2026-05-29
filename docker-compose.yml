@@ -1,0 +1,97 @@
+version: '3.8'
+
+services:
+  # 1. Standalone Vector Database (ChromaDB)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: portable_chroma
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chroma_data:/chroma_data
+    environment:
+      - CHROMA_DB_IMPL=sqlite
+      - PERSIST_DIRECTORY=/chroma_data
+    restart: always
+
+  # 2. Local AI Inference Engine (Ollama)
+  ollama_server:
+    image: ollama/ollama:latest
+    container_name: portable_ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: always
+
+  # 3. Model Initializer (Dynamic Loop & Bypass State)
+  ollama_init:
+    image: ollama/ollama:latest
+    container_name: portable_ollama_init
+    depends_on:
+      - ollama_server
+    environment:
+      - OLLAMA_HOST=ollama_server:11434
+      - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-llama3.2:3b deepseek-r1:8b}
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      if [ \"$$OLLAMA_PULL_MODELS\" != \"none\" ]; then
+        for model in $$OLLAMA_PULL_MODELS; do
+          echo \"📡 [OLLAMA_INIT] Fetching local model: $$model\";
+          ollama pull $$model;
+        done;
+        echo \"✓ [OLLAMA_INIT] All local models successfully provisioned!\";
+      else
+        echo \"💡 [OLLAMA_INIT] Cloud-Only or Host-Only profile. Skipping pull.\";
+      fi
+      "
+
+
+  # 4. Portable FastMCP Swarm Server
+  fastmcp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portable_fastmcp
+    ports:
+      - "${API_PORT:-8001}:8001"
+      - "${MONITOR_PORT:-8002}:8002"
+    volumes:
+      - .:/app
+      - brain_health:/app/core/brain_health
+    environment:
+      - PROJECT_ROOT=/app
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - SWARM_PC_IP=ollama_server
+      - PRIMARY_LLM_URL=http://ollama_server:11434/v1
+      - OLLAMA_URL=http://ollama_server:11434/api/generate
+    depends_on:
+      - chromadb
+    restart: always
+
+  # 3. Telemetry Next.js Dashboard
+  dashboard:
+    image: node:20-slim
+    container_name: portable_dashboard
+    working_dir: /app
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+      - brain_health:/app/brain_health
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_PORT=${API_PORT:-8001}
+      - INTERNAL_API_URL=http://fastmcp_server:${API_PORT:-8001}
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+    command: sh -c "rm -rf .next package-lock.json && npm install --include=optional && npm run dev"
+    depends_on:
+      - fastmcp_server
+    restart: always
+
+volumes:
+  chroma_data:
+  brain_health:
+  ollama_data:

@@ -1,0 +1,151 @@
+{
+    "categories": {
+        "security": {
+            "consult_supervisor": {
+                "alpha": 6.0,
+                "beta": 1.0
+            },
+            "guardrail_audit": {
+                "alpha": 4.0,
+                "beta": 1.0
+            },
+            "maze_verification": {
+                "alpha": 3.0,
+                "beta": 1.0
+            }
+        },
+        "frontend": {
+            "gemini_research": {
+                "alpha": 4.0,
+                "beta": 1.0
+            },
+            "gemini_code_review": {
+                "alpha": 3.0,
+                "beta": 1.0
+            }
+        },
+        "logic": {
+            "recall_fix": {
+                "alpha": 5.0,
+                "beta": 1.0
+            },
+            "run_code_safely": {
+                "alpha": 4.0,
+                "beta": 1.0
+            },
+            "error_memory": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "supervisor_audit": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "repo_mapper": {
+                "alpha": 4.0,
+                "beta": 1.0
+            }
+        },
+        "research": {
+            "gemini_research": {
+                "alpha": 5.0,
+                "beta": 1.0
+            },
+            "scan_repo": {
+                "alpha": 4.0,
+                "beta": 1.0
+            },
+            "gemini_reviewer": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "repo_mapper": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "research_with_gemini": {
+                "alpha": 3.0,
+                "beta": 1.0
+            }
+        }
+    },
+    "global": {
+        "scan_repo": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "gemini_code_review": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "gemini_research": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "consult_supervisor": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "remember_fix": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "recall_fix": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "save_checkpoint": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "restore_checkpoint": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "run_code_safely": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "reflect_and_distill": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "guardrail_audit": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "maze_verification": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "tune_swarm": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "consult_hivemind": {
+            "alpha": 1.0,
+            "beta": 1.0
+        },
+        "gemini_reviewer": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "error_memory": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "repo_mapper": {
+            "alpha": 3.0,
+            "beta": 1.0
+        },
+        "research_with_gemini": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "supervisor_audit": {
+            "alpha": 2.0,
+            "beta": 1.0
+        }
+    },
+    "last_updated": 1778044747.32654
+}

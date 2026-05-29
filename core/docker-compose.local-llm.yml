@@ -1,0 +1,75 @@
+version: '3.8'
+
+# ────────────────────────────────────────────────────────────────────
+# Kenbun Heavy GPU AI Stack (Linux/PC Workstation Version)
+#
+# - ollama          : LLM server (pulls models on first start)
+# - ollama-init     : One-shot job that pulls models into the volume
+#
+# ⚠️ WARNING: DO NOT RUN THIS ON macOS DOCKER.
+# This file is intended for your remote Linux PC reasoning workstation
+# where NVIDIA GPU passthrough (RTX 5070 Ti) is natively supported.
+# ────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── The Brain (Ollama LLM server) ─────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: system3_brain
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h
+      - OLLAMA_HOST=0.0.0.0
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ── The Loader (one-shot model pull) ──────────────────────────────
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: system3_brain_init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen2.5-coder:7b llama3.2:3b phi3:mini}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        echo "🔌 Waiting for Ollama at $$OLLAMA_HOST ..."
+        until ollama list >/dev/null 2>&1; do sleep 2; done
+        echo "✅ Ollama is up. Required models: $$OLLAMA_MODELS"
+        EXISTING="$$(ollama list 2>/dev/null | awk 'NR>1 {print $$1}')"
+        for m in $$OLLAMA_MODELS; do
+          if echo "$$EXISTING" | grep -qx "$$m"; then
+            echo "  ⏭️  $$m already present, skipping."
+          else
+            echo "  ⬇️  Pulling $$m ..."
+            ollama pull "$$m"
+            echo "  ✅ $$m ready."
+          fi
+        done
+        echo "🎉 All models loaded. ollama-init exiting."
+    restart: "no"
+
+volumes:
+  ollama_data:
