@@ -23,6 +23,35 @@ C_W = "\033[97m" # White
 C_D = "\033[90m" # Grey
 C_R = "\033[0m"  # Reset
 
+def decrypt_value(val):
+    """Decrypts values that are encrypted with 'enc:' prefix using the repository master key."""
+    if not val.startswith("enc:"):
+        return val
+    try:
+        from cryptography.fernet import Fernet
+        # Resolve key file path dynamically
+        possible_keys = [
+            Path.cwd() / ".kenbun_master.key",
+            Path.cwd() / "core" / ".kenbun_master.key",
+            Path(__file__).parent.parent / ".kenbun_master.key",
+            Path(__file__).parent.parent / "core" / ".kenbun_master.key"
+        ]
+        key = None
+        for kp in possible_keys:
+            if kp.exists():
+                with open(kp, "rb") as f:
+                    key = f.read().strip()
+                break
+        
+        if key:
+            f = Fernet(key)
+            # Decrypt value (strip 'enc:' prefix)
+            return f.decrypt(val[4:].encode()).decode()
+    except Exception:
+        # Fallback to returning raw string if decryption fails or cryptography is missing
+        pass
+    return val
+
 def load_env_vars():
     """Manually parse .env file to load active configurations securely."""
     env = {}
@@ -41,8 +70,10 @@ def load_env_vars():
                         if line and not line.startswith("#"):
                             parts = line.split("=", 1)
                             if len(parts) == 2:
+                                key = parts[0].strip()
                                 val = parts[1].strip().strip('"').strip("'")
-                                env[parts[0].strip()] = val
+                                # Decrypt immediately on load!
+                                env[key] = decrypt_value(val)
                 break
             except PermissionError:
                 # Catch permission errors gracefully during pre-flight diagnostics
@@ -149,7 +180,7 @@ def main():
     print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
     print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
     print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.0")
+    print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.7.1")
     print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
     print(f"{C_G}┌─────────────────────────────────────────────────────────┐")
     print(f"│ 🌸 Active Agent:      {C_W}{llm_model:<34}{C_G}│")
@@ -346,7 +377,7 @@ def main():
             auto_trigger = False
         except Exception as e:
             print(f"\n\n{C_Y}❌ Failed to query API: {e}{C_R}")
-            print(f"{C_D}Please ensure the container stack is active and {llm_url} is accessible.{C_R}\n")
+            print(f"{C_D}Please ensure the container stack is active.{C_R}\n")
             auto_trigger = False
 
 if __name__ == "__main__":
