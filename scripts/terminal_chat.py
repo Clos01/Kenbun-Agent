@@ -193,13 +193,13 @@ def save_session_backup(history, cwd, llm_url, llm_model):
     for msg in history:
         scrubbed_msg = msg.copy()
         if "content" in scrubbed_msg:
-            scrubbed_msg["content"] = scrubbed_secrets(scrubbed_msg["content"])
+            scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
         scrubbed_history.append(scrubbed_msg)
     
     data = {
         "history": scrubbed_history,
         "cwd": str(cwd),
-        "llm_url": scrubbed_secrets(llm_url),
+        "llm_url": scrub_secrets(llm_url),
         "llm_model": llm_model
     }
     
@@ -1250,7 +1250,7 @@ def main():
                     for msg in backup_history:
                         scrubbed_msg = msg.copy()
                         if "content" in scrubbed_msg:
-                            scrubbed_msg["content"] = scrubbed_secrets(scrubbed_msg["content"])
+                            scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
                         history.append(scrubbed_msg)
                     saved_cwd = backup_data.get("cwd")
                     if saved_cwd and os.path.exists(saved_cwd):
