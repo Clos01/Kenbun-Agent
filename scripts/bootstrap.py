@@ -275,11 +275,11 @@ def select_menu(options, title="Select provider:"):
             tty.setraw(fd)
             ch = sys.stdin.read(1)
             if ch == '\x1b':
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.25)
                 if rlist:
                     ch2 = sys.stdin.read(1)
                     if ch2 == '[':
-                        rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
+                        rlist, _, _ = select.select([sys.stdin], [], [], 0.25)
                         if rlist:
                             ch3 = sys.stdin.read(1)
                             if ch3 == 'A': return 'up'
@@ -291,6 +291,10 @@ def select_menu(options, title="Select provider:"):
                 return 'space'
             elif ch in ('q', 'Q'):
                 return 'quit'
+            elif ch in ('w', 'W', 'k', 'K'):
+                return 'up'
+            elif ch in ('s', 'S', 'j', 'J'):
+                return 'down'
             elif ch.isdigit():
                 return int(ch)
             return ch
