@@ -157,6 +157,30 @@ If the automated installer `install.sh` or bootstrapper encounters runtime const
 
 ---
 
+## ⌨️ Terminal Navigation & SSH Latency Troubleshooting
+
+When connected remotely to your server via SSH, network latency can occasionally interfere with multi-byte escape sequences (such as arrow keys `↑` and `↓`), causing the terminal menus to instantly cancel or behave erratically.
+
+### 🌟 Tactile Navigation Shortcuts (Fallback)
+If your arrow keys are not working or cause the setup menu to exit, you can use standard keyboard letters to navigate comfortably:
+- Press **`w`** or **`k`** (Vim Up) to move **UP**.
+- Press **`s`** or **`j`** (Vim Down) to move **DOWN**.
+- Press **`ENTER`** or **`SPACE`** to select.
+- Press **`ESC`** or **`q`** to cancel/exit.
+
+### 📥 Safe Code Updates & Pulling fixes
+To pull the latest updates cleanly without risking local merge conflicts, run:
+```bash
+cd ~/.kenbun-agent
+git pull origin main
+```
+If you encounter git merge errors or want to force sync your server perfectly with the latest GitHub code, execute:
+```bash
+git fetch origin && git reset --hard origin/main
+```
+
+---
+
 ## 📖 Operational Commands
 
 *   `python3 scripts/bootstrap.py` — Run setup and bootstrapper.

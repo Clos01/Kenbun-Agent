@@ -320,7 +320,7 @@ def select_menu(options, title="Select provider:"):
             lines_printed = 0
             
             menu_text = f"\n{c_m}{title}{c_r}\n"
-            menu_text += f" {c_g}↑↓ navigate   ENTER/SPACE select   ESC/q cancel{c_r}\n\n"
+            menu_text += f" {c_g}↑↓ (or w/s) navigate   ENTER/SPACE select   ESC/q cancel{c_r}\n\n"
             lines_printed += 4
             
             for idx, opt in enumerate(options):
