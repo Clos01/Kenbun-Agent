@@ -1064,36 +1064,10 @@ def launch_docker_swarm():
 
     # 2. Proactive Docker Daemon Health Check (Self-Healing & Secure)
     try:
-        import getpass
-        import urllib.parse
-        import stat
-        
         # Determine socket location for permission auditing (locale-independent check)
         socket_path = "/var/run/docker.sock"
-        docker_host = os.environ.get("DOCKER_HOST", "")
-        if docker_host.startswith("unix://"):
-            try:
-                parsed = urllib.parse.urlparse(docker_host)
-                if parsed.path:
-                    # Resolve path absolutely to prevent traversal
-                    resolved_path = os.path.abspath(parsed.path)
-                    # Limit path probing to standard locations to prevent arbitrary side-channel leaks
-                    allowed_prefixes = ("/var/run/", "/run/", "/tmp/", "/Users/", "/home/")
-                    if any(resolved_path.startswith(pref) for pref in allowed_prefixes):
-                        socket_path = resolved_path
-            except Exception:
-                pass
-            
-        has_socket = False
-        has_write_access = False
-        try:
-            if os.path.exists(socket_path):
-                mode = os.stat(socket_path).st_mode
-                if stat.S_ISSOCK(mode) or stat.S_ISFIFO(mode) or stat.S_REG(mode):
-                    has_socket = True
-                    has_write_access = os.access(socket_path, os.W_OK)
-        except Exception:
-            pass
+        has_socket = os.path.exists(socket_path)
+        has_write_access = os.access(socket_path, os.W_OK) if has_socket else False
         
         # Query daemon info using resolved absolute path and timeout to avoid hanging indefinitely
         daemon_check = subprocess.run([docker_bin, "info"], capture_output=True, text=True, timeout=5)
@@ -1105,25 +1079,43 @@ def launch_docker_swarm():
             elif "permission denied" in (daemon_check.stderr or "").lower():
                 is_permission_denied = True
                 
-            raw_user = getpass.getuser()
-            # Strict regex sanitization to remove any ANSI sequences or special chars to prevent UI spoofing
-            current_user = re.sub(r'[^a-zA-Z0-9_-]', '', strip_ansi(raw_user))
-            
+            # Detect systemd presence and Docker status (Ubuntu specific self-healing)
+            is_systemd = os.path.exists("/run/systemd/system")
+            systemd_docker_active = False
+            if is_systemd:
+                try:
+                    sysctl_check = subprocess.run(["systemctl", "is-active", "docker"], capture_output=True, text=True, timeout=2)
+                    if sysctl_check.stdout.strip() == "active":
+                        systemd_docker_active = True
+                except Exception:
+                    pass
+
             print(f"\n{c_y}┌─────────────────────────────────────────────────────────┐")
             print("│             🚨 DOCKER DAEMON INACTIVE / ACCESS DENIED   │")
             print("├─────────────────────────────────────────────────────────┤")
             if is_permission_denied:
-                print(f"│ Docker socket exists, but user '{current_user}' lacks access. │")
+                print("│ Docker socket exists, but your user lacks permissions.  │")
             else:
                 print("│ Docker CLI is active, but the Daemon is not running.   │")
             print("├─────────────────────────────────────────────────────────┤")
             print("│ Recommended Action:                                     │")
-            print("│ ➔ macOS: Start the Docker Desktop application          │")
-            print("│ ➔ Linux (Start & Enable):                               │")
-            print("│    Run:  sudo systemctl enable --now docker            │")
-            print("│ ➔ Linux (Permissions - run if socket access is denied): │")
-            print(f"│    Run:  sudo usermod -aG docker {current_user}         ")
-            print("│    Then log out & back in, or run: newgrp docker       │")
+            if sys.platform == "darwin":
+                print("│ ➔ macOS: Start the Docker Desktop application          │")
+            else:
+                if is_systemd:
+                    if not systemd_docker_active:
+                        print("│ ➔ Linux (Start & Enable):                               │")
+                        print("│    Run:  sudo systemctl enable --now docker            │")
+                    else:
+                        print("│ ➔ Docker service is active in systemd.                  │")
+                else:
+                    print("│ ➔ Linux (Start Daemon):                                 │")
+                    print("│    Run:  sudo service docker start                     │")
+                
+                if is_permission_denied:
+                    print("│ ➔ Linux (Permissions - run if socket access is denied): │")
+                    print("│    Run:  sudo usermod -aG docker $USER                 │")
+                    print("│    Then log out & back in, or run: newgrp docker       │")
             print("├─────────────────────────────────────────────────────────┤")
             print("│ ⚠️  SECURITY NOTICE: Adding a user to the 'docker' group  │")
             print("│    grants root-equivalent access to the host system.   │")

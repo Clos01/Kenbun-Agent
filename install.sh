@@ -95,12 +95,15 @@ exit_with_error() {
 detect_os() {
     OS="unknown"
     DISTRO="unknown"
+    DISTRO_LIKE=""
+    IS_APT_BASED=0
     case "$(uname -s)" in
         Linux*)  
             OS="linux"  
             if [ -f /etc/os-release ]; then
                 . /etc/os-release
                 DISTRO=$ID
+                DISTRO_LIKE=${ID_LIKE:-""}
             fi
             ;;
         Darwin*) 
@@ -115,7 +118,20 @@ detect_os() {
         log_warn "Unsupported operating system: $(uname -s)"
     else
         if [ "$OS" = "linux" ]; then
-            log_success "Detected Operating System: $OS (Distro: $DISTRO)"
+            # Determine if standard Debian/Ubuntu based package manager (apt) is present
+            case "$DISTRO" in
+                ubuntu|debian|raspbian|pop|mint)
+                    IS_APT_BASED=1
+                    ;;
+                *)
+                    case "$DISTRO_LIKE" in
+                        *ubuntu*|*debian*)
+                            IS_APT_BASED=1
+                            ;;
+                    esac
+                    ;;
+            esac
+            log_success "Detected Operating System: $OS (Distro: $DISTRO, APT-Compatible: $IS_APT_BASED)"
         else
             log_success "Detected Operating System: $OS"
         fi
@@ -128,7 +144,7 @@ audit_dependencies() {
 
     # Check Xcode on macOS
     if [ "$OS" = "macos" ]; then
-        if ! xcode-select -p &>/dev/null; then
+        if ! xcode-select -p >/dev/null 2>&1; then
             exit_with_error "$ERR_008_MACOS_XCODE" \
                 "Xcode Command Line Tools are missing or inactive." \
                 "Run: ${BOLD}xcode-select --install${NC} and accept the prompt to initialize macOS build headers."
@@ -136,8 +152,8 @@ audit_dependencies() {
     fi
 
     # Check Git
-    if command -v git &>/dev/null; then
-        if git --version &>/dev/null; then
+    if command -v git >/dev/null 2>&1; then
+        if git --version >/dev/null 2>&1; then
             log_success "Git is active ($(git --version | head -n 1))"
         else
             exit_with_error "$ERR_001_GIT_MISSING" \
@@ -149,23 +165,24 @@ audit_dependencies() {
         if [ "$OS" = "macos" ]; then
             git_advice="Install git using Homebrew: ${BOLD}brew install git${NC}"
         elif [ "$OS" = "linux" ]; then
-            case "$DISTRO" in
-                ubuntu|debian|raspbian|pop)
-                    git_advice="Install git using apt:\n       Run: ${BOLD}sudo apt update && sudo apt install -y git${NC}"
-                    ;;
-                fedora|rhel|centos|rocky|almalinux)
-                    git_advice="Install git using dnf:\n       Run: ${BOLD}sudo dnf install -y git${NC}"
-                    ;;
-                alpine)
-                    git_advice="Install git using apk:\n       Run: ${BOLD}apk add git${NC}"
-                    ;;
-                arch)
-                    git_advice="Install git using pacman:\n       Run: ${BOLD}sudo pacman -S git${NC}"
-                    ;;
-                *)
-                    git_advice="Please install git using your package manager (${BOLD}apt, dnf, pacman, apk${NC}) and retry."
-                    ;;
-            esac
+            if [ "$IS_APT_BASED" -eq 1 ]; then
+                git_advice="Install git using apt:\n       Run: ${BOLD}sudo apt update && sudo apt install -y git${NC}"
+            else
+                case "$DISTRO" in
+                    fedora|rhel|centos|rocky|almalinux)
+                        git_advice="Install git using dnf:\n       Run: ${BOLD}sudo dnf install -y git${NC}"
+                        ;;
+                    alpine)
+                        git_advice="Install git using apk:\n       Run: ${BOLD}apk add git${NC}"
+                        ;;
+                    arch)
+                        git_advice="Install git using pacman:\n       Run: ${BOLD}sudo pacman -S git${NC}"
+                        ;;
+                    *)
+                        git_advice="Please install git using your package manager (${BOLD}apt, dnf, pacman, apk${NC}) and retry."
+                        ;;
+                esac
+            fi
         fi
         exit_with_error "$ERR_001_GIT_MISSING" \
             "Git is missing from this system." \
@@ -173,8 +190,8 @@ audit_dependencies() {
     fi
 
     # Check Python3
-    if command -v python3 &>/dev/null; then
-        if python3 -c 'import sys' &>/dev/null; then
+    if command -v python3 >/dev/null 2>&1; then
+        if python3 -c 'import sys' >/dev/null 2>&1; then
             python_ver=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
             log_success "Python3 is active (Version $python_ver)"
             
@@ -191,39 +208,76 @@ audit_dependencies() {
                 "Verify your interpreter installation by running: ${BOLD}python3 --version${NC}."
         fi
     else
+        local python_advice="Please install Python 3.8+ and retry."
+        if [ "$OS" = "macos" ]; then
+            python_advice="Install Python3 using Homebrew: ${BOLD}brew install python${NC}"
+        elif [ "$OS" = "linux" ] && [ "$IS_APT_BASED" -eq 1 ]; then
+            python_advice="Install Python3 using apt:\n       Run: ${BOLD}sudo apt update && sudo apt install -y python3 python3-pip python3-venv python3-dev build-essential${NC}"
+        fi
         exit_with_error "$ERR_002_PYTHON_MISSING" \
             "Python3 is missing from this system." \
-            "Please install Python 3.8+ and retry."
+            "$python_advice"
+    fi
+
+    # Check Python3 venv module presence proactively
+    if command -v python3 >/dev/null 2>&1; then
+        if python3 -c 'import venv' >/dev/null 2>&1; then
+            log_success "Python3 venv module is active"
+        else
+            python_ver=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+            local venv_advice="Please install python3-venv and retry."
+            if [ "$OS" = "macos" ]; then
+                venv_advice="Reinstall Python3 using Homebrew: ${BOLD}brew install python${NC}"
+            elif [ "$OS" = "linux" ] && [ "$IS_APT_BASED" -eq 1 ]; then
+                venv_advice="Install the missing package first:\n       Run: ${BOLD}sudo apt update && sudo apt install -y python3-venv python3.${python_ver}-venv${NC}"
+            fi
+            exit_with_error "$ERR_004_VENV_FAILED" \
+                "Python3 virtual environment module ('venv') is missing." \
+                "$venv_advice"
+        fi
     fi
 
     # Check Docker
-    if command -v docker &>/dev/null; then
+    if command -v docker >/dev/null 2>&1; then
         # Capture stderr to distinguish permissions error from stopped service
         local docker_output
         docker_output=$(docker info 2>&1 || true)
         
-        if [[ "$docker_output" == *"permission denied"* ]]; then
-            log_warn "Docker is running, but you do not have permission to access the socket."
-            log_warn "  ➔ Linux (Permissions): Run ${BOLD}sudo usermod -aG docker \$USER && newgrp docker${NC}"
-        elif [[ "$docker_output" == *"Cannot connect to the Docker daemon"* || "$docker_output" == *"error during connect"* ]]; then
-            log_warn "Docker CLI is active, but the Docker Daemon is not running or not enabled."
-            log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
-            log_warn "  ➔ macOS: Open the Docker Desktop application"
-        elif docker info &>/dev/null; then
-            log_success "Docker Engine is active and running ($(docker --version | head -n 1))"
-        else
-            log_warn "Docker CLI is active, but the Docker Daemon connection is failing."
-            log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
-            log_warn "  ➔ macOS: Open the Docker Desktop application"
-        fi
+        case "$docker_output" in
+            *"permission denied"*)
+                log_warn "Docker is running, but you do not have permission to access the socket."
+                log_warn "  ➔ Linux (Permissions): Run ${BOLD}sudo usermod -aG docker \$USER && newgrp docker${NC}"
+                ;;
+            *"Cannot connect to the Docker daemon"*|*"error during connect"*)
+                log_warn "Docker CLI is active, but the Docker Daemon is not running or not enabled."
+                log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
+                log_warn "  ➔ macOS: Open the Docker Desktop application"
+                ;;
+            *)
+                if docker info >/dev/null 2>&1; then
+                    log_success "Docker Engine is active and running ($(docker --version | head -n 1))"
+                else
+                    log_warn "Docker CLI is active, but the Docker Daemon connection is failing."
+                    log_warn "  ➔ Linux (Start & Enable): Run ${BOLD}sudo systemctl enable --now docker${NC}"
+                    log_warn "  ➔ macOS: Open the Docker Desktop application"
+                fi
+                ;;
+        esac
     else
         log_warn "Docker is not detected. (Docker Compose Swarm stack requires Docker Engine to run)."
+        if [ "$OS" = "linux" ]; then
+            if [ "$IS_APT_BASED" -eq 1 ]; then
+                log_warn "  ➔ Linux (Self-Healing Install): Run ${BOLD}curl -fsSL https://get.docker.com | sh && sudo systemctl enable --now docker && sudo usermod -aG docker \$USER && newgrp docker${NC}"
+            else
+                log_warn "  ➔ Linux (Self-Healing Install): Use your package manager to install 'docker' or follow https://docs.docker.com/engine/install/"
+            fi
+        fi
     fi
 
     # Check Docker Compose
-    if docker compose version &>/dev/null; then
+    if docker compose version >/dev/null 2>&1; then
         log_success "Docker Compose is active ($(docker compose version | head -n 1))"
-    elif command -v docker-compose &>/dev/null; then
+    elif command -v docker-compose >/dev/null 2>&1; then
         log_success "Docker-Compose (legacy CLI) is active ($(docker-compose --version | head -n 1))"
     else
         log_warn "Docker Compose is missing. You may not be able to spin up local docker swarm containers."
@@ -352,18 +406,22 @@ EOF
 
     # Shell Profile PATH check
     SHELL_CONFIG=""
-    if [[ "$SHELL" == *"zsh"* ]]; then
-        SHELL_CONFIG="$HOME/.zshrc"
-    elif [[ "$SHELL" == *"bash"* ]]; then
-        SHELL_CONFIG="$HOME/.bashrc"
-        [ ! -f "$SHELL_CONFIG" ] && SHELL_CONFIG="$HOME/.bash_profile"
-    else
-        if [ -f "$HOME/.zshrc" ]; then
+    case "$SHELL" in
+        *zsh*)
             SHELL_CONFIG="$HOME/.zshrc"
-        elif [ -f "$HOME/.bashrc" ]; then
+            ;;
+        *bash*)
             SHELL_CONFIG="$HOME/.bashrc"
-        fi
-    fi
+            [ ! -f "$SHELL_CONFIG" ] && SHELL_CONFIG="$HOME/.bash_profile"
+            ;;
+        *)
+            if [ -f "$HOME/.zshrc" ]; then
+                SHELL_CONFIG="$HOME/.zshrc"
+            elif [ -f "$HOME/.bashrc" ]; then
+                SHELL_CONFIG="$HOME/.bashrc"
+            fi
+            ;;
+    esac
 
     if [ -n "$SHELL_CONFIG" ]; then
         touch "$SHELL_CONFIG" 2>/dev/null || true
