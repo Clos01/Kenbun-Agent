@@ -846,7 +846,21 @@ def check_and_migrate_project_memory(old_dirs):
         return
         
     cwd = Path.cwd().resolve()
-    current_dirs = {p for p in cwd.iterdir() if p.is_dir()}
+    # Gather current directories (up to depth 2)
+    current_dirs = set()
+    try:
+        for p in cwd.iterdir():
+            if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
+                current_dirs.add(p)
+                try:
+                    for sub in p.iterdir():
+                        if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
+                            current_dirs.add(sub)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+        
     new_dirs = current_dirs - old_dirs
     
     if not new_dirs:
@@ -854,7 +868,7 @@ def check_and_migrate_project_memory(old_dirs):
         
     for nd in new_dirs:
         # Ignore standard hidden dirs
-        if nd.name.startswith(".") or nd.name == "venv" or nd.name == "node_modules":
+        if nd.name.startswith(".") or nd.name in ("venv", "node_modules", "brain_health"):
             continue
             
         box_lines = [
@@ -888,6 +902,19 @@ def check_and_migrate_project_memory(old_dirs):
                 
                 # Proactively create a .kenbun workspace marker
                 (nd / ".kenbun").mkdir(exist_ok=True)
+                
+                # 3. Save project creation memory to ChromaDB Hivemind
+                title = f"Project Workspace Created: {nd.name}"
+                content = (
+                    f"PROJECT WORKSPACE DETECTED & BOUND\n"
+                    f"==================================\n"
+                    f"Folder Name: {nd.name}\n"
+                    f"Location: {nd.resolve()}\n"
+                    f"Creation & Binding Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+                    f"Status: Active Project Bound.\n"
+                )
+                save_concept_to_hivemind(title, content, tags="project-workspace,folder-creation", category="concepts")
+                log_event(f"Bound memory and saved project concept for folder: {nd.name}")
                 break
             except Exception as e:
                 print(f"\n{C_Y}❌ Failed to migrate memories: {e}{C_R}\n")
@@ -1109,7 +1136,19 @@ def run_proposed_command(cmd):
     
     # Store directory list state before execution
     cwd = Path.cwd().resolve()
-    old_dirs = {p for p in cwd.iterdir() if p.is_dir()}
+    old_dirs = set()
+    try:
+        for p in cwd.iterdir():
+            if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
+                old_dirs.add(p)
+                try:
+                    for sub in p.iterdir():
+                        if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
+                            old_dirs.add(sub)
+                except Exception:
+                    pass
+    except Exception:
+        pass
     
     try:
         result = subprocess.run(
@@ -1610,8 +1649,8 @@ def main():
                 history = prune_dialog_history(history)
                 save_session_backup(history, Path.cwd(), llm_url, llm_model)
                 
-                # Check for execute blocks: ```execute\n<command>\n```
-                execute_blocks = re.findall(r"```execute\n(.*?)\n```", full_reply, re.DOTALL)
+                # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
+                execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
                 if execute_blocks:
                     for block in execute_blocks:
                         cmd = block.strip()
