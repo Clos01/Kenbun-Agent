@@ -56,3 +56,8 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`sync_to_pc.py`**: Syncs local changes to the Remote PC.
 *   **`sync_intelligence.py`**: Synchronizes Bayesian weights across nodes.
 *   **`nightly_bake.py`**: Scheduled job for re-indexing and system maintenance.
+
+## 🧪 `tests/` (Sovereign Verification Suite)
+*   **`test_autopilot.py`**: Automated unit tests validating dynamic VRAM/RAM hardware sensing profiles on macOS and Linux.
+*   **`test_ralph_loop.py`**: Automated integration tests validating autonomic rollback, re-grounding, and self-healing trial results inside the supervisor.
+

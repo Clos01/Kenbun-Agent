@@ -85,6 +85,8 @@ The system is segmented into two primary domains to ensure infinite scalability 
 
 ### 🩺 Sovereign Testing & Benchmarks
 *   **`tests/`**: Functional unit and integration tests.
+    *   **`test_autopilot.py`**: [NEW] Automated tests for dynamic VRAM/RAM platform-sensing profiles.
+    *   **`test_ralph_loop.py`**: [NEW] Automated tests for the autonomic Ralph-Loop self-healing recovery engine.
 *   **`benchmarks/benchmark_protocol.py`**: Performance verification suite.
 *   **`benchmarks/chaos_orchestrator.py`**: Stress-test script for budget and network failure.
 
