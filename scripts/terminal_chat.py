@@ -897,7 +897,7 @@ def check_and_migrate_project_memory(old_dirs):
 # ========================================================
 
 def log_event(msg):
-    """Logs a diagnostic event directly to shared mcp_debug.log for Dozzle aggregation."""
+    """Logs a diagnostic event directly to shared mcp_debug.log for Dozzle aggregation and live_telemetry.json for Dashboard."""
     try:
         root = get_active_project_root()
         log_file = root / "mcp_debug.log"
@@ -906,6 +906,17 @@ def log_event(msg):
             f.write(f"[{timestamp}] [TERMCHAT] {msg}\n")
     except Exception:
         pass
+
+    global active_brain_health_dir
+    if active_brain_health_dir:
+        try:
+            telemetry_path = Path(active_brain_health_dir) / "live_telemetry.json"
+            data = {"timestamp": time.time(), "message": f"[TERMCHAT] {msg}", "type": "log"}
+            with open(telemetry_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(data) + "\n")
+        except Exception:
+            pass
+
 
 def save_concept_to_hivemind(title, content, tags, category="concepts"):
     """
