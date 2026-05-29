@@ -132,6 +132,32 @@ mcp://localhost:8001
 
 ---
 
+## 🌸 Kenbun Cognitive Agentic Shell (Termchat)
+
+Kenbun-Agent includes an **autonomous, self-healing interactive terminal chat shell** located at `scripts/terminal_chat.py`. 
+
+Instead of just chatting, the terminal agent acts as a fully situated developer copilot and system administrator:
+
+1. **Self-Healing Reflex Shell**: The LLM (local Ollama or cloud) can autonomously diagnose system statuses, inspect files, or verify ports by proposing commands in ```execute\n<command>\n``` blocks.
+2. **Human-in-the-Loop Safeguards**: Proposed commands are presented in a high-fidelity visual card. They are strictly blocked and only execute once you manually type `y` to authorize them.
+3. **Dynamic Intent-Based RAG**: The CLI pre-flight pipeline checks the prompt's intent in the background:
+   * **System Telemetry**: If asking about errors or Docker, it audits VM socket permissions, active containers, and UFW firewalls, injecting live metrics directly into context.
+   * **Design Grounding**: If asking about UI/UX or styling, it runs a local BM25 query on the UI-UX Pro Max database, grounding the LLM with HSL palettes and typography tokens.
+4. **Offline Local First**: Designed to run 100% free and private using your local Ollama models (`llama3.2:3b` or `deepseek-r1:8b`).
+
+### 🚀 How to Launch the Termchat
+```bash
+python3 scripts/terminal_chat.py
+```
+
+### 🎨 Active Dialogue Commands
+* `/exit` — Gracefully terminate the chat session.
+* `/reset` — Purge conversation history to start fresh.
+* `/system` — Prints a secure audit of your active `.env` configuration.
+* `/search <query>` — Manually query UI-UX Pro Max for styles, color boards, or layouts.
+
+---
+
 ## 🛡️ Standardized Error Catalog & Secure Self-Healing
 
 If the automated installer `install.sh` or bootstrapper encounters runtime constraint failures, it outputs a secure, non-leaking terminal exception box containing a standardized error code:
