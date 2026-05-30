@@ -1,0 +1,39 @@
+name: Kenbun CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+# Enforce strict Principle of Least Privilege by restricting GITHUB_TOKEN to read-only access
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Python Smoke Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    # actions/checkout@v4.1.6 (pinned to commit SHA to prevent tag-spoofing supply chain attacks)
+    - name: Checkout Code
+      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29
+
+    # actions/setup-python@v5.1.0 (pinned to commit SHA)
+    - name: Set up Python 3.11
+      uses: actions/setup-python@82c7e631dfb9e910b6b0909787e915ee9d95c52e
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Upgrade Pip & Install Dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -e .[ml,test]
+        if [ -f core/requirements.txt ]; then pip install -r core/requirements.txt; fi
+
+    - name: Run PyTest Smoke Suite
+      run: |
+        cd core
+        PYTHONPATH=. pytest tests/ -m smoke
