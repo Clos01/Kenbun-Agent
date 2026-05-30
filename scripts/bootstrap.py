@@ -1630,6 +1630,7 @@ if __name__ == "__main__":
     use_color = should_enable_color()
     c_m = "\033[38;5;218m" if use_color else ""
     c_c = "\033[38;5;224m" if use_color else ""
+    c_g = "\033[38;5;246m" if use_color else ""
     c_r = "\033[0m" if use_color else ""
     
     if len(sys.argv) > 1:
