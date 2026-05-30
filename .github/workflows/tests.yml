@@ -16,13 +16,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # actions/checkout@v4.1.6 (pinned to commit SHA to prevent tag-spoofing supply chain attacks)
+    # actions/checkout@v4.1.7 (pinned to commit SHA to prevent tag-spoofing supply chain attacks)
     - name: Checkout Code
-      uses: actions/checkout@a5ac7e51b41094c92402da3b24376905380afc29
+      uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
 
-    # actions/setup-python@v5.1.0 (pinned to commit SHA)
+    # actions/setup-python@v5.1.1 (pinned to commit SHA)
     - name: Set up Python 3.11
-      uses: actions/setup-python@82c7e631dfb9e910b6b0909787e915ee9d95c52e
+      uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f
       with:
         python-version: '3.11'
         cache: 'pip'
