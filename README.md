@@ -60,6 +60,21 @@ curl -fsSL https://raw.githubusercontent.com/Clos01/Kenbun-Agent/main/install.sh
 >
 > **Piped Input (EOF) Notice:** When running the installer via `curl | bash`, the standard input is redirected to the download stream. Our safety guards gracefully exit the setup wizard menu to prevent raw Python tracebacks. Once the installation script finishes, simply type `source ~/.bashrc` and press ENTER, then configure your keys by typing `kenbun` and pressing ENTER!
 
+### 🌸 The Global `kenbun` CLI Toolkit
+
+Once the installer has registered `kenbun` in your PATH, you can use these fast CLI shortcuts from anywhere on your system:
+
+| Command | Action | Description |
+| :--- | :--- | :--- |
+| **`kenbun`** | Interactive Wizard Menu | Launches the full Sakura interactive onboarding wizard. |
+| **`kenbun chat`** | Cognitive Agent Shell (Termchat) | Starts the self-healing interactive terminal chat copilot directly. |
+| **`kenbun start`** | Start Stack | Spins up the Docker Swarm Compose microservices in the background. |
+| **`kenbun stop`** | Stop Stack | Stops and shuts down the Docker Compose containers. |
+| **`kenbun setup`** | API Keys Setup | Opens the interactive API credentials configuration manager. |
+| **`kenbun mcp`** | Register MCP | Registers Kenbun's tools inside Claude Desktop and Cursor automatically. |
+| **`kenbun dashboard`**| Telemetry Guidelines | Shows access port mappings and links for the live telemetry dashboard. |
+| **`kenbun express`** | Express Setup | Automates the core default seed environment (`.env`) generation. |
+
 #### 🛠️ Method 2: Manual Clone & Setup
 For manual audits or isolated workspace checkouts, perform these exact steps in sequence:
 
@@ -94,7 +109,21 @@ Open your browser and navigate to the local dashboard interface:
 > [!NOTE]
 > **VM or Cloud Deployments:** If hosting Kenbun-Agent on a cloud VM or local VM instance (VirtualBox, Proxmox, VMware, Hyper-V), default NAT adapters and firewalls will block traffic. You must transition your VM network adapter to **Bridged Mode** and open UFW ports (3000, 8000, 8001, 8888). Refer to the comprehensive **[VM & Firewall Networking Guide](docs/VM_NETWORKING.md)** for step-by-step instructions.
 
-When you first open the dashboard, it automatically runs a **System Diagnostics Check** to ensure your vector index (ChromaDB) and local inference engine (Ollama) are connected properly.
+### 📡 Hybrid System Health & Gateway Probes
+
+Whenever you open the Next.js Dashboard or boot up the Cognitive Shell (`kenbun chat`), an advanced **System Diagnostics Check** runs. This health probe features an advanced network-sensing engine:
+
+1.  **Smart Cloud Gateway Audits**: If your primary LLM is a cloud provider (e.g., Google Gemini, OpenAI, Anthropic, DeepSeek, or Azure), the probe detects the domain name and performs a fast, non-blocking TCP socket verification on port `443` to ensure internet and endpoint reachability. This bypasses the Ollama-specific API tags query (`GET /api/tags`), preventing timeout delays, socket hangs, or false-offline reporting!
+2.  **Local Ollama Reachability**: If configured for offline execution, the probe queries the local Ollama backend tags to ensure the primary model is active.
+3.  **Docker CLI & Daemon Health Audit**: Verifies socket write permissions (`/var/run/docker.sock`) and alerts you with secure, non-leaking diagnostic summaries if access is blocked.
+4.  **Decoupled Vector Database Connection**: Connects to the host/port defined by `CHROMA_HOST` and `CHROMA_PORT` in your `.env` (defaulting to `localhost:8000`), allowing you to point your agent swarm to a dedicated remote or shared ChromaDB instance!
+
+### 🧹 Swarm Stack Cleanup & Reset Wizard
+
+The setup wizard (`kenbun` or `python3 scripts/bootstrap.py`) provides an automated stack cleaning tool under Option 6: **`🧹 Clean/Reset Swarm Stack`**. This handles deep Docker house-cleaning when you need to free disk space or trigger a completely fresh container environment:
+
+*   **Light Clean (Option 1)**: Stops the compose stack and deletes local containers, volumes, and local build images. This is **fast** and leaves standard pulled base images untouched.
+*   **Deep Purge (Option 2)**: Completely prunes the stack. It deletes all containers, volumes, and large cached Docker base images (e.g. Ollama, ChromaDB, Next.js). Then, it runs `docker builder prune -f` and `docker image prune -f` to recover maximum host storage.
 
 *Note on Zero-Config local models:* Kenbun automatically bundles a Dockerized Ollama container! When you run `docker compose up`, it will boot up the local engine and pull `llama3.2` and `deepseek-r1` in the background.
 
@@ -108,6 +137,10 @@ Configure your path settings and LLM providers inside the generated `.env` file:
 PROJECT_ROOT=/absolute/path/to/your/cloned/kenbun-agent
 PROJECT_NAME=kenbun-agent
 
+# Vector Database Binding (Decoupled Storage)
+CHROMA_HOST=localhost
+CHROMA_PORT=8000
+
 # Ollama Binding
 PRIMARY_LLM_URL=http://localhost:11434/v1
 PRIMARY_LLM_MODEL=llama3.2:3b
@@ -117,6 +150,11 @@ PRIMARY_LLM_MODEL=llama3.2:3b
 ```env
 PROJECT_ROOT=/absolute/path/to/your/cloned/kenbun-agent
 PROJECT_NAME=kenbun-agent
+
+# Vector Database Binding (Decoupled Storage)
+CHROMA_HOST=localhost
+CHROMA_PORT=8000
+
 PRIMARY_LLM_URL=https://generativelanguage.googleapis.com/v1
 PRIMARY_LLM_MODEL=gemini-2.5-pro
 GEMINI_API_KEY=your_key_here

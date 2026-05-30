@@ -11,6 +11,9 @@ The system is segmented into two primary domains to ensure infinite scalability 
   * **brain_health/**: Pure telemetry stream (JSON, JSONL, Logs).
   * **benchmarks/**: Performance and reliability testing scripts.
   * **ingestion/**: Knowledge processing logic.
+* **kenbun/scripts/**: Core setup, onboarding bootstrap, and terminal agent entry points.
+  * **bootstrap.py**: Guided hardware-sensing setup wizard, port remap, and Docker stack controls.
+  * **terminal_chat.py**: Autonomous self-healing terminal developer chat shell (termchat).
 * **kenbun/dashboard/**: The "Observatory" (Next.js 16).
   * **src/**: Real-time telemetry visualization and Intelligence Stream.
 
@@ -97,6 +100,11 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`brain_health/usage_stats.json`**: Current session token expenditure log.
 *   **`brain_health/BENCHMARKS.json`**: Historical performance metrics data.
 *   **`brain_health/POST_MORTEM.md`**: Database of historical bugs and their architectural fixes.
+
+### ⌨️ Core Setup & Onboarding Scripts (`scripts/`)
+*   **`scripts/bootstrap.py`**: Guided hardware-sensing setup wizard, provider credentials config, port remapping, and Docker stack controls with deep cleanup options.
+*   **`scripts/terminal_chat.py`**: Interactively runs the cognitive LLM developer agent shell with hybrid network socket probes, dynamic RAG, and terminal layout rendering.
+*   **`scripts/full_audit_scan.py`**: Autonomic code scanning tool verifying AST rules, hardcoded developer paths, import path shims, and exception safety blocks.
 
 ### 🛠️ Core Files (Root Directory)
 - **`SYSTEM_MAP.md`**: [NEW] The Spatial Root and "Memory Palace" of the system.

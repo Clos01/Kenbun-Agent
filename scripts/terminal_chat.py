@@ -1156,36 +1156,67 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
             "You can run any kenbun CLI tool via the execute block (e.g., `kenbun recall`, `kenbun search`).\n"
         )
 
-def check_and_migrate_project_memory(old_dirs):
+def check_and_migrate_project_memory(old_dirs, original_cwd=None):
     """Detects if a new workspace project was created, and attaches active memories/WAL DB to it."""
     global active_brain_health_dir
     if not active_brain_health_dir:
         return
         
-    cwd = Path.cwd().resolve()
-    # Gather current directories (up to depth 2)
-    current_dirs = set()
+    cwd = original_cwd if original_cwd else Path.cwd().resolve()
     try:
-        for p in cwd.iterdir():
-            if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
-                current_dirs.add(p)
-                try:
-                    for sub in p.iterdir():
-                        if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
-                            current_dirs.add(sub)
-                except Exception:
-                    pass
+        cwd = Path(cwd).resolve()
     except Exception:
         pass
+
+    # Gather current directories recursively up to depth 3 (pruning hidden/system paths)
+    def scan_dirs_recursive(path, depth, max_depth=3):
+        if depth > max_depth:
+            return set()
+        dirs = set()
+        try:
+            for p in path.iterdir():
+                if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
+                    dirs.add(p)
+                    dirs.update(scan_dirs_recursive(p, depth + 1, max_depth))
+        except Exception:
+            pass
+        return dirs
+
+    current_dirs = scan_dirs_recursive(cwd, 1, 3)
         
-    new_dirs = current_dirs - old_dirs
+    new_dirs = list(current_dirs - old_dirs)
     
     if not new_dirs:
         return
         
+    # Sort new directories by path depth in descending order to process the deepest leaf first
+    new_dirs.sort(key=lambda x: len(x.parts), reverse=True)
+    
     for nd in new_dirs:
         # Ignore standard hidden dirs
         if nd.name.startswith(".") or nd.name in ("venv", "node_modules", "brain_health"):
+            continue
+            
+        # Security Guard: Canonicalize path and validate against allowed boundaries (project root or home)
+        try:
+            nd = nd.resolve()
+            project_root = get_active_project_root().resolve()
+            is_valid_workspace = False
+            try:
+                nd.relative_to(project_root)
+                is_valid_workspace = True
+            except ValueError:
+                try:
+                    nd.relative_to(Path.home())
+                    is_valid_workspace = True
+                except ValueError:
+                    pass
+            
+            if not is_valid_workspace:
+                log_event(f"Security Block: Prevented workspace migration to unauthorized target: {nd}")
+                continue
+        except Exception as e:
+            log_event(f"Error canonicalizing workspace path {nd}: {e}")
             continue
             
         box_lines = [
@@ -1197,8 +1228,24 @@ def check_and_migrate_project_memory(old_dirs):
         print()
         draw_box(box_lines, title=f"📂 {C_Y}NEW PROJECT WORKSPACE DETECTED", border_color=C_G)
         
-        confirm = input(f"{C_Y}Bind memories to '{nd.name}'? [Y/n]: {C_R}").strip().lower()
-        if confirm != "n":
+        confirm = input(f"{C_Y}Bind memories to '{nd.name}'? [Y/n]: {C_R}")
+        
+        # Security Guard: Strip ANSI escape sequences to prevent spoofing or command bypasses
+        confirm_cleaned = ANSI_ESCAPE.sub('', confirm).strip().lower()
+        
+        if confirm_cleaned in ("/exit", "/quit", "exit", "quit"):
+            print(f"\n{C_P}🌸 Sayonara! Terminating agent session...{C_R}\n")
+            log_event("🌸 Termchat Session Terminated cleanly via migration prompt exit")
+            if active_brain_health_dir:
+                backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
+                if backup_path.exists():
+                    try:
+                        backup_path.unlink()
+                    except Exception:
+                        pass
+            sys.exit(0)
+            
+        if confirm_cleaned != "n":
             # 1. Create target brain_health dir inside new folder
             target_bh = nd / "brain_health"
             target_bh.mkdir(parents=True, exist_ok=True)
@@ -1451,7 +1498,7 @@ def run_proposed_command(cmd):
     cols = get_columns()
     print(f"\n{C_Y}⚙️  Executing: {C_C}{clean_wrap_text(scrub_secrets(cmd), cols - 15)}{C_R}")
     
-    # Store directory list state before execution
+    # Store directory list state before execution relative to current working directory
     cwd = Path.cwd().resolve()
     old_dirs = set()
     try:
@@ -1468,22 +1515,63 @@ def run_proposed_command(cmd):
         pass
     
     try:
+        # Append directory tracking boundary to synchronize subshell changes back to Python process
+        tracked_cmd = f"({cmd}) && printf '__PWD_DELIMITER__' && pwd"
         result = subprocess.run(
-            cmd,
+            tracked_cmd,
             shell=True,
             capture_output=True,
             text=True,
             timeout=45
         )
         
-        # Check if a new folder was created and prompt for memory migration!
-        check_and_migrate_project_memory(old_dirs)
-        
         output = ""
-        if result.stdout:
-            output += result.stdout
-        if result.stderr:
-            output += f"\n[stderr]\n{result.stderr}"
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        
+        # Parse active directory changes if the execution succeeded
+        if result.returncode == 0 and "__PWD_DELIMITER__" in stdout:
+            parts = stdout.split("__PWD_DELIMITER__", 1)
+            stdout = parts[0]
+            new_pwd = parts[1].strip()
+            if new_pwd:
+                try:
+                    resolved_path = Path(new_pwd).resolve()
+                    project_root = get_active_project_root().resolve()
+                    
+                    # Security Sandbox Guard: Ensure the target PWD is strictly relative to project root or user's home
+                    is_safe_boundary = False
+                    try:
+                        resolved_path.relative_to(project_root)
+                        is_safe_boundary = True
+                    except ValueError:
+                        try:
+                            resolved_path.relative_to(Path.home())
+                            is_safe_boundary = True
+                        except ValueError:
+                            pass
+                    
+                    if is_safe_boundary and resolved_path.exists() and resolved_path.is_dir():
+                        import threading
+                        if not hasattr(run_proposed_command, "_dir_lock"):
+                            run_proposed_command._dir_lock = threading.Lock()
+                            
+                        # Acquire process-wide thread lock to guarantee directory context shift is atomic (TOCTOU mitigation)
+                        with run_proposed_command._dir_lock:
+                            os.chdir(str(resolved_path))
+                        log_event(f"Synchronized working directory context to safe path: {resolved_path}")
+                    else:
+                        log_event(f"Security Block: Refused context shift to unauthorized or non-existent path: {new_pwd}")
+                except Exception as e:
+                    log_event(f"Failed to synchronize working directory to {new_pwd}: {e}")
+                    
+        # Check if a new folder was created and prompt for memory migration relative to original_cwd!
+        check_and_migrate_project_memory(old_dirs, original_cwd=cwd)
+        
+        if stdout:
+            output += stdout
+        if stderr:
+            output += f"\n[stderr]\n{stderr}"
         if not output.strip():
             output = "[Success: Command executed with zero stdout/stderr output]"
         log_event("➔ Reflex command completed. Exit Code: {}".format(result.returncode))
@@ -2057,7 +2145,7 @@ def main():
                     payload = {
                         "model": llm_model,
                         "messages": history,
-                        "temperature": 0.2,
+                        "temperature": 0.7 if model_tier == "nano" else 0.2,
                         "stream": True
                     }
                     
@@ -2104,6 +2192,7 @@ def main():
                     # Permanently transition to the fallback configuration for the duration of session
                     llm_url = fallback_url
                     llm_model = fallback_model
+                    model_tier = detect_model_tier(llm_model, llm_url)
                     
                     # Prepare headers and payload for fallback LLM
                     endpoint = f"{llm_url}/chat/completions"
@@ -2118,7 +2207,7 @@ def main():
                     payload = {
                         "model": llm_model,
                         "messages": history,
-                        "temperature": 0.2,
+                        "temperature": 0.7 if model_tier == "nano" else 0.2,
                         "stream": True
                     }
                     

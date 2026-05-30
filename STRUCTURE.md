@@ -60,6 +60,11 @@ Kenbun/
 │   │   └── lib/                # UI Config & API Hooks
 │   ├── brain_health/               # Live Telemetry, Benchmarks & Logs
 ├── docs/                       # Kenbun Obsidian Vault (Complete System Docs)
+├── scripts/                    # Setup, Guided Bootstrap & User CLI Entry Points
+│   ├── bootstrap.py            # Interactive guided onboarding setup & stack manager
+│   ├── terminal_chat.py        # Kenbun Cognitive interactive terminal shell (termchat)
+│   ├── full_audit_scan.py      # Autonomic codebase compliance & quality scanner
+│   └── agent_bus.py            # Real-time event-bus channels for async agents
 ├── DESIGN.md                   # Heritage Design System (Source of Truth)
 ├── LEGION_SPECULATIVE_RUN.md   # System 2 Speculative Server Blueprint
 └── STRUCTURE.md                # Root System Map (Synchronized)
