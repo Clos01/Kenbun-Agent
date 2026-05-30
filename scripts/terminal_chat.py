@@ -574,6 +574,8 @@ class StreamingRenderer:
     2. Buffers and hides code block contents until the closing fence
     3. Handles word-wrapping for normal prose in real-time
     4. Eliminates line-buffering latency for an elite streaming experience
+    5. Formats inline code (backticks) as Bold Cyan for supreme CLI aesthetics
+    6. Formats double asterisks as bold text
     """
     FENCE_OPEN = re.compile(r'^```(execute|bash|sh|spawn|python|json|text|)', re.IGNORECASE)
     FENCE_CLOSE = re.compile(r'^```\s*$')
@@ -586,6 +588,9 @@ class StreamingRenderer:
         self._in_code_block = False
         self._code_lang = ""
         self._code_buffer = ""
+        self._in_inline_code = False
+        self._in_bold = False
+        self._asterisk_count = 0
 
     def write(self, chunk: str):
         """Feed a streaming chunk of text."""
@@ -625,7 +630,30 @@ class StreamingRenderer:
                     if char == '\n':
                         self._line_buffer = ""
 
+    def _check_and_flush_asterisks(self, current_char: str):
+        """Helper to process and style double asterisks (bold) or single asterisks."""
+        if self._asterisk_count > 0 and current_char != '*':
+            if self._asterisk_count == 2:
+                # Toggle bold style
+                if not self._in_bold:
+                    self._in_bold = True
+                    sys.stdout.write("\033[90m**\033[1m") # Dim asterisks + Bold style
+                else:
+                    self._in_bold = False
+                    sys.stdout.write("\033[0m\033[90m**\033[0m") # Reset + Dim asterisks + Reset
+                sys.stdout.flush()
+                self.current_line_len += 2
+            else:
+                # Print the single asterisk
+                sys.stdout.write("*" * self._asterisk_count)
+                sys.stdout.flush()
+                self.current_line_len += self._asterisk_count
+            self._asterisk_count = 0
+
     def _emit_char_prose(self, char: str):
+        # First check and flush any buffered asterisks
+        self._check_and_flush_asterisks(char)
+
         if char == '\n':
             if self.word_buffer:
                 self._flush_word()
@@ -639,9 +667,27 @@ class StreamingRenderer:
                 sys.stdout.write(char)
                 sys.stdout.flush()
                 self.current_line_len += 1
-        elif char in '.,!?;:()[]{}<>-+_=/\\|*&^%$#@~"\'':
+        elif char == '*':
             if self.word_buffer:
                 self._flush_word()
+            self._asterisk_count += 1
+            return
+        elif char in '.,!?;:()[]{}<>-+_=/\\|&^%$#@~"\'`': # Handle punctuation including backtick
+            if self.word_buffer:
+                self._flush_word()
+            
+            if char == '`':
+                # Toggle inline code styling
+                if not self._in_inline_code:
+                    self._in_inline_code = True
+                    sys.stdout.write("\033[90m`\033[1;36m") # Dim grey backtick + Bold Cyan for the command
+                else:
+                    self._in_inline_code = False
+                    sys.stdout.write("\033[0m\033[90m`\033[0m") # Reset + Dim grey backtick + Reset
+                sys.stdout.flush()
+                self.current_line_len += 1
+                return
+
             if self.current_line_len + 1 > self.width:
                 sys.stdout.write('\n')
                 sys.stdout.flush()
@@ -665,6 +711,8 @@ class StreamingRenderer:
 
     def flush(self):
         """Flush any remaining buffers."""
+        # Ensure any trailing asterisks are flushed before finishing
+        self._check_and_flush_asterisks('\033')
         if self.word_buffer:
             self._flush_word()
         if self._line_buffer:
@@ -672,6 +720,7 @@ class StreamingRenderer:
             self._line_buffer = ""
             for c in content:
                 self._emit_char_prose(c)
+            self._check_and_flush_asterisks('\033')
             if self.word_buffer:
                 self._flush_word()
 
