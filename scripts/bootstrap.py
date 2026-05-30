@@ -735,11 +735,23 @@ def configure_api_keys():
             final_url = p["url"]
             final_model = p["model"]
             api_key_val = ""
+            skip_key_update = False
             
             # Dynamic prompt for API Key
             if p["env_key"]:
-                print(f"\n{c_c}Paste your {p['env_key']} below (Input is masked / hidden as you paste/type):{c_r}")
-                api_key_val = getpass.getpass(f"Credential: ").strip()
+                existing_key = env_vars.get(p["env_key"], "")
+                is_existing = False
+                if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
+                    is_existing = True
+                    print(f"\n{c_c}An existing value for {p['env_key']} was detected.{c_r}")
+                    print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
+                    api_key_val = getpass.getpass(f"Credential (Press Enter to keep existing): ").strip()
+                else:
+                    print(f"\n{c_c}Paste your {p['env_key']} below (Input is masked / hidden as you paste/type):{c_r}")
+                    api_key_val = getpass.getpass(f"Credential: ").strip()
+
+                if is_existing and not api_key_val:
+                    skip_key_update = True
                 
             # Local probes if LM Studio/Ollama
             if p.get("local") and p.get("type") == "lmstudio":
@@ -786,7 +798,7 @@ def configure_api_keys():
             # AES rest encryption
             do_encrypt = False
             fernet = None
-            if api_key_val:
+            if api_key_val and not skip_key_update:
                 enc_choice = input(f"\nEncrypt your credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
                 do_encrypt = enc_choice not in ("n", "no")
                 
@@ -830,7 +842,7 @@ def configure_api_keys():
 
             content = update_env_var(content, "PRIMARY_LLM_URL", final_url)
             content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
-            if p["env_key"] and api_key_val:
+            if p["env_key"] and api_key_val and not skip_key_update:
                 content = update_env_var(content, p["env_key"], api_key_val)
 
             try:
@@ -1322,6 +1334,19 @@ def run_quick_setup():
         print(f"\n{c_y}⚠️ Environment file not initialized. Initializing core defaults first...{c_r}")
         bootstrap_core(silent=True)
 
+    # Parse current env to extract statuses
+    env_vars = {}
+    if env_file.exists():
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        parts = line.split("=", 1)
+                        env_vars[parts[0].strip()] = parts[1].strip()
+        except Exception:
+            pass
+
     print(f"\n{c_m}⚡ SAKURA QUICK SETUP WIZARD{c_r}")
     print(f"{c_g}──────────────────────────────────────────────────{c_r}")
     print("This wizard configures your primary AI provider, default model,")
@@ -1340,11 +1365,23 @@ def run_quick_setup():
     final_url = p["url"]
     final_model = p["model"]
     api_key_val = ""
+    skip_key_update = False
 
     # Step 2: Key Setup
     if p["env_key"]:
         print(f"\n{c_w}[STEP 2] Configure API Credentials:{c_r}")
-        api_key_val = getpass.getpass(f"Enter your {p['env_key']}: ").strip()
+        existing_key = env_vars.get(p["env_key"], "")
+        is_existing = False
+        if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
+            is_existing = True
+            print(f"{c_c}An existing value for {p['env_key']} was detected.{c_r}")
+            print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
+            api_key_val = getpass.getpass(f"Enter your {p['env_key']} (Press Enter to keep existing): ").strip()
+        else:
+            api_key_val = getpass.getpass(f"Enter your {p['env_key']}: ").strip()
+
+        if is_existing and not api_key_val:
+            skip_key_update = True
 
     # Probing local servers
     if p.get("local") and p.get("type") == "lmstudio":
@@ -1399,7 +1436,7 @@ def run_quick_setup():
     # Step 4: AES Encryption
     do_encrypt = False
     fernet = None
-    if api_key_val:
+    if api_key_val and not skip_key_update:
         enc_choice = input(f"\nEncrypt credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
         do_encrypt = enc_choice not in ("n", "no")
         
@@ -1438,12 +1475,12 @@ def run_quick_setup():
             if not env_content.endswith("\n"):
                 env_content += "\n"
             env_content += f"{replacement}\n"
-            return new_content
+            return env_content
         return new_content
 
     content = update_env_var(content, "PRIMARY_LLM_URL", final_url)
     content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
-    if p["env_key"] and api_key_val:
+    if p["env_key"] and api_key_val and not skip_key_update:
         content = update_env_var(content, p["env_key"], api_key_val)
     if tg_token and tg_chat_id:
         content = update_env_var(content, "TELEGRAM_BOT_TOKEN", tg_token)
