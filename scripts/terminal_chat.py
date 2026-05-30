@@ -1452,6 +1452,40 @@ def main():
     # Detect model tier for adaptive prompt
     model_tier = detect_model_tier(llm_model, llm_url)
 
+    # Pre-flight API Credentials Decryption Integrity Audit
+    is_gemini_key_failed = "GEMINI_API_KEY" in env and env["GEMINI_API_KEY"].startswith("enc:")
+    is_openai_key_failed = "OPENAI_API_KEY" in env and env["OPENAI_API_KEY"].startswith("enc:")
+    is_anthropic_key_failed = "ANTHROPIC_API_KEY" in env and env["ANTHROPIC_API_KEY"].startswith("enc:")
+    is_deepseek_key_failed = "DEEPSEEK_API_KEY" in env and env["DEEPSEEK_API_KEY"].startswith("enc:")
+    
+    active_key_failed = False
+    active_provider = ""
+    if "gemini" in llm_url.lower() and is_gemini_key_failed:
+        active_key_failed = True
+        active_provider = "Google Gemini"
+    elif "openai" in llm_url.lower() and is_openai_key_failed:
+        active_key_failed = True
+        active_provider = "OpenAI"
+    elif "anthropic" in llm_url.lower() and is_anthropic_key_failed:
+        active_key_failed = True
+        active_provider = "Anthropic"
+    elif "deepseek" in llm_url.lower() and is_deepseek_key_failed:
+        active_key_failed = True
+        active_provider = "DeepSeek"
+
+    if active_key_failed:
+        print()
+        draw_box([
+            f"{C_RED}{C_BOLD}⚠️  API CREDENTIAL DECRYPTION FAILURE ⚠️{C_R}",
+            "",
+            f"Your encrypted {C_Y}{active_provider} API Key{C_R} failed to decrypt.",
+            "This happens if '.kenbun_master.key' was deleted or regenerated.",
+            "",
+            f"Please run the Guided Setup: {C_G}python3 scripts/bootstrap.py{C_R}",
+            f"and select Option {C_C}[3] (Configure API Keys){C_R} to re-enter them.",
+        ], title=f"{C_RED}🚨 SECURITY INTEGRITY ALERT", border_color=C_RED, text_color=C_Y)
+        print()
+
     # Print banner (compact)
     cols = get_columns()
     if cols >= 70:
