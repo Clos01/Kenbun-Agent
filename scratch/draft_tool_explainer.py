@@ -19,14 +19,6 @@ import signal
 import unicodedata
 from pathlib import Path
 
-# prompt_toolkit for robust terminal input
-try:
-    from prompt_toolkit import PromptSession
-    from prompt_toolkit.formatted_text import ANSI
-except ImportError:
-    PromptSession = None
-    ANSI = None
-
 # Thread lock to guarantee safe parallel writes
 _backup_lock = threading.Lock()
 
@@ -201,13 +193,13 @@ def save_session_backup(history, cwd, llm_url, llm_model):
     for msg in history:
         scrubbed_msg = msg.copy()
         if "content" in scrubbed_msg:
-            scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
+            scrubbed_msg["content"] = scrubbed_secrets(scrubbed_msg["content"])
         scrubbed_history.append(scrubbed_msg)
     
     data = {
         "history": scrubbed_history,
         "cwd": str(cwd),
-        "llm_url": scrub_secrets(llm_url),
+        "llm_url": scrubbed_secrets(llm_url),
         "llm_model": llm_model
     }
     
@@ -793,32 +785,16 @@ def check_and_heal_mismatch(llm_url, llm_model):
     if not has_mismatch:
         return llm_url, llm_model
         
-    # Determine the actual cloud provider and target model dynamically to avoid confusing hardcoded examples
-    target_model = "deepseek-chat"
-    provider_name = "Cloud Gateway"
-    if "openai" in llm_url.lower():
-        target_model = "gpt-4o-mini"
-        provider_name = "OpenAI"
-    elif "anthropic" in llm_url.lower():
-        target_model = "claude-3-5-sonnet-latest"
-        provider_name = "Anthropic"
-    elif "googleapis" in llm_url.lower():
-        target_model = "gemini-2.5-flash"
-        provider_name = "Google AI Studio"
-    elif "deepseek" in llm_url.lower():
-        target_model = "deepseek-chat"
-        provider_name = "DeepSeek"
-        
     mismatch_lines = [
         "Kenbun has detected a routing conflict in your config:",
         "",
         f"⚡ Active Provider URL: {C_W}{llm_url}{C_G}",
         f"🌸 Active model:        {C_W}{llm_model}{C_G}",
         "---",
-        f"Cloud provider '{provider_name}' cannot execute local model weights (like '{llm_model}').",
+        f"Cloud gateways (like api.deepseek.com) cannot execute local model weights (like {llm_model}).",
         "",
         "Select an Autonomic Self-Healing patch:",
-        f"{C_C}[1] Switch Model{C_G} - Swap model to '{target_model}' (recommended for {provider_name})",
+        f"{C_C}[1] Switch Model{C_G} - Swap model to target cloud model (e.g., 'deepseek-chat' for DeepSeek)",
         f"{C_C}[2] Switch URL{C_G}   - Route back to local Ollama server (http://localhost:11434/v1)",
         f"{C_C}[3] Bypass{C_G}       - Ignore and boot anyway"
     ]
@@ -829,6 +805,15 @@ def check_and_heal_mismatch(llm_url, llm_model):
         try:
             choice = input(f"{C_C}Select self-healing action [1-3]: {C_R}").strip()
             if choice == "1":
+                # Determine ideal cloud model name
+                target_model = "deepseek-chat"
+                if "openai" in llm_url.lower():
+                    target_model = "gpt-4o-mini"
+                elif "anthropic" in llm_url.lower():
+                    target_model = "claude-3-5-sonnet-latest"
+                elif "googleapis" in llm_url.lower():
+                    target_model = "gemini-2.5-flash"
+                
                 print(f"\n⚙️  Applying Autopilot patch: Setting model to '{target_model}'...")
                 if update_env_value("PRIMARY_LLM_MODEL", target_model):
                     print(f"✓ Model successfully corrected in '.env'.")
@@ -861,21 +846,7 @@ def check_and_migrate_project_memory(old_dirs):
         return
         
     cwd = Path.cwd().resolve()
-    # Gather current directories (up to depth 2)
-    current_dirs = set()
-    try:
-        for p in cwd.iterdir():
-            if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
-                current_dirs.add(p)
-                try:
-                    for sub in p.iterdir():
-                        if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
-                            current_dirs.add(sub)
-                except Exception:
-                    pass
-    except Exception:
-        pass
-        
+    current_dirs = {p for p in cwd.iterdir() if p.is_dir()}
     new_dirs = current_dirs - old_dirs
     
     if not new_dirs:
@@ -883,7 +854,7 @@ def check_and_migrate_project_memory(old_dirs):
         
     for nd in new_dirs:
         # Ignore standard hidden dirs
-        if nd.name.startswith(".") or nd.name in ("venv", "node_modules", "brain_health"):
+        if nd.name.startswith(".") or nd.name == "venv" or nd.name == "node_modules":
             continue
             
         box_lines = [
@@ -917,253 +888,18 @@ def check_and_migrate_project_memory(old_dirs):
                 
                 # Proactively create a .kenbun workspace marker
                 (nd / ".kenbun").mkdir(exist_ok=True)
-                
-                # 3. Save project creation memory to ChromaDB Hivemind
-                title = f"Project Workspace Created: {nd.name}"
-                content = (
-                    f"PROJECT WORKSPACE DETECTED & BOUND\n"
-                    f"==================================\n"
-                    f"Folder Name: {nd.name}\n"
-                    f"Location: {nd.resolve()}\n"
-                    f"Creation & Binding Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-                    f"Status: Active Project Bound.\n"
-                )
-                save_concept_to_hivemind(title, content, tags="project-workspace,folder-creation", category="concepts")
-                log_event(f"Bound memory and saved project concept for folder: {nd.name}")
                 break
             except Exception as e:
                 print(f"\n{C_Y}❌ Failed to migrate memories: {e}{C_R}\n")
 
-# ========================================================
-# 🧠 COGNITIVE HIVEMIND & REFLECTION INTEGRATION HELPER SUITE
-# ========================================================
-
-def log_event(msg):
-    """Logs a diagnostic event directly to shared mcp_debug.log for Dozzle aggregation and live_telemetry.json for Dashboard."""
-    try:
-        root = get_active_project_root()
-        log_file = root / "mcp_debug.log"
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"[{timestamp}] [TERMCHAT] {msg}\n")
-    except Exception:
-        pass
-
-    global active_brain_health_dir
-    if active_brain_health_dir:
-        try:
-            telemetry_path = Path(active_brain_health_dir) / "live_telemetry.json"
-            data = {"timestamp": time.time(), "message": f"[TERMCHAT] {msg}", "type": "log"}
-            with open(telemetry_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(data) + "\n")
-        except Exception:
-            pass
-
-
-def save_concept_to_hivemind(title, content, tags, category="concepts"):
-    """
-    Saves a concept to the Hivemind (ChromaDB) with graceful error handling.
-    """
-    core_path = "/Users/carlosrivas/Dev/kenbun-agent/core"
-    if core_path not in sys.path:
-        sys.path.insert(0, core_path)
-    
-    try:
-        from tools.memory.knowledge_manager import learn_concept
-        res = learn_concept(title, content, tags, category)
-        return res
-    except Exception as e:
-        err_msg = f"ERROR: Failed to save to Hivemind. ChromaDB connection failed or core path error: {e}"
-        # Log to local file fallback
-        try:
-            log_dir = Path("/Users/carlosrivas/Dev/kenbun-agent/brain_health")
-            log_dir.mkdir(parents=True, exist_ok=True)
-            log_file = log_dir / "failed_hivemind_memories.log"
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps({
-                    "timestamp": time.time(),
-                    "title": title,
-                    "content": content,
-                    "tags": tags,
-                    "category": category,
-                    "error": str(e)
-                }) + "\n")
-            err_msg += f"\n⚠️  Saved backup locally to: {log_file}"
-        except Exception as log_err:
-            err_msg += f"\n⚠️  Could not write local log backup: {log_err}"
-        return err_msg
-
-def search_hivemind(query, category="concepts"):
-    """
-    Searches the Hivemind (ChromaDB) semantically with graceful error handling.
-    """
-    core_path = "/Users/carlosrivas/Dev/kenbun-agent/core"
-    if core_path not in sys.path:
-        sys.path.insert(0, core_path)
-    
-    try:
-        from tools.memory.knowledge_manager import list_concepts
-        res = list_concepts(query, n_results=5, category=category)
-        return res
-    except Exception as e:
-        return json.dumps([{"error": f"Failed to search Hivemind. ChromaDB is unreachable or core path error: {e}"}])
-
-def is_healing_command(cmd: str) -> bool:
-    """
-    Heuristically checks if a command is a system repair, configuration, or package setup.
-    """
-    cmd_lower = cmd.lower()
-    healing_keywords = [
-        "pull", "install", "restart", "start", "enable", "config", "setup",
-        "ufw", "iptables", "firewall", "chmod", "chown", "bootstrap", "heal",
-        "repair", "fix", "docker exec", "docker run", "docker-compose up", "service", "systemctl"
-    ]
-    return any(kw in cmd_lower for kw in healing_keywords)
-
-def autonomic_reflection_save(task: str, error: str, solution: str, tags: str = "auto-lesson"):
-    """
-    Dynamically inserts core directory in sys.path and calls
-    tools.memory.knowledge_manager.record_post_mortem to record the lesson in ChromaDB history.
-    """
-    try:
-        # Dynamically find the core path
-        possible_cores = [
-            Path("/Users/carlosrivas/Dev/kenbun-agent/core"),
-            Path(__file__).resolve().parent.parent / "core",
-            Path.cwd() / "core"
-        ]
-        core_path = None
-        for p in possible_cores:
-            if p.exists() and (p / "tools").exists():
-                core_path = p
-                break
-        
-        if not core_path:
-            core_path = Path("/Users/carlosrivas/Dev/kenbun-agent/core")
-            
-        sys_path_str = str(core_path.resolve())
-        if sys_path_str not in sys.path:
-            sys.path.insert(0, sys_path_str)
-            
-        from tools.memory.knowledge_manager import record_post_mortem
-        res = record_post_mortem(task, error, solution, tags)
-        print(f"\n{C_P}🧠 Hivemind Reflection Engine Saved Auto-Lesson: {C_G}{res}{C_R}\n")
-        return res
-    except Exception as e:
-        print(f"\n{C_Y}⚠️  Reflection Engine Warning: Failed to record auto-lesson: {e}{C_R}\n")
-        return None
-
-def save_clean_exit_reflection(history):
-    """
-    Summarizes the chat session, extracts commands run, and records a post-mortem
-    reflection note in the Hivemind titled 'Session Post-Mortem: <Timestamp>'.
-    """
-    try:
-        # Extract commands executed
-        executed_commands = []
-        for msg in history:
-            content = msg.get("content", "")
-            if not content:
-                continue
-            # Look for reflex command executions in user/system feedback
-            commands = re.findall(r"```execute\n(.*?)\n```", content, re.DOTALL)
-            for c in commands:
-                executed_commands.append(c.strip())
-            # Look for SYSTEM OUT command executions
-            sys_outs = re.findall(r"\[SYSTEM OUT \(Command: '(.*?)', Exit Code:", content)
-            for c in sys_outs:
-                executed_commands.append(c.strip())
-                
-        # Deduplicate while preserving order
-        seen = set()
-        executed_commands = [c for c in executed_commands if not (c in seen or seen.add(c))]
-        
-        # Compile a summary of dialogue
-        user_queries = []
-        for msg in history:
-            role = msg.get("role")
-            content = msg.get("content", "")
-            if role == "user" and not content.startswith("[SYSTEM OUT") and not content.startswith("[SYSTEM NOTICE"):
-                if "[USER INSTRUCTION]:" in content:
-                    parts = content.split("[USER INSTRUCTION]:", 1)
-                    user_queries.append(parts[1].strip())
-                else:
-                    user_queries.append(content.strip())
-
-        # Build accomplishments details
-        accomplishments = []
-        if user_queries:
-            accomplishments.append("User Queries addressed:")
-            for q in user_queries[:5]:  # Limit to top 5
-                accomplishments.append(f" - {q}")
-        if executed_commands:
-            accomplishments.append("\nCommands successfully executed:")
-            for cmd in executed_commands:
-                accomplishments.append(f" - {cmd}")
-        else:
-            accomplishments.append("\nNo shell commands were executed in this session.")
-            
-        accomplishments_str = "\n".join(accomplishments)
-        
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-        title = f"Session Post-Mortem: {timestamp}"
-        
-        # Dynamically insert core in sys.path
-        possible_cores = [
-            Path("/Users/carlosrivas/Dev/kenbun-agent/core"),
-            Path(__file__).resolve().parent.parent / "core",
-            Path.cwd() / "core"
-        ]
-        core_path = None
-        for p in possible_cores:
-            if p.exists() and (p / "tools").exists():
-                core_path = p
-                break
-        
-        if not core_path:
-            core_path = Path("/Users/carlosrivas/Dev/kenbun-agent/core")
-            
-        sys_path_str = str(core_path.resolve())
-        if sys_path_str not in sys.path:
-            sys.path.insert(0, sys_path_str)
-            
-        from tools.memory.knowledge_manager import learn_concept
-        
-        content = (
-            f"SESSION SUMMARY POST-MORTEM ({timestamp})\n"
-            f"=========================================\n"
-            f"ACCOMPLISHMENTS:\n{accomplishments_str}\n\n"
-            f"TOTAL DIALOGUE TURNS: {len(history) // 2}\n"
-        )
-        
-        res = learn_concept(title, content, "session-post-mortem,clean-exit", category="history")
-        print(f"\n{C_P}🧠 Session Post-Mortem saved to Hivemind: {C_G}{res}{C_R}\n")
-        return res
-    except Exception as e:
-        print(f"\n{C_Y}⚠️  Reflection Engine Warning: Failed to save session post-mortem: {e}{C_R}\n")
-        return None
-
 def run_proposed_command(cmd):
     """Executes a proposed system shell command safely with stdout/stderr capture."""
-    log_event("⚙️ Executing reflex shell command: {}".format(scrub_secrets(cmd)))
     cols = get_columns()
     print(f"\n{C_Y}⚙️  Executing: {C_C}{clean_wrap_text(scrub_secrets(cmd), cols - 15)}{C_R}")
     
     # Store directory list state before execution
     cwd = Path.cwd().resolve()
-    old_dirs = set()
-    try:
-        for p in cwd.iterdir():
-            if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
-                old_dirs.add(p)
-                try:
-                    for sub in p.iterdir():
-                        if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
-                            old_dirs.add(sub)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    old_dirs = {p for p in cwd.iterdir() if p.is_dir()}
     
     try:
         result = subprocess.run(
@@ -1184,28 +920,11 @@ def run_proposed_command(cmd):
             output += f"\n[stderr]\n{result.stderr}"
         if not output.strip():
             output = "[Success: Command executed with zero stdout/stderr output]"
-        log_event("➔ Reflex command completed. Exit Code: {}".format(result.returncode))
         return result.returncode, scrub_secrets(output)
     except subprocess.TimeoutExpired:
-        log_event("❌ Reflex command failed with execution timeout")
         return -1, "[Timeout Error: The system command exceeded the 45-second execution limit]"
     except Exception as e:
-        log_event("❌ Reflex command failed with start exception: {}".format(e))
         return -1, f"[Execution Error: Failed to start command: {e}]"
-
-def install_shift_enter_alias() -> int:
-    try:
-        from prompt_toolkit.input.ansi_escape_sequences import ANSI_SEQUENCES
-        from prompt_toolkit.keys import Keys
-    except Exception:
-        return 0
-    alt_enter = (Keys.Escape, Keys.ControlM)
-    changed = 0
-    for seq in ("\x1b[13;2u", "\x1b[27;2;13~", "\x1b[27;2;13u", "\x1b[13;5u", "\x1b[27;5;13~", "\x1b[27;5;13u"):
-        if ANSI_SEQUENCES.get(seq) != alt_enter:
-            ANSI_SEQUENCES[seq] = alt_enter
-            changed += 1
-    return changed
 
 def main():
     global active_brain_health_dir
@@ -1260,17 +979,13 @@ def main():
         f"⚙️  Reflex Status:     {C_Y}ACTIVE (Human-in-the-Loop Safe)",
         "",
         f"{C_Y}Commands & Capabilities:",
-        f"  {C_C}/help{C_G}     - Show active commands directory & guidelines",
-        f"  {C_C}/exit{C_G}     - Gracefully close Termchat & commit session post-mortem",
+        f"  {C_C}/exit{C_G}     - Gracefully close Termchat",
         f"  {C_C}/reset{C_G}    - Clear dialogue history",
         f"  {C_C}/system{C_G}   - Dump active environment parameters",
-        f"  {C_C}/search{C_G}   - Direct search on UI-UX Pro Max database",
-        f"  {C_C}/remember{C_G} - Save a custom note/rule in Hivemind",
-        f"  {C_C}/recall{C_G}   - Query Hivemind semantically"
+        f"  {C_C}/search{C_G}   - Direct search on UI-UX Pro Max database"
     ]
     draw_box(banner_lines, title=f"🌸 {C_Y}COGNITIVE AGENT SHELL", border_color=C_G, text_color=C_G)
     print()
-    log_event("🌸 Termchat Session Started. Model: {}, URL: {}".format(llm_model, llm_url))
 
     system_prompt = (
         "You are Kenbun, an autonomous local AI system diagnostician, coding engineer, and design expert. "
@@ -1319,7 +1034,7 @@ def main():
                     for msg in backup_history:
                         scrubbed_msg = msg.copy()
                         if "content" in scrubbed_msg:
-                            scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
+                            scrubbed_msg["content"] = scrubbed_secrets(scrubbed_msg["content"])
                         history.append(scrubbed_msg)
                     saved_cwd = backup_data.get("cwd")
                     if saved_cwd and os.path.exists(saved_cwd):
@@ -1353,12 +1068,6 @@ def main():
     username = os.environ.get("USER", "amontano")
     auto_trigger = False
 
-    # Initialize robust PromptSession for history and multiline
-    pt_session = None
-    if PromptSession is not None:
-        pt_session = PromptSession()
-        install_shift_enter_alias()
-
     # Top-Level Exception Catcher to intercept unexpected system/OS crashes gracefully
     try:
         while True:
@@ -1368,11 +1077,7 @@ def main():
                     user_input = ""
                     auto_trigger = False
                 else:
-                    prompt_str = f"{C_P}{username}@kenbun-agent{C_R}:{C_G}~{C_R}$ "
-                    if pt_session:
-                        user_input = pt_session.prompt(ANSI(prompt_str)).strip()
-                    else:
-                        user_input = input(prompt_str).strip()
+                    user_input = input(f"{C_P}{username}@kenbun-agent{C_R}:{C_G}~{C_R}$ ").strip()
                     user_input = sanitize_input(user_input)
                     if not user_input:
                         continue
@@ -1382,29 +1087,8 @@ def main():
                         cmd_parts = user_input.split(" ", 1)
                         cmd = cmd_parts[0].lower()
                         
-                        if cmd in ("/help", "/?"):
-                            log_event("❓ Displayed commands directory via /help")
-                            help_lines = [
-                                "🌸 KENBUN TERMCHAT DIRECTORY OF COMMANDS",
-                                "───────────────────────────────────────",
-                                f"  {C_C}/help{C_G} (or {C_C}/?{C_G})                   ➔ Show this beautiful commands guide!",
-                                f"  {C_C}/exit{C_G}                         ➔ Gracefully close session & save reflection post-mortem",
-                                f"  {C_C}/reset{C_G}                        ➔ Purge dialogue history & start fresh",
-                                f"  {C_C}/system{C_G}                       ➔ Safely audit active environment parameters & models",
-                                f"  {C_C}/search <query>{C_R}                ➔ Query local UI-UX Pro Max database for designs",
-                                f"  {C_C}/remember <title> = <content>{C_R}  ➔ Save custom notes/rules in local ChromaDB Hivemind",
-                                f"  {C_C}/recall <query>{C_R}                ➔ Semantically search/recall Hivemind concepts"
-                            ]
-                            print()
-                            draw_box(help_lines, title="❓ COMMANDS DIRECTORY", border_color=C_P, text_color=C_G)
-                            print()
-                            continue
-                            
-                        elif cmd == "/exit":
+                        if cmd == "/exit":
                             print(f"\n{C_P}🌸 Sayonara! Terminating agent session...{C_R}\n")
-                            log_event("🌸 Termchat Session Terminated cleanly via /exit")
-                            # Save clean exit session reflection post-mortem in ChromaDB
-                            save_clean_exit_reflection(history)
                             if active_brain_health_dir:
                                 backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
                                 if backup_path.exists():
@@ -1415,14 +1099,12 @@ def main():
                             break
                             
                         elif cmd == "/reset":
-                            log_event("🧹 Dialogue history purged via /reset")
                             history = [history[0]]
                             save_session_backup(history, Path.cwd(), llm_url, llm_model)
                             print(f"\n{C_Y}🧹 Dialogue history purged.{C_R}\n")
                             continue
                             
                         elif cmd == "/system":
-                            log_event("⚙️ Dumped environment parameters via /system")
                             # Fetch fresh config from loaded env
                             fresh_env = load_env_vars()
                             cols = get_columns()
@@ -1450,7 +1132,6 @@ def main():
                                 print(f"\n{C_Y}⚠️ Usage: /search <design topic / style / palette>{C_R}\n")
                                 continue
                             query = cmd_parts[1]
-                            log_event(f"🔍 Direct UI-UX Pro Max search query: {query}")
                             print(f"\n{C_G}🔍 Searching UI-UX Pro Max database for: '{query}'...{C_R}")
                             res = get_design_suggestions(query)
                             if res:
@@ -1461,75 +1142,13 @@ def main():
                                 print(f"\n{C_Y}❌ No matches or search scripts found.{C_R}\n")
                             continue
                             
-                        elif cmd == "/remember":
-                            if len(cmd_parts) < 2 or "=" not in cmd_parts[1]:
-                                print(f"\n{C_Y}⚠️ Usage: /remember <title> = <content>{C_R}\n")
-                                continue
-                            parts = cmd_parts[1].split("=", 1)
-                            title = parts[0].strip()
-                            content = parts[1].strip()
-                            if not title or not content:
-                                print(f"\n{C_Y}⚠️ Usage: /remember <title> = <content>{C_R}\n")
-                                continue
-                            log_event(f"🧠 Saving memory rule: '{title}'")
-                            print(f"\n{C_G}🧠 Saving memory to Hivemind: '{title}'...{C_R}")
-                            res = save_concept_to_hivemind(title, content, tags="user-memories", category="concepts")
-                            print(f"\n{C_W}{res}{C_R}\n")
-                            continue
-                            
-                        elif cmd == "/recall":
-                            if len(cmd_parts) < 2:
-                                print(f"\n{C_Y}⚠️ Usage: /recall <query>{C_R}\n")
-                                continue
-                            query = cmd_parts[1].strip()
-                            print(f"\n{C_G}🔍 Searching Hivemind semantically for: '{query}'...{C_R}")
-                            res = search_hivemind(query, category="concepts")
-                            try:
-                                results = json.loads(res)
-                            except Exception:
-                                results = []
-                            
-                            # Check if the results is a list (valid JSON results) or dict with 'error' or a string error
-                            if isinstance(results, dict) and "error" in results:
-                                draw_box([f"❌ {results['error']}"], title="🌸 HIVE RECALL ERROR", border_color=C_P, text_color=C_W)
-                            elif not results or not isinstance(results, list):
-                                if isinstance(res, str) and res.startswith("ERROR"):
-                                    draw_box([f"❌ {res}"], title="🌸 HIVE RECALL ERROR", border_color=C_P, text_color=C_W)
-                                else:
-                                    draw_box(["No matching memories found in the Hivemind."], title="🌸 HIVE RECALL (0 Results)", border_color=C_P, text_color=C_W)
-                            elif len(results) == 1 and "error" in results[0]:
-                                draw_box([f"❌ {results[0]['error']}"], title="🌸 HIVE RECALL ERROR", border_color=C_P, text_color=C_W)
-                            else:
-                                box_lines = []
-                                for idx, item in enumerate(results, 1):
-                                    title_str = item.get("title", "Untitled")
-                                    content_str = item.get("content", "")
-                                    tags_str = item.get("tags", "")
-                                    c_id = item.get("id", "N/A")
-                                    
-                                    box_lines.append(f"{C_Y}[{idx}] {title_str} (ID: {c_id}){C_R}")
-                                    if tags_str:
-                                        box_lines.append(f"{C_D}Tags: {tags_str}{C_R}")
-                                    
-                                    # Strip and append lines
-                                    for line in content_str.splitlines():
-                                        box_lines.append(f"  {line}")
-                                    
-                                    if idx < len(results):
-                                        box_lines.append("---")
-                                        
-                                draw_box(box_lines, title=f"🌸 HIVE RECALL Results ({len(results)})", border_color=C_P, text_color=C_G)
-                            print()
-                            continue
-                            
                         else:
-                            print(f"\n{C_Y}❌ Unknown command: {cmd}. Available commands: /exit, /reset, /search, /system, /remember, /recall{C_R}\n")
+                            print(f"\n{C_Y}❌ Unknown command: {cmd}. Available commands: /exit, /reset, /search, /system{C_R}\n")
                             continue
 
                     # ========================================================
                     # 🧠 INTENT-BASED DYNAMIC RAG & TELEMETRY PRE-FLIGHT
                     # ========================================================
-                    log_event("👤 Dialogue Turn: {}".format(scrub_secrets(user_input)))
                     grounding_context = []
                     
                     # A. Design / UI / Style Intent Grounding
@@ -1547,23 +1166,6 @@ def main():
                         telemetry = gather_system_telemetry()
                         if telemetry:
                             grounding_context.append(f"[REAL-TIME SYSTEM DIAGNOSTIC TELEMETRY (Current VM status)]:\n{telemetry}")
-
-                    # C. Past Lessons & Memories Grounding
-                    memory_keywords = ["remember", "recall", "memory", "past", "history", "lesson", "post-mortem", "previous", "learn", "concept"]
-                    if any(kw in user_input.lower() for kw in memory_keywords):
-                        print(f"{C_D}🧠 RAG: Retrieving relevant lessons & past concepts from Hivemind...{C_R}", end="\r")
-                        memories_res = search_hivemind(user_input, category="concepts")
-                        try:
-                            memories_list = json.loads(memories_res)
-                        except Exception:
-                            memories_list = []
-                        if memories_list and isinstance(memories_list, list) and len(memories_list) > 0 and "error" not in memories_list[0]:
-                            memory_blocks = []
-                            for idx, item in enumerate(memories_list[:3], 1):
-                                m_title = item.get("title", "Untitled")
-                                m_content = item.get("content", "")
-                                memory_blocks.append(f"Memory #{idx}: {m_title}\n{m_content}")
-                            grounding_context.append(f"[MEMORIES & PAST LESSONS (Grounding from Hivemind)]:\n" + "\n---\n".join(memory_blocks))
 
                     # Compile final grounded input
                     final_input = user_input
@@ -1707,8 +1309,8 @@ def main():
                 history = prune_dialog_history(history)
                 save_session_backup(history, Path.cwd(), llm_url, llm_model)
                 
-                # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
-                execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
+                # Check for execute blocks: ```execute\n<command>\n```
+                execute_blocks = re.findall(r"```execute\n(.*?)\n```", full_reply, re.DOTALL)
                 if execute_blocks:
                     for block in execute_blocks:
                         cmd = block.strip()
@@ -1725,23 +1327,6 @@ def main():
                             wrapped_out = clean_wrap_text(out.strip(), cols - 2)
                             print(f"{C_W}{wrapped_out}{C_R}")
                             print(f"{C_G}{'─' * cols}{C_R}\n")
-                            
-                            # Integration: Save reflection lesson to ChromaDB on successful healing/repair commands
-                            if code == 0 and is_healing_command(cmd):
-                                # Compile / retrieve error context
-                                error_feedback = "None detected in active termchat window."
-                                for msg in reversed(history):
-                                    content = msg.get("content", "")
-                                    if not content:
-                                        continue
-                                    if any(term in content.lower() for term in ["error", "fail", "not found", "does not exist", "exception", "stderr"]):
-                                        error_feedback = content[:500]
-                                        break
-                                autonomic_reflection_save(
-                                    task=f"Execution of reflex command: {cmd}",
-                                    error=error_feedback,
-                                    solution=f"Executed command successfully (Exit Code: 0). Output: {out[:300]}"
-                                )
                             
                             # Feed the action result back to the LLM and trigger another turn immediately!
                             feedback = f"[SYSTEM OUT (Command: '{scrub_secrets(cmd)}', Exit Code: {code})]\n{out}"
@@ -1778,22 +1363,7 @@ def main():
                 print()
                 
                 # Check for missing model trigger (Self-Healing Autopilot)
-                # Ensure it is NOT a cloud URL, since cloud models cannot be pulled via Ollama
-                is_cloud_url = any(domain in llm_url.lower() for domain in ["api.deepseek.com", "api.openai.com", "api.anthropic.com", "googleapis.com"])
-                
-                # Check if it was a web routing 404 error rather than a missing local weight file
-                is_routing_error = any(kw in err_msg.lower() for kw in ["url", "route", "completions"]) if err_msg else False
-                
-                if response_obj and response_obj.status_code == 404:
-                    print(f"{C_Y}💡 Kenbun Diagnostic Tip:{C_R}")
-                    print(f"  Your PRIMARY_LLM_URL is set to: {C_W}{llm_url}{C_R}")
-                    print(f"  The server returned a 404 (Not Found) error for '/chat/completions'.")
-                    print(f"  This usually means the URL is incorrect or doesn't support the OpenAI-compatible chat API.")
-                    if "googleapis.com" in llm_url.lower() and "openai" not in llm_url.lower():
-                        print(f"  ➔ {C_G}Tip: For Google AI Studio, ensure your URL ends with '/v1beta/openai'{C_R}")
-                    print()
-                
-                if not is_cloud_url and not is_routing_error and err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
+                if err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
                     print_ollama_memory_education("pull_triggered")
                     draw_box([
                         f"Kenbun has detected that '{llm_model}' is not pulled.",
@@ -1817,15 +1387,6 @@ def main():
                         wrapped_out = clean_wrap_text(out.strip(), cols - 2)
                         print(f"{C_W}{wrapped_out}{C_R}")
                         print(f"{C_G}{'─' * cols}{C_R}\n")
-                        
-                        # Integration: Save reflection lesson to ChromaDB for autonomic model pulls
-                        if code == 0:
-                            autonomic_reflection_save(
-                                task=f"Pull Ollama model '{llm_model}' using command '{pull_cmd}'",
-                                error=f"HTTP Error: API endpoint returned model not found or mismatch error message: '{err_msg}'",
-                                solution=f"Successfully pulled and registered '{llm_model}' (Exit Code: 0)."
-                            )
-                        
                         print(f"{C_G}✓ Model pull completed. Please retry your message!{C_R}\n")
                         # Pop the last user message to let the user clean retry
                         if history and history[-1]["role"] == "user":
