@@ -822,6 +822,14 @@ def audit_package_safety(package_name: str, ecosystem: str = "npm") -> str:
 if __name__ == "__main__":
     # If running manually, we can print status. 
     try:
+        # Low-Level Systems Memory Optimization (C# Heap Pinning equivalent)
+        # Freeze the CPython heap containing all registered FastMCP tools, decorators,
+        # and third-party modules (ChromaDB, Pydantic) before starting the server loop.
+        # This permanently excludes them from future generational GC sweeps, maximizing throughput.
+        import gc
+        gc.collect(2)
+        gc.freeze()
+        
         # Absolute silence required for MCP protocol.
         # No startup banners allowed.
         mcp.run()

@@ -1636,6 +1636,17 @@ def install_shift_enter_alias() -> int:
 def main():
     global active_brain_health_dir, YOLO_MODE
     
+    # 1. Low-Level Systems Memory Optimization (C# Heap Pinning equivalent)
+    # Freeze the initial CPython heap containing all core static imports and modules
+    # to permanently exclude them from future cyclic garbage collection sweeps.
+    import gc
+    gc.collect(2)
+    gc.freeze()
+    
+    # Tune generational GC thresholds (Gen 0 ceiling at 50,000 allocations) to prevent
+    # garbage collection thrashing during high-frequency REPL command iterations.
+    gc.set_threshold(50000, 10, 10)
+    
     # Support starting directly in YOLO mode via command line flags
     import sys
     if "--yolo" in sys.argv or "-y" in sys.argv:
