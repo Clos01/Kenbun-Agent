@@ -1515,46 +1515,41 @@ def run_interactive_wizard():
     if not use_color:
         c_m = c_c = c_g = c_y = c_r = ""
 
-    while True:
-        print(f"\n{c_m}🌸 KENBUN-AGENT INTERACTIVE WIZARD MENU{c_r}")
-        print(f"{c_g}──────────────────────────────────────────────────{c_r}")
-        print(f"1. 🚀 Express Setup (Automated Defaults - remap ports & seed)")
-        print(f"2. ⚡ Quick Setup (Configure Provider, Model, & Messaging bot)")
-        print(f"3. 🔑 Configure API Keys & Local AI Engines (Interactive)")
-        print(f"4. 🐳 Configure Local AI Models & Docker Pull List")
-        print(f"5. 🐳 Start Swarm Stack (Docker Compose up)")
-        print(f"6. 🔌 Register MCP Server in Claude Desktop & Cursor (Auto)")
-        print(f"7. 📊 Showcase Telemetry Dashboard (Access guidelines)")
-        print(f"8. 🌸 Start Kenbun Cognitive Agentic Shell (Termchat)")
-        print(f"9. ❌ Exit")
-        print(f"{c_g}──────────────────────────────────────────────────{c_r}")
-        try:
-            choice = input(f"{c_c}Select an option [1-9]: {c_r}").strip()
-        except (EOFError, KeyboardInterrupt):
-            print(f"\n\n{c_y}⚠️ Standard input was closed or interrupted. Exiting wizard.{c_r}")
-            print(f"{c_c}➔ Type {c_m}\"source ~/.bashrc\"{c_c} and press ENTER to reload your profile.{c_r}")
-            print(f"{c_c}➔ Type {c_m}\"kenbun\"{c_c} and press ENTER to launch the setup wizard.{c_r}")
-            print(f"{c_c}➔ Or run using the direct path fallback: {c_m}~/.local/bin/kenbun{c_r}")
-            print(f"\nFor full configuration details, please refer to the README.md online:")
-            print(f"  {c_c}https://github.com/Clos01/Kenbun-Agent{c_r}\n")
-            sys.exit(0)
+    options = [
+        "🚀 Express Setup (Automated Defaults - remap ports & seed)",
+        "⚡ Quick Setup (Configure Provider, Model, & Messaging bot)",
+        "🔑 Configure API Keys & Local AI Engines (Interactive)",
+        "🐳 Configure Local AI Models & Docker Pull List",
+        "🐳 Start Swarm Stack (Docker Compose up)",
+        "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
+        "📊 Showcase Telemetry Dashboard (Access guidelines)",
+        "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)",
+        "❌ Exit"
+    ]
 
-        if choice == "1":
+    while True:
+        selection = select_menu(options, "KENBUN-AGENT INTERACTIVE WIZARD MENU")
+        
+        if selection is None:
+            print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
+            break
+
+        if selection == 0:
             bootstrap_core()
-        elif choice == "2":
+        elif selection == 1:
             run_quick_setup()
-        elif choice == "3":
+        elif selection == 2:
             configure_api_keys()
-        elif choice == "4":
+        elif selection == 3:
             configure_local_models()
-        elif choice == "5":
+        elif selection == 4:
             launch_docker_swarm()
-        elif choice == "6":
+        elif selection == 5:
             auto_register_claude_desktop_mcp()
             auto_register_cursor_mcp()
-        elif choice == "7":
+        elif selection == 6:
             showcase_dashboard()
-        elif choice == "8":
+        elif selection == 7:
             # Launch Kenbun Cognitive Shell (Termchat) in-place
             script_dir = Path(__file__).parent.resolve()
             project_root = script_dir.parent
@@ -1568,11 +1563,9 @@ def run_interactive_wizard():
                     print(f"\n❌ Failed to start terminal chat subprocess: {e}")
             else:
                 print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
-        elif choice == "9":
+        elif selection == 8:
             print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
             break
-        else:
-            print(f"\n{c_y}⚠️ Invalid choice. Please select 1 to 9.{c_r}")
 
 if __name__ == "__main__":
     use_color = should_enable_color()
