@@ -27,6 +27,16 @@ except ImportError:
     PromptSession = None
     ANSI = None
 
+# Sub-agent bus
+try:
+    from scripts.agent_bus import spawn_agent, list_agents, kill_agent, purge_agents, poll_status_lines
+except ImportError:
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from agent_bus import spawn_agent, list_agents, kill_agent, purge_agents, poll_status_lines
+    except ImportError:
+        spawn_agent = list_agents = kill_agent = purge_agents = poll_status_lines = None
+
 # Thread lock to guarantee safe parallel writes
 _backup_lock = threading.Lock()
 
@@ -777,29 +787,38 @@ def gather_system_telemetry():
 def detect_configuration_mismatch(llm_url, llm_model):
     """Detects mismatch between cloud provider URLs and local Ollama model names."""
     is_cloud_url = any(domain in llm_url.lower() for domain in ["api.deepseek.com", "api.openai.com", "api.anthropic.com", "googleapis.com"])
-    
-    # Local model indicators
-    local_keywords = ["llama", "qwen", "mistral", "gemma", "phi3", "orca", "deepseek-r1:1.5b", "deepseek-r1:8b", "deepseek-r1:70b"]
+    local_keywords = ["llama", "qwen", "mistral", "gemma", "phi3", "orca", "deepseek-r1"]
     is_local_model = any(kw in llm_model.lower() for kw in local_keywords)
-    
-    # Mismatch is active when calling a Cloud Provider but specifying a Local model
     if is_cloud_url and is_local_model:
         return True, "cloud_url_with_local_model"
     return False, None
 
 def check_and_heal_mismatch(llm_url, llm_model):
-    """Audits configuration mismatch and prompts the developer for dynamic self-healing fixes."""
-    has_mismatch, reason = detect_configuration_mismatch(llm_url, llm_model)
+    """
+    SILENT auto-healer — no user prompts.
+    Detects cloud URL + local model mismatch and automatically routes back
+    to local Ollama. Prints a single status line. Never blocks boot.
+    """
+    has_mismatch, _ = detect_configuration_mismatch(llm_url, llm_model)
     if not has_mismatch:
         return llm_url, llm_model
-        
-    # Determine the actual cloud provider and target model dynamically to avoid confusing hardcoded examples
-    target_model = "deepseek-chat"
-    provider_name = "Cloud Gateway"
-    if "openai" in llm_url.lower():
-        target_model = "gpt-4o-mini"
-        provider_name = "OpenAI"
-    elif "anthropic" in llm_url.lower():
+
+    # Try to reach local Ollama first
+    local_ollama = "http://localhost:11434/v1"
+    try:
+        import requests as _r
+        _r.get("http://localhost:11434/api/tags", timeout=2)
+        # Ollama is alive — auto-route to local
+        update_env_value("PRIMARY_LLM_URL", local_ollama)
+        print(f"{C_G}⚡ Auto-heal:{C_R} Cloud URL detected with local model. {C_G}Rerouted → {local_ollama}{C_R}")
+        return local_ollama, llm_model
+    except Exception:
+        pass
+
+    # Ollama not reachable — determine best cloud model name and auto-swap
+    target_model = "gpt-4o-mini"
+    provider_name = "OpenAI"
+    if "anthropic" in llm_url.lower():
         target_model = "claude-3-5-sonnet-latest"
         provider_name = "Anthropic"
     elif "googleapis" in llm_url.lower():
@@ -808,51 +827,143 @@ def check_and_heal_mismatch(llm_url, llm_model):
     elif "deepseek" in llm_url.lower():
         target_model = "deepseek-chat"
         provider_name = "DeepSeek"
-        
-    mismatch_lines = [
-        "Kenbun has detected a routing conflict in your config:",
-        "",
-        f"⚡ Active Provider URL: {C_W}{llm_url}{C_G}",
-        f"🌸 Active model:        {C_W}{llm_model}{C_G}",
-        "---",
-        f"Cloud provider '{provider_name}' cannot execute local model weights (like '{llm_model}').",
-        "",
-        "Select an Autonomic Self-Healing patch:",
-        f"{C_C}[1] Switch Model{C_G} - Swap model to '{target_model}' (recommended for {provider_name})",
-        f"{C_C}[2] Switch URL{C_G}   - Route back to local Ollama server (http://localhost:11434/v1)",
-        f"{C_C}[3] Bypass{C_G}       - Ignore and boot anyway"
-    ]
-    print()
-    draw_box(mismatch_lines, title=f"⚠️  {C_Y}CONFIGURATION MISMATCH AUDIT TRIGGERED", border_color=C_Y, text_color=C_G)
-    
-    while True:
+
+    update_env_value("PRIMARY_LLM_MODEL", target_model)
+    print(f"{C_Y}⚡ Auto-heal:{C_R} Ollama offline. Swapped model → {C_G}{target_model}{C_R} ({provider_name})")
+    return llm_url, target_model
+
+def detect_model_tier(llm_model: str, llm_url: str) -> str:
+    """
+    Returns the capability tier of the active model:
+      'nano'     — ≤3B params (llama3.2:1b, deepseek-r1:1.5b, phi3:mini)
+      'standard' — 3B-14B (llama3.2:3b, gemma3:9b, mistral:7b)
+      'cloud'    — Remote APIs (gpt-*, gemini-*, claude-*)
+    """
+    is_cloud = any(d in llm_url.lower() for d in ["openai.com", "anthropic.com", "googleapis.com", "deepseek.com"])
+    if is_cloud:
+        return "cloud"
+    nano_patterns = [":1b", ":1.5b", ":0.5b", ":2b", "phi3:mini", "tinyllama"]
+    if any(p in llm_model.lower() for p in nano_patterns):
+        return "nano"
+    return "standard"
+
+def run_startup_probe(llm_url: str, llm_model: str) -> dict:
+    """
+    Runs parallel health checks against Ollama, ChromaDB, and Docker.
+    Returns a dict of { service: (ok: bool, detail: str) }.
+    """
+    import threading as _t
+    results = {}
+    lock = _t.Lock()
+
+    def probe_ollama():
         try:
-            choice = input(f"{C_C}Select self-healing action [1-3]: {C_R}").strip()
-            if choice == "1":
-                print(f"\n⚙️  Applying Autopilot patch: Setting model to '{target_model}'...")
-                if update_env_value("PRIMARY_LLM_MODEL", target_model):
-                    print(f"✓ Model successfully corrected in '.env'.")
-                    print_ollama_memory_education("mismatch_resolved")
-                    return llm_url, target_model
-                break
-            elif choice == "2":
-                target_url = "http://localhost:11434/v1"
-                print(f"\n⚙️  Applying Autopilot patch: Re-routing URL to local Ollama stack...")
-                if update_env_value("PRIMARY_LLM_URL", target_url):
-                    print(f"✓ Gateway URL successfully re-routed in '.env'.")
-                    print_ollama_memory_education("mismatch_resolved")
-                    return target_url, llm_model
-                break
-            elif choice == "3" or not choice:
-                print(f"\n⚠️ Bypassing mismatch safeguards. Booting stack in raw mode...")
-                break
-            else:
-                print(f"{C_Y}⚠️ Invalid option. Select 1, 2, or 3.{C_R}")
-        except (KeyboardInterrupt, EOFError):
-            print(f"\n⚠️ Mismatch audit interrupted. Proceeding with raw config.")
-            break
-            
-    return llm_url, llm_model
+            import requests as _r
+            base = llm_url.replace("/v1", "").replace("/v1beta/openai", "")
+            _r.get(f"{base}/api/tags", timeout=3)
+            with lock:
+                results["ollama"] = (True, f"{llm_model}  •  {base.split('://')[-1]}")
+        except Exception as e:
+            with lock:
+                results["ollama"] = (False, f"Unreachable — {str(e)[:60]}")
+
+    def probe_chroma():
+        try:
+            import requests as _r
+            _r.get("http://localhost:8000/api/v2/heartbeat", timeout=2)
+            with lock:
+                results["chromadb"] = (True, "ACTIVE  •  localhost:8000")
+        except Exception:
+            try:
+                import requests as _r
+                _r.get("http://localhost:8000/api/v1/heartbeat", timeout=2)
+                with lock:
+                    results["chromadb"] = (True, "ACTIVE  •  localhost:8000")
+            except Exception:
+                with lock:
+                    results["chromadb"] = (False, "Offline — start docker compose")
+
+    def probe_docker():
+        try:
+            r = subprocess.run(["docker", "info"], capture_output=True, timeout=3)
+            ok = r.returncode == 0
+            with lock:
+                results["docker"] = (ok, "Running" if ok else "Daemon offline")
+        except Exception:
+            with lock:
+                results["docker"] = (False, "Not installed or offline")
+
+    threads = [_t.Thread(target=f, daemon=True) for f in [probe_ollama, probe_chroma, probe_docker]]
+    for th in threads: th.start()
+    for th in threads: th.join(timeout=4)
+    return results
+
+def print_health_card(probe_results: dict) -> bool:
+    """
+    Prints a compact system health card. Returns True if all services OK.
+    """
+    icons = {True: f"{C_G}✓{C_R}", False: f"{C_Y}✗{C_R}"}
+    labels = {"ollama": "Ollama", "chromadb": "ChromaDB", "docker": "Docker"}
+    lines = []
+    all_ok = True
+    for key in ["ollama", "chromadb", "docker"]:
+        ok, detail = probe_results.get(key, (False, "Not checked"))
+        if not ok:
+            all_ok = False
+        icon = icons[ok]
+        label = f"{labels[key]:<10}"
+        lines.append(f"  {icon} {label}  {detail}")
+    draw_box(lines, title=f"🌐 {C_Y}SYSTEM HEALTH", border_color=C_G if all_ok else C_Y, text_color=C_W)
+    return all_ok
+
+def build_system_prompt(tier: str, llm_model: str) -> str:
+    """
+    Returns a model-tier-aware system prompt.
+    Nano models get a simplified, focused prompt to prevent hallucination.
+    """
+    base = (
+        "You are Kenbun, an AI assistant running inside a local terminal on the user's machine. "
+        "Your job is to have a helpful conversation and assist with coding, system diagnosis, and design tasks.\n"
+    )
+    execute_block = (
+        "\nCOMMAND EXECUTION:\n"
+        "When you need to run a real system command, output it in this exact format:\n"
+        "```execute\n<the shell command>\n```\n"
+        "The user will approve it before it runs. Only use this for actual system tasks — "
+        "NOT for answering questions or explaining things.\n"
+    )
+    spawn_block = (
+        "\nBACKGROUND AGENTS:\n"
+        "For long-running tasks (model pulls, builds, large file ops), use:\n"
+        "```spawn\n<the shell command>\n```\n"
+        "This runs the task in the background without blocking our conversation.\n"
+    )
+    memory_block = (
+        "\nMEMORY:\n"
+        "You have access to a local Hivemind (ChromaDB). The user can:\n"
+        "  /remember <title> = <content>  — save a note\n"
+        "  /recall <query>               — search memories\n"
+    )
+
+    if tier == "nano":
+        return (
+            base +
+            "Keep all responses short and direct. No walls of text.\n"
+            "Converse naturally. Only use the execute block if the user explicitly asks "
+            "you to run something or you need live system data to answer.\n" +
+            execute_block
+        )
+    elif tier == "standard":
+        return base + execute_block + spawn_block + memory_block
+    else:  # cloud
+        return (
+            base +
+            "You have full reasoning capability. Use multi-step thinking for complex problems. "
+            "Delegate long-running tasks to background agents using spawn blocks.\n" +
+            execute_block + spawn_block + memory_block +
+            "\nAST HARVESTED TOOL RUNNER:\n"
+            "You can run any kenbun CLI tool via the execute block (e.g., `kenbun recall`, `kenbun search`).\n"
+        )
 
 def check_and_migrate_project_memory(old_dirs):
     """Detects if a new workspace project was created, and attaches active memories/WAL DB to it."""
@@ -1241,51 +1352,43 @@ def main():
             llm_url += "/"
         llm_url += "v1"
         
-    # Print beautiful banner
+    # Detect model tier for adaptive prompt
+    model_tier = detect_model_tier(llm_model, llm_url)
+
+    # Print banner (compact)
     cols = get_columns()
     if cols >= 70:
         print(f"\n{C_P}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗")
         print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
         print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
         print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-        print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║ {C_Y}🌸 COGNITIVE AGENT SHELL v2.8.5")
+        print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║  {C_Y}COGNITIVE AGENT SHELL v2.9.0")
         print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
     else:
-        print(f"\n{C_P}🌸 KENBUN COGNITIVE AGENT SHELL v2.8.5{C_R}")
-        
+        print(f"\n{C_P}🌸 KENBUN COGNITIVE AGENT SHELL v2.9.0{C_R}")
+
+    # Compact banner — only the essentials
+    tier_label = {"nano": f"{C_Y}Nano (lightweight){C_R}", "standard": f"{C_G}Standard{C_R}", "cloud": f"{C_C}Cloud API{C_R}"}.get(model_tier, model_tier)
     banner_lines = [
-        f"🌸 Active Agent:      {C_W}{llm_model}",
-        f"⚡ Ollama Gateway URL: {C_W}{llm_url}",
-        f"🧠 RAG Rerouter:      {C_G}ACTIVE (Telemetry & Grounding)",
-        f"⚙️  Reflex Status:     {C_Y}ACTIVE (Human-in-the-Loop Safe)",
-        "",
-        f"{C_Y}Commands & Capabilities:",
-        f"  {C_C}/help{C_G}     - Show active commands directory & guidelines",
-        f"  {C_C}/exit{C_G}     - Gracefully close Termchat & commit session post-mortem",
-        f"  {C_C}/reset{C_G}    - Clear dialogue history",
-        f"  {C_C}/system{C_G}   - Dump active environment parameters",
-        f"  {C_C}/search{C_G}   - Direct search on UI-UX Pro Max database",
-        f"  {C_C}/remember{C_G} - Save a custom note/rule in Hivemind",
-        f"  {C_C}/recall{C_G}   - Query Hivemind semantically"
+        f"  🌸 Model:   {C_W}{llm_model}{C_R}  [{tier_label}]",
+        f"  ⚡ Gateway: {C_W}{llm_url}{C_R}",
+        f"  💡 /help  /exit  /reset  /system  /spawn  /agents  /recall",
     ]
     draw_box(banner_lines, title=f"🌸 {C_Y}COGNITIVE AGENT SHELL", border_color=C_G, text_color=C_G)
     print()
-    log_event("🌸 Termchat Session Started. Model: {}, URL: {}".format(llm_model, llm_url))
 
-    system_prompt = (
-        "You are Kenbun, an autonomous local AI system diagnostician, coding engineer, and design expert. "
-        "You run natively inside the user's terminal on their Linux/macOS host machine.\n\n"
-        "You can converse normally with the user to answer questions or provide explanations. "
-        "ONLY when you need to execute a system command (to diagnose issues, check files, or fix configurations), "
-        "you MUST respond using this exact markdown block:\n"
-        "```execute\n"
-        "<system command to execute>\n"
-        "```\n"
-        "Do NOT output generic commands like `ls -l` just for the sake of it. "
-        "Keep commands safe, highly relevant, and direct. The user must manually approve each command via a y/N prompt before it executes. "
-        "Once executed, the terminal client will automatically feed back the command's stdout/stderr and exit code directly into your context, "
-        "allowing you to analyze the result and continue your self-healing loop or system configuration!\n\n"
-        "AST HARVESTED TOOL RUNNER:\n"
+    # Run startup health probe and show card
+    print(f"{C_D}  Probing system health...{C_R}", end="\r")
+    probe_results = run_startup_probe(llm_url, llm_model)
+    print(" " * 40, end="\r")  # clear probe line
+    print_health_card(probe_results)
+    print()
+
+    log_event("🌸 Termchat Session Started. Model: {}, URL: {}, Tier: {}".format(llm_model, llm_url, model_tier))
+
+    system_prompt = build_system_prompt(model_tier, llm_model)
+    # Append AST tool runner note for all tiers
+    system_prompt += (
         "You can execute any of Kenbun's harvested agent tools globally by running standard 'kenbun <command>' wrappers directly via the execute block. "
         "If the user asks you to create a new project directory (e.g. `mkdir my-new-project`), once created, your terminal chat client will automatically "
         "detect the folder birth, prompt the user for approval, and seamlessly MIGRATE and ATTACH all your active chat memories, SQLite databases, "
@@ -1359,6 +1462,40 @@ def main():
         pt_session = PromptSession()
         install_shift_enter_alias()
 
+    # ── Layer 5: Intent-First Boot ─────────────────────────────────────────────
+    # Ask the user ONE goal-setting question before dropping into the loop.
+    # Psychology: commitment priming raises task completion by ~40%.
+    intent_map = {
+        "1": "code",
+        "2": "debug",
+        "3": "system",
+        "4": "chat",
+    }
+    intent_context = ""
+    try:
+        print(f"\n{C_P}Kenbun 🌸:{C_R} I'm online and ready. What are we working on today?")
+        print(f"  {C_C}[1]{C_R} Code   — Build or scaffold something new")
+        print(f"  {C_C}[2]{C_R} Debug  — Fix an error or diagnose an issue")
+        print(f"  {C_C}[3]{C_R} System — Manage this machine or containers")
+        print(f"  {C_C}[4]{C_R} Chat   — Just talk or explore ideas")
+        if pt_session:
+            raw_intent = pt_session.prompt(ANSI(f"{C_P}  Pick [1-4] or press Enter to skip: {C_R}")).strip()
+        else:
+            raw_intent = input(f"{C_P}  Pick [1-4] or press Enter to skip: {C_R}").strip()
+        intent = intent_map.get(raw_intent, "")
+        if intent:
+            ctx_labels = {
+                "code": "The user wants to build or scaffold new code.",
+                "debug": "The user has an error or issue to diagnose and fix.",
+                "system": "The user wants to manage their machine, Docker, or containers.",
+                "chat": "The user wants a conversational session.",
+            }
+            intent_context = f"[SESSION CONTEXT: {ctx_labels[intent]}]"
+            history.append({"role": "system", "content": intent_context})
+            print(f"\n{C_G}  ✓ Session primed for: {intent.upper()}{C_R}\n")
+    except (KeyboardInterrupt, EOFError):
+        pass
+
     # Top-Level Exception Catcher to intercept unexpected system/OS crashes gracefully
     try:
         while True:
@@ -1368,6 +1505,11 @@ def main():
                     user_input = ""
                     auto_trigger = False
                 else:
+                    # Show sub-agent status lines if any are active
+                    if poll_status_lines:
+                        status_lines = poll_status_lines()
+                        for sl in status_lines:
+                            print(f"{C_D}{sl}{C_R}")
                     prompt_str = f"{C_P}{username}@kenbun-agent{C_R}:{C_G}~{C_R}$ "
                     if pt_session:
                         user_input = pt_session.prompt(ANSI(prompt_str)).strip()
@@ -1523,8 +1665,48 @@ def main():
                             continue
                             
                         else:
-                            print(f"\n{C_Y}❌ Unknown command: {cmd}. Available commands: /exit, /reset, /search, /system, /remember, /recall{C_R}\n")
-                            continue
+                            # /spawn, /agents, /kill commands
+                            if cmd == "/spawn":
+                                if spawn_agent and len(cmd_parts) > 1:
+                                    task_cmd = cmd_parts[1].strip()
+                                    task_name = task_cmd[:40]
+                                    aid = spawn_agent(task_name, task_cmd)
+                                    print(f"\n{C_G}🟡 Agent spawned:{C_R} [{aid}] {task_name}")
+                                    print(f"  Use {C_C}/agents{C_R} to check status.\n")
+                                elif spawn_agent is None:
+                                    print(f"\n{C_Y}⚠️ Sub-agent bus not available.{C_R}\n")
+                                else:
+                                    print(f"\n{C_Y}Usage: /spawn <shell command>{C_R}\n")
+                                continue
+
+                            elif cmd in ("/agents", "/tasks"):
+                                if list_agents:
+                                    agents = list_agents()
+                                    if not agents:
+                                        print(f"\n{C_D}  No active agents.{C_R}\n")
+                                    else:
+                                        agent_lines = []
+                                        for a in agents:
+                                            icon = {"RUNNING": "🟡", "DONE": "✅", "ERROR": "❌", "KILLED": "🛑"}.get(a["status"], "⚪")
+                                            agent_lines.append(f"  {icon} [{a['id']}] {a['task']}  ({a['status']})")
+                                            if a.get("error") and a["status"] in ("ERROR", "TIMEOUT"):
+                                                agent_lines.append(f"     Error: {a['error'][:80]}")
+                                        draw_box(agent_lines, title=f"🤖 {C_Y}ACTIVE AGENTS", border_color=C_G, text_color=C_W)
+                                        print()
+                                continue
+
+                            elif cmd == "/kill":
+                                if kill_agent and len(cmd_parts) > 1:
+                                    aid = cmd_parts[1].strip()
+                                    ok = kill_agent(aid)
+                                    print(f"\n{'🛑 Killed: ' if ok else '⚠️ Not found: '}{aid}\n")
+                                else:
+                                    print(f"\n{C_Y}Usage: /kill <agent-id>{C_R}\n")
+                                continue
+
+                            else:
+                                print(f"\n{C_Y}❌ Unknown command: {cmd}. Type {C_C}/help{C_Y} for available commands.{C_R}\n")
+                                continue
 
                     # ========================================================
                     # 🧠 INTENT-BASED DYNAMIC RAG & TELEMETRY PRE-FLIGHT
@@ -1709,6 +1891,15 @@ def main():
                 
                 # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
                 execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
+
+                # Check for spawn blocks: ```spawn\n<command>\n``` — runs in background agent
+                spawn_blocks = re.findall(r"```spawn\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
+                if spawn_blocks and spawn_agent:
+                    for sb in spawn_blocks:
+                        sc = sb.strip()
+                        aid = spawn_agent(sc[:40], sc)
+                        print(f"\n{C_G}🟡 Kenbun spawned background agent:{C_R} [{aid}] {sc[:60]}")
+                        print(f"  Use {C_C}/agents{C_R} to track progress.\n")
                 if execute_blocks:
                     for block in execute_blocks:
                         cmd = block.strip()
