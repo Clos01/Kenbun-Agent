@@ -102,7 +102,7 @@ async def run_benchmark():
                 existing_data = content
             else:
                 existing_data = [content]
-        except:
+        except Exception:
             pass
             
     current_benchmark = {

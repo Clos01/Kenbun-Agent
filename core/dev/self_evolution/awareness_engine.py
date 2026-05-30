@@ -27,7 +27,7 @@ async def generate_self_awareness_report():
     try:
         concepts = json.loads(concepts_raw)
         concept_count = len(concepts)
-    except:
+    except Exception:
         concept_count = 0
         
     # 3. Identify Weakest Tool

@@ -195,7 +195,7 @@ def scan_repository(workspace_root: Path):
     report_content = "\n".join(report_lines)
     
     # Save as artifact
-    artifact_dir = Path("/Users/carlosrivas/.gemini/antigravity/brain/058c08d2-a921-45b9-b708-16e78077597b")
+    artifact_dir = Path.home() / ".gemini/antigravity/brain/058c08d2-a921-45b9-b708-16e78077597b"
     artifact_path = artifact_dir / "architecture_audit_report.md"
     
     try:

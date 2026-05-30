@@ -18,7 +18,7 @@ def log_reflection(message: str, data: dict = None):
         }
         with open(TELEMETRY_PATH, "a") as f:
             f.write(json.dumps(log_entry) + "\n")
-    except:
+    except Exception:
         pass
 
 def reflect_and_distill(task: str, tool_logs: str) -> str:

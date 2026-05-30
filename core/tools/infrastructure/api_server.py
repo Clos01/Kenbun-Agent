@@ -563,7 +563,7 @@ async def get_build_status():
                 data = json.load(f)
             return data.get("_system_pulse", {"status": "unverified"})
         return {"status": "ready", "last_build": datetime.now().isoformat()}
-    except:
+    except Exception:
         return {"status": "error"}
 
 @app.get("/api/v1/sovereignty/status")
@@ -763,7 +763,7 @@ async def get_stats():
                 try:
                     data = json.loads(l)
                     msg = data.get("message", l)
-                except:
+                except Exception:
                     msg = l
                 logs.append(guardrail_agent.mask_secrets(msg))
         except Exception as e:

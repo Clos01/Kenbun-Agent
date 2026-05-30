@@ -27,7 +27,7 @@ def extract_json(text: str) -> Optional[Dict[str, Any]]:
         content = json_match.group(1).strip()
         try:
             return json.loads(content)
-        except:
+        except Exception:
             pass
 
     # Fallback 2: Try generic code block if json specific one fails
@@ -36,7 +36,7 @@ def extract_json(text: str) -> Optional[Dict[str, Any]]:
         content = generic_match.group(1).strip()
         try:
             return json.loads(content)
-        except:
+        except Exception:
             pass
 
     return None

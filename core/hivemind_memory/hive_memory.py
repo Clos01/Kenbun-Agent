@@ -28,7 +28,7 @@ class HiveMemory:
         try:
             with open(self.memory_path, "r") as f:
                 return json.load(f)
-        except:
+        except Exception:
             return []
 
     def _save(self):

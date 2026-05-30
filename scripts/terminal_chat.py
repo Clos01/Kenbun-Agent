@@ -1167,7 +1167,8 @@ def save_concept_to_hivemind(title, content, tags, category="concepts"):
     """
     Saves a concept to the Hivemind (ChromaDB) with graceful error handling.
     """
-    core_path = "/Users/carlosrivas/Dev/kenbun-agent/core"
+    project_root = Path(__file__).resolve().parent.parent
+    core_path = str(project_root / "core")
     if core_path not in sys.path:
         sys.path.insert(0, core_path)
     
@@ -1179,7 +1180,7 @@ def save_concept_to_hivemind(title, content, tags, category="concepts"):
         err_msg = f"ERROR: Failed to save to Hivemind. ChromaDB connection failed or core path error: {e}"
         # Log to local file fallback
         try:
-            log_dir = Path("/Users/carlosrivas/Dev/kenbun-agent/brain_health")
+            log_dir = project_root / "brain_health"
             log_dir.mkdir(parents=True, exist_ok=True)
             log_file = log_dir / "failed_hivemind_memories.log"
             with open(log_file, "a", encoding="utf-8") as f:
@@ -1200,7 +1201,8 @@ def search_hivemind(query, category="concepts"):
     """
     Searches the Hivemind (ChromaDB) semantically with graceful error handling.
     """
-    core_path = "/Users/carlosrivas/Dev/kenbun-agent/core"
+    project_root = Path(__file__).resolve().parent.parent
+    core_path = str(project_root / "core")
     if core_path not in sys.path:
         sys.path.insert(0, core_path)
     
@@ -1231,7 +1233,6 @@ def autonomic_reflection_save(task: str, error: str, solution: str, tags: str = 
     try:
         # Dynamically find the core path
         possible_cores = [
-            Path("/Users/carlosrivas/Dev/kenbun-agent/core"),
             Path(__file__).resolve().parent.parent / "core",
             Path.cwd() / "core"
         ]
@@ -1242,7 +1243,7 @@ def autonomic_reflection_save(task: str, error: str, solution: str, tags: str = 
                 break
         
         if not core_path:
-            core_path = Path("/Users/carlosrivas/Dev/kenbun-agent/core")
+            core_path = Path(__file__).resolve().parent.parent / "core"
             
         sys_path_str = str(core_path.resolve())
         if sys_path_str not in sys.path:
@@ -1313,7 +1314,6 @@ def save_clean_exit_reflection(history):
         
         # Dynamically insert core in sys.path
         possible_cores = [
-            Path("/Users/carlosrivas/Dev/kenbun-agent/core"),
             Path(__file__).resolve().parent.parent / "core",
             Path.cwd() / "core"
         ]
@@ -1324,7 +1324,7 @@ def save_clean_exit_reflection(history):
                 break
         
         if not core_path:
-            core_path = Path("/Users/carlosrivas/Dev/kenbun-agent/core")
+            core_path = Path(__file__).resolve().parent.parent / "core"
             
         sys_path_str = str(core_path.resolve())
         if sys_path_str not in sys.path:

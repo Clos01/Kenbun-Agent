@@ -26,7 +26,7 @@ def _update_registry(func_name: str, module: str, is_clean: bool, breaches: list
         
         with open(REGISTRY_PATH, "w") as f:
             json.dump(data, f, indent=4)
-    except:
+    except Exception:
         pass
 
 def sovereign_logic(strict: bool = False):
