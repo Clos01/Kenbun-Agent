@@ -474,7 +474,7 @@ PROVIDERS_MAP = [
     {
         "name": "Google AI Studio (Gemini models – native Gemini API)",
         "env_key": "GEMINI_API_KEY",
-        "url": "https://generativelanguage.googleapis.com/v1beta",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
         "model": "gemini-3-flash-preview",
         "local": False
     },

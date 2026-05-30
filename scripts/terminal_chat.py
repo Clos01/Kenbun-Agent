@@ -1727,7 +1727,22 @@ def main():
                 print()
                 
                 # Check for missing model trigger (Self-Healing Autopilot)
-                if err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
+                # Ensure it is NOT a cloud URL, since cloud models cannot be pulled via Ollama
+                is_cloud_url = any(domain in llm_url.lower() for domain in ["api.deepseek.com", "api.openai.com", "api.anthropic.com", "googleapis.com"])
+                
+                # Check if it was a web routing 404 error rather than a missing local weight file
+                is_routing_error = any(kw in err_msg.lower() for kw in ["url", "route", "completions"]) if err_msg else False
+                
+                if response_obj and response_obj.status_code == 404:
+                    print(f"{C_Y}💡 Kenbun Diagnostic Tip:{C_R}")
+                    print(f"  Your PRIMARY_LLM_URL is set to: {C_W}{llm_url}{C_R}")
+                    print(f"  The server returned a 404 (Not Found) error for '/chat/completions'.")
+                    print(f"  This usually means the URL is incorrect or doesn't support the OpenAI-compatible chat API.")
+                    if "googleapis.com" in llm_url.lower() and "openai" not in llm_url.lower():
+                        print(f"  ➔ {C_G}Tip: For Google AI Studio, ensure your URL ends with '/v1beta/openai'{C_R}")
+                    print()
+                
+                if not is_cloud_url and not is_routing_error and err_msg and ("not found" in err_msg.lower() or "does not exist" in err_msg.lower() or "mismatch" in err_msg.lower()):
                     print_ollama_memory_education("pull_triggered")
                     draw_box([
                         f"Kenbun has detected that '{llm_model}' is not pulled.",
