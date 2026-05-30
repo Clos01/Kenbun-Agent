@@ -275,16 +275,30 @@ def select_menu(options, title="Select provider:"):
             tty.setraw(fd)
             ch = sys.stdin.read(1)
             if ch == '\x1b':
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.25)
-                if rlist:
-                    ch2 = sys.stdin.read(1)
-                    if ch2 == '[':
-                        rlist, _, _ = select.select([sys.stdin], [], [], 0.25)
-                        if rlist:
-                            ch3 = sys.stdin.read(1)
-                            if ch3 == 'A': return 'up'
-                            elif ch3 == 'B': return 'down'
-                return 'escape'
+                # Read all remaining characters in the escape sequence with a fast timeout
+                seq = ch
+                while True:
+                    rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    if rlist:
+                        seq += sys.stdin.read(1)
+                        if len(seq) >= 6: # Safety limit for escape sequence length
+                            break
+                    else:
+                        break
+                
+                # Check for standard arrow keys
+                if seq in ('\x1b[A', '\x1bOA'):
+                    return 'up'
+                elif seq in ('\x1b[B', '\x1bOB'):
+                    return 'down'
+                elif seq in ('\x1b[C', '\x1bOC'):
+                    return 'right'
+                elif seq in ('\x1b[D', '\x1bOD'):
+                    return 'left'
+                elif seq == '\x1b':
+                    return 'escape' # Actual single ESC key press
+                else:
+                    return 'ignored' # Other unrecognized escape sequence
             elif ch in ('\r', '\n'):
                 return 'enter'
             elif ch == ' ':
