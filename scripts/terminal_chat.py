@@ -141,6 +141,10 @@ def sanitize_input(text):
     if not isinstance(text, str):
         return ""
     
+    # Strict input length validation to prevent Resource Exhaustion (OOM)
+    if len(text) > 65536:
+        raise ValueError("Security Violation: Input length exceeds maximum allowed limit.")
+    
     # 1. Strip ANSI escape sequences to prevent raw terminal control code bypasses
     ansi_pattern = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
     text = ansi_pattern.sub('', text)
@@ -201,32 +205,46 @@ def save_session_backup(history, cwd, llm_url, llm_model):
     All dialogue history is scrubbed defensively before serializing to disk.
     """
     global active_brain_health_dir
-    if not active_brain_health_dir:
-        return
-    
-    backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
-    
-    # Scrub the dialogue history copy defensively before persisting
-    scrubbed_history = []
-    for msg in history:
-        scrubbed_msg = msg.copy()
-        if "content" in scrubbed_msg:
-            scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
-        scrubbed_history.append(scrubbed_msg)
-    
-    data = {
-        "history": scrubbed_history,
-        "cwd": str(cwd),
-        "llm_url": scrub_secrets(llm_url),
-        "llm_model": llm_model
-    }
-    
     with _backup_lock:
+        local_dir = active_brain_health_dir
+        if not local_dir:
+            raise ValueError("Security Violation: Active brain health directory not set.")
+        
+        # Enforce strict path traversal check: backup folder must be strictly under Home or Project Root
+        allowed_roots = [Path.home().resolve(), settings.PROJECT_ROOT.resolve()]
+        resolved_dir = Path(local_dir).resolve()
+        if not any(resolved_dir == root or resolved_dir.is_relative_to(root) for root in allowed_roots):
+            raise ValueError("Security Violation: Backup directory outside allowed boundaries.")
+            
+        # Strict validation on user-influenced parameters using robust whitelist to prevent shell injections (no slash allowed)
+        if not re.match(r"^[a-zA-Z0-9.:\-_]+$", str(llm_model)):
+            raise ValueError("Security Violation: Invalid character in LLM model name.")
+            
+        safe_model = str(llm_model)
+        safe_url = scrub_secrets(str(llm_url))
+        
+        backup_path = resolved_dir / "active_session_backup.json"
+        
+        # Scrub the dialogue history copy defensively before persisting
+        scrubbed_history = []
+        for msg in history:
+            scrubbed_msg = msg.copy()
+            if "content" in scrubbed_msg:
+                scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
+            scrubbed_history.append(scrubbed_msg)
+        
+        data = {
+            "history": scrubbed_history,
+            "cwd": str(cwd),
+            "llm_url": safe_url,
+            "llm_model": safe_model
+        }
+        
         temp_fd = None
         temp_path = None
         try:
             # Create a temp file in the same directory to guarantee atomic rename (same partition)
-            fd, temp_path = tempfile.mkstemp(dir=str(active_brain_health_dir), suffix=".tmp")
+            fd, temp_path = tempfile.mkstemp(dir=str(resolved_dir), suffix=".tmp")
             temp_fd = os.fdopen(fd, 'w')
             json.dump(data, temp_fd, indent=2)
             
@@ -249,8 +267,8 @@ def save_session_backup(history, cwd, llm_url, llm_model):
                     os.unlink(temp_path)
                 except Exception:
                     pass
-            # Graceful warning printed to terminal
-            print(f"\n{C_Y}⚠️  Dialogue Persistence Warning: Atomic session backup failed: {e}{C_R}\n")
+            # Re-raise to prevent masking configuration or system errors
+            raise e
 
 
 # Color palettes (Limestone & Sakura themed)
@@ -2122,9 +2140,10 @@ def main():
                         final_input = f"{context_str}\n\n[USER INSTRUCTION]:\n{user_input}"
 
                     final_input = scrub_secrets(final_input)
-                    history.append({"role": "user", "content": final_input})
-                    history = prune_dialog_history(history)
-                    save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                    if final_input.strip():
+                        history.append({"role": "user", "content": final_input})
+                        history = prune_dialog_history(history)
+                        save_session_backup(history, Path.cwd(), llm_url, llm_model)
 
                 # Prepare streaming request and execute with fallback logic
                 response = None
