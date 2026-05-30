@@ -785,16 +785,32 @@ def check_and_heal_mismatch(llm_url, llm_model):
     if not has_mismatch:
         return llm_url, llm_model
         
+    # Determine the actual cloud provider and target model dynamically to avoid confusing hardcoded examples
+    target_model = "deepseek-chat"
+    provider_name = "Cloud Gateway"
+    if "openai" in llm_url.lower():
+        target_model = "gpt-4o-mini"
+        provider_name = "OpenAI"
+    elif "anthropic" in llm_url.lower():
+        target_model = "claude-3-5-sonnet-latest"
+        provider_name = "Anthropic"
+    elif "googleapis" in llm_url.lower():
+        target_model = "gemini-2.5-flash"
+        provider_name = "Google AI Studio"
+    elif "deepseek" in llm_url.lower():
+        target_model = "deepseek-chat"
+        provider_name = "DeepSeek"
+        
     mismatch_lines = [
         "Kenbun has detected a routing conflict in your config:",
         "",
         f"⚡ Active Provider URL: {C_W}{llm_url}{C_G}",
         f"🌸 Active model:        {C_W}{llm_model}{C_G}",
         "---",
-        f"Cloud gateways (like api.deepseek.com) cannot execute local model weights (like {llm_model}).",
+        f"Cloud provider '{provider_name}' cannot execute local model weights (like '{llm_model}').",
         "",
         "Select an Autonomic Self-Healing patch:",
-        f"{C_C}[1] Switch Model{C_G} - Swap model to target cloud model (e.g., 'deepseek-chat' for DeepSeek)",
+        f"{C_C}[1] Switch Model{C_G} - Swap model to '{target_model}' (recommended for {provider_name})",
         f"{C_C}[2] Switch URL{C_G}   - Route back to local Ollama server (http://localhost:11434/v1)",
         f"{C_C}[3] Bypass{C_G}       - Ignore and boot anyway"
     ]
@@ -805,15 +821,6 @@ def check_and_heal_mismatch(llm_url, llm_model):
         try:
             choice = input(f"{C_C}Select self-healing action [1-3]: {C_R}").strip()
             if choice == "1":
-                # Determine ideal cloud model name
-                target_model = "deepseek-chat"
-                if "openai" in llm_url.lower():
-                    target_model = "gpt-4o-mini"
-                elif "anthropic" in llm_url.lower():
-                    target_model = "claude-3-5-sonnet-latest"
-                elif "googleapis" in llm_url.lower():
-                    target_model = "gemini-2.5-flash"
-                
                 print(f"\n⚙️  Applying Autopilot patch: Setting model to '{target_model}'...")
                 if update_env_value("PRIMARY_LLM_MODEL", target_model):
                     print(f"✓ Model successfully corrected in '.env'.")
