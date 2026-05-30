@@ -1283,6 +1283,66 @@ def launch_docker_swarm():
         
         print(f"\n{c_y}❌ Docker Compose failed with return code {return_code}{c_r}")
 
+def clean_docker_stack():
+    import subprocess
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_y = "\033[38;5;226m"  # Yellow
+    c_r = "\033[0m"         # Reset
+    c_g = "\033[38;5;246m"  # Slate Gray
+    
+    if not use_color:
+        c_m = c_c = c_y = c_r = c_g = ""
+        
+    print(f"\n{c_m}🧹 CLEAN / RESET SWARM DOCKER STACK{c_r}")
+    print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+    
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    
+    docker_bin = shutil.which("docker")
+    if not docker_bin:
+        print(f"\n{c_y}⚠️ Docker is not installed on this system.{c_r}\n")
+        return
+
+    print("Choose cleanup intensity:")
+    print(f"  {c_c}[1]{c_r} Light Clean (Removes local build images & deletes volumes/containers - FAST)")
+    print(f"  {c_c}[2]{c_r} Deep Purge  (Deletes ALL stack containers, volumes, and large cached images - SLOW)")
+    print(f"  {c_c}[3]{c_r} Cancel")
+    
+    try:
+        choice = input(f"\n{c_m}Select Option [1-3]: {c_r}").strip()
+    except (KeyboardInterrupt, EOFError):
+        print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
+        return
+        
+    if choice == "3" or choice not in ("1", "2"):
+        print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
+        return
+        
+    print(f"\n{c_y}🟡 Stopping Docker Swarm Stack containers...{c_r}")
+    
+    # Run compose down
+    down_args = ["docker", "compose", "down", "--volumes", "--remove-orphans"]
+    if choice == "1":
+        down_args.extend(["--rmi", "local"])
+    else:
+        down_args.extend(["--rmi", "all"])
+        
+    try:
+        subprocess.run(down_args, cwd=project_root)
+        
+        if choice == "2":
+            print(f"\n{c_y}🟡 Pruning build caches and unused network layers...{c_r}")
+            subprocess.run(["docker", "builder", "prune", "-f"], cwd=project_root)
+            subprocess.run(["docker", "image", "prune", "-f"], cwd=project_root)
+            
+        print(f"\n{c_c}✓ Docker Swarm Stack cleaned successfully!{c_r}")
+        print(f"  You can now start a fresh build using the Swarm Stack option in the menu.\n")
+    except Exception as e:
+        print(f"\n{c_y}❌ Cleanup error: {e}{c_r}\n")
+
 def showcase_dashboard():
     use_color = should_enable_color()
     c_m = "\033[38;5;218m"  # Pink
@@ -1554,10 +1614,22 @@ def run_interactive_wizard():
         "🔑 Configure API Keys & Local AI Engines (Interactive)",
         "🐳 Configure Local AI Models & Docker Pull List",
         "🐳 Start Swarm Stack (Docker Compose up)",
+        "🧹 Clean/Reset Swarm Stack (Stop & delete Docker containers/images)",
         "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
         "📊 Showcase Telemetry Dashboard (Access guidelines)",
         "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)",
         "❌ Exit"
+    ]
+
+    guided_options = [
+        "🚀 Express Setup (Automated Defaults - remap ports & seed)",
+        "⚡ Quick Setup (Configure Provider, Model, & Messaging bot)",
+        "🔑 Configure API Keys & Local AI Engines (Interactive)",
+        "🐳 Configure Local AI Models & Docker Pull List",
+        "🐳 Start Swarm Stack (Docker Compose up)",
+        "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
+        "📊 Showcase Telemetry Dashboard (Access guidelines)",
+        "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)"
     ]
 
     script_dir = Path(__file__).resolve().parent
@@ -1600,7 +1672,7 @@ def run_interactive_wizard():
             print(f"\n{c_m}KENBUN-AGENT INTERACTIVE WIZARD MENU (GUIDED SETUP){c_r}")
             print(f"{c_g}──────────────────────────────────────────────────{c_r}")
             
-            for idx, opt in enumerate(options):
+            for idx, opt in enumerate(guided_options):
                 if idx < step_idx:
                     print(f"    {c_g}(○) [Completed] {opt}{c_r}")
                 elif idx == step_idx:
@@ -1657,19 +1729,22 @@ def run_interactive_wizard():
             launch_docker_swarm()
             current_selection = 5
         elif selection == 5:
-            auto_register_claude_desktop_mcp()
-            auto_register_cursor_mcp()
+            clean_docker_stack()
             current_selection = 6
         elif selection == 6:
-            showcase_dashboard()
+            auto_register_claude_desktop_mcp()
+            auto_register_cursor_mcp()
             current_selection = 7
         elif selection == 7:
+            showcase_dashboard()
+            current_selection = 8
+        elif selection == 8:
             # Launch Kenbun Cognitive Shell (Termchat) in-place
             script_dir = Path(__file__).parent.resolve()
             project_root = script_dir.parent
             launch_termchat(project_root)
-            current_selection = 7
-        elif selection == 8:
+            current_selection = 8
+        elif selection == 9:
             print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
             break
 
