@@ -254,13 +254,42 @@ def save_session_backup(history, cwd, llm_url, llm_model):
 
 
 # Color palettes (Limestone & Sakura themed)
-C_P = "\033[95m" # Pink (Sakura)
-C_G = "\033[92m" # Green (Limestone/Sage)
-C_Y = "\033[93m" # Gold
-C_C = "\033[96m" # Cyan
-C_W = "\033[97m" # White
-C_D = "\033[90m" # Grey
-C_R = "\033[0m"  # Reset
+C_P = "\033[95m"       # Pink (Sakura)
+C_G = "\033[92m"       # Green
+C_Y = "\033[93m"       # Gold/Warning
+C_C = "\033[96m"       # Cyan/Info
+C_W = "\033[97m"       # White
+C_D = "\033[90m"       # Dim grey
+C_R = "\033[0m"        # Reset
+C_RED = "\033[91m"     # Red/Danger
+C_BOLD = "\033[1m"     # Bold
+C_DIM = "\033[2m"      # Dim
+
+# ── YOLO Mode state ────────────────────────────────────────────
+YOLO_MODE = False
+
+# Commands that are ALWAYS blocked even in YOLO mode (nuclear options)
+YOLO_BLOCKLIST = [
+    "rm -rf /",
+    "rm -rf ~",
+    "rm -rf /*",
+    "mkfs",
+    "dd if=/dev/zero",
+    "dd if=/dev/random",
+    ":(){ :|:& };:",    # fork bomb
+    "chmod -R 777 /",
+    "chown -R",
+    "> /dev/sda",
+    "shred /dev",
+    "wipefs",
+    "fdisk /dev/sd",
+    "format c:",
+]
+
+def is_yolo_safe(cmd: str) -> bool:
+    """Returns False if the command matches the nuclear blocklist."""
+    cmd_lower = cmd.lower().strip()
+    return not any(danger in cmd_lower for danger in YOLO_BLOCKLIST)
 
 # Helper functions for clean terminal display and dynamic layout
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
@@ -538,57 +567,120 @@ def graceful_exit_handler(signum, frame):
                 
     sys.exit(0)
 
-class StreamingWordWrapper:
-    def __init__(self, width):
-        self.width = width if width > 0 else 80
+class StreamingRenderer:
+    """
+    Intelligent streaming renderer that:
+    1. Suppresses raw markdown code-fence tags (```execute, ```bash, etc)
+    2. Buffers and hides code block contents until the closing fence
+    3. Handles word-wrapping for normal prose in real-time
+    4. Eliminates line-buffering latency for an elite streaming experience
+    """
+    FENCE_OPEN = re.compile(r'^```(execute|bash|sh|spawn|python|json|text|)', re.IGNORECASE)
+    FENCE_CLOSE = re.compile(r'^```\s*$')
+
+    def __init__(self, width: int):
+        self.width = max(width, 40)
         self.current_line_len = 0
         self.word_buffer = ""
-        self.word_visible_len = 0
-        
-    def write(self, chunk):
+        self._line_buffer = ""     # accumulates current line to detect fences
+        self._in_code_block = False
+        self._code_lang = ""
+        self._code_buffer = ""
+
+    def write(self, chunk: str):
+        """Feed a streaming chunk of text."""
         for char in chunk:
-            if char == '\n':
-                if self.word_buffer:
-                    if self.current_line_len + self.word_visible_len > self.width:
-                        sys.stdout.write("\n" + self.word_buffer)
+            if self._in_code_block:
+                self._line_buffer += char
+                if char == '\n':
+                    line = self._line_buffer.rstrip('\n')
+                    if self.FENCE_CLOSE.match(line.strip()):
+                        self._in_code_block = False
+                        self._code_lang = ""
+                        self._line_buffer = ""
                     else:
-                        sys.stdout.write(self.word_buffer)
-                    self.word_buffer = ""
-                    self.word_visible_len = 0
-                sys.stdout.write("\n")
+                        self._code_buffer += self._line_buffer
+                        self._line_buffer = ""
+            else:
+                self._line_buffer += char
+                # If we are buffering a potential code fence line (starts with `)
+                if self._line_buffer.startswith('`'):
+                    if char == '\n':
+                        line = self._line_buffer.rstrip('\n')
+                        m = self.FENCE_OPEN.match(line.strip())
+                        if m:
+                            self._in_code_block = True
+                            self._code_lang = m.group(1).lower() or "text"
+                            self._code_buffer = ""
+                            self._line_buffer = ""
+                        else:
+                            # Not a fence, process the accumulated line buffer as normal prose
+                            content = self._line_buffer
+                            self._line_buffer = ""
+                            for c in content:
+                                self._emit_char_prose(c)
+                else:
+                    # Normal prose — emit characters immediately with word-level buffering
+                    self._emit_char_prose(char)
+                    if char == '\n':
+                        self._line_buffer = ""
+
+    def _emit_char_prose(self, char: str):
+        if char == '\n':
+            if self.word_buffer:
+                self._flush_word()
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+            self.current_line_len = 0
+        elif char.isspace():
+            if self.word_buffer:
+                self._flush_word()
+            if self.current_line_len > 0:
+                sys.stdout.write(char)
+                sys.stdout.flush()
+                self.current_line_len += 1
+        elif char in '.,!?;:()[]{}<>-+_=/\\|*&^%$#@~"\'':
+            if self.word_buffer:
+                self._flush_word()
+            if self.current_line_len + 1 > self.width:
+                sys.stdout.write('\n')
                 sys.stdout.flush()
                 self.current_line_len = 0
-            elif char.isspace():
-                if self.word_buffer:
-                    if self.current_line_len + self.word_visible_len > self.width:
-                        sys.stdout.write("\n" + self.word_buffer)
-                        self.current_line_len = self.word_visible_len
-                    else:
-                        sys.stdout.write(self.word_buffer)
-                        self.current_line_len += self.word_visible_len
-                    self.word_buffer = ""
-                    self.word_visible_len = 0
-                
-                if self.current_line_len + 1 > self.width:
-                    sys.stdout.write("\n")
-                    self.current_line_len = 0
-                else:
-                    sys.stdout.write(char)
-                    self.current_line_len += 1
-                sys.stdout.flush()
-            else:
-                self.word_buffer += char
-                self.word_visible_len = visible_len(self.word_buffer)
-                
-    def flush(self):
-        if self.word_buffer:
-            if self.current_line_len + self.word_visible_len > self.width:
-                sys.stdout.write("\n" + self.word_buffer)
-            else:
-                sys.stdout.write(self.word_buffer)
-            self.word_buffer = ""
-            self.word_visible_len = 0
+            sys.stdout.write(char)
+            sys.stdout.flush()
+            self.current_line_len += 1
+        else:
+            self.word_buffer += char
+
+    def _flush_word(self):
+        w_len = visible_len(self.word_buffer)
+        if self.current_line_len + w_len > self.width:
+            sys.stdout.write('\n')
+            sys.stdout.flush()
+            self.current_line_len = 0
+        sys.stdout.write(self.word_buffer)
         sys.stdout.flush()
+        self.current_line_len += w_len
+        self.word_buffer = ""
+
+    def flush(self):
+        """Flush any remaining buffers."""
+        if self.word_buffer:
+            self._flush_word()
+        if self._line_buffer:
+            content = self._line_buffer
+            self._line_buffer = ""
+            for c in content:
+                self._emit_char_prose(c)
+            if self.word_buffer:
+                self._flush_word()
+
+    def get_captured_blocks(self):
+        """Return (lang, content) of the last captured code block (unused but available)."""
+        return self._code_lang, self._code_buffer
+
+# Keep backward-compatible alias
+StreamingWordWrapper = StreamingRenderer
 
 # Global tracking variable for active memory directory
 
@@ -1319,8 +1411,13 @@ def install_shift_enter_alias() -> int:
     return changed
 
 def main():
-    global active_brain_health_dir
+    global active_brain_health_dir, YOLO_MODE
     
+    # Support starting directly in YOLO mode via command line flags
+    import sys
+    if "--yolo" in sys.argv or "-y" in sys.argv:
+        YOLO_MODE = True
+        
     # Configure proper POSIX signal handlers to protect term state
     signal.signal(signal.SIGINT, graceful_exit_handler)
     signal.signal(signal.SIGTERM, graceful_exit_handler)
@@ -1473,26 +1570,52 @@ def main():
     }
     intent_context = ""
     try:
-        print(f"\n{C_P}Kenbun 🌸:{C_R} I'm online and ready. What are we working on today?")
-        print(f"  {C_C}[1]{C_R} Code   — Build or scaffold something new")
-        print(f"  {C_C}[2]{C_R} Debug  — Fix an error or diagnose an issue")
-        print(f"  {C_C}[3]{C_R} System — Manage this machine or containers")
-        print(f"  {C_C}[4]{C_R} Chat   — Just talk or explore ideas")
-        if pt_session:
-            raw_intent = pt_session.prompt(ANSI(f"{C_P}  Pick [1-4] or press Enter to skip: {C_R}")).strip()
-        else:
-            raw_intent = input(f"{C_P}  Pick [1-4] or press Enter to skip: {C_R}").strip()
-        intent = intent_map.get(raw_intent, "")
-        if intent:
-            ctx_labels = {
-                "code": "The user wants to build or scaffold new code.",
-                "debug": "The user has an error or issue to diagnose and fix.",
-                "system": "The user wants to manage their machine, Docker, or containers.",
-                "chat": "The user wants a conversational session.",
-            }
-            intent_context = f"[SESSION CONTEXT: {ctx_labels[intent]}]"
-            history.append({"role": "system", "content": intent_context})
-            print(f"\n{C_G}  ✓ Session primed for: {intent.upper()}{C_R}\n")
+        while True:
+            yolo_banner = f" {C_RED}{C_BOLD}(⚡ YOLO MODE ACTIVE){C_R}" if YOLO_MODE else ""
+            print(f"\n{C_P}Kenbun 🌸:{C_R} I'm online and ready. What are we working on today?{yolo_banner}")
+            print(f"  {C_C}[1]{C_R} Code   — Build or scaffold something new")
+            print(f"  {C_C}[2]{C_R} Debug  — Fix an error or diagnose an issue")
+            print(f"  {C_C}[3]{C_R} System — Manage this machine or containers")
+            print(f"  {C_C}[4]{C_R} Chat   — Just talk or explore ideas")
+            if YOLO_MODE:
+                print(f"  {C_C}[5]{C_R} {C_G}Disable YOLO Mode{C_R} (Restores manual confirmation)")
+            else:
+                print(f"  {C_C}[5]{C_R} {C_RED}Enable YOLO Mode{C_R}  — Auto-approve all shell commands (nuclear-safe)")
+            
+            prompt_label = "  Pick [1-5] or press Enter to skip: "
+            if pt_session:
+                raw_intent = pt_session.prompt(ANSI(f"{C_P}{prompt_label}{C_R}")).strip()
+            else:
+                raw_intent = input(f"{C_P}{prompt_label}{C_R}").strip()
+            
+            if raw_intent == "5":
+                YOLO_MODE = not YOLO_MODE
+                if YOLO_MODE:
+                    draw_box([
+                        f"{C_RED}{C_BOLD}⚡ YOLO MODE ACTIVATED ⚡{C_R}",
+                        "",
+                        "Commands proposed by Kenbun will execute automatically.",
+                        "Nuclear commands (rm -rf /, mkfs, dd, fork bombs)",
+                        "are ALWAYS blocked regardless of this setting.",
+                        "",
+                        "Please select your category [1-4] or skip.",
+                    ], title=f"{C_RED}⚡ YOLO MODE ON", border_color=C_RED, text_color=C_Y)
+                else:
+                    print(f"\n{C_G}✓ YOLO mode disabled. Manual approval restored.{C_R}")
+                continue
+            
+            intent = intent_map.get(raw_intent, "")
+            if intent:
+                ctx_labels = {
+                    "code": "The user wants to build or scaffold new code.",
+                    "debug": "The user has an error or issue to diagnose and fix.",
+                    "system": "The user wants to manage their machine, Docker, or containers.",
+                    "chat": "The user wants a conversational session.",
+                }
+                intent_context = f"[SESSION CONTEXT: {ctx_labels[intent]}]"
+                history.append({"role": "system", "content": intent_context})
+                print(f"\n{C_G}  ✓ Session primed for: {intent.upper()}{C_R}\n")
+            break
     except (KeyboardInterrupt, EOFError):
         pass
 
@@ -1527,18 +1650,21 @@ def main():
                         if cmd in ("/help", "/?"):
                             log_event("❓ Displayed commands directory via /help")
                             help_lines = [
-                                "🌸 KENBUN TERMCHAT DIRECTORY OF COMMANDS",
-                                "───────────────────────────────────────",
-                                f"  {C_C}/help{C_G} (or {C_C}/?{C_G})                   ➔ Show this beautiful commands guide!",
-                                f"  {C_C}/exit{C_G}                         ➔ Gracefully close session & save reflection post-mortem",
-                                f"  {C_C}/reset{C_G}                        ➔ Purge dialogue history & start fresh",
-                                f"  {C_C}/system{C_G}                       ➔ Safely audit active environment parameters & models",
-                                f"  {C_C}/search <query>{C_R}                ➔ Query local UI-UX Pro Max database for designs",
-                                f"  {C_C}/remember <title> = <content>{C_R}  ➔ Save custom notes/rules in local ChromaDB Hivemind",
-                                f"  {C_C}/recall <query>{C_R}                ➔ Semantically search/recall Hivemind concepts"
+                                f"  {C_BOLD}{C_C}/help{C_R}{C_G} (/?){C_D}           ➟ Show this guide{C_R}",
+                                f"  {C_BOLD}{C_C}/exit{C_R}{C_D}              ➟ Gracefully close session{C_R}",
+                                f"  {C_BOLD}{C_C}/reset{C_R}{C_D}             ➟ Clear dialogue history{C_R}",
+                                f"  {C_BOLD}{C_C}/system{C_R}{C_D}            ➟ Show environment config{C_R}",
+                                f"  {C_BOLD}{C_C}/spawn <cmd>{C_R}{C_D}       ➟ Run command in background agent{C_R}",
+                                f"  {C_BOLD}{C_C}/agents{C_R}{C_D}            ➟ List all running background agents{C_R}",
+                                f"  {C_BOLD}{C_C}/kill <id>{C_R}{C_D}         ➟ Kill a background agent{C_R}",
+                                f"  {C_BOLD}{C_C}/recall <query>{C_R}{C_D}    ➟ Search Hivemind memories{C_R}",
+                                f"  {C_BOLD}{C_C}/remember t=c{C_R}{C_D}      ➟ Save a note to Hivemind{C_R}",
+                                f"  {C_BOLD}{C_C}/search <topic>{C_R}{C_D}    ➟ Search UI/UX design database{C_R}",
+                                f"  {C_BOLD}{C_RED}/yolo{C_R}{C_D}              ➟ Toggle YOLO mode (auto-approve commands){C_R}",
                             ]
+                            yolo_status = f"{C_RED}⚡ YOLO MODE: ON  — Commands execute automatically!{C_R}" if YOLO_MODE else f"{C_D}  YOLO MODE: off — Commands need your approval{C_R}"
                             print()
-                            draw_box(help_lines, title="❓ COMMANDS DIRECTORY", border_color=C_P, text_color=C_G)
+                            draw_box(help_lines + ["", yolo_status], title=f"🌸 {C_Y}KENBUN COMMANDS", border_color=C_P, text_color=C_W)
                             print()
                             continue
                             
@@ -1665,8 +1791,24 @@ def main():
                             continue
                             
                         else:
-                            # /spawn, /agents, /kill commands
-                            if cmd == "/spawn":
+                            # /spawn, /agents, /kill, /yolo commands
+                            if cmd == "/yolo":
+                                YOLO_MODE = not YOLO_MODE
+                                if YOLO_MODE:
+                                    draw_box([
+                                        f"{C_RED}{C_BOLD}⚡ YOLO MODE ACTIVATED ⚡{C_R}",
+                                        "",
+                                        "Commands proposed by Kenbun will execute automatically.",
+                                        "Nuclear commands (rm -rf /, mkfs, dd, fork bombs)",
+                                        "are ALWAYS blocked regardless of this setting.",
+                                        "",
+                                        f"Type {C_C}/yolo{C_RED} again to return to safe mode.",
+                                    ], title=f"{C_RED}⚡ YOLO MODE ON", border_color=C_RED, text_color=C_Y)
+                                else:
+                                    print(f"\n{C_G}✓ YOLO mode OFF. Manual approval restored.{C_R}\n")
+                                continue
+
+                            elif cmd == "/spawn":
                                 if spawn_agent and len(cmd_parts) > 1:
                                     task_cmd = cmd_parts[1].strip()
                                     task_name = task_cmd[:40]
@@ -1784,7 +1926,7 @@ def main():
                         "stream": True
                     }
                     
-                    print(f"\n{C_P}Kenbun 🌸:{C_R} ", end="", flush=True)
+                    print(f"\n{C_P}{C_BOLD}Kenbun{C_R} {C_D}▸{C_R} ", end="", flush=True)
                     
                     # Retry loop with exponential backoff for primary LLM endpoint
                     for attempt in range(max_retries + 1):
@@ -1845,7 +1987,7 @@ def main():
                         "stream": True
                     }
                     
-                    print(f"{C_P}Kenbun 🌸 (Fallback):{C_R} ", end="", flush=True)
+                    print(f"\n{C_P}{C_BOLD}Kenbun{C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
                     
                     # Retry loop with exponential backoff for fallback LLM endpoint
                     for attempt in range(max_retries + 1):
@@ -1863,8 +2005,8 @@ def main():
                 response.raise_for_status()
                 
                 cols = get_columns()
-                wrapper = StreamingWordWrapper(cols - 2)
-                wrapper.current_line_len = 22 if is_fallback else 11  # Fallback prefix is 22 chars, Primary is 11
+                wrapper = StreamingRenderer(cols - 4)
+                wrapper.current_line_len = 20 if is_fallback else 9
                 
                 full_reply = ""
                 for line in response.iter_lines():
@@ -1892,40 +2034,80 @@ def main():
                 # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
                 execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
 
-                # Check for spawn blocks: ```spawn\n<command>\n``` — runs in background agent
+                # Check for spawn blocks
                 spawn_blocks = re.findall(r"```spawn\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
                 if spawn_blocks and spawn_agent:
                     for sb in spawn_blocks:
                         sc = sb.strip()
                         aid = spawn_agent(sc[:40], sc)
-                        print(f"\n{C_G}🟡 Kenbun spawned background agent:{C_R} [{aid}] {sc[:60]}")
-                        print(f"  Use {C_C}/agents{C_R} to track progress.\n")
+                        print(f"\n{C_G}🟡 Background agent:{C_R} [{aid}] {sc[:60]}")
+                        print(f"  {C_D}Use /agents to track.{C_R}\n")
+
                 if execute_blocks:
-                    for block in execute_blocks:
-                        cmd = block.strip()
-                        explain_command(cmd)
-                        draw_box([scrub_secrets(cmd)], title=f"🚨 {C_Y}PROPOSED REFLEX ACTION DETECTED", border_color=C_G, text_color=C_W)
-                        
-                        confirm = input(f"{C_Y}Authorize execution of this command? [y/N]: {C_R}").strip().lower()
-                        if confirm == "y":
+                    # Execute ONE block at a time then let LLM react
+                    cmd = execute_blocks[0].strip()
+                    if len(execute_blocks) > 1:
+                        print(f"\n{C_D}  (Kenbun proposed {len(execute_blocks)} commands — running the first one){C_R}")
+
+                    # ── YOLO Mode fast-path ───────────────────────────────────────
+                    if YOLO_MODE:
+                        if is_yolo_safe(cmd):
+                            cols2 = get_columns()
+                            print(f"\n{C_RED}⚡ YOLO:{C_R} {C_W}{cmd}{C_R}")
+                            print(f"{C_RED}{'─' * min(cols2, 60)}{C_R}")
                             code, out = run_proposed_command(cmd)
-                            cols = get_columns()
-                            title = f"─── Output (Exit Code: {code}) "
-                            dash_len = max(0, cols - len(title) - 1)
-                            print(f"\n{C_G}{title}{'─' * dash_len}{C_R}")
-                            wrapped_out = clean_wrap_text(out.strip(), cols - 2)
+                            wrapped_out = clean_wrap_text(out.strip(), cols2 - 2)
                             print(f"{C_W}{wrapped_out}{C_R}")
-                            print(f"{C_G}{'─' * cols}{C_R}\n")
-                            
-                            # Integration: Save reflection lesson to ChromaDB on successful healing/repair commands
+                            print(f"{C_RED}{'─' * min(cols2, 60)}{C_R}\n")
                             if code == 0 and is_healing_command(cmd):
-                                # Compile / retrieve error context
-                                error_feedback = "None detected in active termchat window."
+                                error_feedback = "None"
                                 for msg in reversed(history):
                                     content = msg.get("content", "")
-                                    if not content:
-                                        continue
-                                    if any(term in content.lower() for term in ["error", "fail", "not found", "does not exist", "exception", "stderr"]):
+                                    if content and any(t in content.lower() for t in ["error", "fail", "not found"]):
+                                        error_feedback = content[:500]
+                                        break
+                                autonomic_reflection_save(
+                                    task=f"YOLO execution: {cmd}",
+                                    error=error_feedback,
+                                    solution=f"Exit {code}: {out[:300]}"
+                                )
+                            feedback = f"[SYSTEM OUT (YOLO, cmd: '{scrub_secrets(cmd)}', exit: {code})]\n{out}"
+                            history.append({"role": "user", "content": scrub_secrets(feedback)})
+                            history = prune_dialog_history(history)
+                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            auto_trigger = True
+                        else:
+                            print(f"\n{C_RED}🛑 YOLO BLOCKED:{C_R} This command is on the nuclear blocklist and will NOT run.")
+                            print(f"   {C_W}{cmd}{C_R}\n")
+                    else:
+                        # ── Normal safe mode ────────────────────────────────────────
+                        explain_command(cmd)
+                        draw_box([scrub_secrets(cmd)], title=f"🚀 {C_Y}PROPOSED ACTION", border_color=C_G, text_color=C_W)
+
+                        if pt_session:
+                            raw_conf = pt_session.prompt(ANSI(f"{C_G}  Authorize? {C_D}[y/N/{C_RED}yolo{C_D}]:{C_R} ")).strip().lower()
+                        else:
+                            raw_conf = input(f"{C_G}  Authorize? {C_D}[y/N/yolo]:{C_R} ").strip().lower()
+
+                        if raw_conf == "yolo":
+                            YOLO_MODE = True
+                            print(f"\n{C_RED}⚡ YOLO mode enabled! Auto-executing this and future commands.{C_R}\n")
+                            raw_conf = "y"
+
+                        if raw_conf == "y":
+                            code, out = run_proposed_command(cmd)
+                            cols2 = get_columns()
+                            title = f"{C_G}─── Output (exit: {code}) "
+                            dash_len = max(0, cols2 - visible_len(title) - 1)
+                            print(f"\n{title}{'─' * dash_len}{C_R}")
+                            wrapped_out = clean_wrap_text(out.strip(), cols2 - 2)
+                            print(f"{C_W}{wrapped_out}{C_R}")
+                            print(f"{C_G}{'─' * cols2}{C_R}\n")
+                            if code == 0 and is_healing_command(cmd):
+                                error_feedback = "None detected."
+                                for msg in reversed(history):
+                                    content = msg.get("content", "")
+                                    if content and any(t in content.lower() for t in ["error", "fail", "not found", "does not exist", "exception", "stderr"]):
                                         error_feedback = content[:500]
                                         break
                                 autonomic_reflection_save(
@@ -1933,17 +2115,14 @@ def main():
                                     error=error_feedback,
                                     solution=f"Executed command successfully (Exit Code: 0). Output: {out[:300]}"
                                 )
-                            
-                            # Feed the action result back to the LLM and trigger another turn immediately!
                             feedback = f"[SYSTEM OUT (Command: '{scrub_secrets(cmd)}', Exit Code: {code})]\n{out}"
                             history.append({"role": "user", "content": scrub_secrets(feedback)})
                             history = prune_dialog_history(history)
                             save_session_backup(history, Path.cwd(), llm_url, llm_model)
                             auto_trigger = True
-                            break # Executed one, loop again to let the LLM think about this step's output
                         else:
-                            print(f"\n{C_Y}⚠️ Command execution rejected by user. Bypassing.{C_R}\n")
-                            feedback = f"[SYSTEM NOTICE: The user explicitly REJECTED the execution of command: '{scrub_secrets(cmd)}']"
+                            print(f"\n{C_D}  Command skipped.{C_R}\n")
+                            feedback = f"[SYSTEM NOTICE: User skipped command: '{scrub_secrets(cmd)}']"
                             history.append({"role": "user", "content": scrub_secrets(feedback)})
                             history = prune_dialog_history(history)
                             save_session_backup(history, Path.cwd(), llm_url, llm_model)
