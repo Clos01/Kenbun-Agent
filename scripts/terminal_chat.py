@@ -291,6 +291,39 @@ def is_yolo_safe(cmd: str) -> bool:
     cmd_lower = cmd.lower().strip()
     return not any(danger in cmd_lower for danger in YOLO_BLOCKLIST)
 
+def is_command_destructive(cmd: str) -> tuple[bool, str]:
+    """
+    Checks if a command has potentially destructive or high-impact side effects.
+    Returns (is_high_impact, reason_description).
+    """
+    cmd_lower = cmd.lower().strip()
+    
+    # 1. Superuser privileges
+    if cmd_lower.startswith("sudo "):
+        return True, "Runs with superuser (root) privileges"
+        
+    # 2. File / folder deletion
+    if "rm " in cmd_lower and ("-r" in cmd_lower or "-f" in cmd_lower or "rf" in cmd_lower):
+        return True, "Deletes files or directories recursively/permanently"
+        
+    # 3. System prune / clean
+    if "prune" in cmd_lower:
+        return True, "Wipes or cleans Docker volumes/cache permanently"
+        
+    # 4. Uninstall/purge commands
+    if "uninstall" in cmd_lower or "purge" in cmd_lower or "apt-get remove" in cmd_lower:
+        return True, "Uninstalls packages or software libraries"
+        
+    # 5. Dangerous disk commands
+    if any(k in cmd_lower for k in ["dd ", "mkfs", "fdisk", "wipefs", "shred"]):
+        return True, "Overwrites or modifies physical disk partitions"
+        
+    # 6. Fork bomb or kernel panic triggers
+    if ":(){ :|:& };:" in cmd_lower or "reboot" in cmd_lower or "shutdown" in cmd_lower:
+        return True, "Reboots or shuts down the system"
+        
+    return False, ""
+
 # Helper functions for clean terminal display and dynamic layout
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
@@ -988,9 +1021,9 @@ def detect_model_tier(llm_model: str, llm_url: str) -> str:
         return "nano"
     return "standard"
 
-def run_startup_probe(llm_url: str, llm_model: str) -> dict:
+def run_startup_probe(llm_url: str, llm_model: str, chroma_host: str = "localhost", chroma_port: str = "8000") -> dict:
     """
-    Runs parallel health checks against Ollama, ChromaDB, and Docker.
+    Runs parallel health checks against Ollama/Cloud APIs, ChromaDB, and Docker.
     Returns a dict of { service: (ok: bool, detail: str) }.
     """
     import threading as _t
@@ -998,31 +1031,48 @@ def run_startup_probe(llm_url: str, llm_model: str) -> dict:
     lock = _t.Lock()
 
     def probe_ollama():
-        try:
-            import requests as _r
-            base = llm_url.replace("/v1", "").replace("/v1beta/openai", "")
-            _r.get(f"{base}/api/tags", timeout=3)
-            with lock:
-                results["ollama"] = (True, f"{llm_model}  •  {base.split('://')[-1]}")
-        except Exception as e:
-            with lock:
-                results["ollama"] = (False, f"Unreachable — {str(e)[:60]}")
+        # Check if cloud provider (e.g. Google Gemini, OpenAI, DeepSeek, Anthropic)
+        is_cloud = any(domain in llm_url.lower() for domain in ["api.deepseek.com", "api.openai.com", "api.anthropic.com", "googleapis.com", "azure.com"])
+        if is_cloud:
+            try:
+                # Fast socket connection check on port 443 to verify internet/endpoint reachability
+                from urllib.parse import urlparse
+                parsed = urlparse(llm_url)
+                hostname = parsed.hostname or "google.com"
+                
+                import socket
+                socket.create_connection((hostname, 443), timeout=1.5)
+                with lock:
+                    results["ollama"] = (True, f"ONLINE  •  {llm_model} ({hostname})")
+            except Exception as e:
+                with lock:
+                    results["ollama"] = (False, f"Cloud gateway unreachable — {str(e)[:50]}")
+        else:
+            try:
+                import requests as _r
+                base = llm_url.replace("/v1", "").replace("/v1beta/openai", "")
+                _r.get(f"{base}/api/tags", timeout=3)
+                with lock:
+                    results["ollama"] = (True, f"{llm_model}  •  {base.split('://')[-1]}")
+            except Exception as e:
+                with lock:
+                    results["ollama"] = (False, f"Unreachable — {str(e)[:60]}")
 
     def probe_chroma():
         try:
             import requests as _r
-            _r.get("http://localhost:8000/api/v2/heartbeat", timeout=2)
+            _r.get(f"http://{chroma_host}:{chroma_port}/api/v2/heartbeat", timeout=2)
             with lock:
-                results["chromadb"] = (True, "ACTIVE  •  localhost:8000")
+                results["chromadb"] = (True, f"ACTIVE  •  {chroma_host}:{chroma_port}")
         except Exception:
             try:
                 import requests as _r
-                _r.get("http://localhost:8000/api/v1/heartbeat", timeout=2)
+                _r.get(f"http://{chroma_host}:{chroma_port}/api/v1/heartbeat", timeout=2)
                 with lock:
-                    results["chromadb"] = (True, "ACTIVE  •  localhost:8000")
+                    results["chromadb"] = (True, f"ACTIVE  •  {chroma_host}:{chroma_port}")
             except Exception:
                 with lock:
-                    results["chromadb"] = (False, "Offline — start docker compose")
+                    results["chromadb"] = (False, f"Offline — start docker compose")
 
     def probe_docker():
         try:
@@ -1472,6 +1522,8 @@ def main():
     signal.signal(signal.SIGTERM, graceful_exit_handler)
     
     env = load_env_vars()
+    chroma_host = env.get("CHROMA_HOST", "localhost")
+    chroma_port = env.get("CHROMA_PORT", "8000")
     
     # Initialize connection pooling session
     session = requests.Session()
@@ -1559,7 +1611,7 @@ def main():
 
     # Run startup health probe and show card
     print(f"{C_D}  Probing system health...{C_R}", end="\r")
-    probe_results = run_startup_probe(llm_url, llm_model)
+    probe_results = run_startup_probe(llm_url, llm_model, chroma_host, chroma_port)
     print(" " * 40, end="\r")  # clear probe line
     print_health_card(probe_results)
     print()
@@ -2165,6 +2217,21 @@ def main():
                     else:
                         # ── Normal safe mode ────────────────────────────────────────
                         explain_command(cmd)
+                        
+                        # High-impact command dynamic warning audit
+                        is_high, reason = is_command_destructive(cmd)
+                        if is_high:
+                            print()
+                            draw_box([
+                                f"{C_RED}{C_BOLD}⚠️  ATTENTION: HIGH-IMPACT / DESTRUCTIVE COMMAND DETECTED ⚠️{C_R}",
+                                "",
+                                f"  • {C_Y}Type:{C_R} {reason}",
+                                "  • This command will execute directly on your host machine.",
+                                "",
+                                f"{C_RED}{C_BOLD}Please review carefully before authorizing execution!{C_R}"
+                            ], title=f"{C_RED}🚨 SYSTEM SECURITY WARNING", border_color=C_RED, text_color=C_Y)
+                            print()
+
                         draw_box([scrub_secrets(cmd)], title=f"🚀 {C_Y}PROPOSED ACTION", border_color=C_G, text_color=C_W)
 
                         if pt_session:
