@@ -273,29 +273,38 @@ def select_menu(options, title="Select provider:"):
         old_settings = termios.tcgetattr(fd)
         try:
             tty.setraw(fd)
-            ch = sys.stdin.read(1)
+            # Use raw unbuffered os.read to prevent Python from buffering the sequence bytes
+            b = os.read(fd, 1)
+            if not b:
+                return 'ignored'
+            ch = b.decode('utf-8', errors='ignore')
             if ch == '\x1b':
                 # Read all remaining characters in the escape sequence with a fast timeout
-                seq = ch
+                seq = b
                 while True:
-                    rlist, _, _ = select.select([sys.stdin], [], [], 0.05)
+                    rlist, _, _ = select.select([fd], [], [], 0.05)
                     if rlist:
-                        seq += sys.stdin.read(1)
-                        if len(seq) >= 6: # Safety limit for escape sequence length
+                        next_b = os.read(fd, 1)
+                        if next_b:
+                            seq += next_b
+                            if len(seq) >= 6: # Safety limit for escape sequence length
+                                break
+                        else:
                             break
                     else:
                         break
                 
+                seq_str = seq.decode('utf-8', errors='ignore')
                 # Check for standard arrow keys
-                if seq in ('\x1b[A', '\x1bOA'):
+                if seq_str in ('\x1b[A', '\x1bOA'):
                     return 'up'
-                elif seq in ('\x1b[B', '\x1bOB'):
+                elif seq_str in ('\x1b[B', '\x1bOB'):
                     return 'down'
-                elif seq in ('\x1b[C', '\x1bOC'):
+                elif seq_str in ('\x1b[C', '\x1bOC'):
                     return 'right'
-                elif seq in ('\x1b[D', '\x1bOD'):
+                elif seq_str in ('\x1b[D', '\x1bOD'):
                     return 'left'
-                elif seq == '\x1b':
+                elif seq_str == '\x1b':
                     return 'escape' # Actual single ESC key press
                 else:
                     return 'ignored' # Other unrecognized escape sequence
