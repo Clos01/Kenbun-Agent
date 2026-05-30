@@ -18,7 +18,7 @@ C_R = "\033[0m"         # Reset
 C_RED = "\033[38;5;196m" # Vivid Red
 C_C = "\033[38;5;87m"   # Cyan
 C_D = "\033[38;5;244m"  # Dim Grey
-C_W = "\033[38;5;231m"  # White
+C_W = "\033[0m"         # Default text color (automatically light & dark theme safe)
 
 EXCLUDE_FOLDERS = {
     ".git",
