@@ -1519,22 +1519,32 @@ def run_proposed_command(cmd):
     # Store directory list state before execution relative to current working directory
     cwd = Path.cwd().resolve()
     old_dirs = set()
-    try:
-        for p in cwd.iterdir():
-            if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
-                old_dirs.add(p)
-                try:
-                    for sub in p.iterdir():
-                        if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
-                            old_dirs.add(sub)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    
+    # Performance Optimization: Only scan files if command suggests folder operations
+    scan_keywords = ("mkdir", "clone", "git", "tar", "unzip", "cp", "mv", "touch", "rm")
+    should_scan = any(kw in cmd for kw in scan_keywords)
+    
+    if should_scan:
+        try:
+            for p in cwd.iterdir():
+                if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
+                    old_dirs.add(p)
+                    try:
+                        for sub in p.iterdir():
+                            if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
+                                old_dirs.add(sub)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+    
+    import uuid
+    # Dynamically generate single-use UUID delimiter to prevent output injection or collision
+    pwd_delim = f"__PWD_DELIM_{uuid.uuid4().hex}__"
     
     try:
         # Append directory tracking boundary to synchronize subshell changes back to Python process
-        tracked_cmd = f"({cmd}) && printf '__PWD_DELIMITER__' && pwd"
+        tracked_cmd = f"({cmd}) && printf '{pwd_delim}' && pwd"
         result = subprocess.run(
             tracked_cmd,
             shell=True,
@@ -1548,8 +1558,8 @@ def run_proposed_command(cmd):
         stderr = result.stderr or ""
         
         # Parse active directory changes if the execution succeeded
-        if result.returncode == 0 and "__PWD_DELIMITER__" in stdout:
-            parts = stdout.split("__PWD_DELIMITER__", 1)
+        if result.returncode == 0 and pwd_delim in stdout:
+            parts = stdout.split(pwd_delim, 1)
             stdout = parts[0]
             new_pwd = parts[1].strip()
             if new_pwd:
@@ -1557,7 +1567,7 @@ def run_proposed_command(cmd):
                     resolved_path = Path(new_pwd).resolve()
                     project_root = get_active_project_root().resolve()
                     
-                    # Security Sandbox Guard: Ensure the target PWD is strictly relative to project root or user's home
+                    # Security Sandbox Guard: Ensure the target CWD is strictly relative to project root or user's home
                     is_safe_boundary = False
                     try:
                         resolved_path.relative_to(project_root)
@@ -1577,6 +1587,8 @@ def run_proposed_command(cmd):
                         # Acquire process-wide thread lock to guarantee directory context shift is atomic (TOCTOU mitigation)
                         with run_proposed_command._dir_lock:
                             os.chdir(str(resolved_path))
+                            # Sync logical environment PWD to prevent child process desync (CPython fix)
+                            os.environ['PWD'] = str(resolved_path)
                         log_event(f"Synchronized working directory context to safe path: {resolved_path}")
                     else:
                         log_event(f"Security Block: Refused context shift to unauthorized or non-existent path: {new_pwd}")
@@ -1584,7 +1596,8 @@ def run_proposed_command(cmd):
                     log_event(f"Failed to synchronize working directory to {new_pwd}: {e}")
                     
         # Check if a new folder was created and prompt for memory migration relative to original_cwd!
-        check_and_migrate_project_memory(old_dirs, original_cwd=cwd)
+        if should_scan:
+            check_and_migrate_project_memory(old_dirs, original_cwd=cwd)
         
         if stdout:
             output += stdout
@@ -1594,9 +1607,14 @@ def run_proposed_command(cmd):
             output = "[Success: Command executed with zero stdout/stderr output]"
         log_event("➔ Reflex command completed. Exit Code: {}".format(result.returncode))
         return result.returncode, scrub_secrets(output)
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         log_event("❌ Reflex command failed with execution timeout")
-        return -1, "[Timeout Error: The system command exceeded the 45-second execution limit]"
+        stdout = e.stdout or ""
+        stderr = e.stderr or ""
+        output = f"[Timeout Error: The system command exceeded the 45-second execution limit]\n{stdout}"
+        if stderr:
+            output += f"\n[stderr]\n{stderr}"
+        return -1, scrub_secrets(output)
     except Exception as e:
         log_event("❌ Reflex command failed with start exception: {}".format(e))
         return -1, f"[Execution Error: Failed to start command: {e}]"
