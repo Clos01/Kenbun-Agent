@@ -1238,6 +1238,7 @@ def main():
         f"⚙️  Reflex Status:     {C_Y}ACTIVE (Human-in-the-Loop Safe)",
         "",
         f"{C_Y}Commands & Capabilities:",
+        f"  {C_C}/help{C_G}     - Show active commands directory & guidelines",
         f"  {C_C}/exit{C_G}     - Gracefully close Termchat & commit session post-mortem",
         f"  {C_C}/reset{C_G}    - Clear dialogue history",
         f"  {C_C}/system{C_G}   - Dump active environment parameters",
@@ -1349,7 +1350,25 @@ def main():
                         cmd_parts = user_input.split(" ", 1)
                         cmd = cmd_parts[0].lower()
                         
-                        if cmd == "/exit":
+                        if cmd in ("/help", "/?"):
+                            log_event("❓ Displayed commands directory via /help")
+                            help_lines = [
+                                "🌸 KENBUN TERMCHAT DIRECTORY OF COMMANDS",
+                                "───────────────────────────────────────",
+                                f"  {C_C}/help{C_G} (or {C_C}/?{C_G})                   ➔ Show this beautiful commands guide!",
+                                f"  {C_C}/exit{C_G}                         ➔ Gracefully close session & save reflection post-mortem",
+                                f"  {C_C}/reset{C_G}                        ➔ Purge dialogue history & start fresh",
+                                f"  {C_C}/system{C_G}                       ➔ Safely audit active environment parameters & models",
+                                f"  {C_C}/search <query>{C_R}                ➔ Query local UI-UX Pro Max database for designs",
+                                f"  {C_C}/remember <title> = <content>{C_R}  ➔ Save custom notes/rules in local ChromaDB Hivemind",
+                                f"  {C_C}/recall <query>{C_R}                ➔ Semantically search/recall Hivemind concepts"
+                            ]
+                            print()
+                            draw_box(help_lines, title="❓ COMMANDS DIRECTORY", border_color=C_P, text_color=C_G)
+                            print()
+                            continue
+                            
+                        elif cmd == "/exit":
                             print(f"\n{C_P}🌸 Sayonara! Terminating agent session...{C_R}\n")
                             log_event("🌸 Termchat Session Terminated cleanly via /exit")
                             # Save clean exit session reflection post-mortem in ChromaDB
