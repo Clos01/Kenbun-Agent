@@ -1575,7 +1575,62 @@ def run_interactive_wizard():
             print(f"\n{c_y}⚠️ Invalid choice. Please select 1 to 9.{c_r}")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--express":
-        bootstrap_core()
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1].lower().strip()
+        if cmd in ("--express", "express"):
+            bootstrap_core()
+        elif cmd in ("chat", "shell", "termchat"):
+            # Launch Termchat in-place
+            script_dir = Path(__file__).parent.resolve()
+            project_root = script_dir.parent
+            termchat_path = project_root / "scripts" / "terminal_chat.py"
+            if termchat_path.exists():
+                print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
+                import subprocess
+                subprocess.run([sys.executable, str(termchat_path)])
+            else:
+                print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+        elif cmd in ("start", "up"):
+            launch_docker_swarm()
+        elif cmd in ("stop", "down"):
+            # Execute docker compose down
+            script_dir = Path(__file__).parent.resolve()
+            project_root = script_dir.parent
+            print(f"\n{c_m}🐳 Stopping Swarm Stack...{c_r}")
+            import subprocess
+            try:
+                subprocess.run(["docker", "compose", "down"], cwd=str(project_root))
+            except Exception:
+                try:
+                    subprocess.run(["docker-compose", "down"], cwd=str(project_root))
+                except Exception as e:
+                    print(f"❌ Failed to stop compose stack: {e}")
+        elif cmd in ("mcp", "mcp-register"):
+            auto_register_claude_desktop_mcp()
+            auto_register_cursor_mcp()
+        elif cmd in ("setup", "configure"):
+            configure_api_keys()
+        elif cmd in ("dashboard", "telemetry"):
+            showcase_dashboard()
+        elif cmd in ("--help", "-h", "help"):
+            print(f"\n{c_m}🌸 KENBUN-AGENT CLI TOOL SHORTCUTS{c_r}")
+            print(f"──────────────────────────────────────────────────")
+            print(f"  {c_c}kenbun chat{c_r}      ➔ Start the Cognitive Agent Shell (Termchat) directly!")
+            print(f"  {c_c}kenbun start{c_r}     ➔ Spin up the Docker stack in background!")
+            print(f"  {c_c}kenbun stop{c_r}      ➔ Spin down the Docker stack!")
+            print(f"  {c_c}kenbun setup{c_r}     ➔ Open the interactive API Key Configuration wizard!")
+            print(f"  {c_c}kenbun mcp{c_r}       ➔ Register MCP server in Claude Desktop & Cursor automatically!")
+            print(f"  {c_c}kenbun dashboard{c_r} ➔ Show access guidelines for the Telemetry Dashboard!")
+            print(f"  {c_c}kenbun express{c_r}   ➔ Initialize environment configurations with default seed!")
+            print(f"  {c_c}kenbun{c_r}           ➔ Launch full interactive Sakura setup menu (1-9)")
+            print(f"──────────────────────────────────────────────────\n")
+        else:
+            print(f"\n❌ Unknown command: {sys.argv[1]}")
+            print(f"Type {c_c}kenbun --help{c_r} to see all available command line shortcuts.\n")
     else:
         run_interactive_wizard()
