@@ -1511,8 +1511,6 @@ def run_quick_setup():
         print(f"\n❌ Failed to save environment file: {e}")
 
 def run_interactive_wizard():
-    print_sakura_banner()
-    
     use_color = should_enable_color()
     c_m = "\033[38;5;218m"  # Pink
     c_c = "\033[38;5;224m"  # Soft Rose
@@ -1535,6 +1533,88 @@ def run_interactive_wizard():
         "❌ Exit"
     ]
 
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+
+    # Detect first-time setup
+    first_time = False
+    if not env_file.exists():
+        first_time = True
+    else:
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                if "/absolute/path/to/your/cloned/kenbun-agent" in content or "your_gemini_key_here" in content:
+                    first_time = True
+        except Exception:
+            pass
+
+    if first_time:
+        import time
+        # Print guided onboarding sequential sequence without letting them select
+        steps_list = [
+            ("Express Core Setup", bootstrap_core),
+            ("Quick Setup (Provider & Credentials)", run_quick_setup),
+            ("Configure API Keys Status", configure_api_keys),
+            ("Configure Local Models & Hardware Profile", configure_local_models),
+            ("Start Docker Swarm Stack", launch_docker_swarm),
+            ("Register MCP in Claude & Cursor", lambda: (auto_register_claude_desktop_mcp(), auto_register_cursor_mcp())),
+            ("Showcase Telemetry Dashboard", showcase_dashboard),
+            ("Start Cognitive Shell (Termchat)", None)  # special handling for termchat launch
+        ]
+        
+        for step_idx, (step_name, step_func) in enumerate(steps_list):
+            # Clear screen
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+            print_sakura_banner()
+            
+            print(f"\n{c_m}KENBUN-AGENT INTERACTIVE WIZARD MENU (GUIDED SETUP){c_r}")
+            print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+            
+            for idx, opt in enumerate(options):
+                if idx < step_idx:
+                    print(f"    {c_g}(○) [Completed] {opt}{c_r}")
+                elif idx == step_idx:
+                    print(f" ➔ {c_m}(●) {opt}{c_r}")
+                else:
+                    print(f"    (○) {opt}")
+                    
+            print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+            print(f"{c_c}┌────────────────── 🌸 SAKURA GUIDED SETUP ACTIVE ──────────────────┐{c_r}")
+            print(f"{c_c}│ We detected this is your first time setting up Kenbun-Agent.      │{c_r}")
+            print(f"{c_c}│ To guarantee infinite scalability and perfect API gateway routing, │{c_r}")
+            print(f"{c_c}│ we are walking you through the menu items sequentially.           │{c_r}")
+            print(f"{c_c}│ You do not need to choose; we will execute them one-by-one!       │{c_r}")
+            print(f"{c_c}└───────────────────────────────────────────────────────────────────┘{c_r}")
+            
+            print(f"\n{c_m}👉 Automatically executing Step {step_idx+1}/8: {step_name} in 2 seconds...{c_r}")
+            time.sleep(2.0)
+            
+            if step_func is not None:
+                step_func()
+                # Pause briefly after completion so they can view results
+                print(f"\n{c_c}🟢 Step {step_idx+1} completed successfully! Moving to next step...{c_r}")
+                time.sleep(2.0)
+            else:
+                # Last step: Launch termchat in-place!
+                termchat_path = project_root / "scripts" / "terminal_chat.py"
+                if termchat_path.exists():
+                    print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
+                    try:
+                        import subprocess
+                        subprocess.run([sys.executable, str(termchat_path)])
+                    except Exception as e:
+                        print(f"\n❌ Failed to start terminal chat subprocess: {e}")
+                else:
+                    print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+                
+        print(f"\n{c_m}🎉 Guided setup completed successfully! Welcome to Kenbun Swarm!{c_r}\n")
+        # guided setup terminates, continue to standard loop if they don't exit Termchat
+        first_time = False
+
+    print_sakura_banner()
     current_selection = 0
     while True:
         selection = select_menu(options, "KENBUN-AGENT INTERACTIVE WIZARD MENU", selected=current_selection)
