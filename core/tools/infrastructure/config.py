@@ -107,34 +107,61 @@ def decrypt_value(val: str) -> str:
     else:
         raise DecryptionError("Malformed encrypted configuration format.")
 
+    # Multi-Key Decryption Cascade (Senior CTO Robustness Version)
+    # Collect all potential decryption keys to handle multi-key environments seamlessly.
+    candidates = []
+    
+    # 1. Project Root Key
     try:
-        if version == "v1":
-            key = get_master_key()
+        root_key_path = get_project_root() / ".kenbun_master.key"
+        if root_key_path.exists():
+            candidates.append(root_key_path.read_bytes().strip())
+    except Exception:
+        pass
+        
+    # 2. Core Key Fallbacks
+    try:
+        core_key_path = get_project_root() / "core" / ".kenbun_master.key"
+        if core_key_path.exists():
+            candidates.append(core_key_path.read_bytes().strip())
+    except Exception:
+        pass
+
+    try:
+        anti_key_path = get_project_root() / "core" / ".antigravity_master.key"
+        if anti_key_path.exists():
+            candidates.append(anti_key_path.read_bytes().strip())
+    except Exception:
+        pass
+        
+    # 3. Standard Home directory / Runtime master key
+    try:
+        candidates.append(get_master_key())
+    except Exception:
+        pass
+
+    # Deduplicate candidate keys while preserving order
+    seen = set()
+    unique_candidates = []
+    for c in candidates:
+        if c and c not in seen:
+            seen.add(c)
+            unique_candidates.append(c)
+
+    # Decrypt loop
+    last_err = None
+    for key in unique_candidates:
+        try:
             f = Fernet(key)
             return f.decrypt(ciphertext.encode()).decode("utf-8")
-        elif version == "legacy" or version == "":
-            # Attempt to read project root key first
-            key = None
-            root_key_path = get_project_root() / ".kenbun_master.key"
-            if root_key_path.exists():
-                try:
-                    with open(root_key_path, "rb") as f_file:
-                        key = f_file.read().strip()
-                except Exception:
-                    pass
-            if not key:
-                key = get_master_key()
-            f = Fernet(key)
-            return f.decrypt(ciphertext.encode()).decode("utf-8")
-        else:
-            raise DecryptionError(f"Unsupported encryption version: {version}")
-            
-    except InvalidToken as e:
-        logger.error(f"Decryption integrity check failed for version '{version}'. Key mismatch or corrupted data.")
-        raise DecryptionError("Decryption failed: Integrity check failed.") from e
-    except Exception as e:
-        logger.error(f"Internal error during decryption: {e}")
-        raise DecryptionError("Decryption failed due to an internal error.") from e
+        except InvalidToken as e:
+            last_err = e
+        except Exception as e:
+            last_err = e
+
+    # If all keys failed, raise decryption error loudly
+    logger.error(f"Decryption integrity check failed for version '{version}'. Checked {len(unique_candidates)} keys. Key mismatch or corrupted data.")
+    raise DecryptionError("Decryption failed: Integrity check failed.") from last_err
 
 # --- 1. NESTED MODELS (DATA OBJECTS) ---
 
