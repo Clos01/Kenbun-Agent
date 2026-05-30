@@ -172,9 +172,22 @@ provision_portainer() {
           -v portainer_data:/data \
           portainer/portainer-ce:2.21.5
         
-        log_success "Portainer Dashboard is active."
-        log_info "  ➔ HTTPS URL: https://<VM_IP_ADDRESS>:9443"
-        log_info "  ➔ HTTP URL:  http://<VM_IP_ADDRESS>:9000"
+        log_info "Waiting for Portainer CE console to initialize..."
+        sleep 4
+        
+        container_status=$(docker inspect -f '{{.State.Status}}' portainer 2>/dev/null || echo "unknown")
+        
+        if [ "$container_status" != "running" ]; then
+            log_error "Portainer failed to initialize cleanly (Container Status: $container_status)."
+            log_warning "This is frequently caused by a pre-existing, conflicting data volume (portainer_data) from a different Portainer version."
+            log_warning "To safely reset this database volume and resolve the conflict, run:"
+            echo -e "${YELLOW}  docker rm -f portainer && docker volume rm portainer_data && sudo bash scripts/ubuntu_vm_bootstrap.sh${NC}"
+            echo ""
+        else
+            log_success "Portainer Dashboard is active and running."
+            log_info "  ➔ HTTPS URL: https://<VM_IP_ADDRESS>:9443"
+            log_info "  ➔ HTTP URL:  http://<VM_IP_ADDRESS>:9000"
+        fi
     fi
 }
 

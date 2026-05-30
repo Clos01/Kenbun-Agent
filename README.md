@@ -260,6 +260,39 @@ git fetch origin && git reset --hard origin/main
 
 ---
 
+## 🏛️ Multi-Persona Onboarding Blueprint
+
+To support standard developers and enterprise operations engineers alike, we categorize the onboarding experience into two distinct technical profiles:
+
+### 🌟 Pathway A: The CLI Operator (Standard Setup)
+*   **Target Audience:** 95% of developers who want a zero-friction local installation.
+*   **Workflow:** Simply run the one-click installer (`curl | bash`), source your shell, and type `kenbun` to launch the **guided interactive wizard**.
+*   **Benefit:** The wizard automatically audits your RAM, picks the best quantized local model, seeds databases, registers the FastMCP endpoints inside Claude Desktop/Cursor, and spins up the stack automatically—requiring zero Docker compilation knowledge.
+
+### 🏛️ Pathway B: The Headless Infrastructure Engineer (Power Setup)
+*   **Target Audience:** DevOps and home-lab engineers deploying Kenbun-Agent on headless servers, VirtualBox VMs, or Proxmox VE hypervisors.
+*   **Workflow:** Run `sudo bash scripts/ubuntu_vm_bootstrap.sh` to configureTailscale, Docker, Portainer CE, and firewall endpoints automatically.
+*   **Runbook for Common Headless Roadblocks:**
+
+#### 1. Portainer Database Schema Mismatch (BoltDB Conflict)
+*   **Symptom:** Running the bootstrapper completes, but navigating to `https://<VM_IP>:9443` fails. Running `docker ps` shows the `portainer` container constantly `Restarting`. Running `docker logs portainer` shows `The database schema version does not align with the server version`.
+*   **Cause:** Your server already has an existing named Docker volume (`portainer_data`) initialized by a different version of Portainer CE.
+*   **Safe Resolution:** Wipe the conflicting volume and restart (highly safe as Portainer is just a viewer and holds no code files):
+    ```bash
+    docker rm -f portainer
+    docker volume rm portainer_data
+    sudo bash scripts/ubuntu_vm_bootstrap.sh
+    ```
+
+#### 2. Portainer Web Editor Build Failures (Dockerfile Missing)
+*   **Symptom:** Creating a new stack via Portainer's **Web editor** by pasting `docker-compose.yml` fails with: `Service fastmcp_server Building failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory`.
+*   **Cause:** Pasting compose configurations in a raw web editor does not provide Portainer with the local source directory files (like `Dockerfile` or python dependencies).
+*   **Resolutions:**
+    *   **Method 1 (Fast CLI):** Run `kenbun` in your server terminal and select **Option 5 (Start Swarm Stack)**. This compiles and launches the containers directly where the files exist.
+    *   **Method 2 (Portainer Repository):** In Portainer, change the build method from **`Web editor`** to **`Repository`**. Specify `https://github.com/Clos01/Kenbun-Agent.git` as the URL and `refs/heads/main` as the branch, load your `.env` variables below, and click Deploy.
+
+---
+
 ## 📖 Operational Commands
 
 *   `python3 scripts/bootstrap.py` — Run setup and bootstrapper.
