@@ -235,7 +235,7 @@ def bootstrap_core(silent=False):
     except Exception as e:
         log_status(5, "Failed to initialize SQLite intelligence database", str(e), status="FAIL")
 
-def select_menu(options, title="Select provider:"):
+def select_menu(options, title="Select provider:", selected=0):
     # Fallback to standard printed list if tty/termios is not available or not in standard TTY
     if not sys.stdout.isatty():
         print(f"\nSelect options for: {title}")
@@ -243,7 +243,10 @@ def select_menu(options, title="Select provider:"):
             print(f" {i+1}. {opt}")
         while True:
             try:
-                sel = int(input("Select choice by number: "))
+                sel = input(f"Select choice by number (Default {selected+1}): ").strip()
+                if not sel:
+                    return selected
+                sel = int(sel)
                 if 1 <= sel <= len(options):
                     return sel - 1
             except ValueError:
@@ -261,7 +264,10 @@ def select_menu(options, title="Select provider:"):
             print(f" {i+1}. {opt}")
         while True:
             try:
-                sel = int(input("Select choice by number: "))
+                sel = input(f"Select choice by number (Default {selected+1}): ").strip()
+                if not sel:
+                    return selected
+                sel = int(sel)
                 if 1 <= sel <= len(options):
                     return sel - 1
             except ValueError:
@@ -324,7 +330,9 @@ def select_menu(options, title="Select provider:"):
         finally:
             termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
-    selected = 0
+    # Ensure initial selected index is within bounds
+    if not (0 <= selected < len(options)):
+        selected = 0
     use_color = should_enable_color()
     c_m = "\033[38;5;218m"  # Pink
     c_g = "\033[38;5;246m"  # Slate Gray
@@ -724,34 +732,14 @@ def configure_api_keys():
         opt = input(f"{c_c}Select option [1-3]: {c_r}").strip()
         
         if opt == "1":
-            # Frictionless Auto-Detection Protocol
-            primary_url = env_vars.get("PRIMARY_LLM_URL", "")
-            detected_idx = None
-            if primary_url:
-                for idx, p in enumerate(PROVIDERS_MAP):
-                    if p["url"] and (p["url"] in primary_url or primary_url in p["url"]):
-                        detected_idx = idx
-                        break
-            if detected_idx is None:
-                for idx, p in enumerate(PROVIDERS_MAP):
-                    if p["env_key"]:
-                        val = env_vars.get(p["env_key"], "") or os.environ.get(p["env_key"], "")
-                        if val and "your_" not in val.lower() and val != '""' and val != "''":
-                            detected_idx = idx
-                            break
+            # Interactive arrow-navigable selector for all 20 providers!
+            provider_names = [p["name"] for p in PROVIDERS_MAP]
+            sel_idx = select_menu(provider_names, "Select Primary AI Provider:")
             
-            sel_idx = detected_idx if detected_idx is not None else 0
+            if sel_idx is None:
+                continue
+                
             p = PROVIDERS_MAP[sel_idx]
-            
-            print(f"\n{c_w}Current Auto-Selected Provider:{c_r} {c_m}{p['name']}{c_r}")
-            change = input("Would you like to select a different provider? [y/N]: ").strip().lower()
-            if change in ("y", "yes"):
-                provider_names = [p["name"] for p in PROVIDERS_MAP]
-                new_idx = select_menu(provider_names, "Select Primary AI Provider:")
-                if new_idx is not None:
-                    sel_idx = new_idx
-                    p = PROVIDERS_MAP[sel_idx]
-                    
             final_url = p["url"]
             final_model = p["model"]
             api_key_val = ""
@@ -759,17 +747,19 @@ def configure_api_keys():
             
             # Dynamic prompt for API Key
             if p["env_key"]:
-                existing_key = env_vars.get(p["env_key"], "") or os.environ.get(p["env_key"], "")
+                existing_key = env_vars.get(p["env_key"], "")
                 is_existing = False
                 if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
                     is_existing = True
-                    
-                if is_existing:
-                    print(f"🟢 {c_m}Existing valid credential for {p['env_key']} detected. Keeping existing key without prompting.{c_r}")
-                    skip_key_update = True
+                    print(f"\n{c_c}An existing value for {p['env_key']} was detected.{c_r}")
+                    print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
+                    api_key_val = getpass.getpass(f"Credential (Press Enter to keep existing): ").strip()
                 else:
                     print(f"\n{c_c}Paste your {p['env_key']} below (Input is masked / hidden as you paste/type):{c_r}")
                     api_key_val = getpass.getpass(f"Credential: ").strip()
+
+                if is_existing and not api_key_val:
+                    skip_key_update = True
                 
             # Local probes if LM Studio/Ollama
             if p.get("local") and p.get("type") == "lmstudio":
@@ -1371,46 +1361,15 @@ def run_quick_setup():
     print("and messaging bot integration in a few fast steps.")
     print(f"{c_g}──────────────────────────────────────────────────{c_r}")
 
-    # Step 1: Provider selection - Frictionless Auto-Detection Protocol
-    sel_idx = 0  # Default fallback
-    primary_url = env_vars.get("PRIMARY_LLM_URL", "")
+    # Step 1: Provider selection via dynamic select menu!
+    provider_names = [p["name"] for p in PROVIDERS_MAP]
+    sel_idx = select_menu(provider_names, "Select your Primary AI Provider:")
     
-    # Check if a provider is already active or if a configured key exists in env_vars / os.environ
-    detected_idx = None
-    if primary_url:
-        for idx, p in enumerate(PROVIDERS_MAP):
-            if p["url"] and (p["url"] in primary_url or primary_url in p["url"]):
-                detected_idx = idx
-                break
-                
-    if detected_idx is None:
-        # Match by existing non-placeholder keys
-        for idx, p in enumerate(PROVIDERS_MAP):
-            if p["env_key"]:
-                val = env_vars.get(p["env_key"], "") or os.environ.get(p["env_key"], "")
-                if val and "your_" not in val.lower() and val != '""' and val != "''":
-                    detected_idx = idx
-                    break
-                    
-    if detected_idx is not None:
-        sel_idx = detected_idx
-
-    p = PROVIDERS_MAP[sel_idx]
-    print(f"\n{c_w}[STEP 1] Current Auto-Selected Provider:{c_r} {c_m}{p['name']}{c_r}")
-    
-    change = "n"
-    # If the provider was not detected or url is default, we can prompt. Otherwise, bypass selection!
-    if not primary_url or primary_url == "http://localhost:11434/v1" or primary_url == "http://localhost:11434":
-        # Check if they want to override/change
-        change = input("Would you like to select a different provider? [y/N]: ").strip().lower()
+    if sel_idx is None:
+        print("Quick Setup cancelled.")
+        return
         
-    if change in ("y", "yes"):
-        provider_names = [p["name"] for p in PROVIDERS_MAP]
-        new_idx = select_menu(provider_names, "Select your Primary AI Provider:")
-        if new_idx is not None:
-            sel_idx = new_idx
-            p = PROVIDERS_MAP[sel_idx]
-
+    p = PROVIDERS_MAP[sel_idx]
     final_url = p["url"]
     final_model = p["model"]
     api_key_val = ""
@@ -1419,23 +1378,22 @@ def run_quick_setup():
     # Step 2: Key Setup
     if p["env_key"]:
         print(f"\n{c_w}[STEP 2] Configure API Credentials:{c_r}")
-        existing_key = env_vars.get(p["env_key"], "") or os.environ.get(p["env_key"], "")
+        existing_key = env_vars.get(p["env_key"], "")
         is_existing = False
         if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
             is_existing = True
-            
-        if is_existing:
-            print(f"🟢 {c_m}Existing valid credential for {p['env_key']} detected. Keeping existing key without prompting.{c_r}")
-            skip_key_update = True
+            print(f"{c_c}An existing value for {p['env_key']} was detected.{c_r}")
+            print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
+            api_key_val = getpass.getpass(f"Enter your {p['env_key']} (Press Enter to keep existing): ").strip()
         else:
             api_key_val = getpass.getpass(f"Enter your {p['env_key']}: ").strip()
 
+        if is_existing and not api_key_val:
+            skip_key_update = True
+
     # Probing local servers
     if p.get("local") and p.get("type") == "lmstudio":
-        url_in = ""
-        # Only prompt if it's new or not configured
-        if not primary_url or "localhost" not in primary_url:
-            url_in = input(f"\nEnter local server base URL (Press Enter for '{p['url']}'): ").strip()
+        url_in = input(f"\nEnter local server base URL (Press Enter for '{p['url']}'): ").strip()
         if url_in:
             final_url = url_in
             
@@ -1465,32 +1423,23 @@ def run_quick_setup():
                 final_model = probe_res[model_sel]
         else:
             print(f"🔴 Could not fetch active model keys from {final_url} (offline).")
-            # Only prompt if no existing model is configured
-            existing_model = env_vars.get("PRIMARY_LLM_MODEL", "")
-            if existing_model:
-                final_model = existing_model
-            else:
-                model_in = input(f"Enter target Model ID manually (Press Enter for '{p['model']}'): ").strip()
-                if model_in:
-                    final_model = model_in
+            model_in = input(f"Enter target Model ID manually (Press Enter for '{p['model']}'): ").strip()
+            if model_in:
+                final_model = model_in
     else:
-        # For non-local, only prompt for model ID if no existing model is configured
-        existing_model = env_vars.get("PRIMARY_LLM_MODEL", "")
-        if existing_model and existing_model != "llama3.2:3b":
-            final_model = existing_model
-            print(f" ➔ Kept existing configured model: {final_model}")
-        else:
-            print(f" ➔ Default Model Selected: {final_model}")
+        model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
+        if model_in:
+            final_model = model_in
 
     # Step 3: Messaging setup
-    tg_token = env_vars.get("TELEGRAM_BOT_TOKEN", "")
-    tg_chat_id = env_vars.get("TELEGRAM_CHAT_ID", "")
-    if tg_token and tg_chat_id and "your_" not in tg_token.lower():
-        print(f"🟢 {c_m}Keeping existing Telegram bot configuration.{c_r}")
-    else:
-        # Skip optional setup silently by default during sequential wizard
-        tg_token = ""
-        tg_chat_id = ""
+    print(f"\n{c_w}[STEP 3] Configure Telegram Bot Messaging (Optional):{c_r}")
+    setup_tg = input(f"Configure Telegram Messaging Bot? [y/N]: ").strip().lower()
+    
+    tg_token = ""
+    tg_chat_id = ""
+    if setup_tg in ("y", "yes"):
+        tg_token = input(f"Enter Telegram Bot Token: ").strip()
+        tg_chat_id = input(f"Enter Telegram Chat ID:  ").strip()
 
     # Step 4: AES Encryption
     do_encrypt = False
@@ -1586,8 +1535,9 @@ def run_interactive_wizard():
         "❌ Exit"
     ]
 
+    current_selection = 0
     while True:
-        selection = select_menu(options, "KENBUN-AGENT INTERACTIVE WIZARD MENU")
+        selection = select_menu(options, "KENBUN-AGENT INTERACTIVE WIZARD MENU", selected=current_selection)
         
         if selection is None:
             print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
@@ -1595,19 +1545,26 @@ def run_interactive_wizard():
 
         if selection == 0:
             bootstrap_core()
+            current_selection = 1
         elif selection == 1:
             run_quick_setup()
+            current_selection = 2
         elif selection == 2:
             configure_api_keys()
+            current_selection = 3
         elif selection == 3:
             configure_local_models()
+            current_selection = 4
         elif selection == 4:
             launch_docker_swarm()
+            current_selection = 5
         elif selection == 5:
             auto_register_claude_desktop_mcp()
             auto_register_cursor_mcp()
+            current_selection = 6
         elif selection == 6:
             showcase_dashboard()
+            current_selection = 7
         elif selection == 7:
             # Launch Kenbun Cognitive Shell (Termchat) in-place
             script_dir = Path(__file__).parent.resolve()
@@ -1622,6 +1579,7 @@ def run_interactive_wizard():
                     print(f"\n❌ Failed to start terminal chat subprocess: {e}")
             else:
                 print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+            current_selection = 7
         elif selection == 8:
             print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
             break
@@ -1630,7 +1588,6 @@ if __name__ == "__main__":
     use_color = should_enable_color()
     c_m = "\033[38;5;218m" if use_color else ""
     c_c = "\033[38;5;224m" if use_color else ""
-    c_g = "\033[38;5;246m" if use_color else ""
     c_r = "\033[0m" if use_color else ""
     
     if len(sys.argv) > 1:
@@ -1670,53 +1627,20 @@ if __name__ == "__main__":
             configure_api_keys()
         elif cmd in ("dashboard", "telemetry"):
             showcase_dashboard()
-        elif cmd in ("menu", "interactive", "options"):
-            run_interactive_wizard()
         elif cmd in ("--help", "-h", "help"):
             print(f"\n{c_m}🌸 KENBUN-AGENT CLI TOOL SHORTCUTS{c_r}")
             print(f"──────────────────────────────────────────────────")
-            print(f"  {c_c}kenbun{c_r}            ➔ Start the seamless step-by-step sequential onboarding wizard!")
-            print(f"  {c_c}kenbun chat{c_r}       ➔ Start the Cognitive Agent Shell (Termchat) directly!")
-            print(f"  {c_c}kenbun start{c_r}      ➔ Spin up the Docker stack in background!")
-            print(f"  {c_c}kenbun stop{c_r}       ➔ Spin down the Docker stack!")
-            print(f"  {c_c}kenbun setup{c_r}      ➔ Open the interactive API Key Configuration wizard!")
-            print(f"  {c_c}kenbun mcp{c_r}        ➔ Register MCP server in Claude Desktop & Cursor automatically!")
-            print(f"  {c_c}kenbun dashboard{c_r}  ➔ Show access guidelines for the Telemetry Dashboard!")
-            print(f"  {c_c}kenbun menu{c_r}       ➔ Launch the classic 1-9 arrow-navigated options menu!")
+            print(f"  {c_c}kenbun chat{c_r}      ➔ Start the Cognitive Agent Shell (Termchat) directly!")
+            print(f"  {c_c}kenbun start{c_r}     ➔ Spin up the Docker stack in background!")
+            print(f"  {c_c}kenbun stop{c_r}      ➔ Spin down the Docker stack!")
+            print(f"  {c_c}kenbun setup{c_r}     ➔ Open the interactive API Key Configuration wizard!")
+            print(f"  {c_c}kenbun mcp{c_r}       ➔ Register MCP server in Claude Desktop & Cursor automatically!")
+            print(f"  {c_c}kenbun dashboard{c_r} ➔ Show access guidelines for the Telemetry Dashboard!")
+            print(f"  {c_c}kenbun express{c_r}   ➔ Initialize environment configurations with default seed!")
+            print(f"  {c_c}kenbun{c_r}           ➔ Launch full interactive Sakura setup menu (1-9)")
             print(f"──────────────────────────────────────────────────\n")
         else:
             print(f"\n❌ Unknown command: {sys.argv[1]}")
             print(f"Type {c_c}kenbun --help{c_r} to see all available command line shortcuts.\n")
     else:
-        # No arguments: Launch the seamless step-by-step onboarding wizard pipeline!
-        print_sakura_banner()
-        print(f"\n{c_m}🌸 INITIATING SEAMLESS ONBOARDING PIPELINE{c_r}")
-        print(f"{c_g}──────────────────────────────────────────────────{c_r}")
-        
-        # Step 1: Express Setup
-        print(f"\n{c_c}[1/4] Running Express Core Setup...{c_r}")
-        bootstrap_core(silent=True)
-        
-        # Step 2: Quick Setup
-        print(f"\n{c_c}[2/4] Configuring Provider & API Credentials...{c_r}")
-        run_quick_setup()
-        
-        # Step 3: Register MCP
-        print(f"\n{c_c}[3/4] Registering MCP Server in Cursor & Claude...{c_r}")
-        auto_register_claude_desktop_mcp()
-        auto_register_cursor_mcp()
-        
-        # Step 4: Launch Cognitive Agent Shell (Termchat)
-        print(f"\n{c_c}[4/4] Starting Cognitive Agent Shell...{c_r}")
-        script_dir = Path(__file__).parent.resolve()
-        project_root = script_dir.parent
-        termchat_path = project_root / "scripts" / "terminal_chat.py"
-        if termchat_path.exists():
-            print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
-            try:
-                import subprocess
-                subprocess.run([sys.executable, str(termchat_path)])
-            except Exception as e:
-                print(f"\n❌ Failed to start terminal chat subprocess: {e}")
-        else:
-            print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+        run_interactive_wizard()
