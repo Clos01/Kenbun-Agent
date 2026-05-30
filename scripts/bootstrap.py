@@ -1510,6 +1510,33 @@ def run_quick_setup():
             os.remove(temp_path)
         print(f"\n❌ Failed to save environment file: {e}")
 
+
+def launch_termchat(project_root):
+    termchat_path = project_root / "scripts" / "terminal_chat.py"
+    if termchat_path.exists():
+        use_color = should_enable_color()
+        c_m = "[38;5;218m" if use_color else ""
+        c_r = "[0m" if use_color else ""
+        
+        # Ensure prompt_toolkit is installed before launching terminal chat
+        try:
+            import prompt_toolkit
+        except ImportError:
+            print(f"\n{c_m}⚙️  Installing UI dependencies for Terminal Chat...{c_r}")
+            import subprocess
+            subprocess.run([sys.executable, "-m", "pip", "install", "prompt_toolkit"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+        print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
+        try:
+            import subprocess
+            subprocess.run([sys.executable, str(termchat_path)])
+        except KeyboardInterrupt:
+            pass # Graceful exit from Ctrl+C inside the terminal chat
+        except Exception as e:
+            print(f"\n❌ Failed to start terminal chat subprocess: {e}")
+    else:
+        print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+
 def run_interactive_wizard():
     use_color = should_enable_color()
     c_m = "\033[38;5;218m"  # Pink
@@ -1599,16 +1626,7 @@ def run_interactive_wizard():
                 time.sleep(2.0)
             else:
                 # Last step: Launch termchat in-place!
-                termchat_path = project_root / "scripts" / "terminal_chat.py"
-                if termchat_path.exists():
-                    print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
-                    try:
-                        import subprocess
-                        subprocess.run([sys.executable, str(termchat_path)])
-                    except Exception as e:
-                        print(f"\n❌ Failed to start terminal chat subprocess: {e}")
-                else:
-                    print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+                launch_termchat(project_root)
                 
         print(f"\n{c_m}🎉 Guided setup completed successfully! Welcome to Kenbun Swarm!{c_r}\n")
         # guided setup terminates, continue to standard loop if they don't exit Termchat
@@ -1649,16 +1667,7 @@ def run_interactive_wizard():
             # Launch Kenbun Cognitive Shell (Termchat) in-place
             script_dir = Path(__file__).parent.resolve()
             project_root = script_dir.parent
-            termchat_path = project_root / "scripts" / "terminal_chat.py"
-            if termchat_path.exists():
-                print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
-                try:
-                    import subprocess
-                    subprocess.run([sys.executable, str(termchat_path)])
-                except Exception as e:
-                    print(f"\n❌ Failed to start terminal chat subprocess: {e}")
-            else:
-                print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+            launch_termchat(project_root)
             current_selection = 7
         elif selection == 8:
             print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
@@ -1678,13 +1687,7 @@ if __name__ == "__main__":
             # Launch Termchat in-place
             script_dir = Path(__file__).parent.resolve()
             project_root = script_dir.parent
-            termchat_path = project_root / "scripts" / "terminal_chat.py"
-            if termchat_path.exists():
-                print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
-                import subprocess
-                subprocess.run([sys.executable, str(termchat_path)])
-            else:
-                print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+            launch_termchat(project_root)
         elif cmd in ("start", "up"):
             launch_docker_swarm()
         elif cmd in ("stop", "down"):
