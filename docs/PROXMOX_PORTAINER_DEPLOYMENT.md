@@ -6,12 +6,12 @@ This guide provides the exact architectural procedures to convert physical serve
 
 ## 🗺️ High-Level Deployment Blueprint
 
-This blueprint illustrates the physical-to-virtual abstraction mapping, enabling local LAN clients (such as your cousin's laptop) to securely manage and interface with Kenbun.
+This blueprint illustrates the physical-to-virtual abstraction mapping, enabling local LAN clients (such as an administrator's workstation) to securely manage and interface with Kenbun.
 
 ```mermaid
 graph TD
     subgraph LAN ["Physical Home Network (192.168.1.0/24)"]
-        Cousin["Cousin's Laptop <br> (192.168.1.15)"]
+        Admin["Admin Client <br> (192.168.1.15)"]
         Router["Physical Router <br> (192.168.1.1)"]
         
         subgraph Hardware ["Physical Node (e.g., 192.168.1.50)"]
@@ -35,14 +35,14 @@ graph TD
         end
     end
 
-    Router --> Cousin
+    Router --> Admin
     Router --> Hardware
     PVE --> VM
     Docker --> Portainer
     Portainer --> Kenbun
-    Cousin -- "Admin Console" --> PVE
-    Cousin -- "Container Fleet" --> Portainer
-    Cousin -- "Kenbun Web UI" --> Dash
+    Admin -- "Admin Console" --> PVE
+    Admin -- "Container Fleet" --> Portainer
+    Admin -- "Kenbun Web UI" --> Dash
 ```
 
 ---
@@ -181,7 +181,7 @@ Portainer will now automatically download all container images, map network inte
 
 ## 🔍 Phase 5: Troubleshooting & Connection Diagnostics
 
-If your cousin cannot reach the VM endpoints, follow this diagnostic ladder step-by-step:
+If you cannot reach the VM endpoints from your local client machine, follow this diagnostic ladder step-by-step:
 
 ### 1. Verify Active Containers
 Inside your Ubuntu Server VM, run:

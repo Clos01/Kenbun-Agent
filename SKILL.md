@@ -30,7 +30,7 @@ The workspace is organized into clean, modular folders:
 │   └── tests/               # Standalone unit and integration tests (Pytest)
 ├── dashboard/               # Next.js 18 Telemetry visualizer UI
 ├── docs/
-│   └── COUSIN_SETUP.md      # Standsalone local installation instructions
+│   └── PROXMOX_PORTAINER_DEPLOYMENT.md # Proxmox VE & Portainer local home-lab guide
 ├── docker-compose.yml       # Unified Docker stack orchestration
 ├── pyproject.toml           # Modern package manifest with [ml] split
 ├── README.md                # General developer guide

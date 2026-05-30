@@ -109,6 +109,18 @@ Open your browser and navigate to the local dashboard interface:
 > [!NOTE]
 > **VM or Cloud Deployments:** If hosting Kenbun-Agent on a cloud VM or local VM instance (VirtualBox, Proxmox, VMware, Hyper-V), default NAT adapters and firewalls will block traffic. You must transition your VM network adapter to **Bridged Mode** and open UFW ports (3000, 8000, 8001, 8888). Refer to the comprehensive **[VM & Firewall Networking Guide](docs/VM_NETWORKING.md)** for step-by-step instructions.
 
+#### 🏛️ Method 3: Proxmox VE & Portainer Home-Lab Node (Headless)
+If you are deploying Kenbun-Agent on dedicated virtualization hardware (such as a headless home-lab server VM) to run as an autonomous, remote resource managed via a graphical browser console:
+1. Refer to our step-by-step **[Proxmox VE & Portainer Deployment Guide](docs/PROXMOX_PORTAINER_DEPLOYMENT.md)** for BIOS, VM setup, and bridged routing parameters.
+2. Run our secure, zero-touch bootstrapper script on your newly provisioned Ubuntu VM to automatically configure Docker, Portainer CE (on port `9443`), strict UFW firewalls, and custom hardware-sensing local LLM settings:
+   ```bash
+   sudo bash scripts/ubuntu_vm_bootstrap.sh
+   ```
+3. Deploy the container swarm stack directly using the Portainer Web UI or comfortably via the command line utilizing the interactive wizard wrapper command:
+   ```bash
+   kenbun
+   ```
+
 ### 📡 Hybrid System Health & Gateway Probes
 
 Whenever you open the Next.js Dashboard or boot up the Cognitive Shell (`kenbun chat`), an advanced **System Diagnostics Check** runs. This health probe features an advanced network-sensing engine:
