@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. Standalone Vector Database (ChromaDB)
   chromadb:
@@ -60,6 +58,11 @@ services:
     volumes:
       - ${PROJECT_ROOT:-.}:/app
       - brain_health:/app/core/brain_health
+    env_file:
+      - path: .env
+        required: false
+      - path: stack.env
+        required: false
     environment:
       - PROJECT_ROOT=/app
       - CHROMA_HOST=chromadb
