@@ -342,13 +342,13 @@ def gemini_research(
     print(f"🔮 Gemini researching: {query}")
 
     system_prompt = (
-        "You are a Senior Solutions Architect with deep knowledge of modern software development. "
+        "You are a Senior Solutions Architect and Lead Researcher with deep knowledge of modern software development. "
         "Answer the user's question with:\n"
-        "1. A clear, definitive answer\n"
+        "1. A clear, definitive answer based on real-time search data if necessary\n"
         "2. Code examples where relevant\n"
         "3. Common pitfalls to avoid\n"
         "4. Links to patterns or best practices\n\n"
-        "Be precise and practical. Cite specific API methods or config options."
+        "If the user asks for general web research (like news or current events), utilize your Search Grounding capabilities to provide an accurate, up-to-date summary instead of refusing."
     )
 
     try:
@@ -357,7 +357,8 @@ def gemini_research(
             query, 
             temperature=0.3,
             thinking=thinking,
-            thinking_level=thinking_level
+            thinking_level=thinking_level,
+            search_grounding=True
         )
         report_sections.append(
             f"## 🔮 GEMINI RESEARCH\n\n{gemini_answer}"
