@@ -2871,7 +2871,12 @@ def main():
                                 print(f"\n{C_RED}🛑 YOLO BLOCKED:{C_R} This command is on the nuclear blocklist and will NOT run.")
                             else:
                                 print(f"\n{C_Y}🛑 YOLO BLOCKED:{C_R} {cmd}")
-                                override = input(f"{C_C}Do you want to run this anyway and whitelist the executable for this project? [y/N]: {C_R}").strip().lower()
+                                prompt_str = f"{C_C}Do you want to run this anyway and whitelist the executable for this project? [y/N]: {C_R}"
+                                if pt_session:
+                                    # Use prompt_toolkit to prevent stray newlines from auto-submitting
+                                    override = pt_session.prompt(ANSI(prompt_str)).strip().lower()
+                                else:
+                                    override = input(prompt_str).strip().lower()
                                 if override == "y":
                                     # Save to allowlist
                                     if parts:
@@ -2919,9 +2924,6 @@ def main():
                             history = prune_dialog_history(history)
                             save_session_backup(history, Path.cwd(), llm_url, llm_model)
                             auto_trigger = True
-                        else:
-                            print(f"\n{C_RED}🛑 YOLO BLOCKED:{C_R} This command is on the nuclear blocklist and will NOT run.")
-                            print(f"   {C_W}{cmd}{C_R}\n")
                     else:
                         # ── Normal safe mode ────────────────────────────────────────
                         explain_command(cmd)
