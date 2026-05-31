@@ -20,6 +20,10 @@ import unicodedata
 from pathlib import Path
 from typing import Optional
 
+# Silence noisy ONNX C++ runtime warnings on CPU-only or non-standard GPU architectures
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["ORT_LOGGING_LEVEL"] = "3"
+
 # prompt_toolkit for robust terminal input
 try:
     from prompt_toolkit import PromptSession
@@ -354,7 +358,26 @@ def is_yolo_safe(cmd: str) -> bool:
     args = [arg.lower() for arg in parts[1:]]
     executable_base = Path(executable).name
 
-    # 5. Strict Allowlist (Mandated by System 2 Security Court)
+    # 4. Nuclear Blocklist (Default Allow, but block catastrophic commands)
+    NUCLEAR_EXECUTABLES = {"mkfs", "dd", "fdisk", "format", "reboot", "shutdown", "halt"}
+    if executable_base in NUCLEAR_EXECUTABLES:
+        return False
+    if executable_base == "rm" and "-rf" in args and "/" in args:
+        return False
+
+    # 5. Check local project override registry (Learned from interactive YOLO prompts)
+    try:
+        import json
+        allowlist_path = get_active_project_root() / "brain_health" / ".yolo_allowlist.json"
+        if allowlist_path.exists():
+            with open(allowlist_path, "r") as f:
+                yolo_allowlist = set(json.load(f))
+                if executable_base in yolo_allowlist:
+                    return True
+    except Exception:
+        pass
+
+    # 6. Strict Allowlist (Mandated by System 2 Security Court)
     ALLOWED_EXECUTABLES = {"git", "ls", "npm", "zip", "cd", "pwd", "whoami", "cat", "echo", "python", "pip", "mkdir", "cp", "mv"}
     if executable_base not in ALLOWED_EXECUTABLES:
         return False
@@ -812,9 +835,9 @@ class StreamingRenderer:
                         self._code_buffer += self._line_buffer
                         self._line_buffer = ""
             else:
-                self._line_buffer += char
                 # If we are buffering a potential code fence line (starts with `)
-                if self._line_buffer.startswith('`'):
+                if self._line_buffer or char == '`':
+                    self._line_buffer += char
                     if char == '\n':
                         line = self._line_buffer.rstrip('\n')
                         m = self.FENCE_OPEN.match(line.strip())
@@ -832,8 +855,6 @@ class StreamingRenderer:
                 else:
                     # Normal prose — emit characters immediately with word-level buffering
                     self._emit_char_prose(char)
-                    if char == '\n':
-                        self._line_buffer = ""
 
     def _check_and_flush_asterisks(self, current_char: str):
         """Helper to process and style double asterisks (bold) or single asterisks."""
@@ -2224,7 +2245,7 @@ def main():
                     ], title=f"{C_RED}⚡ YOLO MODE ON", border_color=C_RED, text_color=C_Y)
                 else:
                     print(f"\n{C_G}✓ YOLO mode disabled. Manual approval restored.{C_R}")
-                continue
+                break
             
             intent = intent_map.get(raw_intent, "")
             if intent:
@@ -2690,7 +2711,7 @@ def main():
                         "stream": True
                     }
                     
-                    print(f"\n{C_P}{C_BOLD}Kenbun{C_R} {C_D}▸{C_R} ", end="", flush=True)
+                    print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
                     
                     # Retry loop with exponential backoff for primary LLM endpoint
                     for attempt in range(max_retries + 1):
@@ -2754,7 +2775,7 @@ def main():
                         "stream": True
                     }
                     
-                    print(f"\n{C_P}{C_BOLD}Kenbun{C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
+                    print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
                     
                     # Retry loop with exponential backoff for fallback LLM endpoint
                     for attempt in range(max_retries + 1):
@@ -2818,7 +2839,55 @@ def main():
 
                     # ── YOLO Mode fast-path ───────────────────────────────────────
                     if YOLO_MODE:
-                        if is_yolo_safe(cmd):
+                        is_safe = is_yolo_safe(cmd)
+                        
+                        # Handle interactive YOLO override for blocked commands
+                        if not is_safe:
+                            # Re-verify it's not a nuclear command before prompting
+                            parts = []
+                            try:
+                                import shlex
+                                parts = shlex.split(cmd)
+                            except: pass
+                            
+                            is_nuclear = False
+                            if parts:
+                                base = Path(parts[0]).name.lower()
+                                args_lower = [a.lower() for a in parts[1:]]
+                                if base in {"mkfs", "dd", "fdisk", "format", "reboot", "shutdown", "halt"}:
+                                    is_nuclear = True
+                                if base == "rm" and "-rf" in args_lower and "/" in args_lower:
+                                    is_nuclear = True
+                                    
+                            if is_nuclear:
+                                print(f"\n{C_RED}🛑 YOLO BLOCKED:{C_R} This command is on the nuclear blocklist and will NOT run.")
+                            else:
+                                print(f"\n{C_Y}🛑 YOLO BLOCKED:{C_R} {cmd}")
+                                override = input(f"{C_C}Do you want to run this anyway and whitelist the executable for this project? [y/N]: {C_R}").strip().lower()
+                                if override == "y":
+                                    # Save to allowlist
+                                    if parts:
+                                        base = Path(parts[0]).name.lower()
+                                        try:
+                                            import json
+                                            allowlist_path = get_active_project_root() / "brain_health" / ".yolo_allowlist.json"
+                                            allowlist_path.parent.mkdir(parents=True, exist_ok=True)
+                                            yolo_allowlist = []
+                                            if allowlist_path.exists():
+                                                with open(allowlist_path, "r") as f:
+                                                    yolo_allowlist = json.load(f)
+                                            if base not in yolo_allowlist:
+                                                yolo_allowlist.append(base)
+                                                with open(allowlist_path, "w") as f:
+                                                    json.dump(yolo_allowlist, f, indent=4)
+                                                print(f"{C_G}✓ Executable '{base}' added to project YOLO allowlist.{C_R}")
+                                        except Exception as e:
+                                            print(f"{C_Y}Failed to save allowlist: {e}{C_R}")
+                                    is_safe = True
+                                else:
+                                    print(f"{C_Y}Skipping command.{C_R}")
+                                    
+                        if is_safe:
                             cols2 = get_columns()
                             print(f"\n{C_RED}⚡ YOLO:{C_R} {C_W}{cmd}{C_R}")
                             print(f"{C_RED}{'─' * min(cols2, 60)}{C_R}")

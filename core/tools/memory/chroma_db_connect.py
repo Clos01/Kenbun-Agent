@@ -16,7 +16,7 @@ PROJECT_NAME = settings.PROJECT_NAME
 CHROMA_HOST = settings.CHROMA_HOST
 CHROMA_PORT = settings.CHROMA_PORT
 
-print(f"🔍 [HIVE_DEBUG] CHROMA_HOST: {CHROMA_HOST} | PORT: {CHROMA_PORT}")
+logger.debug(f"🔍 [HIVE_DEBUG] CHROMA_HOST: {CHROMA_HOST} | PORT: {CHROMA_PORT}")
 
 # GLOBAL MEMORY: The "God Mode" rules (Default to a relative path within project)
 GLOBAL_TEMPLATE_PATH = PROJECT_ROOT / "external" / "_TEMPLATE_PROJECT"
@@ -73,7 +73,7 @@ def query_embeddings(query_text: str, n_results: int = 5, category: str = "code"
             where=final_where
         )
     except Exception as e:
-        print(f"❌ [CHROMA] Query failed: {e}")
+        logger.error(f"❌ [CHROMA] Query failed: {e}")
         return {"ids": [[]], "documents": [[]], "metadatas": [[]]}
 
 def upsert_embedding(id: str, document: str, metadata: dict, collection_name: str = None):
@@ -88,9 +88,9 @@ def upsert_embedding(id: str, document: str, metadata: dict, collection_name: st
             metadatas=[metadata],
             ids=[id]
         )
-        print(f"✅ [CHROMA] Upserted {id} in collection '{collection.name}'")
+        logger.debug(f"✅ [CHROMA] Upserted {id} in collection '{collection.name}'")
     except Exception as e:
-        print(f"⚠️ [CHROMA] Upsert failed for {id}: {e}")
+        logger.warning(f"⚠️ [CHROMA] Upsert failed for {id}: {e}")
 
 # --- 2. CONNECTION ---
 def get_chroma_client():
