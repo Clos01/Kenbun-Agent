@@ -1516,14 +1516,18 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
         )
     elif tier == "standard":
         return base + execute_block + spawn_block + memory_block
-    else:  # cloud
         return (
             base +
             "You have full reasoning capability. Use multi-step thinking for complex problems. "
             "Delegate long-running tasks to background agents using spawn blocks.\n" +
             execute_block + spawn_block + memory_block +
-            "\nAST HARVESTED TOOL RUNNER:\n"
-            "You can run any kenbun CLI tool via the execute block (e.g., `kenbun recall`, `kenbun search`).\n"
+            "\nTHE KENBUN PROCESS (System 1-6) [MANDATORY]:\n"
+            "To avoid hallucination, you MUST follow the Kenbun Process for any complex, architectural, or research request:\n"
+            "1. Do NOT guess or hallucinate answers for complex tasks.\n"
+            "2. Execute `kenbun orchestrate workflow=\"research_implement\" task=\"<your task>\"` via the execute block to dynamically route the task to the Cognitive Swarm.\n"
+            "3. Execute `kenbun consult_supervisor user_proposal=\"<prompt>\"` or `kenbun review_code_with_gemini ...` to enforce System 2 safety guardrails.\n"
+            "4. Always use `kenbun recall <query>` to search Hivemind ChromaDB for previous context.\n"
+            "You are the Terminal Gateway. Rely on these MCP CLI tools to do the heavy lifting!\n"
         )
 
 def check_and_migrate_project_memory(old_dirs, original_cwd=None):
