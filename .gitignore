@@ -64,3 +64,6 @@ ehthumbs.db
 *.tmp
 .pytest_cache/
 .benchmarks/
+
+# Scratch & temporary scripts (Consensus Zero-Leak)
+scratch/
