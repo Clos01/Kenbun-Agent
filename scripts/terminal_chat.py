@@ -1929,16 +1929,9 @@ class TerminalSession:
                 except Exception as e:
                     return 1, f"cd error: {e}"
         
-            # Absolute path resolution
-            abs_path = shutil.which(executable)
-            if not abs_path:
-                return 127, f"{executable}: command not found"
-            
-            parts[0] = abs_path
-        
             result = subprocess.run(
-                parts,
-                shell=False,
+                cmd,
+                shell=True,
                 cwd=str(self.cwd),
                 capture_output=True,
                 text=True,
