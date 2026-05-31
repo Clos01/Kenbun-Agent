@@ -367,7 +367,6 @@ def is_yolo_safe(cmd: str) -> bool:
 
     # 5. Check local project override registry (Learned from interactive YOLO prompts)
     try:
-        import json
         allowlist_path = get_active_project_root() / "brain_health" / ".yolo_allowlist.json"
         if allowlist_path.exists():
             with open(allowlist_path, "r") as f:
@@ -2878,7 +2877,6 @@ def main():
                                     if parts:
                                         base = Path(parts[0]).name.lower()
                                         try:
-                                            import json
                                             allowlist_path = get_active_project_root() / "brain_health" / ".yolo_allowlist.json"
                                             allowlist_path.parent.mkdir(parents=True, exist_ok=True)
                                             yolo_allowlist = []
