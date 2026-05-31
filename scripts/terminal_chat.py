@@ -1516,6 +1516,7 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
         )
     elif tier == "standard":
         return base + execute_block + spawn_block + memory_block
+    else:  # cloud
         return (
             base +
             "You have full reasoning capability. Use multi-step thinking for complex problems. "
@@ -1523,7 +1524,7 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
             execute_block + spawn_block + memory_block +
             "\nTHE KENBUN PROCESS (System 1-6) [MANDATORY]:\n"
             "To avoid hallucination, you MUST follow the Kenbun Process for any complex, architectural, or research request:\n"
-            "1. Do NOT guess or hallucinate answers for complex tasks.\n"
+            "1. Do NOT guess or hallucinate answers for complex tasks. If you don't know the exact tool signature, execute `kenbun list-tools` first!\n"
             "2. Execute `kenbun orchestrate workflow=\"research_implement\" task=\"<your task>\"` via the execute block to dynamically route the task to the Cognitive Swarm.\n"
             "3. Execute `kenbun consult_supervisor user_proposal=\"<prompt>\"` or `kenbun review_code_with_gemini ...` to enforce System 2 safety guardrails.\n"
             "4. Always use `kenbun recall <query>` to search Hivemind ChromaDB for previous context.\n"

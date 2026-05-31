@@ -1832,6 +1832,7 @@ if __name__ == "__main__":
     use_color = should_enable_color()
     c_m = "\033[38;5;218m" if use_color else ""
     c_c = "\033[38;5;224m" if use_color else ""
+    c_y = "\033[38;5;226m" if use_color else ""
     c_r = "\033[0m" if use_color else ""
     
     if len(sys.argv) > 1:
@@ -1868,16 +1869,34 @@ if __name__ == "__main__":
         elif cmd in ("--help", "-h", "help"):
             print(f"\n{c_m}🌸 KENBUN-AGENT CLI TOOL SHORTCUTS{c_r}")
             print(f"──────────────────────────────────────────────────")
-            print(f"  {c_c}kenbun chat{c_r}      ➔ Start the Cognitive Agent Shell (Termchat) directly!")
-            print(f"  {c_c}kenbun start{c_r}     ➔ Spin up the Docker stack in background!")
-            print(f"  {c_c}kenbun stop{c_r}      ➔ Spin down the Docker stack!")
-            print(f"  {c_c}kenbun setup{c_r}     ➔ Open the interactive API Key Configuration wizard!")
-            print(f"  {c_c}kenbun mcp{c_r}       ➔ Register MCP server in Claude Desktop & Cursor automatically!")
-            print(f"  {c_c}kenbun dashboard{c_r} ➔ Show access guidelines for the Telemetry Dashboard!")
-            print(f"  {c_c}kenbun express{c_r}   ➔ Initialize environment configurations with default seed!")
-            print(f"  {c_c}kenbun <tool>{c_r}    ➔ Execute any MCP tool (e.g., kenbun orchestrate, kenbun recall)")
-            print(f"  {c_c}kenbun{c_r}           ➔ Launch full interactive Sakura setup menu (1-9)")
+            print(f"  {c_c}kenbun chat{c_r}       ➔ Start the Cognitive Agent Shell (Termchat) directly!")
+            print(f"  {c_c}kenbun start{c_r}      ➔ Spin up the Docker stack in background!")
+            print(f"  {c_c}kenbun stop{c_r}       ➔ Spin down the Docker stack!")
+            print(f"  {c_c}kenbun setup{c_r}      ➔ Open the interactive API Key Configuration wizard!")
+            print(f"  {c_c}kenbun mcp{c_r}        ➔ Register MCP server in Claude Desktop & Cursor automatically!")
+            print(f"  {c_c}kenbun dashboard{c_r}  ➔ Show access guidelines for the Telemetry Dashboard!")
+            print(f"  {c_c}kenbun express{c_r}    ➔ Initialize environment configurations with default seed!")
+            print(f"  {c_c}kenbun list-tools{c_r} ➔ List all dynamic MCP tools and their signatures!")
+            print(f"  {c_c}kenbun <tool>{c_r}     ➔ Execute any MCP tool (e.g., kenbun orchestrate, kenbun recall)")
+            print(f"  {c_c}kenbun{c_r}            ➔ Launch full interactive Sakura setup menu (1-9)")
             print(f"──────────────────────────────────────────────────\n")
+        elif cmd == "list-tools":
+            import sys, os, inspect
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
+            try:
+                import tools.infrastructure.server as server
+                print(f"\n{c_m}🔮 KENBUN SWARM - DYNAMIC MCP TOOLS{c_r}")
+                print("──────────────────────────────────────────────────")
+                for name, obj in inspect.getmembers(server):
+                    if inspect.isfunction(obj) and obj.__module__ == server.__name__ and not name.startswith("_"):
+                        sig = inspect.signature(obj)
+                        doc = inspect.getdoc(obj)
+                        doc_summary = doc.split('\n')[0] if doc else "No description available."
+                        print(f"🚀 {c_c}{name}{c_r}{sig}")
+                        print(f"   {c_y}➔ {doc_summary}{c_r}\n")
+                print("──────────────────────────────────────────────────\n")
+            except Exception as e:
+                print(f"❌ Failed to list tools: {e}")
         else:
             # Dynamic MCP tool dispatcher
             import sys, os, re
