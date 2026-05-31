@@ -1304,26 +1304,14 @@ def detect_configuration_mismatch(llm_url, llm_model):
 def check_and_heal_mismatch(llm_url, llm_model):
     """
     SILENT auto-healer — no user prompts.
-    Detects cloud URL + local model mismatch and automatically routes back
-    to local Ollama. Prints a single status line. Never blocks boot.
+    Detects cloud URL + local model mismatch and automatically aligns the
+    model to the correct cloud provider, preserving their cloud key and URL.
     """
     has_mismatch, _ = detect_configuration_mismatch(llm_url, llm_model)
     if not has_mismatch:
         return llm_url, llm_model
 
-    # Try to reach local Ollama first
-    local_ollama = "http://localhost:11434/v1"
-    try:
-        import requests as _r
-        _r.get("http://localhost:11434/api/tags", timeout=2)
-        # Ollama is alive — auto-route to local
-        update_env_value("PRIMARY_LLM_URL", local_ollama)
-        print(f"{C_G}⚡ Auto-heal:{C_R} Cloud URL detected with local model. {C_G}Rerouted → {local_ollama}{C_R}")
-        return local_ollama, llm_model
-    except Exception:
-        pass
-
-    # Ollama not reachable — determine best cloud model name and auto-swap
+    # Determine the best cloud model name based on the cloud URL
     target_model = "gpt-4o-mini"
     provider_name = "OpenAI"
     if "anthropic" in llm_url.lower():
@@ -1336,8 +1324,31 @@ def check_and_heal_mismatch(llm_url, llm_model):
         target_model = "deepseek-chat"
         provider_name = "DeepSeek"
 
-    update_env_value("PRIMARY_LLM_MODEL", target_model)
-    print(f"{C_Y}⚡ Auto-heal:{C_R} Ollama offline. Swapped model → {C_G}{target_model}{C_R} ({provider_name})")
+    # Symmetrically encrypt the healed model name if Fernet key is active
+    try:
+        from cryptography.fernet import Fernet
+        possible_keys = [
+            Path.cwd() / ".kenbun_master.key",
+            Path.cwd() / "core" / ".kenbun_master.key",
+            Path(__file__).parent.parent / ".kenbun_master.key",
+            Path(__file__).parent.parent / "core" / ".kenbun_master.key"
+        ]
+        key = None
+        for kp in possible_keys:
+            if kp.exists():
+                with open(kp, "rb") as fk:
+                    key = fk.read().strip()
+                break
+        if key:
+            f = Fernet(key)
+            encrypted_model = f"enc:{f.encrypt(target_model.encode()).decode()}"
+            update_env_value("PRIMARY_LLM_MODEL", encrypted_model)
+        else:
+            update_env_value("PRIMARY_LLM_MODEL", target_model)
+    except Exception:
+        update_env_value("PRIMARY_LLM_MODEL", target_model)
+
+    print(f"{C_G}⚡ Auto-heal:{C_R} Cloud URL detected with local model. Aligned model to {C_G}{target_model}{C_R} ({provider_name})")
     return llm_url, target_model
 
 def detect_model_tier(llm_model: str, llm_url: str) -> str:

@@ -1066,6 +1066,12 @@ def configure_local_models():
 
     # Atomic write to env
     try:
+        is_cloud_active = False
+        current_url = env_vars.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
+        decrypted_url = decrypt_value_local(current_url, project_root)
+        if any(domain in decrypted_url.lower() for domain in ["googleapis.com", "api.openai.com", "api.anthropic.com", "api.deepseek.com"]):
+            is_cloud_active = True
+
         with open(env_file, "r", encoding="utf-8") as f:
             content = f.read()
 
@@ -1081,8 +1087,32 @@ def configure_local_models():
             return new_content
 
         content = update_env_var(content, "OLLAMA_PULL_MODELS", f'"{pull_val}"' if " " in pull_val else pull_val)
-        if primary_val != "none":
-            content = update_env_var(content, "PRIMARY_LLM_MODEL", primary_val)
+        
+        final_primary_model = current_primary
+        if is_cloud_active:
+            # Active Cloud Provider detected — do not overwrite it with local hardware model
+            pass
+        else:
+            if primary_val != "none":
+                # Symmetrically encrypt if they have Fernet active
+                if current_primary.startswith("enc:") or env_vars.get("PRIMARY_LLM_MODEL", "").startswith("enc:"):
+                    # Check if master key exists to encrypt
+                    key_file = project_root / ".kenbun_master.key"
+                    if not key_file.exists():
+                        key_file = project_root / "core" / ".kenbun_master.key"
+                    if key_file.exists():
+                        from cryptography.fernet import Fernet
+                        with open(key_file, "rb") as fk:
+                            f_obj = Fernet(fk.read().strip())
+                        encrypted_val = f"enc:{f_obj.encrypt(primary_val.encode()).decode()}"
+                        content = update_env_var(content, "PRIMARY_LLM_MODEL", encrypted_val)
+                        final_primary_model = encrypted_val
+                    else:
+                        content = update_env_var(content, "PRIMARY_LLM_MODEL", primary_val)
+                        final_primary_model = primary_val
+                else:
+                    content = update_env_var(content, "PRIMARY_LLM_MODEL", primary_val)
+                    final_primary_model = primary_val
 
         temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
         try:
@@ -1096,7 +1126,12 @@ def configure_local_models():
 
         print(f"\n🟢 {c_m}Successfully updated local model profile!{c_r}")
         print(f"  ➔ Pull Models:   {c_c}{pull_val}{c_r}")
-        print(f"  ➔ Primary Model: {c_c}{primary_val if primary_val != 'none' else current_primary}{c_r}")
+        if is_cloud_active:
+            decrypted_model = decrypt_value_local(current_primary, project_root)
+            print(f"  ➔ Primary Model: {c_c}{decrypted_model}{c_r} {c_g}[Keeping active Cloud Model]{c_r}")
+            print(f"  ℹ️  Local models configured for Docker background stack only.")
+        else:
+            print(f"  ➔ Primary Model: {c_c}{primary_val if primary_val != 'none' else current_primary}{c_r}")
         print("  ➔ To pull changes, please rebuild docker containers via Option 5.\n")
     except Exception as e:
         print(f"❌ {c_y}Failed to write configuration: {e}{c_r}\n")
