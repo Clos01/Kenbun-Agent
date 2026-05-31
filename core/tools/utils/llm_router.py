@@ -196,7 +196,20 @@ def _make_openai_compatible_call(
         url = f"{base_url}/messages"
         response = requests.post(url, json=payload, headers=headers, timeout=60.0)
         response.raise_for_status()
-        return response.json()["content"][0]["text"]
+        res_json = response.json()
+        content = res_json["content"][0]["text"]
+        
+        # Dynamic Token Tracking (System 4)
+        try:
+            usage = res_json.get("usage", {})
+            in_t = usage.get("input_tokens", 0)
+            out_t = usage.get("output_tokens", 0)
+            from tools.strategy.token_governor import token_governor
+            token_governor.track_usage(model_name, in_t, out_t, "anthropic_call")
+        except Exception as e:
+            logging.debug(f"Token Governor failed to track Anthropic usage: {e}")
+            
+        return content
         
     # Standard OpenAI payload
     payload = {
@@ -211,7 +224,20 @@ def _make_openai_compatible_call(
     
     response = requests.post(url, json=payload, headers=headers, timeout=60.0)
     response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+    res_json = response.json()
+    content = res_json["choices"][0]["message"]["content"]
+    
+    # Dynamic Token Tracking (System 4)
+    try:
+        usage = res_json.get("usage", {})
+        in_t = usage.get("prompt_tokens", 0)
+        out_t = usage.get("completion_tokens", 0)
+        from tools.strategy.token_governor import token_governor
+        token_governor.track_usage(model_name, in_t, out_t, "openai_call")
+    except Exception as e:
+        logging.debug(f"Token Governor failed to track OpenAI/Gemini usage: {e}")
+        
+    return content
 
 def call_llm_gateway(system_prompt: str, user_message: str, temperature: float = 0.1, max_tokens: int = 4000) -> str:
     """
@@ -223,6 +249,20 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     primary_model = settings.models.primary_llm_model
     fallback_url = settings.models.fallback_llm_url
     fallback_model = settings.models.fallback_llm_model
+    
+    # Dynamic Budget-Aware Swapping (System 4)
+    try:
+        from tools.strategy.token_governor import token_governor
+        resolved_model = token_governor.get_budget_aware_model(primary_model)
+        if resolved_model != primary_model:
+            logging.info(f"📉 Budget Governor dynamically swapped model '{primary_model}' ➔ '{resolved_model}'")
+            primary_model = resolved_model
+            # If forced to local, dynamically map the local container endpoint
+            if primary_model == "local":
+                primary_url = "http://ollama_server:11434/v1"
+                primary_model = "llama3.2:1b"
+    except Exception as e:
+        logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
     
     # Clean trailing slash in URLs
     if primary_url.endswith("/"):
