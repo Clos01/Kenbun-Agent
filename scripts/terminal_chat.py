@@ -805,7 +805,7 @@ class StreamingRenderer:
     5. Formats inline code (backticks) as Bold Cyan for supreme CLI aesthetics
     6. Formats double asterisks as bold text
     """
-    FENCE_OPEN = re.compile(r'^```(execute|bash|sh|spawn|python|json|text|)', re.IGNORECASE)
+    FENCE_OPEN = re.compile(r'^```(execute|bash|sh|spawn)', re.IGNORECASE)
     FENCE_CLOSE = re.compile(r'^```\s*$')
 
     def __init__(self, width: int):
@@ -2806,10 +2806,13 @@ def main():
                                 break
                             try:
                                 data_json = json.loads(data_str)
-                                chunk = data_json["choices"][0]["delta"].get("content", "")
+                                choices = data_json.get("choices", [])
+                                if not choices:
+                                    continue
+                                chunk = choices[0].get("delta", {}).get("content") or ""
                                 wrapper.write(chunk)
                                 full_reply += chunk
-                            except Exception:
+                            except Exception as e:
                                 pass
                 wrapper.flush()
                 print("\n")
