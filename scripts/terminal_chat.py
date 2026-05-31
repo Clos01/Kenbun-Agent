@@ -211,8 +211,19 @@ def save_session_backup(history, cwd, llm_url, llm_model):
         if not local_dir:
             raise ValueError("Security Violation: Active brain health directory not set.")
         
+        # Resolve project root dynamically to prevent NameError or ModuleNotFoundError
+        try:
+            from tools.infrastructure.config import settings
+            project_root = settings.PROJECT_ROOT.resolve()
+        except Exception:
+            try:
+                from tools.utils.path_utils import get_project_root
+                project_root = get_project_root().resolve()
+            except Exception:
+                project_root = Path(__file__).resolve().parent.parent
+
         # Enforce strict path traversal check: backup folder must be strictly under Home or Project Root
-        allowed_roots = [Path.home().resolve(), settings.PROJECT_ROOT.resolve()]
+        allowed_roots = [Path.home().resolve(), project_root]
         resolved_dir = Path(local_dir).resolve()
         if not any(resolved_dir == root or resolved_dir.is_relative_to(root) for root in allowed_roots):
             raise ValueError("Security Violation: Backup directory outside allowed boundaries.")

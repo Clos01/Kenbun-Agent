@@ -658,6 +658,25 @@ def auto_register_cursor_mcp():
     except Exception as e:
         print(f"❌ {c_y}Failed to write Cursor configuration: {e}{c_r}\n")
 
+def decrypt_value_local(val: str, project_root: Path) -> str:
+    """Decrypts values that are encrypted with 'enc:' prefix using the repository master key."""
+    if not isinstance(val, str) or not val.startswith("enc:"):
+        return val
+    try:
+        from cryptography.fernet import Fernet
+        key_file = project_root / ".kenbun_master.key"
+        if not key_file.exists():
+            key_file = project_root / "core" / ".kenbun_master.key"
+        
+        if key_file.exists():
+            with open(key_file, "rb") as f:
+                key = f.read().strip()
+                f_obj = Fernet(key)
+                return f_obj.decrypt(val[4:].encode()).decode()
+    except Exception:
+        pass
+    return val
+
 def configure_api_keys():
     import getpass
     import tempfile
@@ -699,12 +718,16 @@ def configure_api_keys():
         primary_url = env_vars.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
         primary_model = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
 
+        # Decrypt for screen display to make it clear for the user
+        decrypted_url = decrypt_value_local(primary_url, project_root)
+        decrypted_model = decrypt_value_local(primary_model, project_root)
+
         # Detect active provider
         active_provider_name = "Unknown / Custom"
         active_provider_key_status = "[No Key Required]"
         
         for p in PROVIDERS_MAP:
-            if p["url"] in primary_url or primary_url in p["url"]:
+            if p["url"] in decrypted_url or decrypted_url in p["url"] or p["url"] in primary_url or primary_url in p["url"]:
                 active_provider_name = p["name"]
                 if p["env_key"]:
                     val = env_vars.get(p["env_key"], "")
@@ -720,8 +743,18 @@ def configure_api_keys():
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
         print(f"Current Status:")
         print(f" ➔ Active Provider:    {c_w}{active_provider_name}{c_r}")
-        print(f" ➔ Primary LLM URL:    {c_w}{primary_url}{c_r}")
-        print(f" ➔ Primary LLM Model:  {c_w}{primary_model}{c_r}")
+        
+        # Display clean decrypted values with secure visual tag
+        if primary_url.startswith("enc:"):
+            print(f" ➔ Primary LLM URL:    {c_w}{decrypted_url}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
+        else:
+            print(f" ➔ Primary LLM URL:    {c_w}{primary_url}{c_r}")
+            
+        if primary_model.startswith("enc:"):
+            print(f" ➔ Primary LLM Model:  {c_w}{decrypted_model}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
+        else:
+            print(f" ➔ Primary LLM Model:  {c_w}{primary_model}{c_r}")
+            
         print(f" ➔ Active Key Status:  {active_provider_key_status}")
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
         print("1. ⚙️  Select Primary AI Provider & Model (Select from 20+ options)")
