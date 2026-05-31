@@ -354,11 +354,11 @@ def is_yolo_safe(cmd: str) -> bool:
     args = [arg.lower() for arg in parts[1:]]
     executable_base = Path(executable).name
 
-    # 5. Strict Positional Allowlist for YOLO executables (Default Deny)
-    # Living off the land binaries like python, node, sh, bash are strictly forbidden.
-    ALLOWED_EXECUTABLES = {"git", "ls", "npm"}
+    # 5. Strict Allowlist (Mandated by System 2 Security Court)
+    ALLOWED_EXECUTABLES = {"git", "ls", "npm", "zip", "cd", "pwd", "whoami", "cat", "echo", "python", "pip", "mkdir", "cp", "mv"}
     if executable_base not in ALLOWED_EXECUTABLES:
         return False
+
 
     # 6. Strict Argument Injection Prevention (Default Deny on dangerous flags)
     if executable_base == "git":
@@ -719,11 +719,15 @@ def explain_command(cmd):
         tool_name = "Python Package & Runtime Utility"
         why_needed = "Manages Python dependencies, environments (virtualenvs), and executes Python-based scripting tools."
         pro_tip = "💡 Pro-Tip: You can run this command directly in your shell: `pip list`"
-    elif any(cmd_lower.startswith(x) for x in ["mkdir", "rm", "cp", "mv", "ls", "cat", "chmod"]):
+    elif any(cmd_lower.startswith(x) for x in ["mkdir", "rm", "cp", "mv", "ls", "cat", "chmod", "pwd", "whoami"]):
         tool_name = "POSIX OS Filesystem Operations"
         why_needed = "Performs filesystem manipulation tasks such as creating, moving, reading, copying, or deleting files and folders."
         pro_tip = f"💡 Pro-Tip: You can run this command directly in your shell: `ls -lh`"
         
+    # Explainer Fatigue Mitigation: Do not show giant explainer for basic POSIX read-only commands
+    if cmd_lower.strip() in ["ls", "pwd", "whoami", "clear", "ls -l", "ls -la"]:
+        return
+
     lines = [
         f"🛠️  Tool Running: {C_W}{tool_name}{C_G}",
         f"🎯 Active Context: {why_needed}",
@@ -1458,7 +1462,8 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
     Nano models get a simplified, focused prompt to prevent hallucination.
     """
     base = (
-        "You are Kenbun, an AI assistant running inside a local terminal on the user's machine. "
+        f"You are Kenbun, an AI assistant running inside a local terminal on the user's machine. "
+        f"You are currently powered by the LLM: {llm_model}. Do not hallucinate your architecture or claim to be LLaMA unless that is your actual active model.\n"
         "Your job is to have a helpful conversation and assist with coding, system diagnosis, and design tasks.\n"
     )
     execute_block = (
@@ -1837,114 +1842,120 @@ def save_clean_exit_reflection(history):
         print(f"\n{C_Y}⚠️  Reflection Engine Warning: Failed to save session post-mortem: {e}{C_R}\n")
         return None
 
-def run_proposed_command(cmd):
-    """Executes a proposed system shell command safely with stdout/stderr capture."""
-    log_event("⚙️ Executing reflex shell command: {}".format(scrub_secrets(cmd)))
-    cols = get_columns()
-    print(f"\n{C_Y}⚙️  Executing: {C_C}{clean_wrap_text(scrub_secrets(cmd), cols - 15)}{C_R}")
-    
-    # Store directory list state before execution relative to current working directory
-    cwd = Path.cwd().resolve()
-    old_dirs = set()
-    
-    # Performance Optimization: Only scan files if command suggests folder operations
-    scan_keywords = ("mkdir", "clone", "git", "tar", "unzip", "cp", "mv", "touch", "rm")
-    should_scan = any(kw in cmd for kw in scan_keywords)
-    
-    if should_scan:
-        try:
-            for p in cwd.iterdir():
-                if p.is_dir() and not p.name.startswith(".") and p.name not in ("venv", "node_modules", "brain_health"):
-                    old_dirs.add(p)
-                    try:
-                        for sub in p.iterdir():
-                            if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ("venv", "node_modules", "brain_health"):
-                                old_dirs.add(sub)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
-    
-    import uuid
-    # Dynamically generate single-use UUID delimiter to prevent output injection or collision
-    pwd_delim = f"__PWD_DELIM_{uuid.uuid4().hex}__"
-    
-    try:
-        # Append directory tracking boundary to synchronize subshell changes back to Python process
-        tracked_cmd = f"({cmd}) && printf '{pwd_delim}' && pwd"
-        result = subprocess.run(
-            tracked_cmd,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=45
-        )
+class TerminalSession:
+    """Class-based execution context for isolated state tracking and secure command execution."""
+    def __init__(self):
+        self.cwd = Path.cwd().resolve()
+
+    def execute_command(self, cmd: str) -> tuple[int, str]:
+        """Executes a proposed system shell command safely with stdout/stderr capture."""
+        log_event("⚙️ Executing reflex shell command: {}".format(scrub_secrets(cmd)))
+        cols = get_columns()
+        print(f"\n{C_Y}⚙️  Executing: {C_C}{clean_wrap_text(scrub_secrets(cmd), cols - 15)}{C_R}")
         
-        output = ""
-        stdout = result.stdout or ""
-        stderr = result.stderr or ""
-        
-        # Parse active directory changes if the execution succeeded
-        if result.returncode == 0 and pwd_delim in stdout:
-            parts = stdout.split(pwd_delim, 1)
-            stdout = parts[0]
-            new_pwd = parts[1].strip()
-            if new_pwd:
-                try:
-                    resolved_path = Path(new_pwd).resolve()
-                    project_root = get_active_project_root().resolve()
-                    
-                    # Security Sandbox Guard: Ensure the target CWD is strictly relative to project root or user's home
-                    is_safe_boundary = False
-                    try:
-                        resolved_path.relative_to(project_root)
-                        is_safe_boundary = True
-                    except ValueError:
-                        try:
-                            resolved_path.relative_to(Path.home())
-                            is_safe_boundary = True
-                        except ValueError:
-                            pass
-                    
-                    if is_safe_boundary and resolved_path.exists() and resolved_path.is_dir():
-                        import threading
-                        if not hasattr(run_proposed_command, "_dir_lock"):
-                            run_proposed_command._dir_lock = threading.Lock()
-                            
-                        # Acquire process-wide thread lock to guarantee directory context shift is atomic (TOCTOU mitigation)
-                        with run_proposed_command._dir_lock:
-                            os.chdir(str(resolved_path))
-                            # Sync logical environment PWD to prevent child process desync (CPython fix)
-                            os.environ['PWD'] = str(resolved_path)
-                        log_event(f"Synchronized working directory context to safe path: {resolved_path}")
-                    else:
-                        log_event(f"Security Block: Refused context shift to unauthorized or non-existent path: {new_pwd}")
-                except Exception as e:
-                    log_event(f"Failed to synchronize working directory to {new_pwd}: {e}")
-                    
-        # Check if a new folder was created and prompt for memory migration relative to original_cwd!
+        # Store directory list state before execution relative to logical session directory
+        cwd = self.cwd
+        old_dirs = set()
+    
+        # Performance Optimization: Only scan files if command suggests folder operations
+        scan_keywords = ("mkdir", "clone", "git", "tar", "unzip", "cp", "mv", "touch", "rm")
+        should_scan = any(kw in cmd for kw in scan_keywords)
+    
         if should_scan:
-            check_and_migrate_project_memory(old_dirs, original_cwd=cwd)
+            try:
+                ignore_dirs = {"venv", ".venv", "node_modules", "brain_health", "__pycache__", "dist", "build"}
+                for p in cwd.iterdir():
+                    if p.is_dir() and not p.name.startswith(".") and p.name not in ignore_dirs:
+                        old_dirs.add(p)
+                        try:
+                            for sub in p.iterdir():
+                                if sub.is_dir() and not sub.name.startswith(".") and sub.name not in ignore_dirs:
+                                    old_dirs.add(sub)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+    
+        try:
+            import shlex
+            import shutil
         
-        if stdout:
-            output += stdout
-        if stderr:
-            output += f"\n[stderr]\n{stderr}"
-        if not output.strip():
-            output = "[Success: Command executed with zero stdout/stderr output]"
-        log_event("➔ Reflex command completed. Exit Code: {}".format(result.returncode))
-        return result.returncode, scrub_secrets(output)
-    except subprocess.TimeoutExpired as e:
-        log_event("❌ Reflex command failed with execution timeout")
-        stdout = e.stdout or ""
-        stderr = e.stderr or ""
-        output = f"[Timeout Error: The system command exceeded the 45-second execution limit]\n{stdout}"
-        if stderr:
-            output += f"\n[stderr]\n{stderr}"
-        return -1, scrub_secrets(output)
-    except Exception as e:
-        log_event("❌ Reflex command failed with start exception: {}".format(e))
-        return -1, f"[Execution Error: Failed to start command: {e}]"
+            try:
+                parts = shlex.split(cmd)
+            except ValueError as e:
+                return -1, f"[Execution Error: Failed to parse command safely: {e}]"
+            
+            if not parts:
+                return 0, "[Success: Empty command]"
+            
+            executable = parts[0]
+        
+            # Explicit handling for shell builtin 'cd'
+            if executable == "cd":
+                target = parts[1] if len(parts) > 1 else str(Path.home())
+                try:
+                    resolved_path = Path(target).resolve()
+                
+                    # Apply Security Sandbox Guard with strict prefix validation (Project root only)
+                    project_root = get_active_project_root().resolve()
+                    is_safe_boundary = resolved_path.is_relative_to(project_root)
+                
+                    if is_safe_boundary and resolved_path.exists() and resolved_path.is_dir():
+                        self.cwd = resolved_path
+                        log_event(f"Synchronized logical working directory context to safe path: {resolved_path}")
+                        return 0, "[Success: Directory changed]"
+                    else:
+                        return 1, f"Security Block: Refused context shift to unauthorized or non-existent path: {target}"
+                except Exception as e:
+                    return 1, f"cd error: {e}"
+        
+            # Absolute path resolution
+            abs_path = shutil.which(executable)
+            if not abs_path:
+                return 127, f"{executable}: command not found"
+            
+            parts[0] = abs_path
+        
+            result = subprocess.run(
+                parts,
+                shell=False,
+                cwd=str(self.cwd),
+                capture_output=True,
+                text=True,
+                timeout=45
+            )
+        
+            # Check if a new folder was created and prompt for memory migration relative to original_cwd!
+            if should_scan:
+                check_and_migrate_project_memory(old_dirs, original_cwd=cwd)
+        
+            output = ""
+            if result.stdout:
+                output += result.stdout
+            if result.stderr:
+                output += f"\n[stderr]\n{result.stderr}"
+            if not output.strip():
+                output = "[Success: Command executed with zero stdout/stderr output]"
+            log_event("➔ Reflex command completed. Exit Code: {}".format(result.returncode))
+            return result.returncode, scrub_secrets(output)
+        except subprocess.TimeoutExpired as e:
+            log_event("❌ Reflex command failed with execution timeout")
+            stdout = e.stdout or ""
+            stderr = e.stderr or ""
+            output = f"[Timeout Error: The system command exceeded the 45-second execution limit]\n{stdout}"
+            if stderr:
+                output += f"\n[stderr]\n{stderr}"
+            return -1, scrub_secrets(output)
+        except Exception as e:
+            log_event("❌ Reflex command failed with start exception: {}".format(e))
+            return -1, f"[Execution Error: Failed to start command: {e}]"
+
+# Global session instance for the main REPL thread
+_active_terminal_session = TerminalSession()
+
+def run_proposed_command(cmd: str) -> tuple[int, str]:
+    """Proxy function to maintain backwards compatibility with REPL call sites."""
+    return _active_terminal_session.execute_command(cmd)
 
 def install_shift_enter_alias() -> int:
     try:
