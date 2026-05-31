@@ -91,7 +91,7 @@ def build_cors_origins() -> List[str]:
 # NOTE: Using wildcard for local Docker dev. Tighten for production.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=build_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -168,12 +168,39 @@ async def get_config():
 @app.post("/api/v1/config")
 async def update_config(req: ConfigUpdateRequest):
     """Safely and atomically updates .env variables with concurrency locking, validation, and metadata preservation."""
-    # 1. Validate Input (Prevent Injection)
+    
+    # 1. Check authorized keys against Pydantic model fields allowlist
+    valid_fields = set(settings.model_fields.keys())
     for key, val in req.settings.items():
+        if key not in valid_fields:
+            raise HTTPException(status_code=400, detail="Unauthorized configuration key.")
         if "\n" in key or "\r" in key or "=" in key:
-            raise HTTPException(status_code=400, detail=f"Invalid characters in key: {key}")
+            raise HTTPException(status_code=400, detail="Invalid characters in key.")
         if "\n" in val or "\r" in val:
-            raise HTTPException(status_code=400, detail=f"Invalid characters in value for key: {key}")
+            raise HTTPException(status_code=400, detail="Invalid characters in value.")
+
+    # 2. Trigger Pydantic validation BEFORE writing to disk or modifying os.environ
+    try:
+        # Create a dict of current settings values
+        current_dict = {f: getattr(settings, f) for f in settings.model_fields}
+        # Overlay proposed updates (skipping masked values)
+        proposed_dict = {}
+        for f in settings.model_fields:
+            if f in req.settings:
+                if req.settings[f] != "********":
+                    proposed_dict[f] = req.settings[f]
+                else:
+                    proposed_dict[f] = current_dict[f]
+            else:
+                proposed_dict[f] = current_dict[f]
+
+        # Trigger Pydantic class validation by instantiating a temporary model
+        from tools.infrastructure.config import KenbunSettings
+        # Construct and validate
+        KenbunSettings(**proposed_dict)
+    except Exception as e:
+        logging.error(f"Config Validation Failure: {e}")
+        raise HTTPException(status_code=400, detail="Invalid configuration parameters or validation failure.")
 
     env_path = project_root / ".env"
     lock_path = env_path.with_suffix(".lock")
@@ -181,12 +208,18 @@ async def update_config(req: ConfigUpdateRequest):
     import fcntl
     import tempfile
     
-    # 2. Acquire exclusive cross-process lock
+    # 3. Acquire exclusive cross-process lock with secure resource cleanup
+    lock_fd = None
     try:
         lock_fd = open(lock_path, "w")
         fcntl.flock(lock_fd.fileno(), fcntl.LOCK_EX)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to acquire configuration lock: {e}")
+        if lock_fd:
+            try:
+                lock_fd.close()
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail="Configuration lock acquisition failed.")
         
     try:
         lines = []
@@ -243,7 +276,7 @@ async def update_config(req: ConfigUpdateRequest):
                     os.remove(temp_path)
                 except Exception:
                     pass
-            raise HTTPException(status_code=500, detail=f"Failed to write environment file atomically: {e}")
+            raise HTTPException(status_code=500, detail="Atomic write operation failed.")
             
     finally:
         # Release lock
@@ -253,7 +286,7 @@ async def update_config(req: ConfigUpdateRequest):
         except Exception:
             pass
             
-    # Hot-reload in current os.environ context
+    # 4. Hot-reload in current os.environ context (safe now since we verified validation passes)
     for key, val in req.settings.items():
         if val != "********" and val.strip() != "":
             os.environ[key] = val
@@ -266,6 +299,23 @@ async def update_config(req: ConfigUpdateRequest):
         except Exception as e:
             logging.error(f"Failed to hot-reload budget: {e}")
             
+    # Clear Pydantic's get_settings cache and hot-reload in-memory settings instance
+    try:
+        from tools.infrastructure.config import get_settings
+        get_settings.cache_clear()
+        
+        # Instantiate a fresh settings model (will match our validated test)
+        new_settings = get_settings()
+        
+        # Transfer validated fields safely to the global singleton settings instance
+        for field in settings.model_fields:
+            try:
+                setattr(settings, field, getattr(new_settings, field))
+            except Exception:
+                pass
+    except Exception as e:
+        logging.error(f"Failed to hot-reload settings dynamically: {e}")
+
     return {"status": "success", "message": "Configuration updated successfully."}
 
 

@@ -68,8 +68,12 @@ class TokenGovernor:
     def __init__(self, daily_budget: float = 2.00):
         from tools.infrastructure.config import settings
         self.daily_budget = daily_budget
-        self.log_file = settings.BRAIN_HEALTH_DIR / "usage_stats.json"
-        self.lock = threading.Lock()
+        
+        # Canonicalization and per-access path validation setup
+        self.log_file = (settings.BRAIN_HEALTH_DIR.resolve() / "usage_stats.json").resolve()
+        self._validate_path(self.log_file)
+            
+        self.lock = threading.RLock()  # Re-entrant lock to prevent deadlocks in nested calls
         self.rw_lock = ReaderWriterLock()
         self.pricing = {
             "gemini-3.5-flash": {"input": 0.10 / 1_000_000, "output": 0.40 / 1_000_000},
@@ -84,39 +88,56 @@ class TokenGovernor:
             "deepseek-reasoner": {"input": 0.55 / 1_000_000, "output": 2.19 / 1_000_000},
             "local": {"input": 0, "output": 0},
         }
+        self._cache = None  # Single atomic tuple for cross-thread consistency: (stats_dict, timestamp_float)
+        self._cache_ttl = 1.0  # 1-second cache TTL
         self._ensure_log_exists()
+
+    def _validate_path(self, path: Path):
+        """Validates that the path is strictly contained within settings.BRAIN_HEALTH_DIR."""
+        from tools.infrastructure.config import settings
+        base_dir = settings.BRAIN_HEALTH_DIR.resolve()
+        resolved_path = path.resolve()
+        # Verify strict logical containment (base_dir is a parent directory of path)
+        if base_dir not in resolved_path.parents and base_dir != resolved_path:
+            raise ValueError(f"Security Violation: Path traversal detected on path: {path}")
 
     def _get_stats(self) -> dict:
         """Returns the stats in a thread-safe and cross-process safe manner."""
-        try:
-            # 1. Try to read with a shared lock first (99.9% path)
-            with self._lock_file(shared=True, timeout=2.0):
-                stats = self._read_stats_file()
-                
-                # Check if rollover or recovery is required
-                if stats is None or self._is_rollover_needed(stats):
-                    need_write = True
-                else:
-                    need_write = False
-                    
-            if need_write:
-                # 2. Swap to exclusive lock for rollovers/initialization
+        # 1. Lock-free fast-path check using atomic tuple assignment (Double-Checked Locking)
+        cache = self._cache
+        if cache is not None:
+            stats, cache_time = cache
+            if (time.monotonic() - cache_time) < self._cache_ttl:
+                return stats
+
+        # 2. Synchronized slow-path check to avoid thundering herd across threads
+        with self.lock:
+            # Recheck cache inside lock
+            cache = self._cache
+            if cache is not None:
+                stats, cache_time = cache
+                if (time.monotonic() - cache_time) < self._cache_ttl:
+                    return stats
+
+            try:
+                # Use exclusive lock to perform read/write atomically and avoid lock upgrade anti-pattern
                 with self._lock_file(shared=False, timeout=2.0):
-                    # TOCTOU Protection: Re-read and re-evaluate inside the exclusive lock
                     stats = self._read_stats_file()
                     if stats is None or self._is_rollover_needed(stats):
-                        return self._get_stats_unlocked()
+                        res = self._get_stats_unlocked()
+                        self._cache = (res, time.monotonic())
+                        return res
+                    self._cache = (stats, time.monotonic())
                     return stats
-            else:
-                return stats
-        except (TimeoutError, Exception) as e:
-            # Fail-safe: return default stats to keep dashboard and server alive
-            print(f"⚠️ Failed to acquire lock or read stats, falling back to default stats: {e}", file=sys.stderr)
-            return self._get_default_stats()
+            except (TimeoutError, Exception) as e:
+                # Fail-Closed Secure Architecture: return budget-depleted stats on error to prevent unauthorized spends
+                print(f"⚠️ Fail-Closed: Telemetry lookup failed ({e}). Restricting token quota.", file=sys.stderr)
+                return self._get_fail_closed_stats()
 
     def _read_stats_file(self) -> Optional[dict]:
         """Reads the stats file without checking for rollovers or performing any writes."""
         try:
+            self._validate_path(self.log_file)
             with open(self.log_file, "r", encoding="utf-8") as f:
                 stats = json.load(f)
             if not isinstance(stats, dict):
@@ -155,6 +176,22 @@ class TokenGovernor:
             "daily_total": 0.0, 
             "monthly_total": 0.0,
             "total_spend": 0.0,
+            "daily_input_tokens": 0,
+            "daily_output_tokens": 0,
+            "monthly_input_tokens": 0,
+            "monthly_output_tokens": 0,
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "history": []
+        }
+
+    def _get_fail_closed_stats(self) -> dict:
+        """Returns stats indicating budget is fully depleted to fail securely."""
+        return {
+            "date": str(datetime.now(timezone.utc).date()), 
+            "daily_total": self.daily_budget, 
+            "monthly_total": self.daily_budget * 30,
+            "total_spend": self.daily_budget * 30,
             "daily_input_tokens": 0,
             "daily_output_tokens": 0,
             "monthly_input_tokens": 0,
@@ -282,20 +319,44 @@ class TokenGovernor:
         if modified:
             self._save_stats_unlocked(stats)
             
+        with self.lock:
+            self._cache = (stats, time.monotonic())
         return stats
 
     def _save_stats_unlocked(self, stats):
+        import tempfile
         parent_dir = self.log_file.parent
-        # Generate unique temporary file name in same directory to preserve atomic replacement and respect system umask
-        temp_path = parent_dir / f"usage_stats_tmp_{os.getpid()}_{threading.get_ident()}.json"
-        try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(stats, f, indent=2)
-                f.flush()
-                os.fsync(f.fileno())
+        parent_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Per-access path containment verification to defeat TOCTOU dynamic directory modifications
+        self._validate_path(self.log_file)
+        
+        # Instantiate NamedTemporaryFile (automatically defaults to 0600 permissions securely on POSIX)
+        with tempfile.NamedTemporaryFile(dir=parent_dir, suffix=".json", delete=False, mode="w", encoding="utf-8") as temp_file:
+            temp_path = Path(temp_file.name)
+            try:
+                json.dump(stats, temp_file, indent=2)
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
+            except Exception:
+                temp_file.close()
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
+                raise
             
-            # Atomically replace final file using native Pathlib objects
+        try:
+            # Atomically replace final file
             os.replace(temp_path, self.log_file)
+            
+            # Directory-level fsync to guarantee durability of rename
+            dir_fd = os.open(str(parent_dir), os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
         except Exception:
             if temp_path.exists():
                 try:
@@ -303,6 +364,9 @@ class TokenGovernor:
                 except OSError:
                     pass
             raise
+            
+        with self.lock:
+            self._cache = (stats, time.monotonic())
 
     def track_usage(self, model: str, input_tokens: int, output_tokens: int, task_id: str, batch: bool = False) -> float:
         """

@@ -1,9 +1,14 @@
 import os
 import json
 import hashlib
+import threading
+import logging
+import time
 import chromadb
 from pathlib import Path
 from tools.infrastructure.config import settings
+
+logger = logging.getLogger(__name__)
 
 # --- 1. CONFIGURATION ---
 PROJECT_ROOT = settings.PROJECT_ROOT
@@ -29,6 +34,10 @@ ALLOWED_EXTS = {
 
 _EMBEDDING_FUNCTION = None
 _CHROMA_CLIENT = None
+_CHROMA_LOCK = threading.Lock()
+_IS_FALLBACK = False
+_LAST_RECONNECT_ATTEMPT = 0.0
+_RECONNECT_INTERVAL = 30.0  # Throttled remote check interval to prevent connection stampede
 
 def get_embedding(text: str):
     """Generates 384-dimensional vector embedding using ChromaDB default ONNX model locally."""
@@ -85,40 +94,80 @@ def upsert_embedding(id: str, document: str, metadata: dict, collection_name: st
 
 # --- 2. CONNECTION ---
 def get_chroma_client():
-    global _CHROMA_CLIENT
-    if _CHROMA_CLIENT is not None:
-        return _CHROMA_CLIENT
+    global _CHROMA_CLIENT, _IS_FALLBACK, _LAST_RECONNECT_ATTEMPT
+    
+    current_time = time.time()
+    
+    # 1. Fast path: check if client is already initialized, healthy, and not in fallback state
+    client = _CHROMA_CLIENT
+    if client is not None and not _IS_FALLBACK:
+        try:
+            client.heartbeat()
+            return client
+        except Exception:
+            # Sanitized logging to prevent CWE-209 Information Disclosure
+            logger.warning("⚠️ [CHROMA] Heartbeat failed. Resetting client under synchronization lock...")
 
-    try:
-        # Fast socket ping to check reachability before calling HttpClient
-        import socket
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1.5)
-        result = sock.connect_ex((CHROMA_HOST, int(CHROMA_PORT)))
-        sock.close()
-        
-        if result != 0:
-            raise ConnectionError(f"Host {CHROMA_HOST}:{CHROMA_PORT} is unreachable.")
+    # 2. Slow path: synchronize to initialize or recreate the client thread-safely
+    with _CHROMA_LOCK:
+        # Double-check inside lock
+        client = _CHROMA_CLIENT
+        if client is not None and not _IS_FALLBACK:
+            try:
+                client.heartbeat()
+                return client
+            except Exception:
+                _CHROMA_CLIENT = None
 
-        print(f"📡 Sovereign Link: Connecting to Hivemind at {CHROMA_HOST}:{CHROMA_PORT}...")
-        import os
-        os.environ.pop("CHROMA_SERVER_HOST", None)
-        os.environ.pop("CHROMA_SERVER_PORT", None)
-        from chromadb.config import Settings
-        _CHROMA_CLIENT = chromadb.HttpClient(
-            host=CHROMA_HOST, 
-            port=CHROMA_PORT,
-            settings=Settings(
-                chroma_api_impl="chromadb.api.fastapi.FastAPI",
-                allow_reset=True
+        # Throttled recovery check: if we are in fallback, verify if reconnect interval has elapsed
+        if _IS_FALLBACK and (current_time - _LAST_RECONNECT_ATTEMPT) < _RECONNECT_INTERVAL:
+            if client is not None:
+                try:
+                    client.heartbeat()
+                    return client
+                except Exception:
+                    pass
+
+        # Try to connect/reconnect to the primary remote Hivemind database
+        _LAST_RECONNECT_ATTEMPT = current_time
+        try:
+            # Fast socket ping with context manager (CWE-404 compliance)
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(1.5)
+                result = sock.connect_ex((CHROMA_HOST, int(CHROMA_PORT)))
+            
+            if result != 0:
+                raise ConnectionError("ChromaDB port is unreachable.")
+    
+            logger.info("📡 Sovereign Link: Connecting to Hivemind...")
+            from chromadb.config import Settings
+            remote_client = chromadb.HttpClient(
+                host=CHROMA_HOST, 
+                port=CHROMA_PORT,
+                settings=Settings(
+                    chroma_api_impl="chromadb.api.fastapi.FastAPI",
+                    allow_reset=False  # Secure: Disable remote database resets (CWE-276 compliance)
+                )
             )
-        )
-        return _CHROMA_CLIENT
-    except Exception as e:
-        print(f"❌ [HIVE_CRITICAL] Hivemind is offline or unreachable: {e}")
-        db_path = str(settings.BRAIN_HEALTH_DIR / "chromadb_local")
-        print(f"⚠️ Falling back to Local Archive: {db_path}")
-        return chromadb.PersistentClient(path=db_path)
+            # Verify remote client is healthy
+            remote_client.heartbeat()
+            
+            if _IS_FALLBACK:
+                logger.info("✅ [CHROMA] Successfully recovered remote Hivemind connection. Upgrading from local backup.")
+                
+            _CHROMA_CLIENT = remote_client
+            _IS_FALLBACK = False
+            return _CHROMA_CLIENT
+        except Exception:
+            # Fallback block (CWE-209 compliance: sanitized logging)
+            if not _IS_FALLBACK or _CHROMA_CLIENT is None:
+                logger.error("❌ [HIVE_CRITICAL] Hivemind is offline or unreachable. Initializing local fallback...")
+                db_path = str(settings.BRAIN_HEALTH_DIR / "chromadb_local")
+                logger.warning(f"⚠️ Falling back to Local Archive: {db_path}")
+                _CHROMA_CLIENT = chromadb.PersistentClient(path=db_path)
+                _IS_FALLBACK = True
+            return _CHROMA_CLIENT
 
 def get_project_collection(category: str):
     """
