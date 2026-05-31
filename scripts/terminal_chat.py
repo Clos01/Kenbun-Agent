@@ -2012,10 +2012,12 @@ def main():
     
     active_key_failed = False
     active_provider = ""
-    if "gemini" in llm_url.lower() and is_gemini_key_failed:
+    is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
+    
+    if is_gemini_route and is_gemini_key_failed:
         active_key_failed = True
         active_provider = "Google Gemini"
-    elif "openai" in llm_url.lower() and is_openai_key_failed:
+    elif "openai" in llm_url.lower() and not is_gemini_route and is_openai_key_failed:
         active_key_failed = True
         active_provider = "OpenAI"
     elif "anthropic" in llm_url.lower() and is_anthropic_key_failed:
@@ -2650,12 +2652,14 @@ def main():
                     # Primary request parameters
                     endpoint = f"{llm_url}/chat/completions"
                     headers = {"Content-Type": "application/json"}
-                    if "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
+                    is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
+                    
+                    if "GEMINI_API_KEY" in env and is_gemini_route:
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+                    elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
                     elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
-                    elif "GEMINI_API_KEY" in env and "gemini" in llm_url.lower():
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
 
                     payload = {
                         "model": llm_model,
@@ -2712,12 +2716,14 @@ def main():
                     # Prepare headers and payload for fallback LLM
                     endpoint = f"{llm_url}/chat/completions"
                     headers = {"Content-Type": "application/json"}
-                    if "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
+                    is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
+                    
+                    if "GEMINI_API_KEY" in env and is_gemini_route:
+                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+                    elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
                     elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
-                    elif "GEMINI_API_KEY" in env and "gemini" in llm_url.lower():
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
 
                     payload = {
                         "model": llm_model,
