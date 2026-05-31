@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # 1. Standalone Vector Database (ChromaDB)
   chromadb:
@@ -56,13 +58,11 @@ services:
       - "${API_PORT:-8001}:8001"
       - "${MONITOR_PORT:-8002}:8002"
     volumes:
+      # WARNING: Ensure PROJECT_ROOT is set to an absolute path in production
       - ${PROJECT_ROOT:-.}:/app
       - brain_health:/app/core/brain_health
     env_file:
-      - path: .env
-        required: false
-      - path: stack.env
-        required: false
+      - .env
     environment:
       - PROJECT_ROOT=/app
       - CHROMA_HOST=chromadb
