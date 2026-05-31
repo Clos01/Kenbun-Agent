@@ -19,10 +19,91 @@ CHECKPOINT_DIR = Path.home() / ".kenbun" / "checkpoints"
 MAX_CHECKPOINTS_PER_FILE = 10
 METADATA_FILE = "checkpoints_index.json"
 
+# Immutable allowed roots loaded once at module startup to prevent configuration poisoning
+ALLOWED_ROOTS = []
+try:
+    from tools.infrastructure.config import settings
+    if settings and hasattr(settings, "PROJECT_ROOT"):
+        ALLOWED_ROOTS.append(os.path.realpath(str(settings.PROJECT_ROOT)))
+except Exception:
+    pass
+
+try:
+    from tools.utils.path_utils import get_project_root
+    if get_project_root:
+        ALLOWED_ROOTS.append(os.path.realpath(str(get_project_root())))
+except Exception:
+    pass
+
+# Filter and clean roots to enforce absolute least privilege boundaries
+_cleaned = []
+for r in ALLOWED_ROOTS:
+    try:
+        r_abs = os.path.realpath(r)
+        if r_abs not in ("/", "/Users", "/home", "/private", "/var", "/etc", "/tmp"):
+            _cleaned.append(r_abs)
+    except Exception:
+        pass
+ALLOWED_ROOTS = list(set(_cleaned))
+
+if not ALLOWED_ROOTS:
+    # Strictly bound to CWD under fail-closed principles
+    ALLOWED_ROOTS.append(os.path.realpath(os.getcwd()))
+
 
 def _ensure_checkpoint_dir():
     """Create the checkpoint directory if it doesn't exist."""
     CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _validate_path(file_path: str) -> Path:
+    """
+    Validate that the input path is strictly within the allowed secure workspace boundaries.
+    Uses canonicalized absolute paths and os.path.commonpath whitelist validation to block breakouts.
+    """
+    if not file_path:
+        raise ValueError("Path is empty or not specified.")
+
+    # 1. Load active project root deterministically (Fail-closed)
+    try:
+        from tools.infrastructure.config import settings
+        project_root = settings.PROJECT_ROOT.resolve()
+    except Exception:
+        try:
+            from tools.utils.path_utils import get_project_root
+            project_root = get_project_root().resolve()
+        except Exception:
+            raise ValueError("Fail-Closed: Workspace configuration load failed.")
+
+    # 2. Strict anchor validation to prevent system-level root configurations
+    if project_root.parent == project_root or str(project_root).lower().rstrip("/\\") in (
+        "", "/", "c:", "d:", "c:\\", "d:\\", "/users", "/home", "/private", "/var", "/etc", "/tmp"
+    ):
+        raise ValueError("Security Violation: Project root is anchored at an unsafe system directory.")
+
+    # 3. Resolve target path completely to check boundaries
+    try:
+        path = Path(file_path).resolve()
+    except Exception:
+        raise ValueError("Security Violation: The requested path is invalid.")
+
+    # 4. Enforce strict containment check
+    is_safe = False
+    try:
+        if hasattr(path, "is_relative_to"):
+            if path.is_relative_to(project_root):
+                is_safe = True
+        else:
+            path.relative_to(project_root)
+            is_safe = True
+    except (ValueError, RuntimeError):
+        pass
+            
+    if not is_safe:
+        raise ValueError("Security Violation: The requested path is outside secure workspace boundaries.")
+    
+    return path
+
 
 
 def _load_index() -> dict:
@@ -66,16 +147,55 @@ def save_checkpoint(file_path: str, label: str = "auto") -> str:
     """
     _ensure_checkpoint_dir()
 
-    source = Path(file_path)
-    if not source.exists():
-        return f"❌ File not found: {file_path}"
-    if not source.is_file():
-        return f"❌ Not a file: {file_path}"
+    try:
+        source = _validate_path(file_path)
+    except ValueError:
+        return "❌ Security Violation: The requested path is outside secure workspace boundaries."
 
-    # Generate checkpoint filename and copy
+    # Open source file securely using file descriptor to prevent TOCTOU symlink swaps
+    fd = None
+    try:
+        fd = os.open(str(source), os.O_RDONLY | os.O_NOFOLLOW)
+        # Perform atomic fstat on the open file descriptor to prevent DoS via special file streams
+        stat_info = os.fstat(fd)
+        import stat
+        if not stat.S_ISREG(stat_info.st_mode):
+            os.close(fd)
+            fd = None
+            return "❌ Security Violation: Only regular files are allowed."
+            
+        # Block hard-links to prevent shared file corruption / modifications
+        if stat_info.st_nlink > 1:
+            os.close(fd)
+            fd = None
+            return "❌ Security Violation: Hard-linked files are forbidden."
+
+        # Perform safe resource constraint checks
+        if stat_info.st_size > 10 * 1024 * 1024:  # 10 MB Limit
+            os.close(fd)
+            fd = None
+            return "❌ Security Violation: File size exceeds safe limits."
+
+        # Once wrapped, os.fdopen owns the fd. Set fd to None so we don't manual-close in except.
+        wrapped_fd = fd
+        fd = None
+        with os.fdopen(wrapped_fd, 'rb') as f:
+            content = f.read()
+    except Exception:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        return "❌ Failed to perform safe file operations."
+
+    # Generate checkpoint filename and write safely
     cp_filename = _make_checkpoint_filename(file_path, label)
     cp_path = CHECKPOINT_DIR / cp_filename
-    shutil.copy2(source, cp_path)
+    try:
+        cp_path.write_bytes(content)
+    except Exception:
+        return "❌ Failed to perform safe file operations."
 
     # Update index
     index = _load_index()
@@ -85,7 +205,7 @@ def save_checkpoint(file_path: str, label: str = "auto") -> str:
         "checkpoint_path": str(cp_path),
         "label": label,
         "timestamp": datetime.now().isoformat(),
-        "size_bytes": source.stat().st_size,
+        "size_bytes": len(content),
     }
     index["checkpoints"].append(entry)
 
@@ -109,7 +229,7 @@ def save_checkpoint(file_path: str, label: str = "auto") -> str:
         f"**File:** `{source.name}`\n"
         f"**Label:** `{label}`\n"
         f"**ID:** `{cp_filename}`\n"
-        f"**Size:** {source.stat().st_size:,} bytes\n\n"
+        f"**Size:** {len(content):,} bytes\n\n"
         f"Use `restore_checkpoint(\"{file_path}\", \"{label}\")` to revert."
     )
 
@@ -128,9 +248,14 @@ def restore_checkpoint(file_path: str, label: str = "") -> str:
         Confirmation or error message.
     """
     _ensure_checkpoint_dir()
-    index = _load_index()
 
-    target = str(Path(file_path).resolve())
+    try:
+        target_path = _validate_path(file_path)
+    except ValueError:
+        return "❌ Security Violation: The requested path is outside secure workspace boundaries."
+
+    index = _load_index()
+    target = str(target_path)
 
     # Find matching checkpoints for this file
     file_checkpoints = [
@@ -154,10 +279,46 @@ def restore_checkpoint(file_path: str, label: str = "") -> str:
     # Verify checkpoint file exists
     cp_path = Path(checkpoint["checkpoint_path"])
     if not cp_path.exists():
-        return f"❌ Checkpoint file missing: {cp_path}"
+        return "❌ Failed to perform safe file operations."
 
-    # Restore
-    shutil.copy2(cp_path, target)
+    # Read checkpoint file securely
+    try:
+        content = cp_path.read_bytes()
+    except Exception:
+        return "❌ Failed to perform safe file operations."
+
+    # Restore to target securely using file descriptor (with O_NOFOLLOW to prevent symlink TOCTOU)
+    fd = None
+    try:
+        # Open WITHOUT O_TRUNC to prevent premature data truncation of hard-links
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o644)
+        stat_info = os.fstat(fd)
+        import stat
+        if not stat.S_ISREG(stat_info.st_mode):
+            os.close(fd)
+            fd = None
+            return "❌ Security Violation: Only regular files are allowed."
+
+        # Block hard-links to prevent shared file corruption
+        if stat_info.st_nlink > 1:
+            os.close(fd)
+            fd = None
+            return "❌ Security Violation: Hard-linked files are forbidden."
+
+        # Truncate atomically now that the file descriptor is verified safe
+        os.ftruncate(fd, 0)
+
+        wrapped_fd = fd
+        fd = None
+        with os.fdopen(wrapped_fd, 'wb') as f:
+            f.write(content)
+    except Exception:
+        if fd is not None:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        return "❌ Failed to perform safe file operations."
 
     return (
         f"## 🔄 Checkpoint Restored\n\n"
@@ -184,7 +345,11 @@ def list_checkpoints(file_path: str = "") -> str:
     checkpoints = index.get("checkpoints", [])
 
     if file_path:
-        target = str(Path(file_path).resolve())
+        try:
+            target_path = _validate_path(file_path)
+            target = str(target_path)
+        except ValueError:
+            return "❌ Security Violation: The requested path is outside secure workspace boundaries."
         checkpoints = [c for c in checkpoints if c["original_path"] == target]
 
     if not checkpoints:

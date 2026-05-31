@@ -1035,12 +1035,60 @@ async def delete_chat_session(session_id: str):
         return JSONResponse(status_code=404, content={"error": f"Session {session_id} not found"})
     return {"status": "success", "message": f"Session {session_id} deleted"}
 
+def execute_cli_command(command: str) -> str:
+    """
+    Safely executes a whitelisted CLI command on the user's hardware.
+    Protected by the absolute regex whitelist and YOLO filters of terminal_chat.py.
+    """
+    import sys
+    import subprocess
+    from pathlib import Path
+    from tools.infrastructure.config import settings
+
+    try:
+        # Load scripts directory
+        scripts_dir = Path("/app/scripts")
+        if not scripts_dir.exists():
+            scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
+            
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+            
+        from terminal_chat import is_yolo_safe
+    except Exception as e:
+        return f"❌ Internal Error: Failed to load CLI security engine: {e}"
+        
+    # Check security boundaries
+    if not is_yolo_safe(command):
+        return "❌ Security Violation: Command is blocked by yolo sandboxing rules."
+        
+    # Execute safely
+    try:
+        res = subprocess.run(
+            command,
+            shell=True,
+            capture_output=True,
+            text=True,
+            cwd=str(settings.PROJECT_ROOT),
+            timeout=30.0
+        )
+        output = res.stdout
+        if res.stderr:
+            output += f"\n{res.stderr}"
+        if not output.strip():
+            output = f"Command completed with exit code {res.returncode}."
+        return f"```\n{output}\n```"
+    except subprocess.TimeoutExpired:
+        return "❌ Error: Command execution timed out after 30 seconds."
+    except Exception as e:
+        return f"❌ Error: Command execution failed: {e}"
+
+
 @app.post("/api/v1/chat/sessions/{session_id}/message")
 async def post_message_to_session(session_id: str, req: ChatSessionMessageRequest):
     """Sends a message within an existing chat session and queries the AI using history context."""
     from tools.utils import chat_history_manager
     from tools.utils.llm_router import call_llm_gateway
-    from tools.memory.chroma_db_connect import get_project_collection
     
     # 1. Verify session exists
     session = chat_history_manager.get_session(session_id)
@@ -1050,22 +1098,19 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
     # 2. Append user message to history
     user_msg = chat_history_manager.add_message_to_session(session_id, "user", req.message)
     
-    # 3. Fast Command Hooks (Command Parsing for System 1 & 2 Diagnostics)
-    msg_lower = req.message.lower()
-    if "status" in msg_lower or "health" in msg_lower:
-        collection = get_project_collection("code")
-        vector_count = len(collection.get()["ids"]) if collection else 0
-        response_text = f"Swarm health is OPTIMAL. {vector_count} semantic vectors are mapped in ChromaDB. We are ready to scale."
-    elif "audit" in msg_lower or "security" in msg_lower:
-        response_text = "The System 2 Supervisor Agent is actively monitoring AST safety. All endpoints are currently hardened. No SQL injection vulnerabilities or unauthorized access points detected."
+    # 3. Direct /run Command Hook (Sovereign Command Execution on Hardware)
+    msg_strip = req.message.strip()
+    if msg_strip.startswith("/run ") or msg_strip.startswith("run: "):
+        command = msg_strip[5:] if msg_strip.startswith("/run ") else msg_strip[4:]
+        response_text = await run_in_threadpool(execute_cli_command, command)
     else:
-        # 4. Compile full conversational context from history
+        # 4. Compile full conversational context from history (No static templates)
         system_prompt = (
             "You are Kenbun, a Sovereign Vector interface for the user's AST codebase memory. "
             "Be extremely concise, highly analytical, and use terminal-like formatting when appropriate. "
-            "IMPORTANT: If the user requests a code fix or says 'Fix X' or 'Build Y' that requires complex changes, "
-            "you should recommend launching the full on-rails Swarm Orchestrator by saying: "
-            "'PROPOSAL: [Spawn Swarm Orchestration] to analyze and implement this securely.'\n\n"
+            "IMPORTANT: If the user requests a code change or wants you to execute a CLI command on their hardware, "
+            "inform them they can prefix their command with '/run <command>' directly in this chat! "
+            "For example: '/run ls -la' or '/run git status'.\n\n"
             "Here is the history of our session for context:"
         )
         
@@ -1156,21 +1201,21 @@ async def chat_with_kenbun(req: ChatRequest):
     """
     try:
         from tools.utils.llm_router import call_llm_gateway
-        from tools.memory.chroma_db_connect import get_project_collection
-        import os
         
-        msg_lower = req.message.lower()
+        msg_strip = req.message.strip()
         
-        # 1. Local System 1/2 Command Parsing (Status / Health checks)
-        if "status" in msg_lower or "health" in msg_lower:
-            collection = get_project_collection("code")
-            vector_count = len(collection.get()["ids"]) if collection else 0
-            response_text = f"Swarm health is OPTIMAL. {vector_count} semantic vectors are mapped in ChromaDB. We are ready to scale."
-        elif "audit" in msg_lower or "security" in msg_lower:
-            response_text = "The System 2 Supervisor Agent is actively monitoring AST safety. All endpoints are currently hardened. No SQL injection vulnerabilities or unauthorized access points detected."
+        # 1. Direct /run Command Hook (Sovereign Command Execution on Hardware)
+        if msg_strip.startswith("/run ") or msg_strip.startswith("run: "):
+            command = msg_strip[5:] if msg_strip.startswith("/run ") else msg_strip[4:]
+            response_text = await run_in_threadpool(execute_cli_command, command)
         else:
-            # 2. Functional Chat Pass-Through to the LLM
-            system_prompt = "You are Kenbun, a Sovereign Vector interface for the user's AST codebase memory. Be extremely concise, highly analytical, and use terminal-like formatting when appropriate."
+            # 2. Functional Chat Pass-Through to the LLM (No static templates)
+            system_prompt = (
+                "You are Kenbun, a Sovereign Vector interface for the user's AST codebase memory. "
+                "Be extremely concise, highly analytical, and use terminal-like formatting when appropriate. "
+                "IMPORTANT: If the user requests a code change or wants you to execute a CLI command on their hardware, "
+                "inform them they can prefix their command with '/run <command>' directly in this chat!"
+            )
             
             response_text = await run_in_threadpool(
                 call_llm_gateway,

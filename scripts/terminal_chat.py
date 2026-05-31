@@ -18,6 +18,7 @@ import tempfile
 import signal
 import unicodedata
 from pathlib import Path
+from typing import Optional
 
 # prompt_toolkit for robust terminal input
 try:
@@ -305,9 +306,147 @@ YOLO_BLOCKLIST = [
 ]
 
 def is_yolo_safe(cmd: str) -> bool:
-    """Returns False if the command matches the nuclear blocklist."""
+    """
+    Returns False if the command matches any blocked structural pattern.
+    Uses shlex parsing to inspect command parts securely and prevent blocklist bypasses.
+    Fail-closed: returns False if parsing or safety checks fail.
+    """
+    import shlex
+    import re
     cmd_lower = cmd.lower().strip()
-    return not any(danger in cmd_lower for danger in YOLO_BLOCKLIST)
+    
+    # 1. Strict Character Whitelist (Default Deny on metacharacters, braces, backslashes, etc.)
+    if not re.match(r"^[a-zA-Z0-9_\-\.\/ \'\"\+\=\:]+$", cmd):
+        return False
+
+    # 2. Prevent Command Chaining, background execution, subshell metacharacters,
+    # redirection, globbing, brace expansion, parentheses, and backslash obfuscation (Fail-closed structural block).
+    forbidden_metachars = {";", "&", "|", "`", "$", "\n", "\r", ">", "<", "*", "?", "\\", "{", "}", "(", ")"}
+    if any(char in cmd for char in forbidden_metachars):
+        return False
+
+    # 3. Parse command using shlex to analyze structure
+    try:
+        parts = shlex.split(cmd)
+    except ValueError:
+        # If shell parsing fails (e.g. due to unclosed quotes), fail-closed
+        return False
+
+    if not parts:
+        return True
+
+    # 4. Strictly block sudo execution in YOLO mode to prevent privilege escalation
+    if "sudo" in cmd_lower or "sudo" in parts:
+        return False
+
+    executable = parts[0].lower()
+    args = [arg.lower() for arg in parts[1:]]
+    executable_base = Path(executable).name
+
+    # 5. Strict Positional Allowlist for YOLO executables (Default Deny)
+    # Living off the land binaries like python, node, sh, bash are strictly forbidden.
+    ALLOWED_EXECUTABLES = {"git", "ls", "npm"}
+    if executable_base not in ALLOWED_EXECUTABLES:
+        return False
+
+    # 6. Strict Argument Injection Prevention (Default Deny on dangerous flags)
+    if executable_base == "git":
+        for arg in args:
+            if "--upload-pack" in arg or "--exec-path" in arg or "--config" in arg or "!" in arg:
+                return False
+
+    if executable_base == "npm":
+        for arg in args:
+            # Block arbitrary npm script execution and installation
+            if arg in ("run", "exec", "install", "i", "link", "run-script", "publish"):
+                return False
+
+    # Load active project root deterministically (Fail-closed)
+    try:
+        from tools.infrastructure.config import settings
+        project_root = settings.PROJECT_ROOT.resolve()
+    except Exception:
+        try:
+            from tools.utils.path_utils import get_project_root
+            project_root = get_project_root().resolve()
+        except Exception:
+            return False
+
+    if project_root.parent == project_root or str(project_root).lower().rstrip("/\\") in (
+        "", "/", "c:", "d:", "c:\\", "d:\\", "/users", "/home", "/private", "/var", "/etc", "/tmp"
+    ):
+        return False
+
+    def is_path_in_workspace(path_str: str) -> bool:
+        try:
+            target_path = Path(path_str).expanduser().resolve()
+            # Enforce symlink check on components to prevent TOCTOU symlink swaps
+            current = target_path
+            while current != current.parent:
+                if current.is_symlink():
+                    return False
+                current = current.parent
+                
+            if hasattr(target_path, "is_relative_to"):
+                return target_path.is_relative_to(project_root)
+            else:
+                target_path.relative_to(project_root)
+                return True
+        except Exception:
+            # Resolution failed or is outside -> Fail-closed
+            return False
+
+    # Check 1: Recursive/Forced deletion target checks (Fail-closed)
+    if executable_base == "rm":
+        has_recursive = any("-" in arg and "r" in arg for arg in args)
+        has_no_preserve = any("--no-preserve-root" in arg for arg in args)
+        
+        if has_no_preserve:
+            return False
+            
+        if has_recursive or any("rf" in arg or "fr" in arg for arg in args):
+            # Target check
+            targets = [arg for arg in args if not arg.startswith("-")]
+            if not targets:
+                return False
+                
+            for target in targets:
+                if not is_path_in_workspace(target):
+                    return False
+                
+                # Check for sensitive top-level folders explicitly
+                sensitive_paths = {"/", "/*", "~", os.path.expanduser("~").lower(), "/etc", "/var", "/usr", "/bin", "/sbin", "/boot", "/lib", "/system"}
+                clean_target = target.strip("\"'").rstrip("/")
+                if clean_target in sensitive_paths:
+                    return False
+                    
+                try:
+                    resolved_target = Path(clean_target).expanduser().resolve()
+                    if str(resolved_target) in sensitive_paths or str(resolved_target) in ("/", os.path.expanduser("~"), str(Path.home())):
+                        return False
+                except Exception:
+                    return False
+
+    # Check 2: Block recursive chmod/chown on sensitive root directories or outside workspace
+    if executable_base in ("chmod", "chown"):
+        has_recursive = any("-" in arg and "r" in arg for arg in args)
+        if has_recursive:
+            targets = [arg for arg in args if not arg.startswith("-")]
+            if not targets:
+                return False
+            for target in targets:
+                if not is_path_in_workspace(target):
+                    return False
+
+    # Fallback legacy check
+    cmd_condensed = "".join(cmd_lower.split())
+    for danger in YOLO_BLOCKLIST:
+        danger_condensed = "".join(danger.split()).lower()
+        if danger_condensed in cmd_condensed:
+            return False
+
+    return True
+
 
 def is_command_destructive(cmd: str) -> tuple[bool, str]:
     """
@@ -919,6 +1058,172 @@ def get_design_suggestions(query):
         except Exception:
             pass
     return None
+
+def read_secure_file(path_obj: Path, base_dir: Path, max_bytes: int = 51200) -> Optional[str]:
+    """
+    Securely reads a file inside base_dir, preventing TOCTOU, intermediate/leaf symlinks,
+    and path traversal.
+    """
+    # Verify required flags are present on the host OS
+    if not hasattr(os, "O_NOFOLLOW"):
+        raise RuntimeError("os.O_NOFOLLOW is required for secure file operations.")
+    
+    from contextlib import ExitStack
+    stack = ExitStack()
+    try:
+        # Resolve the base directory to get its canonical absolute path
+        resolved_base = base_dir.resolve(strict=True)
+        
+        # Purely lexical path validation of the target path to prevent path traversal
+        # We do not call .resolve() on path_obj to eliminate the TOCTOU window between
+        # resolution and step-by-step opening.
+        target_abs = Path(os.path.normpath(resolved_base / path_obj))
+        
+        # Verify boundary condition lexically
+        if not target_abs.is_relative_to(resolved_base):
+            raise ValueError(f"Path traversal detected: {path_obj} is outside {base_dir}")
+            
+        rel_path = target_abs.relative_to(resolved_base)
+        parts = rel_path.parts
+        
+        # 1. Open the base directory first (O_DIRECTORY blocks regular files)
+        # We include O_NOFOLLOW to ensure resolved_base itself wasn't replaced by a symlink.
+        flags_base = os.O_RDONLY | os.O_NOFOLLOW
+        if hasattr(os, "O_DIRECTORY"):
+            flags_base |= os.O_DIRECTORY
+        if hasattr(os, "O_CLOEXEC"):
+            flags_base |= os.O_CLOEXEC
+            
+        current_dir_fd = os.open(str(resolved_base), flags_base)
+        stack.callback(os.close, current_dir_fd)
+        
+        # 2. Traverse down each component step-by-step
+        file_fd = -1
+        for idx, part in enumerate(parts):
+            # Strict validation: block lexical directory traversal tokens
+            if part in ("..", ".", "/"):
+                raise ValueError("Invalid path component in secure file read.")
+                
+            is_last = (idx == len(parts) - 1)
+            
+            # Formulate open flags. O_NOFOLLOW is mandatory at every step.
+            flags = os.O_RDONLY | os.O_NOFOLLOW
+            if hasattr(os, "O_CLOEXEC"):
+                flags |= os.O_CLOEXEC
+                
+            if not is_last:
+                if hasattr(os, "O_DIRECTORY"):
+                    flags |= os.O_DIRECTORY
+                # Open the directory component relative to current_dir_fd
+                next_fd = os.open(part, flags, dir_fd=current_dir_fd)
+                stack.callback(os.close, next_fd)
+                current_dir_fd = next_fd
+            else:
+                # Open leaf file relative to current_dir_fd
+                file_fd = os.open(part, flags, dir_fd=current_dir_fd)
+                stack.callback(os.close, file_fd)
+                
+        if file_fd == -1:
+            raise FileNotFoundError("Target leaf file not opened.")
+            
+        # 3. Verify stats on the open descriptor (prevents metadata TOCTOU)
+        stat_info = os.fstat(file_fd)
+        import stat
+        if not stat.S_ISREG(stat_info.st_mode):
+            raise ValueError("Target path is not a regular file.")
+        if stat_info.st_size > max_bytes:
+            raise ValueError("Target file exceeds maximum allowed size.")
+            
+        # 4. Read from file descriptor
+        raw_bytes = os.read(file_fd, max_bytes)
+        return raw_bytes.decode("utf-8")
+        
+    except (FileNotFoundError, PermissionError, ValueError) as e:
+        log_event(f"ℹ️ Secure file access exception (handled): {e}")
+        return None
+    except UnicodeDecodeError as e:
+        log_event(f"⚠️ Secure file decode error: {e}")
+        return None
+    except Exception as e:
+        log_event(f"🚨 Unhandled secure file reader error: {e}")
+        return None
+    finally:
+        stack.close()
+
+def get_harvested_tools():
+    """Dynamically sweeps the core directory and returns all registered sovereign tools."""
+    try:
+        project_root = get_active_project_root()
+        core_path = project_root / "core"
+        if not core_path.exists() or not (core_path / "tools").exists():
+            return {}
+            
+        # We DO NOT dynamically inject into sys.path to prevent module hijacking.
+        # PYTHONPATH is verified at boot time.
+        from tools.harvester import harvest_and_register_tools
+        from tools.registry import registry
+        
+        harvest_and_register_tools(core_path / "tools")
+        return registry.get_all_tools()
+    except Exception as e:
+        log_event(f"⚠️ Tool Harvester warning: {e}")
+        return {}
+
+def get_harvested_skills():
+    """Scans and parses frontmatter from all design and template SKILL.md files."""
+    skills = {}
+    try:
+        project_root = get_active_project_root()
+        skills_dir = project_root / "core" / "tools" / "skills"
+            
+        if skills_dir.exists() and skills_dir.is_dir():
+            # Resource constraint: limit folder count to prevent Denial of Service (DoS)
+            folders = [p for p in skills_dir.iterdir() if p.is_dir()]
+            if len(folders) > 100:
+                folders = folders[:100]
+                
+            for p in folders:
+                folder_name = p.name
+                skill_md_path = p / "SKILL.md"
+                content = read_secure_file(skill_md_path, skills_dir)
+                if not content:
+                    continue
+                    
+                yaml_meta = {}
+                desc = ""
+                triggers = []
+                
+                match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+                if match:
+                    yaml_str = match.group(1)
+                    # Hardened secure YAML parsing utilizing PyYAML's SafeLoader
+                    try:
+                        import yaml
+                        yaml_meta = yaml.load(yaml_str, Loader=yaml.SafeLoader) or {}
+                    except Exception:
+                        pass
+                        
+                name = yaml_meta.get("name", folder_name) if isinstance(yaml_meta, dict) else folder_name
+                if isinstance(yaml_meta, dict):
+                    desc = yaml_meta.get("description", "")
+                    triggers = yaml_meta.get("triggers", [])
+                    if not isinstance(triggers, list):
+                        triggers = []
+                
+                if not desc:
+                    m_hdr = re.search(r"^#\s+(.*?)$", content, re.MULTILINE)
+                    desc = m_hdr.group(1).strip() if m_hdr else "No description provided."
+                    
+                skills[name] = {
+                    "name": name,
+                    "path": str(p),
+                    "description": desc,
+                    "triggers": triggers,
+                    "content": content
+                }
+    except Exception as e:
+        log_event(f"⚠️ Skills Harvester warning: {e}")
+    return skills
 
 def get_active_project_root():
     """Robust helper matching config.py path discovery."""
@@ -1739,7 +2044,7 @@ def main():
     banner_lines = [
         f"  🌸 Model:   {C_W}{llm_model}{C_R}  [{tier_label}]",
         f"  ⚡ Gateway: {C_W}{llm_url}{C_R}",
-        f"  💡 /help  /exit  /reset  /system  /spawn  /agents  /recall",
+        f"  💡 Commands: {C_G}/tools{C_R} (inspect tools) | {C_G}/skills{C_R} (design blueprints) | {C_G}/run{C_R} (execute) | {C_G}/help{C_R}",
     ]
     draw_box(banner_lines, title=f"🌸 {C_Y}COGNITIVE AGENT SHELL", border_color=C_G, text_color=C_G)
     print()
@@ -1749,6 +2054,18 @@ def main():
     probe_results = run_startup_probe(llm_url, llm_model, chroma_host, chroma_port)
     print(" " * 40, end="\r")  # clear probe line
     print_health_card(probe_results)
+    print()
+
+    # 🌸 Quick-Start Guide for Sovereign CLI Actions
+    guide_lines = [
+        f"  • {C_C}/tools{C_R}           ➟ List all harvested sovereign tools grouped by category",
+        f"  • {C_C}/tools <tool>{C_R}    ➟ Inspect parameters, signature, and async requirements",
+        f"  • {C_C}/skills{C_R}          ➟ Discover design and template skills from the catalog",
+        f"  • {C_C}/run <tool> args{C_R} ➟ Direct live parameter execution with sync/async auto-safety",
+        "",
+        f"  {C_D}Example:{C_R} {C_G}/run search_hivemind_concepts query=\"lemon\"{C_R}"
+    ]
+    draw_box(guide_lines, title="🌸 SOVEREIGN CLI QUICK-START GUIDE", border_color=C_Y, text_color=C_W)
     print()
 
     log_event("🌸 Termchat Session Started. Model: {}, URL: {}, Tier: {}".format(llm_model, llm_url, model_tier))
@@ -1930,6 +2247,9 @@ def main():
                                 f"  {C_BOLD}{C_C}/recall <query>{C_R}{C_D}    ➟ Search Hivemind memories{C_R}",
                                 f"  {C_BOLD}{C_C}/remember t=c{C_R}{C_D}      ➟ Save a note to Hivemind{C_R}",
                                 f"  {C_BOLD}{C_C}/search <topic>{C_R}{C_D}    ➟ Search UI/UX design database{C_R}",
+                                f"  {C_BOLD}{C_C}/tools [name]{C_R}{C_D}     ➟ List or inspect harvested sovereign tools{C_R}",
+                                f"  {C_BOLD}{C_C}/skills [name]{C_R}{C_D}    ➟ List or inspect design & template skills{C_R}",
+                                f"  {C_BOLD}{C_C}/run <tool> [args]{C_R}{C_D}  ➟ Live REPL execution of a harvested tool{C_R}",
                                 f"  {C_BOLD}{C_RED}/yolo{C_R}{C_D}              ➟ Toggle YOLO mode (auto-approve commands){C_R}",
                             ]
                             yolo_status = f"{C_RED}⚡ YOLO MODE: ON  — Commands execute automatically!{C_R}" if YOLO_MODE else f"{C_D}  YOLO MODE: off — Commands need your approval{C_R}"
@@ -2058,6 +2378,142 @@ def main():
                                         
                                 draw_box(box_lines, title=f"🌸 HIVE RECALL Results ({len(results)})", border_color=C_P, text_color=C_G)
                             print()
+                            continue
+                            
+                        elif cmd == "/tools":
+                            tools = get_harvested_tools()
+                            if len(cmd_parts) < 2:
+                                if not tools:
+                                    print(f"\n{C_D}  No harvested sovereign tools active.{C_R}\n")
+                                else:
+                                    by_cat = {}
+                                    for t_name, entry in tools.items():
+                                        cat = entry.category
+                                        if cat not in by_cat:
+                                            by_cat[cat] = []
+                                        by_cat[cat].append(entry)
+                                    
+                                    tool_lines = []
+                                    for cat, entries in sorted(by_cat.items()):
+                                        tool_lines.append(f"{C_Y}Category: {cat}{C_R}")
+                                        for entry in sorted(entries, key=lambda x: x.name):
+                                            desc_line = entry.description.splitlines()[0][:60] if entry.description else "No description."
+                                            tool_lines.append(f"  • {C_G}{entry.name:<25}{C_R}{C_D}➟ {desc_line}{C_R}")
+                                        tool_lines.append("")
+                                    if tool_lines and tool_lines[-1] == "":
+                                        tool_lines.pop()
+                                    
+                                    draw_box(tool_lines, title=f"🌸 HARVESTED SOVEREIGN TOOLS ({len(tools)})", border_color=C_P, text_color=C_W)
+                                    print(f"\n  Use {C_C}/tools <tool_name>{C_R} for details or {C_C}/run <tool_name> arg=val{C_R} to execute.\n")
+                            else:
+                                target_tool = cmd_parts[1].strip()
+                                entry = tools.get(target_tool)
+                                if not entry:
+                                    print(f"\n{C_Y}❌ Tool '{target_tool}' not found.{C_R}\n")
+                                else:
+                                    import inspect
+                                    sig = inspect.signature(entry.handler)
+                                    details = [
+                                        f"{C_Y}Name:{C_R}        {C_G}{entry.name}{C_R}",
+                                        f"{C_Y}Category:{C_R}    {entry.category}",
+                                        f"{C_Y}Signature:{C_R}   {entry.name}{sig}",
+                                        f"{C_Y}Async:{C_R}       {entry.is_async}",
+                                        f"{C_Y}Required Env:{C_R} {', '.join(entry.requires_env) if entry.requires_env else 'None'}",
+                                        "---",
+                                        f"{C_Y}Description:{C_R}"
+                                    ]
+                                    for line in entry.description.splitlines():
+                                        details.append(f"  {line}")
+                                    draw_box(details, title=f"🌸 TOOL: {entry.name.upper()}", border_color=C_G, text_color=C_W)
+                                    print()
+                            continue
+
+                        elif cmd == "/skills":
+                            skills = get_harvested_skills()
+                            if len(cmd_parts) < 2:
+                                if not skills:
+                                    print(f"\n{C_D}  No harvested template skills active.{C_R}\n")
+                                else:
+                                    skill_lines = []
+                                    for s_name, s_data in sorted(skills.items()):
+                                        desc_line = s_data["description"].splitlines()[0][:60]
+                                        skill_lines.append(f"  • {C_G}{s_name:<25}{C_R}{C_D}➟ {desc_line}{C_R}")
+                                    draw_box(skill_lines, title=f"🌸 ACTIVE DESIGN SKILLS ({len(skills)})", border_color=C_P, text_color=C_W)
+                                    print(f"\n  Use {C_C}/skills <skill_name>{C_R} to inspect the full design workflow.\n")
+                            else:
+                                target_skill = cmd_parts[1].strip()
+                                s_data = skills.get(target_skill)
+                                if not s_data:
+                                    print(f"\n{C_Y}❌ Skill '{target_skill}' not found.{C_R}\n")
+                                else:
+                                    details = [
+                                        f"{C_Y}Name:{C_R}        {C_G}{s_data['name']}{C_R}",
+                                        f"{C_Y}Path:{C_R}        {s_data['path']}",
+                                        f"{C_Y}Triggers:{C_R}    {', '.join(s_data['triggers']) if s_data['triggers'] else 'None'}",
+                                        "---",
+                                        f"{C_Y}SKILL BLUEPRINT & INSTRUCTIONS:{C_R}"
+                                    ]
+                                    for line in s_data["content"].splitlines():
+                                        details.append(f"  {line}")
+                                    draw_box(details, title=f"🌸 SKILL: {s_data['name'].upper()}", border_color=C_G, text_color=C_W)
+                                    print()
+                            continue
+
+                        elif cmd == "/run":
+                            if len(cmd_parts) < 2:
+                                print(f"\n{C_Y}⚠️ Usage: /run <tool_name> [param1=val1 param2=val2 ...]{C_R}\n")
+                                continue
+                            run_parts = cmd_parts[1].strip().split(" ", 1)
+                            tool_name = run_parts[0]
+                            tools = get_harvested_tools()
+                            entry = tools.get(tool_name)
+                            if not entry:
+                                print(f"\n{C_Y}❌ Tool '{tool_name}' not found.{C_R}\n")
+                                continue
+                                
+                            kwargs = {}
+                            args = []
+                            if len(run_parts) > 1:
+                                param_str = run_parts[1].strip()
+                                for token in re.findall(r'[^\s"]+|"[^"]*"', param_str):
+                                    if "=" in token:
+                                        k, v = token.split("=", 1)
+                                        v = v.strip('"')
+                                        kwargs[k] = v
+                                    else:
+                                        args.append(token.strip('"'))
+                            
+                            missing_envs = [ev for ev in entry.requires_env if not os.environ.get(ev)]
+                            if missing_envs:
+                                print(f"\n{C_RED}❌ Missing required environment variables: {', '.join(missing_envs)}{C_R}\n")
+                                continue
+                                
+                            print(f"\n{C_G}🚀 Executing tool '{tool_name}' with args={args} kwargs={kwargs}...{C_R}")
+                            log_event(f"🚀 Manual REPL run of tool '{tool_name}': args={args}, kwargs={kwargs}")
+                            
+                            try:
+                                if entry.is_async:
+                                    import asyncio
+                                    try:
+                                        loop = asyncio.get_event_loop()
+                                        if loop.is_running():
+                                            future = asyncio.run_coroutine_threadsafe(entry.handler(*args, **kwargs), loop)
+                                            result = future.result()
+                                        else:
+                                            result = loop.run_until_complete(entry.handler(*args, **kwargs))
+                                    except RuntimeError:
+                                        result = asyncio.run(entry.handler(*args, **kwargs))
+                                else:
+                                    result = entry.handler(*args, **kwargs)
+                                    
+                                print(f"\n{C_G}✓ Result:{C_R}")
+                                if isinstance(result, (dict, list)):
+                                    print(json.dumps(result, indent=2))
+                                else:
+                                    print(result)
+                                print()
+                            except Exception as e:
+                                print(f"\n{C_RED}❌ Tool execution failed: {e}{C_R}\n")
                             continue
                             
                         else:

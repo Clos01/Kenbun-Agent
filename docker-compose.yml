@@ -60,7 +60,8 @@ services:
     volumes:
       # WARNING: Ensure PROJECT_ROOT is set to an absolute path in production
       - ${PROJECT_ROOT:-.}:/app
-      - brain_health:/app/core/brain_health
+      - brain_health:/app/brain_health
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
     environment:
@@ -100,7 +101,7 @@ services:
     image: amir20/dozzle:latest
     container_name: portable_dozzle
     ports:
-      - "${DOZZLE_PORT:-8888}:8888"
+      - "${DOZZLE_PORT:-8888}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: always
