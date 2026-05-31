@@ -1372,7 +1372,19 @@ def clean_docker_stack():
             subprocess.run(["docker", "image", "prune", "-f"], cwd=project_root)
             
         print(f"\n{c_c}✓ Docker Swarm Stack cleaned successfully!{c_r}")
-        print(f"  You can now start a fresh build using the Swarm Stack option in the menu.\n")
+        print(f"  You can now start a fresh build using the Swarm Stack option in the menu.")
+        
+        # Guide on file permissions (highly helpful for fresh reinstalls)
+        print(f"\n{c_y}┌───────────────── 🌸 HOST FILE OWNERSHIP WARNING ────────────────┐")
+        print(f"│ On Linux systems, Docker mount environments compile pycache/     │")
+        print(f"│ assets using 'root' ownership on the host filesystem.           │")
+        print(f"│                                                                 │")
+        print(f"│ ➔ If you plan to completely remove this directory, standard     │")
+        print(f"│   'rm -rf' will fail with Permission Denied.                    │")
+        print(f"│                                                                 │")
+        print(f"│ ➔ To cleanly delete this entire folder from your server:        │")
+        print(f"│   {c_c}sudo rm -rf {project_root}{c_y}                           │")
+        print(f"└─────────────────────────────────────────────────────────────────┘{c_r}\n")
     except Exception as e:
         print(f"\n{c_y}❌ Cleanup error: {e}{c_r}\n")
 
