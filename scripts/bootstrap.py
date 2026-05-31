@@ -1865,32 +1865,6 @@ if __name__ == "__main__":
             configure_api_keys()
         elif cmd in ("dashboard", "telemetry"):
             showcase_dashboard()
-        elif cmd == "recall":
-            import sys, os
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
-            from tools.utils.error_memory import recall_fix
-            query = " ".join(sys.argv[2:])
-            # Wait, the prompt says `/recall <query> - search memories` (plural).
-            # It could mean search concepts OR recall_fix. Let's use search_hivemind_concepts.
-            from tools.infrastructure.server import search_hivemind_concepts
-            print(search_hivemind_concepts(query))
-        elif cmd == "search":
-            import sys, os
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
-            from tools.infrastructure.server import search_hivemind_concepts
-            query = " ".join(sys.argv[2:])
-            print(search_hivemind_concepts(query))
-        elif cmd == "remember":
-            # format: kenbun remember title = content
-            import sys, os
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
-            from tools.memory.knowledge_manager import learn_concept
-            arg_str = " ".join(sys.argv[2:])
-            if "=" in arg_str:
-                title, content = arg_str.split("=", 1)
-                print(learn_concept(title.strip(), content.strip(), "General", "concepts"))
-            else:
-                print("Usage: kenbun remember <title> = <content>")
         elif cmd in ("--help", "-h", "help"):
             print(f"\n{c_m}🌸 KENBUN-AGENT CLI TOOL SHORTCUTS{c_r}")
             print(f"──────────────────────────────────────────────────")
@@ -1900,14 +1874,57 @@ if __name__ == "__main__":
             print(f"  {c_c}kenbun setup{c_r}     ➔ Open the interactive API Key Configuration wizard!")
             print(f"  {c_c}kenbun mcp{c_r}       ➔ Register MCP server in Claude Desktop & Cursor automatically!")
             print(f"  {c_c}kenbun dashboard{c_r} ➔ Show access guidelines for the Telemetry Dashboard!")
-            print(f"  {c_c}kenbun recall{c_r}    ➔ Search the Hivemind database for memories!")
-            print(f"  {c_c}kenbun search{c_r}    ➔ Alias for kenbun recall!")
-            print(f"  {c_c}kenbun remember{c_r}  ➔ Save a memory to the Hivemind (kenbun remember title = content)!")
             print(f"  {c_c}kenbun express{c_r}   ➔ Initialize environment configurations with default seed!")
+            print(f"  {c_c}kenbun <tool>{c_r}    ➔ Execute any MCP tool (e.g., kenbun orchestrate, kenbun recall)")
             print(f"  {c_c}kenbun{c_r}           ➔ Launch full interactive Sakura setup menu (1-9)")
             print(f"──────────────────────────────────────────────────\n")
         else:
-            print(f"\n❌ Unknown command: {sys.argv[1]}")
-            print(f"Type {c_c}kenbun --help{c_r} to see all available command line shortcuts.\n")
+            # Dynamic MCP tool dispatcher
+            import sys, os, re
+            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
+            
+            try:
+                import tools.infrastructure.server as server
+                
+                # Support 'search' as an alias for 'search_hivemind_concepts' and 'recall' as an alias for 'recall_fix'
+                actual_cmd = cmd
+                if cmd == "search": actual_cmd = "search_hivemind_concepts"
+                if cmd == "recall": actual_cmd = "search_hivemind_concepts" # Aligning with user expectation for recall
+                if cmd == "remember": actual_cmd = "save_to_hivemind"
+                
+                if hasattr(server, actual_cmd) and callable(getattr(server, actual_cmd)):
+                    func = getattr(server, actual_cmd)
+                    
+                    kwargs = {}
+                    args = []
+                    
+                    # Manual parsing for remember to support "kenbun remember title = content"
+                    if cmd == "remember":
+                        arg_str = " ".join(sys.argv[2:])
+                        if "=" in arg_str:
+                            title, content = arg_str.split("=", 1)
+                            args.extend([title.strip(), content.strip(), "General"])
+                            kwargs["category"] = "concepts"
+                        else:
+                            print("Usage: kenbun remember <title> = <content>")
+                            sys.exit(1)
+                    else:
+                        if len(sys.argv) > 2:
+                            # Reconstruct param string safely to preserve quotes
+                            # We'll just use the raw string from sys.argv but properly grouped
+                            # Actually, sys.argv already tokenizes. We just parse the tokens.
+                            for token in sys.argv[2:]:
+                                if "=" in token:
+                                    k, v = token.split("=", 1)
+                                    kwargs[k] = v
+                                else:
+                                    args.append(token)
+                                    
+                    print(func(*args, **kwargs))
+                else:
+                    print(f"\n❌ Unknown command: {sys.argv[1]}")
+                    print(f"Type {c_c}kenbun --help{c_r} to see all available command line shortcuts.\n")
+            except Exception as e:
+                print(f"❌ Failed to execute tool '{cmd}': {e}")
     else:
         run_interactive_wizard()
