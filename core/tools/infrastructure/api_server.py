@@ -132,6 +132,15 @@ def _encrypt_setting(key: str, val: str) -> str:
 class ConfigUpdateRequest(BaseModel):
     settings: Dict[str, str]
 
+@app.get("/api/v1/active-model")
+async def get_active_model():
+    """Returns ONLY the currently active Primary LLM model name for secure frontend display."""
+    try:
+        from tools.infrastructure.config import settings
+        return {"model": settings.models.primary_llm_model}
+    except Exception:
+        return {"model": "Ollama Llama3.2"}
+
 @app.get("/api/v1/config")
 async def get_config():
     """Reads .env file and masks sensitive API keys."""

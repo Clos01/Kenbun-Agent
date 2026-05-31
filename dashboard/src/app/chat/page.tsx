@@ -27,6 +27,7 @@ export default function KenbunChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [activeModel, setActiveModel] = useState<string>("Detecting Brain...");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -69,8 +70,25 @@ export default function KenbunChat() {
     }
   };
 
+  const fetchActiveModel = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/active-model`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.model) {
+          setActiveModel(data.model);
+        } else {
+          setActiveModel("Ollama Llama3.2");
+        }
+      }
+    } catch {
+      setActiveModel("Offline Node");
+    }
+  };
+
   useEffect(() => {
     fetchSessions();
+    fetchActiveModel();
   }, []);
 
   useEffect(() => {
@@ -271,7 +289,7 @@ export default function KenbunChat() {
           <div className="flex items-center gap-3 bg-primary/5 px-4 py-2 border border-primary/5 rounded-sm">
             <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
             <span className="text-[10px] font-black uppercase tracking-widest text-primary/70">
-              Uplink Active
+              Brain: {activeModel}
             </span>
           </div>
         </header>
