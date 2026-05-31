@@ -2813,7 +2813,13 @@ def main():
                                 wrapper.write(chunk)
                                 full_reply += chunk
                             except Exception as e:
-                                pass
+                                print(f"\n{C_RED}STREAM PARSE ERROR:{C_R} {repr(e)} on chunk: {data_str[:50]}...", flush=True)
+                                log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
+                        else:
+                            # Not a data line, could be an API error embedded in the stream body!
+                            if decoded.startswith("{") or decoded.startswith("["):
+                                print(f"\n{C_Y}API WARNING:{C_R} {decoded}", flush=True)
+                                log_event(f"API WARNING: {decoded}")
                 wrapper.flush()
                 print("\n")
                 
