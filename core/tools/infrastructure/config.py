@@ -72,6 +72,12 @@ class DeploymentSettings(BaseModel):
     ssh_key_path: str = "~/.ssh/kenbun_pc"
     training_dir: str = "/app/kenbun_training" # Default internal docker path
 
+class SecuritySettings(BaseModel):
+    cron_mode: str = "allow"
+    approval_mode: str = "smart"
+    approval_timeout: int = 45
+    custom_hook_path: Optional[str] = None
+
 # --- 2. MAIN CONFIGURATION HUB ---
 
 class KenbunSettings(BaseSettings):
@@ -229,6 +235,22 @@ class KenbunSettings(BaseSettings):
             ssh_key_path=self.SSH_KEY_PATH,
             training_dir=self.TRAINING_DIR
         )
+
+    # --- SECURITY GATEWAY ---
+    SECURITY_CRON_MODE: str = Field(default="allow")
+    SECURITY_APPROVAL_MODE: str = Field(default="smart")
+    SECURITY_APPROVAL_TIMEOUT: int = Field(default=45)
+    SECURITY_CUSTOM_HOOK_PATH: Optional[str] = Field(default=None)
+
+    @property
+    def security(self) -> SecuritySettings:
+        security_settings_instance = SecuritySettings(
+            cron_mode=self.SECURITY_CRON_MODE,
+            approval_mode=self.SECURITY_APPROVAL_MODE,
+            approval_timeout=self.SECURITY_APPROVAL_TIMEOUT,
+            custom_hook_path=self.SECURITY_CUSTOM_HOOK_PATH
+        )
+        return security_settings_instance
 
     # --- WATCHDOG & TELEMETRY ---
     BASE_TIMEOUT: int = 60

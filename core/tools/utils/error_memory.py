@@ -26,11 +26,11 @@ def _get_collection(chroma_database_server_host_ip_address: str, chroma_database
 
 
 def remember_fix(
-    runtime_error_stack_trace_message: str,
-    developer_resolution_or_code_diff: str,
-    offending_file_context_path: str = "",
-    chroma_database_server_host_ip_address: str = "",
-    chroma_database_server_connection_port: str = "8000",
+    error_message: str,
+    solution: str,
+    file_context: str = "",
+    pc_ip: str = "",
+    chroma_port: str = "8000",
 ) -> str:
     """
     Save an error→fix mapping to the knowledge base.
@@ -38,8 +38,14 @@ def remember_fix(
     The error message is embedded as a vector so future similar errors
     can be found via semantic search (not exact match).
     """
+    runtime_error_stack_trace_message = error_message
+    developer_resolution_or_code_diff = solution
+    offending_file_context_path = file_context
+    chroma_database_server_host_ip_address = pc_ip
+    chroma_database_server_connection_port = chroma_port
+
     if not runtime_error_stack_trace_message or not developer_resolution_or_code_diff:
-        return "❌ Both runtime_error_stack_trace_message and developer_resolution_or_code_diff are required."
+        return "❌ Both error_message and solution are required."
 
     try:
         chroma_vector_collection_instance = _get_collection(chroma_database_server_host_ip_address, chroma_database_server_connection_port)
@@ -85,14 +91,19 @@ def remember_fix(
 
 
 def recall_fix(
-    runtime_error_stack_trace_message: str,
-    chroma_database_server_host_ip_address: str = "",
-    chroma_database_server_connection_port: str = "8000",
-    maximum_number_of_recall_results_requested: int = MAX_RECALL_RESULTS,
+    error_message: str,
+    pc_ip: str = "",
+    chroma_port: str = "8000",
+    n_results: int = MAX_RECALL_RESULTS,
 ) -> str:
     """
     Search for similar past errors and their solutions.
     """
+    runtime_error_stack_trace_message = error_message
+    chroma_database_server_host_ip_address = pc_ip
+    chroma_database_server_connection_port = chroma_port
+    maximum_number_of_recall_results_requested = n_results
+
     if not runtime_error_stack_trace_message:
         return "❌ Error message is required."
 
