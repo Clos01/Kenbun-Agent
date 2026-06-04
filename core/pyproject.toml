@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Kenbun"
+version = "0.1.0"
+description = "Kenbun: Local-first AI Swarm with Bayesian routing, Hivemind memory, and System 1–6 neural hierarchy."
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+include = ["tools*"]
+exclude = [".venv*", "external*", "artifacts*", "design_systems*", "ingestion*", "tests*", "brain_health*", "neural_observatory*", "training_data*", "scratch*", "dev*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--tb=short",
+]
+markers = [
+    "smoke: fast import/health checks (run on every commit)",
+    "unit: pure-logic unit tests (no network, no DB)",
+    "integration: require DB / network / API keys",
+    "slow: > 5s — run nightly only",
+    "golden: golden-set benchmark evaluation",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["tools"]
+omit = [
+    "*/__pycache__/*",
+    "*/scratch/*",
+    "*/skills/*",
+    "*/observatory/*",
+    "tests/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

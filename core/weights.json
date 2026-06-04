@@ -1,0 +1,103 @@
+{
+    "categories": {
+        "logic": {
+            "linter_auto_fix": {
+                "alpha": 4.0,
+                "beta": 4.0
+            },
+            "sandbox_execution": {
+                "alpha": 1.0,
+                "beta": 5.0
+            },
+            "safe_file_checkpoint": {
+                "alpha": 1.0,
+                "beta": 6.0
+            },
+            "preflight_linter": {
+                "alpha": 1.0,
+                "beta": 6.0
+            },
+            "safe_file_operations": {
+                "alpha": 1.0,
+                "beta": 5.0
+            },
+            "pre_flight_linter": {
+                "alpha": 3.0,
+                "beta": 5.0
+            },
+            "safe_file_checkpointing": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "gemini_code_review": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "black_linter": {
+                "alpha": 1.0,
+                "beta": 3.0
+            }
+        },
+        "research": {
+            "sandbox_execution": {
+                "alpha": 3.0,
+                "beta": 2.0
+            },
+            "error_memory_recall": {
+                "alpha": 5.0,
+                "beta": 1.0
+            },
+            "memory_recall_engine": {
+                "alpha": 3.0,
+                "beta": 1.0
+            }
+        }
+    },
+    "global": {
+        "linter_auto_fix": {
+            "alpha": 4.0,
+            "beta": 3.0
+        },
+        "sandbox_execution": {
+            "alpha": 2.0,
+            "beta": 4.0
+        },
+        "safe_file_checkpoint": {
+            "alpha": 1.0,
+            "beta": 5.0
+        },
+        "preflight_linter": {
+            "alpha": 1.0,
+            "beta": 5.0
+        },
+        "safe_file_operations": {
+            "alpha": 1.0,
+            "beta": 4.0
+        },
+        "pre_flight_linter": {
+            "alpha": 3.0,
+            "beta": 4.0
+        },
+        "safe_file_checkpointing": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "error_memory_recall": {
+            "alpha": 4.0,
+            "beta": 1.0
+        },
+        "memory_recall_engine": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "gemini_code_review": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "black_linter": {
+            "alpha": 1.0,
+            "beta": 2.0
+        }
+    },
+    "last_updated": 1780334526.507509
+}
