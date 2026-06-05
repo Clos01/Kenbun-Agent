@@ -42,6 +42,7 @@ Kenbun is organized into a nested hierarchy of reasoning, from immediate reflexe
 
 ```text
 Kenbun/
+├── brain_health/               # Live Telemetry, Benchmarks & SQLite DBs
 ├── core/                       # The Intelligence Core (Twelve-Factor, Modular)
 │   ├── services/               # Background Daemons (System 6)
 │   ├── tools/                  # The Toolbelt (Systems 1-5)
@@ -52,21 +53,20 @@ Kenbun/
 │   │   ├── memory/             # Hivemind & Vector Store
 │   │   ├── strategy/           # Bayesian Governor & Token Logic
 │   │   └── utils/              # Pathing, Telemetry, Shims
+│   ├── brain_health/           # Recovery logs & tuning queue
+│   ├── DESIGN.md               # Heritage Design System (Source of Truth)
 │   └── STRUCTURE.md            # Technical Master Map (Local)
 ├── dashboard/                  # The Observatory (Next.js 16, Heritage)
 │   ├── src/
 │   │   ├── app/                # Next.js App Router
 │   │   ├── components/         # Galaxy Map, Fleet View, Kanban
 │   │   └── lib/                # UI Config & API Hooks
-│   ├── brain_health/               # Live Telemetry, Benchmarks & Logs
 ├── docs/                       # Kenbun Obsidian Vault (Complete System Docs)
 ├── scripts/                    # Setup, Guided Bootstrap & User CLI Entry Points
 │   ├── bootstrap.py            # Interactive guided onboarding setup & stack manager
 │   ├── terminal_chat.py        # Kenbun Cognitive interactive terminal shell (termchat)
 │   ├── full_audit_scan.py      # Autonomic codebase compliance & quality scanner
 │   └── agent_bus.py            # Real-time event-bus channels for async agents
-├── DESIGN.md                   # Heritage Design System (Source of Truth)
-├── LEGION_SPECULATIVE_RUN.md   # System 2 Speculative Server Blueprint
 └── STRUCTURE.md                # Root System Map (Synchronized)
 ```
 

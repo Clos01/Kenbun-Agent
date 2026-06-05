@@ -14,7 +14,7 @@ This document is the **Design Law** of the Kenbun Intelligence Ecosystem. All ag
     - Tight tracking for headlines (`tracking-tighter`).
     - Wide tracking for labels (`tracking-widest`).
     - Hierarchy must be obvious: Headers are 3XL+, subheads are medium, body is small.
-- **API Integration**: For standard Google Fonts API integration, optimization protocols (like subsetting and `font-display`), and beta text effects, refer to [docs/Google_Fonts_API.md](../docs/Google_Fonts_API.md).
+    - Use standard web optimization protocols (like `font-display: swap` and link prefetching) when importing Google Fonts to prevent layout shift.
 
 ## 3. Color Palette (OKLch)
 We prioritize OKLch for perceptual uniformity.

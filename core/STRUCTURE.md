@@ -48,8 +48,6 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`tools/memory/code_indexer.py`**: Semantic indexing of the current repository's source code.
 *   **`tools/memory/repo_mapper.py`**: Generates logical topologies of the codebase for RAG.
 *   **`tools/memory/chroma_db_connect.py`**: Low-level connection handler for remote ChromaDB.
-*   **`tools/memory/error_memory.py`**: [NEW] Tracks recurring errors specifically for orchestrator recovery.
-*   **`tools/memory/ALGORITHMS.md`**: [NEW] Mathematical and logical documentation of the engine core.
 
 ### 🛡️ System 2 & 2c: Audit & Quality
 *   **`tools/audit/supervisor_agent.py`**: (System 2) Executive audit agent with Tiered Ensemble logic.
@@ -106,19 +104,29 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`scripts/terminal_chat.py`**: Interactively runs the cognitive LLM developer agent shell with hybrid network socket probes, dynamic RAG, and terminal layout rendering.
 *   **`scripts/full_audit_scan.py`**: Autonomic code scanning tool verifying AST rules, hardcoded developer paths, import path shims, and exception safety blocks.
 
-### 🛠️ Core Files (Root Directory)
-- **`SYSTEM_MAP.md`**: [NEW] The Spatial Root and "Memory Palace" of the system.
-- **`STRUCTURE.md`**: (You are here) The technical map and source of truth for the repository.
-- **`POST_MORTEM.md`**: Historical record of system failures and architectural corrections.
-- **`LEGION_SPECULATIVE_RUN.md`**: [NEW] Server-side speculative decoding deployment and configuration blueprint.
-- **`NEURAL_HIERARCHY.md`**: Deep-dive into the six-system agentic architecture (now includes Maze Protocol).
-- **`.agent/rules/the-augmented-cto.md`**: The Orchestrator core rules (Source of Truth for Agent behavior).
-- **`DEPLOYMENT_GUIDE.md`**: Instructions for setting up the local-first production swarm.
-- **`requirements.txt`**: Python dependencies for the entire engine.
-- **`docker-compose.yml`**: Infrastructure definitions for local ChromaDB and testing services.
-- **`workspace_config.json`**: [NEW] Central registry for all projects watched by Kenbun.
+### 🛠️ Root Directory Files
+- **`STRUCTURE.md`**: The root topological map and source of truth for the repository.
+- **`README.md`**: Core system description and setup instructions.
+- **`CONTRIBUTING.md`**: Contribution workflow, testing guidelines, and Git practices.
+- **`KENBUN.md`**: Neural identity and Agent operational constraints.
+- **`pyproject.toml`**: Metadata and dependencies configuration.
+- **`docker-compose.yml`**: Docker services orchestrating the local environment.
 - **`.env` / `.env.example`**: Environment configuration and API key placeholders.
 - **`.kenbun_master.key`**: AES master key for the encrypted `secret_manager.py`.
+
+### 🛠️ Core Workspace Metadata (`core/`)
+- **`core/STRUCTURE.md`**: (You are here) The technical codebase map for the intelligence engine.
+- **`core/SYSTEM_MAP.md`**: The Spatial Root and "Memory Palace" of the system.
+- **`core/FILE_GLOSSARY.md`**: Exhaustive 1:1 functional descriptions of all Python modules.
+- **`core/NEURAL_HIERARCHY.md`**: Deep-dive into the six-system agentic architecture (with Maze Protocol).
+- **`core/DEPLOYMENT_GUIDE.md`**: Setup manual for local-first swarm execution.
+- **`core/POST_MORTEM.md`**: Historical log of software bugs and architectural resolutions.
+- **`core/OPERATIONS_MANUAL.md`**: DevOps operations, health diagnostics, and logs reference.
+- **`core/VOIP_SETUP.md`**: Setup guidelines for voice sensory features.
+- **`core/DESIGN.md`**: The Heritage Design System specification rules.
+- **`core/requirements.txt`**: Python dependencies for the core engine.
+- **`core/workspace_config.json`**: Central registry for all projects watched by Kenbun.
+- **`core/.agent/rules/the-augmented-cto.md`**: The Orchestrator core rules (Source of Behavior Rules).
 ### 🛠️ Service Layer (`core/services/`)
 - **`services/swarm_daemon.py`**: Background service that monitors for autonomous task triggers and runs the Autonomic Heartbeat.
 - **`tools/autonomic/autonomic_corrector.py`**: [NEW] Closed-loop self-healing engine with "Death Spiral" circuit breakers and log-rotation support.

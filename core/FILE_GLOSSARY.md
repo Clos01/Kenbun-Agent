@@ -34,7 +34,6 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`code_indexer.py`**: Chunks and indexes the codebase for semantic search.
 *   **`repo_mapper.py`**: Generates a skeleton map of the repository (classes/functions).
 *   **`pdf_ingestor.py`**: Ingests technical documentation PDFs to teach the AI.
-*   **`error_memory.py`**: Specific memory bank for recurring failures (System 2 feedback).
 
 ## 🧠 `tools/strategy/` (System 4)
 *   **`decision_logic.py`**: The "Governor" logic. Routes tasks to the correct system.
@@ -47,6 +46,7 @@ This document provides a 1:1 functional description of every Python file in the 
 ## 🛠️ `tools/utils/` (Shared Toolkit)
 *   **`maze_protocol.py`**: The "Backward Verification" utility (The Maze).
 *   **`backtracker.py`**: Checkpoint/Restore system for rolling back file changes.
+*   **`error_memory.py`**: Tracks recurring errors and past developer resolutions (System 2 feedback).
 *   **`path_utils.py`**: Absolute path resolution for cross-platform stability.
 *   **`secret_manager.py`**: AES-encrypted storage for API keys and tokens.
 *   **`notifications.py`**: Native macOS "Say" and Alert bridge.
