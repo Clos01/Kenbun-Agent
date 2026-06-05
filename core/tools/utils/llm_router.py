@@ -3,7 +3,8 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from typing import List, Optional
+import os
+from typing import List, Optional, Tuple
 from tools.infrastructure.config import settings
 
 def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
@@ -128,6 +129,58 @@ def ensure_lmstudio_model_loaded(
         return None
     return target_context_length
 
+def resolve_google_endpoint_and_model(
+    base_url: str,
+    model_name: str,
+    api_key_set: bool = False,
+    project_id: Optional[str] = None
+) -> Tuple[str, str]:
+    """
+    Dynamically rewrites legacy/placeholder Google Cloud Code Assist URL
+    and model name to production-ready Gemini endpoints.
+    """
+    if "cloudaidoc-pa.googleapis.com" not in base_url:
+        return base_url, model_name
+
+    # If API key is set, use Google AI Studio endpoint
+    if api_key_set:
+        rewritten_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+        rewritten_model = "gemini-1.5-pro" if model_name == "code-assist" else model_name
+        return rewritten_url, rewritten_model
+
+    # If no API key, use Vertex AI endpoint with OAuth
+    resolved_project = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or os.environ.get("PROJECT_ID")
+    if not resolved_project:
+        # Check if project-specific credentials JSON exists in project root
+        from tools.utils.path_utils import get_project_root
+        proj_creds_path = get_project_root() / ".google_credentials.json"
+        if proj_creds_path.exists():
+            try:
+                import json
+                with open(proj_creds_path, "r") as f:
+                    creds_data = json.load(f)
+                    resolved_project = creds_data.get("project_id") or creds_data.get("quota_project_id")
+            except Exception:
+                pass
+
+    if not resolved_project:
+        try:
+            import google.auth
+            _, resolved_project = google.auth.default()
+        except Exception:
+            pass
+
+    if resolved_project:
+        location = os.environ.get("VERTEX_AI_LOCATION") or os.environ.get("GOOGLE_CLOUD_REGION") or "us-central1"
+        rewritten_url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{resolved_project}/locations/{location}/endpoints/openapi"
+        rewritten_model = "google/gemini-1.5-pro-001" if model_name == "code-assist" else model_name
+        return rewritten_url, rewritten_model
+    else:
+        # Fallback to AI Studio
+        rewritten_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+        rewritten_model = "gemini-1.5-pro" if model_name == "code-assist" else model_name
+        return rewritten_url, rewritten_model
+
 def _make_openai_compatible_call(
     base_url: str,
     model_name: str,
@@ -136,6 +189,11 @@ def _make_openai_compatible_call(
     temperature: float = 0.1,
     max_tokens: int = 4000
 ) -> Optional[str]:
+    # Resolve dynamic Google URL/Model rewrites
+    base_url, model_name = resolve_google_endpoint_and_model(
+        base_url, model_name, api_key_set=bool(settings.GEMINI_API_KEY)
+    )
+
     # Formulate endpoint
     url = f"{base_url}/chat/completions"
     
@@ -179,15 +237,25 @@ def _make_openai_compatible_call(
             api_key = settings.GEMINI_API_KEY.get_secret_value()
         else:
             try:
-                import google.auth
                 from google.auth.transport.requests import Request as AuthRequest
-                scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-                credentials, project_id = google.auth.default(scopes=scopes)
-                credentials.refresh(AuthRequest())
-                api_key = credentials.token
-                logging.info("Successfully acquired Google OAuth access token via ADC")
+                from tools.utils.path_utils import get_project_root
+                proj_creds_path = get_project_root() / ".google_credentials.json"
+                
+                if proj_creds_path.exists():
+                    from google.oauth2.credentials import Credentials
+                    credentials = Credentials.from_authorized_user_file(str(proj_creds_path))
+                    credentials.refresh(AuthRequest())
+                    api_key = credentials.token
+                    logging.info("Successfully acquired Google OAuth access token via custom client credentials")
+                else:
+                    import google.auth
+                    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                    credentials, project_id = google.auth.default(scopes=scopes)
+                    credentials.refresh(AuthRequest())
+                    api_key = credentials.token
+                    logging.info("Successfully acquired Google OAuth access token via ADC")
             except Exception as oauth_err:
-                logging.warning(f"Failed to acquire Google OAuth access token via ADC: {oauth_err}")
+                logging.warning(f"Failed to acquire Google OAuth access token: {oauth_err}")
         
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"

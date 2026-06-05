@@ -62,6 +62,7 @@ services:
       - ${PROJECT_ROOT:-.}:/app
       - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
       - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/app/kenbun_training
+      - ~/.config/gcloud:/root/.config/gcloud:ro
     env_file:
       - .env
     environment:

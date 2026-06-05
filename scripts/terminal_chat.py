@@ -2691,23 +2691,64 @@ def main():
                 
                 try:
                     # Primary request parameters
-                    endpoint = f"{llm_url}/chat/completions"
-                    headers = {"Content-Type": "application/json"}
+                    actual_url = llm_url
+                    actual_model = llm_model
                     is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
+                    headers = {"Content-Type": "application/json"}
                     
                     if "GEMINI_API_KEY" in env and is_gemini_route:
                         headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+                        if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                            actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+                            if actual_model == "code-assist":
+                                actual_model = "gemini-1.5-pro"
                     elif ("cloudaidoc-pa.googleapis.com" in llm_url.lower() or "googleapis.com" in llm_url.lower()) and is_gemini_route:
                         try:
-                            import google.auth
                             from google.auth.transport.requests import Request as AuthRequest
                             scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-                            credentials, project_id = google.auth.default(scopes=scopes)
-                            credentials.refresh(AuthRequest())
+                            
+                            # Check if local credentials file exists
+                            proj_creds_path = Path(__file__).resolve().parent.parent / ".google_credentials.json"
+                            credentials = None
+                            project_id = None
+                            
+                            if proj_creds_path.exists():
+                                from google.oauth2.credentials import Credentials
+                                credentials = Credentials.from_authorized_user_file(str(proj_creds_path))
+                                credentials.refresh(AuthRequest())
+                                log_event("Successfully acquired Google OAuth access token via custom client credentials in termchat")
+                                # Read project ID from custom credentials JSON
+                                try:
+                                    import json
+                                    with open(proj_creds_path, "r") as f:
+                                        creds_data = json.load(f)
+                                        project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
+                                except Exception:
+                                    pass
+                            else:
+                                import google.auth
+                                credentials, project_id = google.auth.default(scopes=scopes)
+                                credentials.refresh(AuthRequest())
+                                log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                                
                             headers["Authorization"] = f"Bearer {credentials.token}"
-                            log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                            
+                            if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                                gcp_project = project_id or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT") or env.get("PROJECT_ID")
+                                gcp_location = env.get("VERTEX_AI_LOCATION") or env.get("GOOGLE_CLOUD_REGION") or env.get("LOCATION") or "us-central1"
+                                
+                                if gcp_project:
+                                    actual_url = f"https://{gcp_location}-aiplatform.googleapis.com/v1/projects/{gcp_project}/locations/{gcp_location}/endpoints/openapi"
+                                    if actual_model == "code-assist":
+                                        actual_model = "google/gemini-1.5-pro-001"
+                                    log_event(f"Rewriting cloudaidoc endpoint to Vertex AI: {actual_url} ({actual_model})")
+                                else:
+                                    actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+                                    if actual_model == "code-assist":
+                                        actual_model = "gemini-1.5-pro"
+                                    log_event(f"Rewriting cloudaidoc to AI Studio fallback: {actual_url} ({actual_model})")
                         except Exception as oauth_err:
-                            log_event(f"Failed to acquire Google OAuth access token via ADC in termchat: {oauth_err}")
+                            log_event(f"Failed to acquire Google OAuth access token: {oauth_err}")
                             print()
                             draw_box([
                                 "Google Cloud CLI credentials not found or not consented!",
@@ -2716,6 +2757,7 @@ def main():
                                 "  1. Install: sudo snap install google-cloud-cli --classic",
                                 "  2. Login:   gcloud auth application-default login",
                                 "     (Ensure you check the Google Cloud Platform consent checkbox)",
+                                "  - Or configure custom Client ID/Secret via bootstrap setup menu.",
                             ], title="🚨 GOOGLE AUTHENTICATION REQUIRED", border_color=C_RED, text_color=C_Y)
                             print()
                     elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
@@ -2723,8 +2765,9 @@ def main():
                     elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
 
+                    endpoint = f"{actual_url}/chat/completions"
                     payload = {
-                        "model": llm_model,
+                        "model": actual_model,
                         "messages": history,
                         "temperature": 0.7 if model_tier == "nano" else 0.2,
                         "stream": True
@@ -2776,23 +2819,64 @@ def main():
                     model_tier = detect_model_tier(llm_model, llm_url)
                     
                     # Prepare headers and payload for fallback LLM
-                    endpoint = f"{llm_url}/chat/completions"
-                    headers = {"Content-Type": "application/json"}
+                    actual_url = llm_url
+                    actual_model = llm_model
                     is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
+                    headers = {"Content-Type": "application/json"}
                     
                     if "GEMINI_API_KEY" in env and is_gemini_route:
                         headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+                        if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                            actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+                            if actual_model == "code-assist":
+                                actual_model = "gemini-1.5-pro"
                     elif ("cloudaidoc-pa.googleapis.com" in llm_url.lower() or "googleapis.com" in llm_url.lower()) and is_gemini_route:
                         try:
-                            import google.auth
                             from google.auth.transport.requests import Request as AuthRequest
                             scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-                            credentials, project_id = google.auth.default(scopes=scopes)
-                            credentials.refresh(AuthRequest())
+                            
+                            # Check if local credentials file exists
+                            proj_creds_path = Path(__file__).resolve().parent.parent / ".google_credentials.json"
+                            credentials = None
+                            project_id = None
+                            
+                            if proj_creds_path.exists():
+                                from google.oauth2.credentials import Credentials
+                                credentials = Credentials.from_authorized_user_file(str(proj_creds_path))
+                                credentials.refresh(AuthRequest())
+                                log_event("Successfully acquired Google OAuth access token via custom client credentials in termchat")
+                                # Read project ID from custom credentials JSON
+                                try:
+                                    import json
+                                    with open(proj_creds_path, "r") as f:
+                                        creds_data = json.load(f)
+                                        project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
+                                except Exception:
+                                    pass
+                            else:
+                                import google.auth
+                                credentials, project_id = google.auth.default(scopes=scopes)
+                                credentials.refresh(AuthRequest())
+                                log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                                
                             headers["Authorization"] = f"Bearer {credentials.token}"
-                            log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                            
+                            if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                                gcp_project = project_id or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT") or env.get("PROJECT_ID")
+                                gcp_location = env.get("VERTEX_AI_LOCATION") or env.get("GOOGLE_CLOUD_REGION") or env.get("LOCATION") or "us-central1"
+                                
+                                if gcp_project:
+                                    actual_url = f"https://{gcp_location}-aiplatform.googleapis.com/v1/projects/{gcp_project}/locations/{gcp_location}/endpoints/openapi"
+                                    if actual_model == "code-assist":
+                                        actual_model = "google/gemini-1.5-pro-001"
+                                    log_event(f"Rewriting cloudaidoc endpoint to Vertex AI: {actual_url} ({actual_model})")
+                                else:
+                                    actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+                                    if actual_model == "code-assist":
+                                        actual_model = "gemini-1.5-pro"
+                                    log_event(f"Rewriting cloudaidoc to AI Studio fallback: {actual_url} ({actual_model})")
                         except Exception as oauth_err:
-                            log_event(f"Failed to acquire Google OAuth access token via ADC in termchat: {oauth_err}")
+                            log_event(f"Failed to acquire Google OAuth access token: {oauth_err}")
                             print()
                             draw_box([
                                 "Google Cloud CLI credentials not found or not consented!",
@@ -2801,6 +2885,7 @@ def main():
                                 "  1. Install: sudo snap install google-cloud-cli --classic",
                                 "  2. Login:   gcloud auth application-default login",
                                 "     (Ensure you check the Google Cloud Platform consent checkbox)",
+                                "  - Or configure custom Client ID/Secret via bootstrap setup menu.",
                             ], title="🚨 GOOGLE AUTHENTICATION REQUIRED", border_color=C_RED, text_color=C_Y)
                             print()
                     elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
@@ -2808,8 +2893,9 @@ def main():
                     elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
 
+                    endpoint = f"{actual_url}/chat/completions"
                     payload = {
-                        "model": llm_model,
+                        "model": actual_model,
                         "messages": history,
                         "temperature": 0.7 if model_tier == "nano" else 0.2,
                         "stream": True

@@ -840,6 +840,90 @@ def configure_api_keys():
             final_model = p["model"]
             api_key_val = ""
             skip_key_update = False
+            g_client_id = ""
+            g_client_secret = ""
+            do_encrypt = False
+            fernet = None
+
+            if p["name"].startswith("Google Gemini via OAuth"):
+                print(f"\n{c_m}🌸 GOOGLE OAUTH + VERTEX AI CONFIGURATION{c_r}")
+                print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+                print("To use Google Gemini via OAuth, you have two authentication options:")
+                print("  [1] Google Cloud CLI login (Recommended: easiest setup)")
+                print("  [2] Custom Google Cloud Console OAuth Client ID & Secret (Enterprise setup)")
+                print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+                auth_opt = input(f"{c_c}Select option [1-2, default=1]: {c_r}").strip() or "1"
+                
+                if auth_opt == "2":
+                    g_client_id = input(f"\nEnter Google Client ID: ").strip()
+                    g_client_secret = input(f"Enter Google Client Secret: ").strip()
+                    
+                    if g_client_id and g_client_secret:
+                        enc_choice = input(f"\nEncrypt your Google Developer Console credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
+                        do_encrypt = enc_choice not in ("n", "no")
+                        
+                        if do_encrypt:
+                            try:
+                                from cryptography.fernet import Fernet
+                            except ImportError:
+                                print(f"\n⚠️ Cryptography library missing. Installing cryptography...")
+                                import subprocess
+                                subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                from cryptography.fernet import Fernet
+                                
+                            key_file = project_root / ".kenbun_master.key"
+                            if not key_file.exists():
+                                key = Fernet.generate_key()
+                                with open(key_file, "wb") as f:
+                                    f.write(key)
+                                os.chmod(key_file, 0o600)
+                            with open(key_file, "rb") as f:
+                                fernet = Fernet(f.read().strip())
+                                
+                        print(f"\n📡 Starting Google OAuth 2.0 authorization server on your machine...")
+                        print(f"  This will open a browser window to authenticate. Please authorize the app.")
+                        try:
+                            try:
+                                from google_auth_oauthlib.flow import InstalledAppFlow
+                            except ImportError:
+                                print(f"🔧 Installing required oauthlib libraries...")
+                                import subprocess
+                                subprocess.run([get_python_executable(), "-m", "pip", "install", "google-auth-oauthlib"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                from google_auth_oauthlib.flow import InstalledAppFlow
+                                
+                            scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                            flow = InstalledAppFlow.from_client_config({
+                                "installed": {
+                                    "client_id": g_client_id,
+                                    "client_secret": g_client_secret,
+                                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                                    "token_uri": "https://oauth2.googleapis.com/token"
+                                }
+                            }, scopes=scopes)
+                            
+                            credentials = flow.run_local_server(port=0)
+                            creds_file = project_root / ".google_credentials.json"
+                            with open(creds_file, "w", encoding="utf-8") as f:
+                                f.write(credentials.to_json())
+                            print(f"\n🟢 {c_m}Successfully authorized custom client and saved credentials to:{c_r}")
+                            print(f"  ➔ {creds_file}")
+                        except Exception as e:
+                            print(f"\n❌ Failed to run Google OAuth flow: {e}")
+                            print(f"  Continuing with standard setup...")
+                else:
+                    print(f"\n{c_y}💡 Google Cloud CLI setup selected.{c_r}")
+                    print("Please ensure you run the following command in a separate terminal window:")
+                    print(f"  {c_w}gcloud auth application-default login{c_r}")
+                    print("And verify you check the 'Google Cloud Platform' consent scope box.")
+                    
+                    run_gcloud = input(f"\nWould you like Kenbun to launch 'gcloud login' for you now? [y/N]: ").strip().lower()
+                    if run_gcloud in ("y", "yes"):
+                        print(f"\n🚀 Launching gcloud login...")
+                        import subprocess
+                        try:
+                            subprocess.run(["gcloud", "auth", "application-default", "login"])
+                        except Exception as ge:
+                            print(f"❌ Failed to run gcloud: {ge}. Please make sure gcloud is installed.")
             
             # Dynamic prompt for API Key
             if p["env_key"]:
@@ -948,6 +1032,10 @@ def configure_api_keys():
             content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
             if p["env_key"] and api_key_val and not skip_key_update:
                 content = update_env_var(content, p["env_key"], api_key_val)
+            if g_client_id:
+                content = update_env_var(content, "GOOGLE_CLIENT_ID", g_client_id)
+            if g_client_secret:
+                content = update_env_var(content, "GOOGLE_CLIENT_SECRET", g_client_secret)
 
             try:
                 temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")

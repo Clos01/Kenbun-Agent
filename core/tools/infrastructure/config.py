@@ -164,6 +164,8 @@ class KenbunSettings(BaseSettings):
     GEMINI_MODEL: str = "gemini-3-flash-preview"
     GEMINI_PRO_MODEL: str = "gemini-3.1-pro-preview"
     GEMINI_API_KEY: Optional[SecretStr] = None
+    GOOGLE_CLIENT_ID: Optional[SecretStr] = None
+    GOOGLE_CLIENT_SECRET: Optional[SecretStr] = None
     ANTHROPIC_API_KEY: Optional[SecretStr] = None
     DEEPSEEK_API_KEY: Optional[SecretStr] = None
     OPENROUTER_API_KEY: Optional[SecretStr] = None
