@@ -7,7 +7,7 @@ and repair system errors in real time.
 """
 import os
 import sys
-import json
+
 import re
 import time
 import requests
@@ -2719,7 +2719,7 @@ def main():
                                 log_event("Successfully acquired Google OAuth access token via custom client credentials in termchat")
                                 # Read project ID from custom credentials JSON
                                 try:
-                                    import json
+
                                     with open(proj_creds_path, "r") as f:
                                         creds_data = json.load(f)
                                         project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
@@ -2735,7 +2735,7 @@ def main():
                                     try:
                                         adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
                                         if adc_path.exists():
-                                            import json
+
                                             with open(adc_path, "r") as f:
                                                 adc_data = json.load(f)
                                                 project_id = adc_data.get("quota_project_id")
@@ -2767,7 +2767,7 @@ def main():
                                         try:
                                             adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
                                             if adc_path.exists():
-                                                import json
+
                                                 with open(adc_path, "r") as f:
                                                     fallback_project = json.load(f).get("quota_project_id")
                                         except Exception:
@@ -2878,7 +2878,7 @@ def main():
                                 log_event("Successfully acquired Google OAuth access token via custom client credentials in termchat")
                                 # Read project ID from custom credentials JSON
                                 try:
-                                    import json
+
                                     with open(proj_creds_path, "r") as f:
                                         creds_data = json.load(f)
                                         project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
@@ -2893,7 +2893,7 @@ def main():
                                     try:
                                         adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
                                         if adc_path.exists():
-                                            import json
+
                                             with open(adc_path, "r") as f:
                                                 adc_data = json.load(f)
                                                 project_id = adc_data.get("quota_project_id")
@@ -2920,7 +2920,7 @@ def main():
                                         try:
                                             adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
                                             if adc_path.exists():
-                                                import json
+
                                                 with open(adc_path, "r") as f:
                                                     fallback_project = json.load(f).get("quota_project_id")
                                         except Exception:
