@@ -2746,7 +2746,7 @@ def main():
                                 
                             headers["Authorization"] = f"Bearer {credentials.token}"
                             
-                            if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                            if "googleapis.com" in llm_url.lower():
                                 gcp_project = project_id or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT") or env.get("PROJECT_ID")
                                 gcp_location = env.get("VERTEX_AI_LOCATION") or env.get("GOOGLE_CLOUD_REGION") or env.get("LOCATION") or "us-central1"
                                 
@@ -2902,7 +2902,7 @@ def main():
                                 
                             headers["Authorization"] = f"Bearer {credentials.token}"
                             
-                            if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                            if "googleapis.com" in llm_url.lower():
                                 gcp_project = project_id or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT") or env.get("PROJECT_ID")
                                 gcp_location = env.get("VERTEX_AI_LOCATION") or env.get("GOOGLE_CLOUD_REGION") or env.get("LOCATION") or "us-central1"
                                 
@@ -3265,6 +3265,8 @@ def main():
             except Exception as e:
                 # Format generic connection failures cleanly
                 print()
+                import traceback
+                traceback.print_exc()
                 draw_box([
                     str(e),
                     "---",
