@@ -800,6 +800,18 @@ def resolve_display_url_and_model(url: str, model: str, project_root: Path) -> t
                 project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
         except Exception:
             pass
+    
+    # Also check ADC credentials file for quota_project_id
+    if not project_id:
+        adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+        if adc_path.exists():
+            try:
+                import json
+                with open(adc_path, "r") as f:
+                    adc_data = json.load(f)
+                    project_id = adc_data.get("quota_project_id")
+            except Exception:
+                pass
             
     if not project_id:
         project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or os.environ.get("PROJECT_ID")
@@ -810,9 +822,9 @@ def resolve_display_url_and_model(url: str, model: str, project_root: Path) -> t
         res_model = "google/gemini-1.5-pro-001" if model == "code-assist" else model
         return res_url, res_model
     else:
-        res_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-        res_model = "gemini-1.5-pro" if model == "code-assist" else model
-        return res_url, res_model
+        # No project ID found — show the actual configured values rather than misleading fallback
+        display_model = "gemini-2.5-flash (via OAuth)" if model == "code-assist" else model
+        return "generativelanguage.googleapis.com/v1beta (OAuth)", display_model
 
 def configure_api_keys():
     import getpass
@@ -1089,6 +1101,41 @@ def configure_api_keys():
                         import subprocess
                         try:
                             subprocess.run(["gcloud", "auth", "application-default", "login"])
+                            
+                            # After login, check if quota_project_id is set in ADC credentials
+                            adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+                            has_quota_project = False
+                            if adc_path.exists():
+                                try:
+                                    import json
+                                    with open(adc_path, "r") as f:
+                                        adc_data = json.load(f)
+                                        has_quota_project = bool(adc_data.get("quota_project_id"))
+                                except Exception:
+                                    pass
+                            
+                            if not has_quota_project:
+                                print(f"\n{c_y}⚠️  No quota project found in your Google Cloud credentials.{c_r}")
+                                print(f"  The Gemini API requires a quota project for OAuth authentication.")
+                                print(f"  Without it, API calls will fail with a 500 Internal Error.\n")
+                                quota_proj = input(f"Enter your Google Cloud Project ID (e.g. 'my-project-12345'): ").strip()
+                                if quota_proj:
+                                    try:
+                                        result = subprocess.run(
+                                            ["gcloud", "auth", "application-default", "set-quota-project", quota_proj],
+                                            capture_output=True, text=True
+                                        )
+                                        if result.returncode == 0:
+                                            print(f"\n🟢 Successfully set quota project: {quota_proj}")
+                                        else:
+                                            print(f"\n{c_y}⚠️ gcloud returned: {result.stderr.strip()}{c_r}")
+                                            print(f"  You can set it manually later: gcloud auth application-default set-quota-project {quota_proj}")
+                                    except Exception as qe:
+                                        print(f"\n{c_y}⚠️ Could not set quota project automatically: {qe}{c_r}")
+                                        print(f"  Run manually: gcloud auth application-default set-quota-project YOUR_PROJECT_ID")
+                                else:
+                                    print(f"\n{c_y}⚠️ Skipped. Run this later if API calls fail:{c_r}")
+                                    print(f"  gcloud auth application-default set-quota-project YOUR_PROJECT_ID")
                         except Exception as ge:
                             print(f"❌ Failed to run gcloud: {ge}. Please make sure gcloud is installed.")
             

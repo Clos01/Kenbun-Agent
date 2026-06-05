@@ -2730,6 +2730,19 @@ def main():
                                 credentials, project_id = google.auth.default(scopes=scopes)
                                 credentials.refresh(AuthRequest())
                                 log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                                # Read quota_project_id from ADC credentials file if google.auth.default didn't return one
+                                if not project_id:
+                                    try:
+                                        adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+                                        if adc_path.exists():
+                                            import json
+                                            with open(adc_path, "r") as f:
+                                                adc_data = json.load(f)
+                                                project_id = adc_data.get("quota_project_id")
+                                                if project_id:
+                                                    log_event(f"Resolved quota_project_id from ADC file: {project_id}")
+                                    except Exception:
+                                        pass
                                 
                             headers["Authorization"] = f"Bearer {credentials.token}"
                             
@@ -2740,13 +2753,31 @@ def main():
                                 if gcp_project:
                                     actual_url = f"https://{gcp_location}-aiplatform.googleapis.com/v1/projects/{gcp_project}/locations/{gcp_location}/endpoints/openapi"
                                     if actual_model == "code-assist":
-                                        actual_model = "google/gemini-1.5-pro-001"
+                                        actual_model = "google/gemini-2.5-flash"
                                     log_event(f"Rewriting cloudaidoc endpoint to Vertex AI: {actual_url} ({actual_model})")
                                 else:
+                                    # Use generativelanguage.googleapis.com with x-goog-user-project header for OAuth
                                     actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
                                     if actual_model == "code-assist":
-                                        actual_model = "gemini-1.5-pro"
-                                    log_event(f"Rewriting cloudaidoc to AI Studio fallback: {actual_url} ({actual_model})")
+                                        actual_model = "gemini-2.5-flash"
+                                    # CRITICAL: generativelanguage.googleapis.com requires x-goog-user-project for OAuth auth
+                                    # Try to find any project reference to set the header
+                                    fallback_project = env.get("GOOGLE_CLOUD_QUOTA_PROJECT") or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT")
+                                    if not fallback_project:
+                                        try:
+                                            adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+                                            if adc_path.exists():
+                                                import json
+                                                with open(adc_path, "r") as f:
+                                                    fallback_project = json.load(f).get("quota_project_id")
+                                        except Exception:
+                                            pass
+                                    if fallback_project:
+                                        headers["x-goog-user-project"] = fallback_project
+                                        log_event(f"Set x-goog-user-project={fallback_project} for generativelanguage.googleapis.com OAuth")
+                                    else:
+                                        log_event("WARNING: No quota project found for OAuth. API may return 500. Run: gcloud auth application-default set-quota-project YOUR_PROJECT")
+                                    log_event(f"Rewriting cloudaidoc to AI Studio OAuth: {actual_url} ({actual_model})")
                         except Exception as oauth_err:
                             log_event(f"Failed to acquire Google OAuth access token: {oauth_err}")
                             print()
@@ -2858,6 +2889,16 @@ def main():
                                 credentials, project_id = google.auth.default(scopes=scopes)
                                 credentials.refresh(AuthRequest())
                                 log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                                if not project_id:
+                                    try:
+                                        adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+                                        if adc_path.exists():
+                                            import json
+                                            with open(adc_path, "r") as f:
+                                                adc_data = json.load(f)
+                                                project_id = adc_data.get("quota_project_id")
+                                    except Exception:
+                                        pass
                                 
                             headers["Authorization"] = f"Bearer {credentials.token}"
                             
@@ -2868,13 +2909,25 @@ def main():
                                 if gcp_project:
                                     actual_url = f"https://{gcp_location}-aiplatform.googleapis.com/v1/projects/{gcp_project}/locations/{gcp_location}/endpoints/openapi"
                                     if actual_model == "code-assist":
-                                        actual_model = "google/gemini-1.5-pro-001"
+                                        actual_model = "google/gemini-2.5-flash"
                                     log_event(f"Rewriting cloudaidoc endpoint to Vertex AI: {actual_url} ({actual_model})")
                                 else:
                                     actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
                                     if actual_model == "code-assist":
-                                        actual_model = "gemini-1.5-pro"
-                                    log_event(f"Rewriting cloudaidoc to AI Studio fallback: {actual_url} ({actual_model})")
+                                        actual_model = "gemini-2.5-flash"
+                                    fallback_project = env.get("GOOGLE_CLOUD_QUOTA_PROJECT") or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT")
+                                    if not fallback_project:
+                                        try:
+                                            adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
+                                            if adc_path.exists():
+                                                import json
+                                                with open(adc_path, "r") as f:
+                                                    fallback_project = json.load(f).get("quota_project_id")
+                                        except Exception:
+                                            pass
+                                    if fallback_project:
+                                        headers["x-goog-user-project"] = fallback_project
+                                    log_event(f"Rewriting cloudaidoc to AI Studio OAuth: {actual_url} ({actual_model})")
                         except Exception as oauth_err:
                             log_event(f"Failed to acquire Google OAuth access token: {oauth_err}")
                             print()

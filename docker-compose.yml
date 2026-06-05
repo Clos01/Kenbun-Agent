@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 1. Standalone Vector Database (ChromaDB)
   chromadb:
