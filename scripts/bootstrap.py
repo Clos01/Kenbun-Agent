@@ -464,6 +464,46 @@ def select_menu(options, title="Select provider:", selected=0):
         sys.stdout.flush()
         return None
 
+MODEL_PRESETS = {
+    "Google Gemini via OAuth": [
+        "code-assist",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro"
+    ],
+    "Google AI Studio": [
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+        "gemini-2.0-flash-exp",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro"
+    ],
+    "Anthropic": [
+        "claude-3-5-sonnet-latest",
+        "claude-3-5-haiku-latest",
+        "claude-3-opus-latest"
+    ],
+    "OpenAI Codex": [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "o1-mini",
+        "o1-preview"
+    ],
+    "DeepSeek": [
+        "deepseek-chat",
+        "deepseek-coder",
+        "deepseek-reasoner"
+    ],
+    "OpenRouter": [
+        "nousresearch/hermes-3-llama-3.1-405b",
+        "meta-llama/llama-3.3-70b-instruct",
+        "deepseek/deepseek-chat",
+        "google/gemini-flash-1.5"
+    ]
+}
+
 PROVIDERS_MAP = [
     {
         "name": "Nous Portal (Nous Research subscription)",
@@ -740,6 +780,34 @@ def decrypt_value_local(val: str, project_root: Path) -> str:
         pass
     return val
 
+def resolve_display_url_and_model(url: str, model: str, project_root: Path) -> tuple[str, str]:
+    if "cloudaidoc-pa.googleapis.com" not in url:
+        return url, model
+        
+    project_id = None
+    creds_file = project_root / ".google_credentials.json"
+    if creds_file.exists():
+        try:
+            import json
+            with open(creds_file, "r") as f:
+                creds_data = json.load(f)
+                project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
+        except Exception:
+            pass
+            
+    if not project_id:
+        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or os.environ.get("PROJECT_ID")
+        
+    if project_id:
+        location = os.environ.get("VERTEX_AI_LOCATION") or os.environ.get("GOOGLE_CLOUD_REGION") or "us-central1"
+        res_url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{project_id}/locations/{location}/endpoints/openapi"
+        res_model = "google/gemini-1.5-pro-001" if model == "code-assist" else model
+        return res_url, res_model
+    else:
+        res_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+        res_model = "gemini-1.5-pro" if model == "code-assist" else model
+        return res_url, res_model
+
 def configure_api_keys():
     import getpass
     import tempfile
@@ -784,6 +852,7 @@ def configure_api_keys():
         # Decrypt for screen display to make it clear for the user
         decrypted_url = decrypt_value_local(primary_url, project_root)
         decrypted_model = decrypt_value_local(primary_model, project_root)
+        display_url, display_model = resolve_display_url_and_model(decrypted_url, decrypted_model, project_root)
 
         # Detect active provider
         active_provider_name = "Unknown / Custom"
@@ -809,14 +878,14 @@ def configure_api_keys():
         
         # Display clean decrypted values with secure visual tag
         if primary_url.startswith("enc:"):
-            print(f" ➔ Primary LLM URL:    {c_w}{decrypted_url}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
+            print(f" ➔ Primary LLM URL:    {c_w}{display_url}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
         else:
-            print(f" ➔ Primary LLM URL:    {c_w}{primary_url}{c_r}")
+            print(f" ➔ Primary LLM URL:    {c_w}{display_url}{c_r}")
             
         if primary_model.startswith("enc:"):
-            print(f" ➔ Primary LLM Model:  {c_w}{decrypted_model}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
+            print(f" ➔ Primary LLM Model:  {c_w}{display_model}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
         else:
-            print(f" ➔ Primary LLM Model:  {c_w}{primary_model}{c_r}")
+            print(f" ➔ Primary LLM Model:  {c_w}{display_model}{c_r}")
             
         print(f" ➔ Active Key Status:  {active_provider_key_status}")
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
@@ -1071,9 +1140,26 @@ def configure_api_keys():
                     if manual_model:
                         final_model = manual_model
             else:
-                model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
-                if model_in:
-                    final_model = model_in
+                matched_presets = None
+                for key, presets in MODEL_PRESETS.items():
+                    if key.lower() in p["name"].lower():
+                        matched_presets = presets
+                        break
+                        
+                if matched_presets:
+                    menu_options = matched_presets + ["Custom model ID (Enter manually)"]
+                    model_sel = select_menu(menu_options, f"Select Target Model for {p['name']}:")
+                    if model_sel is not None:
+                        if model_sel < len(matched_presets):
+                            final_model = matched_presets[model_sel]
+                        else:
+                            manual_in = input(f"\nEnter Target Model ID manually (Press Enter for default '{p['model']}'): ").strip()
+                            if manual_in:
+                                final_model = manual_in
+                else:
+                    model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
+                    if model_in:
+                        final_model = model_in
 
             # AES rest encryption
             do_encrypt = False
@@ -1804,9 +1890,26 @@ def run_quick_setup():
             if model_in:
                 final_model = model_in
     else:
-        model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
-        if model_in:
-            final_model = model_in
+        matched_presets = None
+        for key, presets in MODEL_PRESETS.items():
+            if key.lower() in p["name"].lower():
+                matched_presets = presets
+                break
+                
+        if matched_presets:
+            menu_options = matched_presets + ["Custom model ID (Enter manually)"]
+            model_sel = select_menu(menu_options, f"Select Target Model for {p['name']}:")
+            if model_sel is not None:
+                if model_sel < len(matched_presets):
+                    final_model = matched_presets[model_sel]
+                else:
+                    manual_in = input(f"\nEnter Target Model ID manually (Press Enter for default '{p['model']}'): ").strip()
+                    if manual_in:
+                        final_model = manual_in
+        else:
+            model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
+            if model_in:
+                final_model = model_in
 
     # Step 3: Messaging setup
     print(f"\n{c_w}[STEP 3] Configure Telegram Bot Messaging (Optional):{c_r}")
