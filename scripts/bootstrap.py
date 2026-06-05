@@ -54,26 +54,69 @@ def get_python_executable() -> str:
     if not project_root.is_dir():
         return sys.executable
         
-    # Check for .venv first, then venv, then fallback to sys.executable
-    folders = (".venv", "venv")
-    if sys.platform == "win32":
-        bin_dir = "Scripts"
-        names = ("python.exe",)
-    else:
-        bin_dir = "bin"
-        names = ("python", "python3")
-        
+    # 0. Allow direct developer override via env vars
+    env_override = os.environ.get("KENBUN_PYTHON_EXECUTABLE") or os.environ.get("PROJECT_VENV_DIR")
+    if env_override:
+        override_path = Path(env_override)
+        try:
+            if override_path.is_dir():
+                bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+                names = ("python.exe",) if sys.platform == "win32" else ("python", "python3")
+                for name in names:
+                    p = override_path / bin_dir / name
+                    resolved = p.resolve(strict=True)
+                    if resolved.is_file():
+                        logger.debug(f"Resolved python override directory to: {resolved}")
+                        return str(resolved)
+            elif override_path.is_file():
+                resolved = override_path.resolve(strict=True)
+                logger.debug(f"Resolved python override executable to: {resolved}")
+                return str(resolved)
+        except Exception as e:
+            logger.debug(f"Failed to resolve KENBUN_PYTHON_EXECUTABLE/PROJECT_VENV_DIR override: {e}")
+
+    # 1. If we are already running inside an active virtual environment, return sys.executable
+    if sys.prefix != sys.base_prefix:
+        logger.debug(f"Running inside active virtual environment. Using sys.executable: {sys.executable}")
+        return sys.executable
+
+    # 2. Check environment variables for active virtualenv or conda environment
+    env_keys = ("VIRTUAL_ENV", "CONDA_PREFIX")
+    bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+    names = ("python.exe",) if sys.platform == "win32" else ("python", "python3")
+    
+    for key in env_keys:
+        val = os.environ.get(key)
+        if val:
+            venv_dir = Path(val)
+            for name in names:
+                venv_path = venv_dir / bin_dir / name
+                try:
+                    resolved_venv = venv_path.resolve(strict=True)
+                    if resolved_venv.is_file():
+                        logger.debug(f"Resolved active environment ({key}) to: {resolved_venv}")
+                        return str(resolved_venv)
+                except Exception as e:
+                    logger.debug(f"Failed to resolve path under environment {key}: {e}")
+
+    # 3. Check for project-local virtual environments (escalated search scope for scalability)
+    folders = (".venv", "venv", "env", ".env")
     for folder in folders:
         for name in names:
             venv_path = project_root / folder / bin_dir / name
             try:
-                resolved_venv = venv_path.resolve()
-                # Enforce strict path containment boundary check to defeat path traversal/hijacking
-                if resolved_venv.is_file() and project_root in resolved_venv.parents:
+                resolved_venv = venv_path.resolve(strict=True)
+                # Enforce strict path containment boundary check to defeat path traversal/hijacking for local files
+                if resolved_venv.is_file() and project_root.resolve() in resolved_venv.parents:
+                    logger.debug(f"Resolved local virtual environment ({folder}) to: {resolved_venv}")
                     return str(resolved_venv)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Skipping path {venv_path} during local search: {e}")
+
+    logger.debug(f"No virtual environment detected. Falling back to sys.executable: {sys.executable}")
     return sys.executable
+
+
 
 def print_sakura_banner():
     use_color = should_enable_color()

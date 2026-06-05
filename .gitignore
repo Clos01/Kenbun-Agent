@@ -99,3 +99,7 @@ dashboard.log
 dashboard/*.log
 tmp/
 temp/
+
+# --- External Dependencies / Third-Party Repos ---
+core/external/
+
