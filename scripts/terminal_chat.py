@@ -227,7 +227,7 @@ def save_session_backup(history, cwd, llm_url, llm_model):
                 project_root = Path(__file__).resolve().parent.parent
 
         # Enforce strict path traversal check: backup folder must be strictly under Home or Project Root
-        allowed_roots = [Path.home().resolve(), project_root]
+        allowed_roots = [Path.home().resolve(), project_root, Path(active_brain_health_dir).resolve()]
         resolved_dir = Path(local_dir).resolve()
         if not any(resolved_dir == root or resolved_dir.is_relative_to(root) for root in allowed_roots):
             raise ValueError("Security Violation: Backup directory outside allowed boundaries.")

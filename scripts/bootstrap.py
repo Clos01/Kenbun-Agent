@@ -1976,6 +1976,9 @@ def clean_docker_stack():
         
     try:
         subprocess.run(down_args, cwd=project_root)
+        # Explicitly kill containers by name to prevent cross-project conflicts (e.g. if ran from /opt vs ~/)
+        containers = ["portable_chroma", "portable_ollama", "portable_ollama_init", "portable_fastmcp", "portable_dashboard", "portable_dozzle"]
+        subprocess.run(["docker", "rm", "-f"] + containers, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
         if choice == "2":
             print(f"\n{c_y}🟡 Pruning build caches and unused network layers...{c_r}")
@@ -2317,7 +2320,11 @@ def run_interactive_wizard():
         try:
             with open(env_file, "r", encoding="utf-8") as f:
                 content = f.read()
-                if "/absolute/path/to/your/cloned/kenbun-agent" in content or "your_gemini_key_here" in content:
+                has_default_path = "/absolute/path/to/your/cloned/kenbun-agent" in content
+                has_default_key = "your_gemini_key_here" in content
+                has_oauth = "generativelanguage.googleapis.com" in content or "vertexai" in content
+                
+                if has_default_path or (has_default_key and not has_oauth):
                     first_time = True
         except Exception:
             pass
