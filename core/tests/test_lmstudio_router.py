@@ -82,7 +82,7 @@ def test_ensure_lmstudio_model_loaded_triggers_load(mock_urlopen):
 
 def test_decrypt_value_compatibility():
     """Verifies that decrypt_value handles plain text, enc:v1:, and enc: prefixes."""
-    from tools.infrastructure.config import decrypt_value, get_master_key
+    from tools.utils.secret_manager import decrypt_value, _ensure_key as get_master_key
     from cryptography.fernet import Fernet
     
     # 1. Plain text
