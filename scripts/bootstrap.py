@@ -467,18 +467,24 @@ def select_menu(options, title="Select provider:", selected=0):
 MODEL_PRESETS = {
     "Google Gemini via OAuth": [
         "code-assist",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-2.0-flash-exp",
         "gemini-2.5-flash",
-        "gemini-2.5-pro"
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-pro-exp",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro"
     ],
     "Google AI Studio": [
-        "gemini-1.5-flash",
-        "gemini-1.5-pro",
-        "gemini-2.0-flash-exp",
         "gemini-2.5-flash",
-        "gemini-2.5-pro"
+        "gemini-2.5-pro",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-2.0-pro-exp",
+        "gemini-2.0-flash-thinking-exp",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro"
     ],
     "Anthropic": [
         "claude-3-5-sonnet-latest",
