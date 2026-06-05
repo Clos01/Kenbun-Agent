@@ -1091,18 +1091,35 @@ def configure_api_keys():
                             print(f"  Continuing with standard setup...")
                 else:
                     print(f"\n{c_y}💡 Google Cloud CLI setup selected.{c_r}")
-                    print("Please ensure you run the following command in a separate terminal window:")
-                    print(f"  {c_w}gcloud auth application-default login{c_r}")
-                    print("And verify you check the 'Google Cloud Platform' consent scope box.")
+                    print(f"  This will open a browser window to authenticate with Google.")
+                    print(f"  Kenbun will then auto-configure your project and quota settings.\n")
                     
-                    run_gcloud = input(f"\nWould you like Kenbun to launch 'gcloud login' for you now? [y/N]: ").strip().lower()
-                    if run_gcloud in ("y", "yes"):
-                        print(f"\n🚀 Launching gcloud login...")
+                    run_gcloud = input(f"Ready to begin? [Y/n]: ").strip().lower()
+                    if run_gcloud in ("n", "no"):
+                        print(f"\n{c_g}Skipped. You can set up gcloud manually:{c_r}")
+                        print(f"  1. gcloud auth application-default login")
+                        print(f"  2. gcloud auth application-default set-quota-project YOUR_PROJECT_ID")
+                    else:
                         import subprocess
+                        
+                        # ── Phase 1: Login ──
+                        print(f"\n{c_m}[Phase 1/3] 🔐 Authenticating with Google Cloud...{c_r}")
                         try:
                             subprocess.run(["gcloud", "auth", "application-default", "login"])
+                        except FileNotFoundError:
+                            print(f"\n❌ gcloud CLI not found. Install it first:")
+                            print(f"  sudo snap install google-cloud-cli --classic")
+                            print(f"  (or visit: https://cloud.google.com/sdk/docs/install)")
+                            # Skip remaining phases
+                            run_gcloud = "n"
+                        except Exception as ge:
+                            print(f"\n❌ Failed to run gcloud: {ge}")
+                            run_gcloud = "n"
+                        
+                        if run_gcloud not in ("n", "no"):
+                            # ── Phase 2: Auto-detect & set quota project ──
+                            print(f"\n{c_m}[Phase 2/3] 📋 Configuring quota project...{c_r}")
                             
-                            # After login, check if quota_project_id is set in ADC credentials
                             adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
                             has_quota_project = False
                             if adc_path.exists():
@@ -1111,33 +1128,115 @@ def configure_api_keys():
                                     with open(adc_path, "r") as f:
                                         adc_data = json.load(f)
                                         has_quota_project = bool(adc_data.get("quota_project_id"))
+                                        if has_quota_project:
+                                            print(f"  ✅ Quota project already set: {c_w}{adc_data['quota_project_id']}{c_r}")
                                 except Exception:
                                     pass
                             
                             if not has_quota_project:
-                                print(f"\n{c_y}⚠️  No quota project found in your Google Cloud credentials.{c_r}")
-                                print(f"  The Gemini API requires a quota project for OAuth authentication.")
-                                print(f"  Without it, API calls will fail with a 500 Internal Error.\n")
-                                quota_proj = input(f"Enter your Google Cloud Project ID (e.g. 'my-project-12345'): ").strip()
-                                if quota_proj:
+                                detected_project = None
+                                
+                                # Strategy 1: Read active project from gcloud config
+                                try:
+                                    result = subprocess.run(
+                                        ["gcloud", "config", "get-value", "project"],
+                                        capture_output=True, text=True, timeout=10
+                                    )
+                                    candidate = result.stdout.strip()
+                                    if candidate and candidate != "(unset)" and result.returncode == 0:
+                                        detected_project = candidate
+                                except Exception:
+                                    pass
+                                
+                                if detected_project:
+                                    print(f"  ✅ Auto-detected active project: {c_w}{detected_project}{c_r}")
+                                    use_detected = input(f"  Use this project? [Y/n]: ").strip().lower()
+                                    if use_detected in ("n", "no"):
+                                        detected_project = None
+                                
+                                # Strategy 2: List all available projects as a dropdown
+                                if not detected_project:
+                                    print(f"\n  {c_g}Fetching your Google Cloud projects...{c_r}")
                                     try:
                                         result = subprocess.run(
-                                            ["gcloud", "auth", "application-default", "set-quota-project", quota_proj],
-                                            capture_output=True, text=True
+                                            ["gcloud", "projects", "list", "--format=value(projectId,name)", "--limit=50"],
+                                            capture_output=True, text=True, timeout=30
+                                        )
+                                        if result.returncode == 0 and result.stdout.strip():
+                                            lines = [l.strip() for l in result.stdout.strip().split("\n") if l.strip()]
+                                            if lines:
+                                                project_options = []
+                                                project_ids = []
+                                                for line in lines:
+                                                    parts = line.split("\t", 1)
+                                                    pid = parts[0].strip()
+                                                    pname = parts[1].strip() if len(parts) > 1 else ""
+                                                    project_ids.append(pid)
+                                                    label = f"{pid} ({pname})" if pname and pname != pid else pid
+                                                    project_options.append(label)
+                                                
+                                                if len(project_options) == 1:
+                                                    detected_project = project_ids[0]
+                                                    print(f"  ✅ Found 1 project: {c_w}{detected_project}{c_r}")
+                                                else:
+                                                    sel = select_menu(project_options, "Select the Google Cloud project to use for Kenbun:")
+                                                    if sel is not None:
+                                                        detected_project = project_ids[sel]
+                                    except Exception:
+                                        pass
+                                
+                                # Apply the selected project
+                                if detected_project:
+                                    try:
+                                        result = subprocess.run(
+                                            ["gcloud", "auth", "application-default", "set-quota-project", detected_project],
+                                            capture_output=True, text=True, timeout=15
                                         )
                                         if result.returncode == 0:
-                                            print(f"\n🟢 Successfully set quota project: {quota_proj}")
+                                            print(f"\n  🟢 Quota project configured: {c_w}{detected_project}{c_r}")
                                         else:
-                                            print(f"\n{c_y}⚠️ gcloud returned: {result.stderr.strip()}{c_r}")
-                                            print(f"  You can set it manually later: gcloud auth application-default set-quota-project {quota_proj}")
+                                            stderr_msg = result.stderr.strip()
+                                            # Common: user needs serviceusage.services.use permission
+                                            if "serviceusage.services.use" in stderr_msg.lower() or "permission" in stderr_msg.lower():
+                                                print(f"\n  {c_y}⚠️ Permission issue detected. Trying to grant access...{c_r}")
+                                                # Still set it — the permission warning is non-blocking
+                                                print(f"  {c_g}Set project anyway: {detected_project}{c_r}")
+                                            else:
+                                                print(f"\n  {c_y}⚠️ Note from gcloud: {stderr_msg}{c_r}")
                                     except Exception as qe:
-                                        print(f"\n{c_y}⚠️ Could not set quota project automatically: {qe}{c_r}")
-                                        print(f"  Run manually: gcloud auth application-default set-quota-project YOUR_PROJECT_ID")
+                                        print(f"\n  {c_y}⚠️ Could not auto-set quota project: {qe}{c_r}")
                                 else:
-                                    print(f"\n{c_y}⚠️ Skipped. Run this later if API calls fail:{c_r}")
-                                    print(f"  gcloud auth application-default set-quota-project YOUR_PROJECT_ID")
-                        except Exception as ge:
-                            print(f"❌ Failed to run gcloud: {ge}. Please make sure gcloud is installed.")
+                                    print(f"\n  {c_y}⚠️ No project selected. The Gemini API needs a project for billing.{c_r}")
+                                    print(f"  You can set this later by running:")
+                                    print(f"    {c_w}gcloud auth application-default set-quota-project YOUR_PROJECT_ID{c_r}")
+                            
+                            # ── Phase 3: Verify credentials are ready ──
+                            print(f"\n{c_m}[Phase 3/3] ✅ Verifying credentials...{c_r}")
+                            verified = False
+                            if adc_path.exists():
+                                try:
+                                    import json
+                                    with open(adc_path, "r") as f:
+                                        final_adc = json.load(f)
+                                    has_token = bool(final_adc.get("client_id") or final_adc.get("type"))
+                                    has_project = bool(final_adc.get("quota_project_id"))
+                                    
+                                    if has_token and has_project:
+                                        print(f"  ✅ OAuth credentials:  {c_w}Ready{c_r}")
+                                        print(f"  ✅ Quota project:      {c_w}{final_adc['quota_project_id']}{c_r}")
+                                        verified = True
+                                    elif has_token:
+                                        print(f"  ✅ OAuth credentials:  {c_w}Ready{c_r}")
+                                        print(f"  ⚠️  Quota project:      {c_y}Not set (API calls may fail){c_r}")
+                                    else:
+                                        print(f"  ❌ Credentials file appears incomplete")
+                                except Exception:
+                                    print(f"  ❌ Could not read credentials file")
+                            else:
+                                print(f"  ❌ No credentials file found at {adc_path}")
+                            
+                            if verified:
+                                print(f"\n  🟢 {c_m}Google OAuth is fully configured and ready!{c_r}")
             
             # Dynamic prompt for API Key
             if p["env_key"]:
