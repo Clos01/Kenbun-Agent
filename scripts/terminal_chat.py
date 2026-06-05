@@ -2697,6 +2697,27 @@ def main():
                     
                     if "GEMINI_API_KEY" in env and is_gemini_route:
                         headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+                    elif ("cloudaidoc-pa.googleapis.com" in llm_url.lower() or "googleapis.com" in llm_url.lower()) and is_gemini_route:
+                        try:
+                            import google.auth
+                            from google.auth.transport.requests import Request as AuthRequest
+                            scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                            credentials, project_id = google.auth.default(scopes=scopes)
+                            credentials.refresh(AuthRequest())
+                            headers["Authorization"] = f"Bearer {credentials.token}"
+                            log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                        except Exception as oauth_err:
+                            log_event(f"Failed to acquire Google OAuth access token via ADC in termchat: {oauth_err}")
+                            print()
+                            draw_box([
+                                "Google Cloud CLI credentials not found or not consented!",
+                                "To use the Google OAuth provider, you must install the CLI and log in:",
+                                "",
+                                "  1. Install: sudo snap install google-cloud-cli --classic",
+                                "  2. Login:   gcloud auth application-default login",
+                                "     (Ensure you check the Google Cloud Platform consent checkbox)",
+                            ], title="🚨 GOOGLE AUTHENTICATION REQUIRED", border_color=C_RED, text_color=C_Y)
+                            print()
                     elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
                     elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
@@ -2761,6 +2782,27 @@ def main():
                     
                     if "GEMINI_API_KEY" in env and is_gemini_route:
                         headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
+                    elif ("cloudaidoc-pa.googleapis.com" in llm_url.lower() or "googleapis.com" in llm_url.lower()) and is_gemini_route:
+                        try:
+                            import google.auth
+                            from google.auth.transport.requests import Request as AuthRequest
+                            scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                            credentials, project_id = google.auth.default(scopes=scopes)
+                            credentials.refresh(AuthRequest())
+                            headers["Authorization"] = f"Bearer {credentials.token}"
+                            log_event("Successfully acquired Google OAuth access token via ADC in termchat")
+                        except Exception as oauth_err:
+                            log_event(f"Failed to acquire Google OAuth access token via ADC in termchat: {oauth_err}")
+                            print()
+                            draw_box([
+                                "Google Cloud CLI credentials not found or not consented!",
+                                "To use the Google OAuth provider, you must install the CLI and log in:",
+                                "",
+                                "  1. Install: sudo snap install google-cloud-cli --classic",
+                                "  2. Login:   gcloud auth application-default login",
+                                "     (Ensure you check the Google Cloud Platform consent checkbox)",
+                            ], title="🚨 GOOGLE AUTHENTICATION REQUIRED", border_color=C_RED, text_color=C_Y)
+                            print()
                     elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
                         headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
                     elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
