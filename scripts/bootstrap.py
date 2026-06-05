@@ -890,10 +890,23 @@ def configure_api_keys():
                         else:
                             json_path = Path(json_path_str)
                             
-                        if json_path.exists() and json_path.is_file():
+                        # Security: canonicalize path and enforce strict file boundaries & size limits
+                        try:
+                            resolved_path = json_path.resolve()
+                            if resolved_path.exists() and resolved_path.is_file():
+                                file_size = resolved_path.stat().st_size
+                                if file_size > 102400:  # 100 KB limit
+                                    print(f"\n❌ Security Error: File is too large ({file_size} bytes). Credentials JSON should be under 100 KB.")
+                                    resolved_path = None
+                            else:
+                                resolved_path = None
+                        except Exception:
+                            resolved_path = None
+                            
+                        if resolved_path:
                             try:
                                 import json
-                                with open(json_path, "r", encoding="utf-8") as jf:
+                                with open(resolved_path, "r", encoding="utf-8") as jf:
                                     data = json.load(jf)
                                 for key in ("installed", "web"):
                                     if key in data and isinstance(data[key], dict):
@@ -902,21 +915,22 @@ def configure_api_keys():
                                 if not g_client_id:
                                     g_client_id = data.get("client_id", "")
                                     g_client_secret = data.get("client_secret", "")
-                            except Exception as je:
-                                print(f"\n❌ Error parsing JSON file: {je}")
+                            except Exception:
+                                print(f"\n❌ Error parsing JSON credentials file.")
                         else:
-                            print(f"\n❌ File does not exist at path: {json_path_str}")
+                            print(f"\n❌ Invalid file path or access denied: {json_path_str}")
                             
                     elif input_method == "2":
                         print(f"\n{c_c}Paste raw JSON credentials content below and press Enter twice:{c_r}")
                         lines = []
-                        while True:
+                        # Security: prevent OOM/DoS by limiting maximum pasted lines
+                        while len(lines) < 200:
                             line = sys.stdin.readline().strip()
                             if not line:
                                 break
                             lines.append(line)
                         raw_json_str = "".join(lines)
-                        if raw_json_str:
+                        if raw_json_str and len(raw_json_str) < 102400: # Max 100 KB payload
                             try:
                                 import json
                                 data = json.loads(raw_json_str)
@@ -927,9 +941,10 @@ def configure_api_keys():
                                 if not g_client_id:
                                     g_client_id = data.get("client_id", "")
                                     g_client_secret = data.get("client_secret", "")
-                            except Exception as je:
-                                print(f"\n❌ Error parsing raw JSON: {je}")
-                                
+                            except Exception:
+                                print(f"\n❌ Error parsing raw JSON content.")
+                        else:
+                            print(f"\n❌ Error: Paste content was empty or exceeded size limitations.")
                     else:
                         g_client_id = input(f"\nEnter Google Client ID: ").strip()
                         g_client_secret = input(f"Enter Google Client Secret: ").strip()
