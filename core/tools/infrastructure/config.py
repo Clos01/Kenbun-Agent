@@ -166,6 +166,18 @@ class KenbunSettings(BaseSettings):
     GEMINI_API_KEY: Optional[SecretStr] = None
     ANTHROPIC_API_KEY: Optional[SecretStr] = None
     DEEPSEEK_API_KEY: Optional[SecretStr] = None
+    OPENROUTER_API_KEY: Optional[SecretStr] = None
+    NOUS_PORTAL_API_KEY: Optional[SecretStr] = None
+    NVIDIA_API_KEY: Optional[SecretStr] = None
+    XAI_API_KEY: Optional[SecretStr] = None
+    ZHIPU_API_KEY: Optional[SecretStr] = None
+    KIMI_API_KEY: Optional[SecretStr] = None
+    MOONSHOT_API_KEY: Optional[SecretStr] = None
+    STEPFUN_API_KEY: Optional[SecretStr] = None
+    DASHSCOPE_API_KEY: Optional[SecretStr] = None
+    MIMO_API_KEY: Optional[SecretStr] = None
+    TOKENHUB_API_KEY: Optional[SecretStr] = None
+    HF_API_KEY: Optional[SecretStr] = None
     DEEPSEEK_MODEL: str = "deepseek-chat"
     TWENTYONE_DEV_API_KEY: Optional[SecretStr] = None
     DAILY_BUDGET: float = Field(default=50.00, validation_alias="DAILY_BUDGET", gt=0.0)
