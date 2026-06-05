@@ -1170,6 +1170,8 @@ def configure_api_keys():
                                                 for line in lines:
                                                     parts = line.split("\t", 1)
                                                     pid = parts[0].strip()
+                                                    if not pid:
+                                                        continue
                                                     pname = parts[1].strip() if len(parts) > 1 else ""
                                                     project_ids.append(pid)
                                                     label = f"{pid} ({pname})" if pname and pname != pid else pid
@@ -1178,12 +1180,115 @@ def configure_api_keys():
                                                 if len(project_options) == 1:
                                                     detected_project = project_ids[0]
                                                     print(f"  ✅ Found 1 project: {c_w}{detected_project}{c_r}")
-                                                else:
+                                                elif len(project_options) > 1:
                                                     sel = select_menu(project_options, "Select the Google Cloud project to use for Kenbun:")
                                                     if sel is not None:
                                                         detected_project = project_ids[sel]
                                     except Exception:
                                         pass
+                                
+                                # Strategy 3: No projects found — offer to create one or switch to API key
+                                if not detected_project:
+                                    import random, string
+                                    print(f"\n  {c_y}No Google Cloud projects found on this account.{c_r}")
+                                    print(f"  You have two options:\n")
+                                    print(f"  {c_w}[1] Create a new Google Cloud project automatically (free){c_r}")
+                                    print(f"      Kenbun will create a project and enable the Gemini API for you.")
+                                    print(f"  {c_w}[2] Use a Google AI Studio API Key instead (simpler, no project needed){c_r}")
+                                    print(f"      Get a free key at: {c_m}https://aistudio.google.com/apikey{c_r}\n")
+                                    
+                                    fallback_choice = input(f"  Select option [1-2, default=1]: ").strip() or "1"
+                                    
+                                    if fallback_choice == "1":
+                                        # Auto-generate a project ID
+                                        suffix = ''.join(random.choices(string.digits, k=6))
+                                        auto_project_id = f"kenbun-agent-{suffix}"
+                                        
+                                        print(f"\n  {c_g}Creating project: {c_w}{auto_project_id}{c_r}")
+                                        try:
+                                            result = subprocess.run(
+                                                ["gcloud", "projects", "create", auto_project_id, f"--name=Kenbun Agent"],
+                                                capture_output=True, text=True, timeout=60
+                                            )
+                                            if result.returncode == 0:
+                                                print(f"  ✅ Project created: {c_w}{auto_project_id}{c_r}")
+                                                detected_project = auto_project_id
+                                                
+                                                # Set as active project
+                                                subprocess.run(
+                                                    ["gcloud", "config", "set", "project", auto_project_id],
+                                                    capture_output=True, text=True, timeout=10
+                                                )
+                                                
+                                                # Enable the Generative Language API
+                                                print(f"  {c_g}Enabling Gemini (Generative Language) API...{c_r}")
+                                                api_result = subprocess.run(
+                                                    ["gcloud", "services", "enable", "generativelanguage.googleapis.com",
+                                                     f"--project={auto_project_id}"],
+                                                    capture_output=True, text=True, timeout=60
+                                                )
+                                                if api_result.returncode == 0:
+                                                    print(f"  ✅ Generative Language API enabled")
+                                                else:
+                                                    api_err = api_result.stderr.strip()
+                                                    if "billing" in api_err.lower():
+                                                        print(f"  {c_y}⚠️ Billing must be enabled on the project to use this API.{c_r}")
+                                                        print(f"  Visit: https://console.cloud.google.com/billing/linkedaccount?project={auto_project_id}")
+                                                    else:
+                                                        print(f"  {c_y}⚠️ Could not enable API: {api_err}{c_r}")
+                                            else:
+                                                create_err = result.stderr.strip()
+                                                print(f"  {c_y}❌ Could not create project: {create_err}{c_r}")
+                                                if "billing" in create_err.lower() or "quota" in create_err.lower():
+                                                    print(f"  {c_g}Try Option 2 (AI Studio API Key) instead — it's free and simpler.{c_r}")
+                                        except Exception as ce:
+                                            print(f"  {c_y}❌ Project creation failed: {ce}{c_r}")
+                                    
+                                    elif fallback_choice == "2":
+                                        # Switch to AI Studio API key provider
+                                        print(f"\n  {c_m}Switching to Google AI Studio (API Key) provider...{c_r}")
+                                        print(f"  Get your free API key at: {c_w}https://aistudio.google.com/apikey{c_r}")
+                                        print(f"  Copy the key and paste it below.\n")
+                                        
+                                        import getpass
+                                        api_key_input = getpass.getpass(f"  Paste your Gemini API Key (hidden): ").strip()
+                                        
+                                        if api_key_input:
+                                            # Switch provider to AI Studio
+                                            final_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+                                            final_model = "gemini-2.5-flash"
+                                            
+                                            # Write to .env
+                                            import tempfile
+                                            env_file_path = project_root / ".env"
+                                            with open(env_file_path, "r", encoding="utf-8") as f:
+                                                env_content = f.read()
+                                            
+                                            def _update_env(content, k, v):
+                                                pattern = rf"^{k}\s*=.*"
+                                                new_content, count = re.subn(pattern, f"{k}={v}", content, flags=re.MULTILINE)
+                                                if count == 0:
+                                                    content = content.rstrip("\n") + f"\n{k}={v}\n"
+                                                    return content
+                                                return new_content
+                                            
+                                            env_content = _update_env(env_content, "PRIMARY_LLM_URL", final_url)
+                                            env_content = _update_env(env_content, "PRIMARY_LLM_MODEL", final_model)
+                                            env_content = _update_env(env_content, "GEMINI_API_KEY", api_key_input)
+                                            
+                                            temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
+                                            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                                                f.write(env_content)
+                                            os.replace(temp_path, env_file_path)
+                                            
+                                            print(f"\n  🟢 {c_m}Switched to Google AI Studio!{c_r}")
+                                            print(f"  ➔ PRIMARY_LLM_URL:   {final_url}")
+                                            print(f"  ➔ PRIMARY_LLM_MODEL: {final_model}")
+                                            print(f"  ➔ GEMINI_API_KEY:    [Configured]")
+                                            # Skip the rest of OAuth setup since we switched providers
+                                            skip_key_update = True
+                                        else:
+                                            print(f"  {c_y}No key entered. Skipping.{c_r}")
                                 
                                 # Apply the selected project
                                 if detected_project:
@@ -1196,19 +1301,12 @@ def configure_api_keys():
                                             print(f"\n  🟢 Quota project configured: {c_w}{detected_project}{c_r}")
                                         else:
                                             stderr_msg = result.stderr.strip()
-                                            # Common: user needs serviceusage.services.use permission
                                             if "serviceusage.services.use" in stderr_msg.lower() or "permission" in stderr_msg.lower():
-                                                print(f"\n  {c_y}⚠️ Permission issue detected. Trying to grant access...{c_r}")
-                                                # Still set it — the permission warning is non-blocking
-                                                print(f"  {c_g}Set project anyway: {detected_project}{c_r}")
+                                                print(f"\n  {c_y}⚠️ Permission note (non-blocking): {stderr_msg[:100]}{c_r}")
                                             else:
                                                 print(f"\n  {c_y}⚠️ Note from gcloud: {stderr_msg}{c_r}")
                                     except Exception as qe:
                                         print(f"\n  {c_y}⚠️ Could not auto-set quota project: {qe}{c_r}")
-                                else:
-                                    print(f"\n  {c_y}⚠️ No project selected. The Gemini API needs a project for billing.{c_r}")
-                                    print(f"  You can set this later by running:")
-                                    print(f"    {c_w}gcloud auth application-default set-quota-project YOUR_PROJECT_ID{c_r}")
                             
                             # ── Phase 3: Verify credentials are ready ──
                             print(f"\n{c_m}[Phase 3/3] ✅ Verifying credentials...{c_r}")
