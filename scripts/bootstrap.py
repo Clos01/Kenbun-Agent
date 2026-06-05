@@ -1105,7 +1105,10 @@ def configure_api_keys():
                         # ── Phase 1: Login ──
                         print(f"\n{c_m}[Phase 1/3] 🔐 Authenticating with Google Cloud...{c_r}")
                         try:
-                            subprocess.run(["gcloud", "auth", "application-default", "login"])
+                            # Use 'login --update-adc' instead of 'application-default login'
+                            # This authenticates BOTH the gcloud CLI (allowing project creation/listing)
+                            # AND the Application Default Credentials (ADC) needed for the Python SDK.
+                            subprocess.run(["gcloud", "auth", "login", "--update-adc"])
                         except FileNotFoundError:
                             print(f"\n❌ gcloud CLI not found. Install it first:")
                             print(f"  sudo snap install google-cloud-cli --classic")
