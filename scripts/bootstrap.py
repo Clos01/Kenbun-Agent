@@ -855,10 +855,87 @@ def configure_api_keys():
                 auth_opt = input(f"{c_c}Select option [1-2, default=1]: {c_r}").strip() or "1"
                 
                 if auth_opt == "2":
-                    g_client_id = input(f"\nEnter Google Client ID: ").strip()
-                    g_client_secret = input(f"Enter Google Client Secret: ").strip()
+                    print(f"\n{c_m}┌──────────────────────────────────────────────────────────────────┐")
+                    print("│             🛠️ GOOGLE DEVELOPER CONSOLE SETUP GUIDE              │")
+                    print(f"├──────────────────────────────────────────────────────────────────┤")
+                    print("│  1. Open: https://console.cloud.google.com                       │")
+                    print("│  2. Create a new project or select an existing one.              │")
+                    print("│  3. Navigate to: APIs & Services > OAuth consent screen          │")
+                    print("│     - Choose 'External' (or 'Internal' if org).                  │")
+                    print("│     - Fill in App Name (e.g. 'Kenbun Client'), User Support      │")
+                    print("│       Email, and Developer Contact Email.                        │")
+                    print("│     - Save & Continue. Under Scopes, add:                        │")
+                    print("│       'https://www.googleapis.com/auth/cloud-platform'           │")
+                    print("│     - Add your Gmail/workspace account under 'Test users'.       │")
+                    print("│     - Click 'Back to Dashboard' and click 'PUBLISH APP'.         │")
+                    print("│  4. Navigate to: APIs & Services > Credentials                   │")
+                    print("│     - Click '+ CREATE CREDENTIALS' > 'OAuth client ID'.          │")
+                    print("│     - Select Application Type: 'Desktop app'.                    │")
+                    print("│     - Name it (e.g. 'Kenbun CLI') & click 'Create'.              │")
+                    print("│  5. Click the Download (⬇️) icon next to the client ID to save    │")
+                    print("│     the JSON credentials file.                                   │")
+                    print(f"└──────────────────────────────────────────────────────────────────┘{c_r}")
                     
+                    print(f"\n{c_c}Choose how to input your Custom OAuth Client credentials:{c_r}")
+                    print("  [1] Paste absolute path to downloaded JSON file (Automatic & Easiest)")
+                    print("  [2] Paste raw JSON content from downloaded file")
+                    print("  [3] Enter Client ID and Client Secret manually")
+                    
+                    input_method = input(f"\nSelect input method [1-3, default=1]: ").strip() or "1"
+                    
+                    if input_method == "1":
+                        json_path_str = input(f"\nEnter absolute path to the downloaded JSON file: ").strip()
+                        if json_path_str.startswith("~"):
+                            json_path = Path.home() / json_path_str[2:]
+                        else:
+                            json_path = Path(json_path_str)
+                            
+                        if json_path.exists() and json_path.is_file():
+                            try:
+                                import json
+                                with open(json_path, "r", encoding="utf-8") as jf:
+                                    data = json.load(jf)
+                                for key in ("installed", "web"):
+                                    if key in data and isinstance(data[key], dict):
+                                        g_client_id = data[key].get("client_id", "")
+                                        g_client_secret = data[key].get("client_secret", "")
+                                if not g_client_id:
+                                    g_client_id = data.get("client_id", "")
+                                    g_client_secret = data.get("client_secret", "")
+                            except Exception as je:
+                                print(f"\n❌ Error parsing JSON file: {je}")
+                        else:
+                            print(f"\n❌ File does not exist at path: {json_path_str}")
+                            
+                    elif input_method == "2":
+                        print(f"\n{c_c}Paste raw JSON credentials content below and press Enter twice:{c_r}")
+                        lines = []
+                        while True:
+                            line = sys.stdin.readline().strip()
+                            if not line:
+                                break
+                            lines.append(line)
+                        raw_json_str = "".join(lines)
+                        if raw_json_str:
+                            try:
+                                import json
+                                data = json.loads(raw_json_str)
+                                for key in ("installed", "web"):
+                                    if key in data and isinstance(data[key], dict):
+                                        g_client_id = data[key].get("client_id", "")
+                                        g_client_secret = data[key].get("client_secret", "")
+                                if not g_client_id:
+                                    g_client_id = data.get("client_id", "")
+                                    g_client_secret = data.get("client_secret", "")
+                            except Exception as je:
+                                print(f"\n❌ Error parsing raw JSON: {je}")
+                                
+                    else:
+                        g_client_id = input(f"\nEnter Google Client ID: ").strip()
+                        g_client_secret = input(f"Enter Google Client Secret: ").strip()
+                        
                     if g_client_id and g_client_secret:
+                        print(f"\n🟢 Successfully resolved credentials! Client ID starts with: {g_client_id[:15]}...")
                         enc_choice = input(f"\nEncrypt your Google Developer Console credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
                         do_encrypt = enc_choice not in ("n", "no")
                         
