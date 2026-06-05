@@ -37,12 +37,17 @@ def decrypt_value(encrypted_text: str) -> str:
     if not encrypted_text.startswith("enc:"):
         return encrypted_text # Already plain text
         
+    ciphertext = encrypted_text[4:]
+    if ciphertext.startswith("v1:"):
+        ciphertext = ciphertext[3:]
+        
     key = _ensure_key()
     f = Fernet(key)
     try:
-        return f.decrypt(encrypted_text[4:].encode()).decode()
+        return f.decrypt(ciphertext.encode()).decode()
     except Exception as e:
         return f"ERROR: Decryption failed. {e}"
+
 
 if __name__ == "__main__":
     # CLI for the user to encrypt keys
