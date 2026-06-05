@@ -174,6 +174,20 @@ def _make_openai_compatible_call(
         api_key = settings.HF_API_KEY.get_secret_value()
     elif "generativelanguage.googleapis.com" in base_url and settings.GEMINI_API_KEY:
         api_key = settings.GEMINI_API_KEY.get_secret_value()
+    elif "cloudaidoc-pa.googleapis.com" in base_url or "googleapis.com" in base_url:
+        if settings.GEMINI_API_KEY:
+            api_key = settings.GEMINI_API_KEY.get_secret_value()
+        else:
+            try:
+                import google.auth
+                from google.auth.transport.requests import Request as AuthRequest
+                scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                credentials, project_id = google.auth.default(scopes=scopes)
+                credentials.refresh(AuthRequest())
+                api_key = credentials.token
+                logging.info("Successfully acquired Google OAuth access token via ADC")
+            except Exception as oauth_err:
+                logging.warning(f"Failed to acquire Google OAuth access token via ADC: {oauth_err}")
         
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
