@@ -48,6 +48,33 @@ def should_enable_color() -> bool:
         return True
     return sys.stdout.isatty()
 
+def get_python_executable() -> str:
+    # Resolve project root relative to this script safely
+    project_root = Path(__file__).resolve().parent.parent
+    if not project_root.is_dir():
+        return sys.executable
+        
+    # Check for .venv first, then venv, then fallback to sys.executable
+    folders = (".venv", "venv")
+    if sys.platform == "win32":
+        bin_dir = "Scripts"
+        names = ("python.exe",)
+    else:
+        bin_dir = "bin"
+        names = ("python", "python3")
+        
+    for folder in folders:
+        for name in names:
+            venv_path = project_root / folder / bin_dir / name
+            try:
+                resolved_venv = venv_path.resolve()
+                # Enforce strict path containment boundary check to defeat path traversal/hijacking
+                if resolved_venv.is_file() and project_root in resolved_venv.parents:
+                    return str(resolved_venv)
+            except Exception:
+                pass
+    return sys.executable
+
 def print_sakura_banner():
     use_color = should_enable_color()
     
@@ -561,10 +588,7 @@ def auto_register_claude_desktop_mcp():
     # Build the server config dictionary using direct virtualenv interpreter
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    venv_python = project_root / "venv" / "bin" / "python"
-    
-    if not venv_python.exists():
-        venv_python = Path(sys.executable)
+    venv_python = Path(get_python_executable())
 
     kenbun_server_node = {
         "command": str(venv_python.resolve()),
@@ -619,10 +643,7 @@ def auto_register_cursor_mcp():
 
     script_dir = Path(__file__).resolve().parent
     project_root = script_dir.parent
-    venv_python = project_root / "venv" / "bin" / "python"
-    
-    if not venv_python.exists():
-        venv_python = Path(sys.executable)
+    venv_python = Path(get_python_executable())
 
     kenbun_server_node = {
         "type": "command",
@@ -848,7 +869,7 @@ def configure_api_keys():
                     except ImportError:
                         print(f"\n⚠️ Cryptography library missing. Installing cryptography...")
                         import subprocess
-                        subprocess.run([sys.executable, "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                         from cryptography.fernet import Fernet
                         
                     key_file = project_root / ".kenbun_master.key"
@@ -1587,7 +1608,7 @@ def run_quick_setup():
             except ImportError:
                 print(f"\n⚠️ Cryptography library missing. Installing cryptography...")
                 import subprocess
-                subprocess.run([sys.executable, "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 from cryptography.fernet import Fernet
                     
             key_file = project_root / ".kenbun_master.key"
@@ -1652,17 +1673,18 @@ def launch_termchat(project_root):
         c_r = "[0m" if use_color else ""
         
         # Ensure prompt_toolkit is installed before launching terminal chat
+        python_exe = get_python_executable()
         try:
             import prompt_toolkit  # noqa: F401
         except ImportError:
             print(f"\n{c_m}⚙️  Installing UI dependencies for Terminal Chat...{c_r}")
             import subprocess
-            subprocess.run([sys.executable, "-m", "pip", "install", "prompt_toolkit"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run([python_exe, "-m", "pip", "install", "prompt_toolkit"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
         print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
         try:
             import subprocess
-            subprocess.run([sys.executable, str(termchat_path)])
+            subprocess.run([python_exe, str(termchat_path)])
         except KeyboardInterrupt:
             pass # Graceful exit from Ctrl+C inside the terminal chat
         except Exception as e:
