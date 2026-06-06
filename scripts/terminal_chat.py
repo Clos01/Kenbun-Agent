@@ -2002,14 +2002,36 @@ def check_and_start_docker_swarm(project_root: Path):
         
     try:
         res = subprocess.run([docker_bin, "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=2)
-        if "fastmcp_server" in res.stdout or "ollama_server" in res.stdout:
-            return  # Swarm is already running
+        is_running = "fastmcp_server" in res.stdout or "ollama_server" in res.stdout
     except Exception:
-        return # Daemon might be offline, don't crash
+        is_running = False
         
     compose_file = project_root / "docker-compose.yml"
     if not compose_file.exists():
         return
+        
+    # Auto-heal docker-compose.yml drift
+    try:
+        git_bin = shutil.which("git")
+        if git_bin and (project_root / ".git").exists():
+            status_res = subprocess.run([git_bin, "status", "--porcelain", "docker-compose.yml"], capture_output=True, text=True, cwd=str(project_root))
+            if status_res.stdout.strip():
+                print(f"\n\033[38;5;226m⚠️ [SWARM HEALER] Detected unauthorized modifications to docker-compose.yml.\033[0m")
+                print("\033[38;5;246mThis usually causes port mismatches and 'Hivemind offline' errors.\033[0m")
+                print("Would you like to auto-heal it by resetting to the official repository version?")
+                choice = input("Auto-heal? [Y/n]: ").strip().lower()
+                if choice != 'n':
+                    subprocess.run([git_bin, "checkout", "docker-compose.yml"], cwd=str(project_root), check=True)
+                    print("\033[38;5;224m✓ Successfully restored docker-compose.yml.\033[0m")
+                    print(f"\033[38;5;218m🌸 Restarting Swarm to apply corrected configuration...\033[0m")
+                    subprocess.run([docker_bin, "compose", "up", "-d", "--force-recreate"], cwd=str(project_root), check=True)
+                    print(f"\033[38;5;224m✓ Swarm containers are online.\033[0m")
+                    return # Skip normal boot since we just force-recreated
+    except Exception:
+        pass
+        
+    if is_running:
+        return # Swarm is already running properly and compose file is clean
         
     print(f"\n\033[38;5;218m🌸 Automating Swarm Boot Sequence...\033[0m")
     try:
