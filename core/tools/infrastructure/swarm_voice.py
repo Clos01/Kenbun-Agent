@@ -6,9 +6,9 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 from google import genai
 from google.genai import types
 
-from tools.infrastructure.config import settings
-from tools.infrastructure.orchestrator import orchestrate
-from tools.utils.notifications import send_notification
+from core.tools.infrastructure.config import settings
+from core.tools.infrastructure.orchestrator import orchestrate
+from core.tools.utils.notifications import send_notification
 
 # Configure logging
 logging.basicConfig(
@@ -16,7 +16,7 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-from tools.utils.secret_manager import decrypt_value
+from core.tools.utils.secret_manager import decrypt_value
 
 # Load Config from Centralized Hub
 TOKEN = decrypt_value(settings.telegram.bot_token.get_secret_value()) if settings.telegram.bot_token else None

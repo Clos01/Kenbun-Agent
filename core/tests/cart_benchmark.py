@@ -1,5 +1,5 @@
 import time
-from tools.strategy.cart_router import cart_router
+from core.tools.strategy.cart_router import cart_router
 
 # 35 Test Cases for the CART Benchmark
 BENCHMARK_DATA = [

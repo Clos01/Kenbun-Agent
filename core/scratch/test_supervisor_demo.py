@@ -2,7 +2,7 @@ import asyncio
 import json
 
 
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 async def run_demo():
     print("🚀 [DEMO] Starting System 2 Supervisor Audit Demo...")

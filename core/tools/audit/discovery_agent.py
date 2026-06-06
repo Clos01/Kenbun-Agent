@@ -59,7 +59,7 @@ def generate_discovery_form(task_description: str):
     }
     
     # Save the form to the telemetry stream so the UI can pick it up
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     TELEMETRY_PATH = settings.BRAIN_HEALTH_DIR / "live_telemetry.json"
     try:
         data = {

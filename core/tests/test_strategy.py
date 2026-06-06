@@ -1,4 +1,4 @@
-from tools.strategy.decision_logic import router
+from core.tools.strategy.decision_logic import router
 
 def test_keyword_matching():
     """Verify that System 4b correctly identifies core categories."""

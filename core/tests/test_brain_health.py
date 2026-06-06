@@ -2,8 +2,8 @@ import pytest
 import time
 
 
-from tools.strategy.decision_logic import router, LOG_DIR, DecisionRouter
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.strategy.decision_logic import router, LOG_DIR, DecisionRouter
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 def test_router_corruption_recovery():
     """Test 1: Corrupt Weight File Recovery"""
@@ -51,7 +51,7 @@ def test_adversarial_routing(task, expected, label):
 async def test_supervisor_json_retry():
     """Test the new JSON retry logic in supervisor_agent.py"""
     # We can mock _call_lm_studio to return malformed JSON first, then valid JSON
-    import tools.audit.supervisor_agent as supervisor
+    import core.tools.audit.supervisor_agent as supervisor
     
     original_call = supervisor._call_local_senior
     calls = 0
@@ -91,7 +91,7 @@ async def test_supervisor_json_retry():
 @pytest.mark.asyncio
 async def test_supervisor_fallback():
     """Test the new Gemini fallback in supervisor_agent.py"""
-    import tools.audit.supervisor_agent as supervisor
+    import core.tools.audit.supervisor_agent as supervisor
     
     # Mock LM Studio failure
     def mock_fail(system, user):

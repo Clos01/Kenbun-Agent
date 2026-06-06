@@ -1,7 +1,7 @@
 import sqlite3
 import chromadb
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 PC_IP = settings.SWARM_PC_IP
 CHROMA_PORT = settings.CHROMA_PORT

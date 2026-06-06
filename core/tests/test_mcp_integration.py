@@ -2,12 +2,12 @@ import pytest
 from unittest.mock import patch
 
 # Import the actual FastMCP object from the server module
-from tools.infrastructure.server import mcp
+from core.tools.infrastructure.server import mcp
 
 @pytest.fixture
 def mock_chroma_db():
     """Mock ChromaDB connection to avoid hitting the actual database during tests."""
-    with patch("tools.memory.chroma_db_connect.query_embeddings") as mock_query:
+    with patch("core.tools.memory.chroma_db_connect.query_embeddings") as mock_query:
         # Mocking the response structure from System 3 memory
         mock_query.return_value = {
             "documents": [["""
@@ -27,7 +27,7 @@ def test_mcp_server_initialization():
 
 def test_mcp_docs_registration():
     """Test that the FastMCP environment has loaded the official docs mapping."""
-    from tools.infrastructure.server import OFFICIAL_DOCS
+    from core.tools.infrastructure.server import OFFICIAL_DOCS
     assert "react" in OFFICIAL_DOCS
     assert "nextjs" in OFFICIAL_DOCS
     assert OFFICIAL_DOCS["react"] == "react.dev"
@@ -40,7 +40,7 @@ async def test_mcp_tool_execution(mock_chroma_db):
     """
     # Since we can't fully boot the stdio loop without blocking, we simulate
     # calling the underlying helper function the MCP server exposes.
-    from tools.infrastructure.server import query_system_3
+    from core.tools.infrastructure.server import query_system_3
     
     results = query_system_3("search_codebase", n=1)
     
@@ -50,6 +50,6 @@ async def test_mcp_tool_execution(mock_chroma_db):
 
 def test_mcp_env_bindings():
     """Test that the FastMCP server is correctly reading environment bindings."""
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     # As long as PROJECT_ROOT is loaded, the Docker volume mount is succeeding
     assert settings.PROJECT_ROOT is not None

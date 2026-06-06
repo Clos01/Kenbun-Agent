@@ -1,7 +1,7 @@
 import re
 import sys
 import json
-from tools.design.oracle import DesignOracle
+from core.tools.design.oracle import DesignOracle
 
 class DesignGuardrail:
     """

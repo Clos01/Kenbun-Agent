@@ -5,9 +5,12 @@ import time
 from datetime import datetime
 from functools import lru_cache
 
-from tools.infrastructure.config import settings
+import sys
+def print(*args, **kwargs):
+    kwargs['file'] = sys.stderr
+    __builtins__['print'](*args, **kwargs)
 
-# --- 1. CONFIGURATION ---
+from core.tools.infrastructure.config import settings
 PC_IP = settings.SWARM_PC_IP
 CHROMA_PORT = settings.CHROMA_PORT
 LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
@@ -44,8 +47,8 @@ class TelemetryPulse:
 def get_discovered_or_default_tools() -> List[tuple[str, str]]:
     """Gets dynamically discovered tools, falling back to a static default list."""
     try:
-        from tools.harvester import harvest_and_register_tools
-        from tools.registry import registry
+        from core.tools.harvester import harvest_and_register_tools
+        from core.tools.registry import registry
         harvest_and_register_tools()
         discovered = registry.get_all_tools()
         if discovered:

@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, List
 from pydantic import Field, SecretStr, field_validator, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from tools.utils.path_utils import get_project_root
+from core.tools.utils.path_utils import get_project_root
 
 # --- 0. ENV DISCOVERY ---
 
@@ -11,14 +11,14 @@ def discover_env_file() -> str:
     """Locates the .env file in expected locations."""
     root = get_project_root()
     locations = [
-        root / "core" / ".env",
         root / ".env",
+        root / "core" / ".env",
         Path.cwd() / ".env"
     ]
     for loc in locations:
         if loc.exists():
             return str(loc)
-    return str(root / "core" / ".env") # Fallback
+    return str(root / ".env") # Fallback
 
 # --- 1. NESTED MODELS (DATA OBJECTS) ---
 

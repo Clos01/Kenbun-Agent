@@ -1,6 +1,6 @@
 import pytest
-from tools.audit.linter_autofix import autofix_linter, _resolve_paths, SecurityException
-from tools.infrastructure.config import settings
+from core.tools.audit.linter_autofix import autofix_linter, _resolve_paths, SecurityException
+from core.tools.infrastructure.config import settings
 
 @pytest.mark.smoke
 def test_resolve_paths_valid():
@@ -30,7 +30,7 @@ def test_autofix_python_valid(tmp_path, monkeypatch):
     """Verify auto-fixing a dummy Python file with unused imports works successfully."""
     # Create dummy Python file inside tmp_path
     workspace = tmp_path
-    monkeypatch.setattr("tools.audit.linter_autofix.settings.PROJECT_ROOT", workspace)
+    monkeypatch.setattr("core.tools.audit.linter_autofix.settings.PROJECT_ROOT", workspace)
     dummy_file = workspace / "dummy.py"
     
     # Write python code with unused import and a formatting misalignment
@@ -63,7 +63,7 @@ def test_autofix_python_valid(tmp_path, monkeypatch):
 def test_autofix_python_syntax_error(tmp_path, monkeypatch):
     """Verify auto-fixing a Python file with syntax error aborts formatting."""
     workspace = tmp_path
-    monkeypatch.setattr("tools.audit.linter_autofix.settings.PROJECT_ROOT", workspace)
+    monkeypatch.setattr("core.tools.audit.linter_autofix.settings.PROJECT_ROOT", workspace)
     dummy_file = workspace / "broken.py"
     
     # Syntax error: unclosed parenthesis

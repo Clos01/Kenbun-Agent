@@ -1,6 +1,6 @@
 import time
 import random
-from tools.strategy.hme_router import hme_router
+from core.tools.strategy.hme_router import hme_router
 
 # Generating 100 diverse test cases
 BENCHMARK_DATA = [

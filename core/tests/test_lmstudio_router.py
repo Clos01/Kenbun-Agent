@@ -1,6 +1,6 @@
 import json
 from unittest.mock import patch, MagicMock
-from tools.utils import llm_router
+from core.tools.utils import llm_router
 
 def test_lmstudio_server_root():
     """Verifies that the /v1 suffix is correctly stripped from URLs."""
@@ -82,7 +82,7 @@ def test_ensure_lmstudio_model_loaded_triggers_load(mock_urlopen):
 
 def test_decrypt_value_compatibility():
     """Verifies that decrypt_value handles plain text, enc:v1:, and enc: prefixes."""
-    from tools.utils.secret_manager import decrypt_value, _ensure_key as get_master_key
+    from core.tools.utils.secret_manager import decrypt_value, _ensure_key as get_master_key
     from cryptography.fernet import Fernet
     
     # 1. Plain text
@@ -104,7 +104,7 @@ def test_decrypt_value_compatibility():
 def test_make_openai_compatible_call_keys_mapping():
     """Verifies that _make_openai_compatible_call dynamically selects and injects the correct bearer keys."""
     from unittest.mock import patch, MagicMock
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     from pydantic import SecretStr
     
     # Mock settings keys

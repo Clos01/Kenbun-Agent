@@ -1,4 +1,4 @@
-from tools.audit.reflection_agent import reflect_and_distill
+from core.tools.audit.reflection_agent import reflect_and_distill
 
 def build_research_pipeline(tools):
     """

@@ -21,14 +21,14 @@ METADATA_FILE = "checkpoints_index.json"
 # Immutable allowed roots loaded once at module startup to prevent configuration poisoning
 ALLOWED_ROOTS = []
 try:
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     if settings and hasattr(settings, "PROJECT_ROOT"):
         ALLOWED_ROOTS.append(os.path.realpath(str(settings.PROJECT_ROOT)))
 except Exception:
     pass
 
 try:
-    from tools.utils.path_utils import get_project_root
+    from core.tools.utils.path_utils import get_project_root
     if get_project_root:
         ALLOWED_ROOTS.append(os.path.realpath(str(get_project_root())))
 except Exception:
@@ -65,11 +65,11 @@ def _validate_path(file_path: str) -> Path:
 
     # 1. Load active project root deterministically (Fail-closed)
     try:
-        from tools.infrastructure.config import settings
+        from core.tools.infrastructure.config import settings
         project_root = settings.PROJECT_ROOT.resolve()
     except Exception:
         try:
-            from tools.utils.path_utils import get_project_root
+            from core.tools.utils.path_utils import get_project_root
             project_root = get_project_root().resolve()
         except Exception:
             raise ValueError("Fail-Closed: Workspace configuration load failed.")

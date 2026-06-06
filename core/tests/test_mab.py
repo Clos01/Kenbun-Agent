@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 from pathlib import Path
-from tools.strategy.decision_logic import ContextualModelBandit, DecisionRouter
+from core.tools.strategy.decision_logic import ContextualModelBandit, DecisionRouter
 
 class TestContextualModelBandit(unittest.TestCase):
     def setUp(self):

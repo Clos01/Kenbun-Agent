@@ -1,8 +1,8 @@
 import pytest
 import asyncio
-from tools.infrastructure.parallel_manager import parallel_manager
-from tools.utils.io_lock import io_lock
-from hivemind_memory.hive_memory import hive_memory
+from core.tools.infrastructure.parallel_manager import parallel_manager
+from core.tools.utils.io_lock import io_lock
+from core.hivemind_memory.hive_memory import hive_memory
 
 @pytest.mark.asyncio
 async def test_parallel_throttling():

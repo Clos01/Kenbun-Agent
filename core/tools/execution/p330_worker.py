@@ -10,7 +10,7 @@ The P330 is our "Embeddings Specialist":
   - Role: Background tasks, embeddings, ChromaDB population
 
 Usage:
-    from tools.execution.p330_worker import p330_worker
+    from core.tools.execution.p330_worker import p330_worker
     if p330_worker.is_online():
         embedding = p330_worker.embed("text to embed")
 """
@@ -18,7 +18,7 @@ import json
 import logging
 import requests
 from typing import Optional
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 logger = logging.getLogger(__name__)
 

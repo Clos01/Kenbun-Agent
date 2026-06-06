@@ -1,5 +1,5 @@
 import pytest
-from tools.utils import chat_history_manager
+from core.tools.utils import chat_history_manager
 
 @pytest.fixture(autouse=True)
 def clean_sessions_file():

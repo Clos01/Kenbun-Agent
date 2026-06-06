@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 # --- CONFIGURATION ---
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 PROJECT_ROOT = settings.PROJECT_ROOT
 POST_MORTEM_PATH = PROJECT_ROOT / "POST_MORTEM.md"
 TRAINING_DATA_DIR = PROJECT_ROOT / "training_data"

@@ -1,6 +1,6 @@
 import json
-from tools.autonomic.autonomic_corrector import corrector
-from tools.utils.workspace_manager import workspace_manager
+from core.tools.autonomic.autonomic_corrector import corrector
+from core.tools.utils.workspace_manager import workspace_manager
 
 def test_autonomic_monitoring(tmp_path):
     """Verify that the corrector detects error signatures in logs."""

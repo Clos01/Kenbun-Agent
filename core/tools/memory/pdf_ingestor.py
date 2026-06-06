@@ -1,13 +1,13 @@
 import os
 from pypdf import PdfReader
-from tools.memory.knowledge_manager import learn_concept
+from core.tools.memory.knowledge_manager import learn_concept
 
 def ingest_pdf_to_hivemind(pdf_path: str, tech_key: str = "general") -> str:
     """
     Reads a PDF, extracts text by page, and saves each page as a 'Concept' in the Hivemind.
     This allows for semantic retrieval of technical documentation.
     """
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     from pathlib import Path
     
     # Path Traversal Guardrail

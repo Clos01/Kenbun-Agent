@@ -1,10 +1,10 @@
 import os
 import re
 from pathlib import Path
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
-from tools.memory.chroma_db_connect import get_project_collection, query_embeddings
-from tools.memory.project_memory import get_project_id
+from core.tools.memory.chroma_db_connect import get_project_collection, query_embeddings
+from core.tools.memory.project_memory import get_project_id
 
 IGNORE_DIRS = {
     "node_modules", "venv", ".venv", ".git", ".next", "dist", "build", 

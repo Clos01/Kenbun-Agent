@@ -1,6 +1,6 @@
 import subprocess
 from typing import Tuple
-from tools.audit.guardrail_agent import guardrail_agent as guardrail_engine
+from core.tools.audit.guardrail_agent import guardrail_agent as guardrail_engine
 
 class ShellSentinel:
     """

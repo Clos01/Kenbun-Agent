@@ -16,7 +16,7 @@ except Exception as e:
     logger.error(f"Failed to import chromadb: {e}")
     chromadb = None
 from pathlib import Path
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 logger = logging.getLogger(__name__)
 

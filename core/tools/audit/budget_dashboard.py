@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 
 def generate_dashboard():
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     stats_file = settings.BRAIN_HEALTH_DIR / "usage_stats.json"
     
     if not stats_file.exists():
@@ -13,7 +13,7 @@ def generate_dashboard():
         stats = json.load(f)
 
     total_spend = stats.get("total_spend", 0.0)
-    from tools.strategy.token_governor import token_governor
+    from core.tools.strategy.token_governor import token_governor
     daily_budget = token_governor.daily_budget
     history = stats.get("history", [])
     

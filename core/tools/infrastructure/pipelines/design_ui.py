@@ -1,4 +1,4 @@
-from tools.infrastructure.design_bridge import spawn_design_agent, detect_available_agents
+from core.tools.infrastructure.design_bridge import spawn_design_agent, detect_available_agents
 
 def run_design_agent_with_fallback(tools, **kwargs):
     """

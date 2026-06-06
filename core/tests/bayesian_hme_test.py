@@ -1,6 +1,6 @@
 import asyncio
-from tools.strategy.strategy_manager import governor
-from tools.strategy.hme_router import hme_router
+from core.tools.strategy.strategy_manager import governor
+from core.tools.strategy.hme_router import hme_router
 
 async def test_bayesian_pivot():
     print("🧪 Testing Bayesian-HME Pivot Logic...")

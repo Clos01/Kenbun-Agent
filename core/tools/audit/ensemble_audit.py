@@ -6,11 +6,11 @@ from typing import List, Dict, Any
 from pathlib import Path
 from dataclasses import dataclass
 
-from tools.strategy.strategy_manager import governor
-from tools.utils.llm_utils import extract_json
-from tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.strategy.strategy_manager import governor
+from core.tools.utils.llm_utils import extract_json
+from core.tools.infrastructure.topology_manager import log_swarm_event
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # --- CONFIGURATION ---
 @dataclass

@@ -114,7 +114,7 @@ def build_agent_policy(workflow_hook: SovereignVerificationHook) -> List[Any]:
     policies = []
     
     # Restrict file tools to authorized workspace paths
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     policies.append(policy.workspace_only([settings.PROJECT_ROOT]))
     
     # Argument Predicate: Reject dangerous execution strings instantly

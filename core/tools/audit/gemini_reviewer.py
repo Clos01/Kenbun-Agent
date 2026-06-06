@@ -9,12 +9,12 @@ import random
 import json
 from google import genai
 from google.genai import types
-from tools.utils.secret_manager import decrypt_value
-from tools.strategy.token_governor import token_governor
-from tools.strategy.decision_logic import router
+from core.tools.utils.secret_manager import decrypt_value
+from core.tools.strategy.token_governor import token_governor
+from core.tools.strategy.decision_logic import router
 
-from tools.infrastructure.config import settings
-from tools.design.oracle import DesignOracle
+from core.tools.infrastructure.config import settings
+from core.tools.design.oracle import DesignOracle
 
 # --- 1. CONFIGURATION ---
 GEMINI_MODEL = settings.models.gemini_model
@@ -29,7 +29,7 @@ def _get_gemini_client():
     global _gemini_client
     if _gemini_client is None:
         import dotenv
-        from tools.infrastructure.config import discover_env_file
+        from core.tools.infrastructure.config import discover_env_file
         
         # Robust override: load raw value directly from .env file to bypass any stale env variables
         env_file = discover_env_file()
@@ -381,7 +381,7 @@ def transcribe_audio(audio_path: str, prompt: str = "Transcribe this audio and e
     
     try:
         from pathlib import Path
-        from tools.infrastructure.config import settings
+        from core.tools.infrastructure.config import settings
         
         path = Path(audio_path).resolve()
         root = settings.PROJECT_ROOT.resolve()

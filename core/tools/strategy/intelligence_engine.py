@@ -2,8 +2,8 @@ import json
 import logging
 from typing import List, Dict, Any
 
-from tools.utils.path_utils import get_project_root
-from tools.strategy.token_governor import token_governor
+from core.tools.utils.path_utils import get_project_root
+from core.tools.strategy.token_governor import token_governor
 
 PROJECT_ROOT = get_project_root()
 BENCHMARKS_FILE = PROJECT_ROOT / "brain_health" / "BENCHMARKS.json"

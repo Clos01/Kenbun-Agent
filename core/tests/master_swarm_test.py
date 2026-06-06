@@ -1,16 +1,16 @@
 import asyncio
-from tools.infrastructure.orchestrator import spawn_swarm
-from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
-from tools.audit.supervisor_agent import run_supervisor_audit
-from tools.memory.repo_mapper import scan_repo
-from tools.utils.error_memory import remember_fix, recall_fix
-from tools.utils.backtracker import save_checkpoint, restore_checkpoint
-from tools.execution.sandbox_runner import run_code_safely
-from tools.utils.bayesian import tune_swarm
-from tools.audit.consult_architect import consult_brain
-from tools.utils.maze_protocol import backward_verify
-from tools.audit.guardrail_agent import run_guardrail_audit
-from tools.audit.linter_autofix import autofix_linter
+from core.tools.infrastructure.orchestrator import spawn_swarm
+from core.tools.audit.gemini_reviewer import gemini_code_review, gemini_research
+from core.tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.memory.repo_mapper import scan_repo
+from core.tools.utils.error_memory import remember_fix, recall_fix
+from core.tools.utils.backtracker import save_checkpoint, restore_checkpoint
+from core.tools.execution.sandbox_runner import run_code_safely
+from core.tools.utils.bayesian import tune_swarm
+from core.tools.audit.consult_architect import consult_brain
+from core.tools.utils.maze_protocol import backward_verify
+from core.tools.audit.guardrail_agent import run_guardrail_audit
+from core.tools.audit.linter_autofix import autofix_linter
 
 async def test_swarm_performance():
     """

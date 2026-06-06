@@ -3,12 +3,12 @@ import time
 from pathlib import Path
 
 # Setup paths to import core tools
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 project_root = settings.PROJECT_ROOT
-from tools.infrastructure.server import get_intelligence_stats, get_brain_health, query_system_3
+from core.tools.infrastructure.server import get_intelligence_stats, get_brain_health, query_system_3
 
-from tools.memory.knowledge_manager import list_concepts
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.memory.knowledge_manager import list_concepts
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 async def generate_self_awareness_report():
     """

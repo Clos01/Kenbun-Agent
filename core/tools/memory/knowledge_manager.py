@@ -1,6 +1,6 @@
 import uuid
 import json
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 HIVEMIND_HOST = settings.SWARM_PC_IP
 HIVEMIND_PORT = settings.CHROMA_PORT
@@ -8,7 +8,7 @@ HIVEMIND_PORT = settings.CHROMA_PORT
 HIVEMIND_HOST = settings.SWARM_PC_IP
 HIVEMIND_PORT = settings.CHROMA_PORT
 
-from tools.memory.chroma_db_connect import get_project_collection, upsert_embedding, query_embeddings
+from core.tools.memory.chroma_db_connect import get_project_collection, upsert_embedding, query_embeddings
 
 def _get_collection(category: str = "concepts"):
     return get_project_collection(category)

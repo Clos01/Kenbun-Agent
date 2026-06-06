@@ -2,10 +2,10 @@ import subprocess
 import requests
 
 # Import centralized settings
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 
-from tools.utils.secret_manager import decrypt_value
+from core.tools.utils.secret_manager import decrypt_value
 
 # Load Config from Centralized Hub
 TELEGRAM_TOKEN = decrypt_value(settings.telegram.bot_token.get_secret_value()) if settings.telegram.bot_token else None

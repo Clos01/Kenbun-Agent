@@ -9,7 +9,7 @@ from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
 # Central config paths
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 class FileReadInput(BaseModel):
     """Schema for viewing file contents safely."""

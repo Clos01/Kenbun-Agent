@@ -1,5 +1,5 @@
 import random
-from tools.strategy.hme_router import hme_router
+from core.tools.strategy.hme_router import hme_router
 
 # RE-USING THE SAME GENERATOR LOGIC
 ACTIONS = ["Fix", "Update", "Harden", "Secure", "Refactor", "Optimize", "Build", "Redesign", "Audit", "Debug", "Implement", "Patch", "Scale", "Deploy"]

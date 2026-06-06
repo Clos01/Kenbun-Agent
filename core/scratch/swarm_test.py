@@ -1,4 +1,4 @@
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 from pydantic import SecretStr
 
 def test_sovereign_config():
@@ -27,7 +27,7 @@ def test_sovereign_config():
     print(f"Chroma Port: {chroma.port}")
     
     # 5. Test Backward Compatibility
-    from tools.infrastructure.config import CHROMA_PORT
+    from core.tools.infrastructure.config import CHROMA_PORT
     print(f"Backward Compatible CHROMA_PORT: {CHROMA_PORT}")
     assert CHROMA_PORT == chroma.port, "❌ Backward compatibility shim failed!"
 

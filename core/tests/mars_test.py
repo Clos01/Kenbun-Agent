@@ -1,5 +1,5 @@
 import asyncio
-from tools.audit.mars_auditor import mars_auditor
+from core.tools.audit.mars_auditor import mars_auditor
 
 async def test_mars_breach():
     print("🧪 Testing MARS Boundary Breach Detection...")

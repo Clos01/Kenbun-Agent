@@ -18,7 +18,7 @@ COLLECTION_NAME = "error_solutions"
 MAX_RECALL_RESULTS = 3
 
 
-from tools.memory.chroma_db_connect import get_project_collection
+from core.tools.memory.chroma_db_connect import get_project_collection
 
 def _get_collection(chroma_database_server_host_ip_address: str, chroma_database_server_connection_port: str):
     """Connect to ChromaDB and get/create the namespaced history collection."""

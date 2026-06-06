@@ -7,7 +7,7 @@ class DesignOracle:
     from the Sovereign Design library (DESIGN.md).
     """
     
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     DESIGN_FILE = settings.PROJECT_ROOT / "DESIGN.md"
 
     @classmethod

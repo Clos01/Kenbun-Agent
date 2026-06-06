@@ -12,7 +12,7 @@ class HiveMemory:
     """
     def __init__(self, memory_dir: str = None):
         if memory_dir is None:
-            from tools.infrastructure.config import settings
+            from core.tools.infrastructure.config import settings
             self.memory_dir = settings.BRAIN_HEALTH_DIR
         else:
             self.memory_dir = Path(memory_dir)

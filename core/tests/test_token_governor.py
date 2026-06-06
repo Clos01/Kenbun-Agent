@@ -3,8 +3,8 @@ import threading
 import shutil
 import time
 from datetime import datetime, timedelta, timezone
-from tools.strategy.token_governor import TokenGovernor
-from tools.infrastructure.config import settings
+from core.tools.strategy.token_governor import TokenGovernor
+from core.tools.infrastructure.config import settings
 
 class TestTokenGovernor(unittest.TestCase):
     def setUp(self):

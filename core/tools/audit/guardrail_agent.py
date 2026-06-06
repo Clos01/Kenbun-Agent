@@ -11,10 +11,10 @@ import os
 import logging
 from pathlib import Path
 from typing import Tuple, Union
-from tools.utils.telemetry import log_tool_performance
-from tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.utils.telemetry import log_tool_performance
+from core.tools.infrastructure.topology_manager import log_swarm_event
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 _SECURE_ROOT = Path(settings.PROJECT_ROOT).resolve().absolute()
 

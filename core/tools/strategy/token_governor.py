@@ -73,7 +73,7 @@ class TokenGovernor:
     _warned_no_fcntl = False
 
     def __init__(self, daily_budget: float = 2.00):
-        from tools.infrastructure.config import settings
+        from core.tools.infrastructure.config import settings
         self.daily_budget = daily_budget
         
         # Canonicalization and per-access path validation setup
@@ -101,7 +101,7 @@ class TokenGovernor:
 
     def _validate_path(self, path: Path):
         """Validates that the path is strictly contained within settings.BRAIN_HEALTH_DIR."""
-        from tools.infrastructure.config import settings
+        from core.tools.infrastructure.config import settings
         base_dir = settings.BRAIN_HEALTH_DIR.resolve()
         resolved_path = path.resolve()
         # Verify strict logical containment (base_dir is a parent directory of path)
@@ -477,6 +477,6 @@ class TokenGovernor:
         return preferred_model
 
 # Global Instance with dynamic environment budget
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 token_governor = TokenGovernor(daily_budget=settings.DAILY_BUDGET)
 

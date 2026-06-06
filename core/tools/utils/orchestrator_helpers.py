@@ -3,7 +3,7 @@ from pathlib import Path
 # Assuming PROJECT_ROOT is available globally or passed around
 # For simplicity, let's redefine it here based on common project structure.
 # In a real scenario, this might be imported from path_utils or config.
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 def get_project_root_from_helpers():
     return settings.PROJECT_ROOT

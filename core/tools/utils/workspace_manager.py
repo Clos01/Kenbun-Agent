@@ -9,7 +9,7 @@ class WorkspaceManager:
     def __init__(self, config_path: str = None):
         if config_path is None:
             # Default to workspace_config.json in project root
-            from tools.infrastructure.config import settings
+            from core.tools.infrastructure.config import settings
             self.config_path = settings.PROJECT_ROOT / "workspace_config.json"
         else:
             self.config_path = Path(config_path)

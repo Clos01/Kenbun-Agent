@@ -6,9 +6,9 @@ import asyncio
 import logging
 
 # Import centralized settings
-from tools.infrastructure.config import settings
-from tools.infrastructure.orchestrator import swarm
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.infrastructure.config import settings
+from core.tools.infrastructure.orchestrator import swarm
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 # Native macOS Imports
 try:

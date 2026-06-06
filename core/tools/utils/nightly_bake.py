@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # --- CONFIGURATION ---
 TRAINING_DIR = Path(settings.TRAINING_DIR) # Inside Docker path

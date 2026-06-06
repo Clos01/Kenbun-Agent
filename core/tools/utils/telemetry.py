@@ -2,7 +2,7 @@ import json
 import time
 from datetime import datetime
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # --- CONFIGURATION ---
 BENCHMARK_PATH = settings.BRAIN_HEALTH_DIR / "BENCHMARKS.json"

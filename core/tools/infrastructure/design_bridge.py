@@ -18,7 +18,7 @@ class AgentTimeoutError(AgentExecutionError):
     """Raised when the agent CLI exceeds the timeout limit."""
 
 # --- CONFIGURATION ---
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 DESIGN_SYSTEMS_DIR = settings.PROJECT_ROOT / "design_systems"
 SKILLS_DIR = settings.PROJECT_ROOT / "core" / "tools" / "skills"
 
@@ -146,7 +146,7 @@ def spawn_design_agent(agent_id: str, task: str, design_system: str = "default",
         design_context = design_path.read_text() if design_path.exists() else ""
         skill_context = skill_path.read_text() if skill_path.exists() else ""
 
-        from tools.memory.project_memory import build_project_memory_context
+        from core.tools.memory.project_memory import build_project_memory_context
         project_memory_context = build_project_memory_context(
             query=task,
             project_path=settings.PROJECT_ROOT,

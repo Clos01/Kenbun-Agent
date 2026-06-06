@@ -1,7 +1,7 @@
 import hashlib
 import time
 from pathlib import Path
-from tools.memory.chroma_db_connect import get_project_collection, upsert_embedding, query_embeddings
+from core.tools.memory.chroma_db_connect import get_project_collection, upsert_embedding, query_embeddings
 
 def get_project_id(project_path: str) -> str:
     """Generates a stable 16-character project_id hash from the resolved path."""

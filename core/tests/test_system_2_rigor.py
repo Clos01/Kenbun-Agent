@@ -4,8 +4,8 @@ Verifies the separation of Executive Audit (S2) and Continuous Guardrails (S2c).
 """
 # Standard absolute imports
 
-from tools.audit.guardrail_agent import run_guardrail_audit
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.audit.guardrail_agent import run_guardrail_audit
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 import pytest
 
@@ -35,7 +35,7 @@ def get_config():
 
     print("\n[CASE 2] Testing System 2 (Executive) High-Fidelity Audit...")
     # System 2 Executive Audit Approved or custom string result
-    import tools.audit.supervisor_agent as supervisor
+    import core.tools.audit.supervisor_agent as supervisor
     original_court = supervisor.adversarial_court
     supervisor.adversarial_court = None
     try:

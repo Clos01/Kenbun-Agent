@@ -5,11 +5,11 @@ from sklearn.preprocessing import LabelEncoder
 import logging
 
 # Import centralized settings
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 project_root = settings.PROJECT_ROOT
 
-from tools.utils.path_utils import get_project_root
-from tools.memory.chroma_db_connect import get_project_collection
+from core.tools.utils.path_utils import get_project_root
+from core.tools.memory.chroma_db_connect import get_project_collection
 
 PROJECT_ROOT = get_project_root()
 MODEL_PATH = PROJECT_ROOT / "brain_health" / "neural_classifier.json"

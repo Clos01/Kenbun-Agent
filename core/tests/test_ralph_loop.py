@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 @pytest.mark.asyncio
 async def test_ralph_loop_recovery_success():
@@ -33,9 +33,9 @@ async def test_ralph_loop_recovery_success():
     mock_sec.approval_timeout = 45
     mock_sec.custom_hook_path = None
         
-    with patch("tools.audit.supervisor_agent._run_supervisor_audit_raw", side_effect=mock_run_raw), \
-         patch("tools.audit.supervisor_agent._call_local_senior", side_effect=mock_call_senior), \
-         patch("tools.infrastructure.config.KenbunSettings.security", new_callable=MagicMock) as mock_settings_sec:
+    with patch("core.tools.audit.supervisor_agent._run_supervisor_audit_raw", side_effect=mock_run_raw), \
+         patch("core.tools.audit.supervisor_agent._call_local_senior", side_effect=mock_call_senior), \
+         patch("core.tools.infrastructure.config.KenbunSettings.security", new_callable=MagicMock) as mock_settings_sec:
          
         mock_settings_sec.return_value = mock_sec
          
@@ -73,9 +73,9 @@ async def test_ralph_loop_recovery_exhausted():
     mock_sec.approval_timeout = 45
     mock_sec.custom_hook_path = None
         
-    with patch("tools.audit.supervisor_agent._run_supervisor_audit_raw", side_effect=mock_run_raw), \
-         patch("tools.audit.supervisor_agent._call_local_senior", side_effect=mock_call_senior), \
-         patch("tools.infrastructure.config.KenbunSettings.security", new_callable=MagicMock) as mock_settings_sec:
+    with patch("core.tools.audit.supervisor_agent._run_supervisor_audit_raw", side_effect=mock_run_raw), \
+         patch("core.tools.audit.supervisor_agent._call_local_senior", side_effect=mock_call_senior), \
+         patch("core.tools.infrastructure.config.KenbunSettings.security", new_callable=MagicMock) as mock_settings_sec:
          
         mock_settings_sec.return_value = mock_sec
          

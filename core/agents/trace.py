@@ -9,7 +9,7 @@ import json
 import hashlib
 from pathlib import Path
 from typing import Dict, Any, Optional
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 class TraceabilityManifestLogger:
     """

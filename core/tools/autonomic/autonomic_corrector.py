@@ -5,12 +5,12 @@ import subprocess
 import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from tools.audit.reflection_agent import log_reflection
-from tools.strategy.strategy_manager import governor
-from tools.utils.workspace_manager import workspace_manager
+from core.tools.audit.reflection_agent import log_reflection
+from core.tools.strategy.strategy_manager import governor
+from core.tools.utils.workspace_manager import workspace_manager
 
 # Configuration
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 PROJECT_ROOT = settings.PROJECT_ROOT
 LOG_DIR = PROJECT_ROOT / "core" / "brain_health"
 TUNING_LOG_PATH = LOG_DIR / "tuning_queue.jsonl"
@@ -73,7 +73,7 @@ class AutonomicCorrector:
             return {"status": "error", "message": str(e)}
 
     def _calculate_gravity_shifts(self, misses: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        from tools.strategy.decision_logic import router
+        from core.tools.strategy.decision_logic import router
         applied_shifts = []
         hits = {}
         

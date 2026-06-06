@@ -2,8 +2,8 @@ import functools
 import hashlib
 import json
 import time
-from tools.infrastructure.sovereign_verifier import audit_function, SovereignBreach
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.sovereign_verifier import audit_function, SovereignBreach
+from core.tools.infrastructure.config import settings
 
 REGISTRY_PATH = settings.BRAIN_HEALTH_DIR / "sovereign_registry.json"
 

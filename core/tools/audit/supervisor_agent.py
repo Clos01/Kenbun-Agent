@@ -1,42 +1,42 @@
 import os
 import json
 from pathlib import Path
-from tools.utils.llm_utils import extract_json
+from core.tools.utils.llm_utils import extract_json
 
 # --- 1. ENSEMBLE INTEGRATION ---
 try:
-    from tools.audit.ensemble_audit import ensemble
+    from core.tools.audit.ensemble_audit import ensemble
 except ImportError:
     ensemble = None
 
 try:
-    from tools.audit.adversarial_court import adversarial_court
+    from core.tools.audit.adversarial_court import adversarial_court
 except ImportError:
     adversarial_court = None
 
 # Try to import Gemini reviewer for high-fidelity audits
 try:
-    from tools.audit.gemini_reviewer import call_gemini_pro, gemini_code_review
+    from core.tools.audit.gemini_reviewer import call_gemini_pro, gemini_code_review
 except ImportError:
     # Use lazy imports or placeholders if the reviewer isn't available
     def call_gemini_pro(prompt: str): return None
     def gemini_code_review(*args, **kwargs): return None
 
-from tools.infrastructure.config import settings
-from tools.design.guardrail import DesignGuardrail
-from tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.config import settings
+from core.tools.design.guardrail import DesignGuardrail
+from core.tools.infrastructure.topology_manager import log_swarm_event
 
 def _call_local_senior(system_prompt: str, user_message: str):
     """Call the hardware-agnostic LLM gateway."""
     import time
     start_time = time.time()
     try:
-        from tools.utils.llm_router import call_llm_gateway
+        from core.tools.utils.llm_router import call_llm_gateway
         content = call_llm_gateway(system_prompt, user_message)
         duration = time.time() - start_time
         
         try:
-            from tools.strategy.decision_logic import router
+            from core.tools.strategy.decision_logic import router
             router.record_model_feedback(
                 model="local",
                 task=user_message,
@@ -51,7 +51,7 @@ def _call_local_senior(system_prompt: str, user_message: str):
     except Exception as e:
         duration = time.time() - start_time
         try:
-            from tools.strategy.decision_logic import router
+            from core.tools.strategy.decision_logic import router
             router.record_model_feedback(
                 model="local",
                 task=user_message,
@@ -122,7 +122,7 @@ async def _synthesize_review_reason_locally(raw_critique: str, proposal: str) ->
 async def _fetch_digested_rules() -> str:
     """Retrieves the synthesized architectural rules from the Local Digestion Loop."""
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from core.tools.memory.chroma_db_connect import get_project_collection
         collection = get_project_collection("digested_rules")
         if not collection:
             return ""
@@ -159,7 +159,7 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
     user_message = f"CONTEXT:\n{context}\n\nCODE:\n{code_snippet}"
     
     try:
-        from tools.utils.llm_router import call_llm_gateway
+        from core.tools.utils.llm_router import call_llm_gateway
         # The llm_router will naturally route to DeepSeek if configured, or the default fallback
         result = call_llm_gateway(system_prompt, user_message)
         
@@ -231,7 +231,7 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
     Respects Hook Gateway settings in ~/.kenbun/config.yaml.
     """
     import sys
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     
     sec_cfg = settings.security
     

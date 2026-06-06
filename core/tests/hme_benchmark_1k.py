@@ -1,6 +1,6 @@
 import random
 import time
-from tools.strategy.hme_router import hme_router
+from core.tools.strategy.hme_router import hme_router
 
 # KEYWORD LIBRARIES FOR SYNTHETIC GENERATION
 ACTIONS = ["Fix", "Update", "Harden", "Secure", "Refactor", "Optimize", "Build", "Redesign", "Audit", "Debug", "Implement"]

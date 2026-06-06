@@ -4,10 +4,10 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # Import centralized settings
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 project_root = settings.PROJECT_ROOT
 
-from tools.utils.notifications import send_notification
+from core.tools.utils.notifications import send_notification
 
 class ShadowTesterHandler(FileSystemEventHandler):
     """

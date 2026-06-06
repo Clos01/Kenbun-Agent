@@ -8,9 +8,9 @@ import time
 import requests
 import asyncio
 from typing import Optional
-from tools.infrastructure.config import settings
-from tools.utils.secret_manager import decrypt_value
-from tools.strategy.token_governor import token_governor
+from core.tools.infrastructure.config import settings
+from core.tools.utils.secret_manager import decrypt_value
+from core.tools.strategy.token_governor import token_governor
 
 # Lazy client setup
 _deepseek_api_key = None
@@ -20,7 +20,7 @@ def _get_api_key() -> str:
     global _deepseek_api_key
     if _deepseek_api_key is None:
         import dotenv
-        from tools.infrastructure.config import discover_env_file
+        from core.tools.infrastructure.config import discover_env_file
         
         # Load directly from .env file to bypass stale process environments
         env_file = discover_env_file()

@@ -4,7 +4,7 @@ from pathlib import Path
 
 current_dir = Path(__file__).resolve().parent
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # --- 1. CONFIGURATION ---
 CHROMA_PORT = settings.CHROMA_PORT
@@ -14,7 +14,7 @@ def recall_memories(query, n_results=5):
     """Searches the PC's Vector DB for relevant code snippets."""
     print(f"🔍 Scanning Hivemind for: '{query}'...", file=sys.stderr)
     try:
-        from tools.memory.chroma_db_connect import query_embeddings
+        from core.tools.memory.chroma_db_connect import query_embeddings
         results = query_embeddings(query, n_results=n_results, category="concepts")
         
         context_text = ""
@@ -67,7 +67,7 @@ def consult_brain(user_query):
     
     # C. Send to Gateway
     try:
-        from tools.utils.llm_router import call_llm_gateway
+        from core.tools.utils.llm_router import call_llm_gateway
         return call_llm_gateway(system_prompt, full_user_message)
     except Exception as e:
         return f"❌ Connection Error: {e}"

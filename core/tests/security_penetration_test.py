@@ -1,8 +1,8 @@
 
-from tools.audit.guardrail_agent import guardrail_agent as guardrail_engine
+from core.tools.audit.guardrail_agent import guardrail_agent as guardrail_engine
 
 from fastapi.testclient import TestClient
-from tools.infrastructure.api_server import app
+from core.tools.infrastructure.api_server import app
 
 def test_path_jailing():
     print("🧪 Testing Path Jailing...")

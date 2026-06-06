@@ -200,7 +200,7 @@ def seed_mab_stats():
 def seed_chromadb_reasoning():
     print("📡 Seeding ChromaDB reasoning history...")
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from core.tools.memory.chroma_db_connect import get_project_collection
         collection = get_project_collection("history")
         
         # Define 5 distinct decisions
@@ -274,9 +274,9 @@ def seed_chromadb_reasoning():
 def seed_chromadb_code():
     print("📡 Seeding ChromaDB codebase semantic index (high-fidelity subset)...")
     try:
-        from tools.memory.code_indexer import chunk_code, get_chroma_collection
-        from tools.infrastructure.config import settings
-        from tools.memory.chroma_db_connect import upsert_embedding
+        from core.tools.memory.code_indexer import chunk_code, get_chroma_collection
+        from core.tools.infrastructure.config import settings
+        from core.tools.memory.chroma_db_connect import upsert_embedding
 
         collection = get_chroma_collection()
         if not collection:
@@ -343,7 +343,7 @@ def seed_chromadb_code():
 def seed_chromadb_intelligence():
     print("📡 Seeding ChromaDB system_4_intelligence collection...")
     try:
-        from tools.memory.chroma_db_connect import get_chroma_client
+        from core.tools.memory.chroma_db_connect import get_chroma_client
         client = get_chroma_client()
         if not client:
             print("⚠️ ChromaDB client is offline. Skipping remote intelligence seeding.")

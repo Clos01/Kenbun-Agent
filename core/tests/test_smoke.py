@@ -8,36 +8,36 @@ import pytest
 
 CRITICAL_MODULES = [
     # Core engine
-    "tools.infrastructure.orchestrator",
-    "tools.infrastructure.server",
-    "tools.infrastructure.api_server",
-    "tools.infrastructure.agents",
-    "tools.infrastructure.config",
-    "tools.infrastructure.design_bridge",
+    "core.tools.infrastructure.orchestrator",
+    "core.tools.infrastructure.server",
+    "core.tools.infrastructure.api_server",
+    "core.tools.infrastructure.agents",
+    "core.tools.infrastructure.config",
+    "core.tools.infrastructure.design_bridge",
     # Memory layer
-    "tools.memory.knowledge_manager",
-    "tools.memory.code_indexer",
-    "tools.memory.chroma_db_connect",
-    "tools.memory.repo_mapper",
+    "core.tools.memory.knowledge_manager",
+    "core.tools.memory.code_indexer",
+    "core.tools.memory.chroma_db_connect",
+    "core.tools.memory.repo_mapper",
     # Audit layer
-    "tools.audit.gemini_reviewer",
-    "tools.audit.supervisor_agent",
-    "tools.audit.guardrail_agent",
-    "tools.audit.reflection_agent",
-    "tools.audit.discovery_agent",
+    "core.tools.audit.gemini_reviewer",
+    "core.tools.audit.supervisor_agent",
+    "core.tools.audit.guardrail_agent",
+    "core.tools.audit.reflection_agent",
+    "core.tools.audit.discovery_agent",
     # Strategy layer
-    "tools.strategy.decision_logic",
-    "tools.strategy.token_governor",
-    "tools.strategy.strategy_manager",
+    "core.tools.strategy.decision_logic",
+    "core.tools.strategy.token_governor",
+    "core.tools.strategy.strategy_manager",
     # Execution
-    "tools.execution.sandbox_runner",
+    "core.tools.execution.sandbox_runner",
     # Utils
-    "tools.utils.error_memory",
-    "tools.utils.backtracker",
-    "tools.utils.maze_protocol",
-    "tools.utils.path_utils",
-    "tools.utils.telemetry",
-    "tools.utils.bayesian",
+    "core.tools.utils.error_memory",
+    "core.tools.utils.backtracker",
+    "core.tools.utils.maze_protocol",
+    "core.tools.utils.path_utils",
+    "core.tools.utils.telemetry",
+    "core.tools.utils.bayesian",
 ]
 
 
@@ -51,7 +51,7 @@ def test_module_imports(module_name):
 @pytest.mark.smoke
 def test_no_shim_files_exist():
     """Regression guard: ensure deleted shims stay deleted."""
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     root = settings.PROJECT_ROOT
     forbidden = [
         root / "tools" / "orchestrator.py",
@@ -68,7 +68,7 @@ def test_no_shim_files_exist():
 @pytest.mark.smoke
 def test_error_memory_is_real_implementation():
     """The orchestrator's error memory must be the real ChromaDB-backed one, not a stub."""
-    from tools.utils import error_memory
+    from core.tools.utils import error_memory
     # Real impl has these signatures with full param lists; stub had only (error_message, fix_code)
     import inspect
     sig = inspect.signature(error_memory.remember_fix)
@@ -80,7 +80,7 @@ def test_error_memory_is_real_implementation():
 @pytest.mark.smoke
 def test_decision_router_loads():
     """Router singleton must initialize and expose expected API."""
-    from tools.strategy.decision_logic import router
+    from core.tools.strategy.decision_logic import router
     assert hasattr(router, "get_strategy_path")
     assert hasattr(router, "analyze_task")
     # Should not crash on minimal input

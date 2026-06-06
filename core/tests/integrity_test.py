@@ -1,5 +1,5 @@
 import asyncio
-from tools.strategy.hme_router import hme_router
+from core.tools.strategy.hme_router import hme_router
 
 async def test_integrity_chunking():
     print("🧪 Testing HME Integrity Layer (Truncation Prevention)...")

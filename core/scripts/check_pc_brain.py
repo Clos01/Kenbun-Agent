@@ -28,7 +28,7 @@ except ImportError:
     sys.exit(1)
 
 # Setup paths to import core tools
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # Read from Sovereign Settings
 PC_IP = settings.SWARM_PC_IP

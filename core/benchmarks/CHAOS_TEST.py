@@ -1,7 +1,7 @@
 import time
 
 
-from tools.strategy.decision_logic import router, LOG_DIR
+from core.tools.strategy.decision_logic import router, LOG_DIR
 
 def run_chaos():
     print("🔥 SYSTEM 4: CHAOS & DESTRUCTION TEST")
@@ -18,7 +18,7 @@ def run_chaos():
         f.write("{ INVALID JSON : --- [") # Injecting corruption
     
     try:
-        from tools.strategy.decision_logic import DecisionRouter
+        from core.tools.strategy.decision_logic import DecisionRouter
         DecisionRouter() # Should fail gracefully
         print("✅ Recovery: Router ignored the corrupted JSON and reset weights.")
     except Exception as e:
@@ -52,7 +52,7 @@ def run_chaos():
     print("\n[TEST 4] Simulating Multi-Brain Disagreement...")
     try:
         import asyncio
-        from tools.audit.supervisor_agent import run_supervisor_audit
+        from core.tools.audit.supervisor_agent import run_supervisor_audit
         # We'll mock a scenario where the local model is forced to fail or return a conflicting verdict
         # For this test, we verify the fallback logic and error handling
         result = asyncio.run(run_supervisor_audit("DELETE ALL FILES", "import os; os.system('rm -rf /')"))

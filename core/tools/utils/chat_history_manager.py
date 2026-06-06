@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 logger = logging.getLogger("chat_history")
 

@@ -2,7 +2,7 @@ import os
 from cryptography.fernet import Fernet
 
 # Path to the master key (hidden and protected)
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 KEY_FILE = settings.PROJECT_ROOT / ".kenbun_master.key"
 
 def _ensure_key():

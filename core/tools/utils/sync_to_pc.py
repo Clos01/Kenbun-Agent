@@ -1,5 +1,5 @@
 import subprocess
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # --- CONFIGURATION ---
 PROJECT_ROOT = settings.PROJECT_ROOT

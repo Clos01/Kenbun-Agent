@@ -19,21 +19,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
 # Import centralized settings
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 project_root = settings.PROJECT_ROOT
 
-from tools.strategy.strategy_manager import governor
-from tools.infrastructure.topology_manager import get_swarm_events
-from tools.infrastructure.orchestrator import orchestrate
-from tools.strategy.intelligence_engine import intelligence_engine
-from tools.audit.guardrail_agent import guardrail_agent
-from tools.execution.claude_code_agent import claude_code_agent
-from tools.execution.p330_worker import p330_worker
-from tools.utils.workspace_manager import workspace_manager
-from tools.strategy.token_governor import token_governor
-from tools.autonomic.autonomic_corrector import corrector
-from tools.memory.chroma_db_connect import get_project_collection
-from tools.strategy.neural_classifier import neural_classifier
+from core.tools.strategy.strategy_manager import governor
+from core.tools.infrastructure.topology_manager import get_swarm_events
+from core.tools.infrastructure.orchestrator import orchestrate
+from core.tools.strategy.intelligence_engine import intelligence_engine
+from core.tools.audit.guardrail_agent import guardrail_agent
+from core.tools.execution.claude_code_agent import claude_code_agent
+from core.tools.execution.p330_worker import p330_worker
+from core.tools.utils.workspace_manager import workspace_manager
+from core.tools.strategy.token_governor import token_governor
+from core.tools.autonomic.autonomic_corrector import corrector
+from core.tools.memory.chroma_db_connect import get_project_collection
+from core.tools.strategy.neural_classifier import neural_classifier
 
 app = FastAPI(title="Kenbun Mission Control API")
 
@@ -238,11 +238,11 @@ async def startup_event():
         
     # Start the non-blocking signals count update task
     asyncio.create_task(update_signals_count_task())
-    from tools.memory.digester import digester_daemon
+    from core.tools.memory.digester import digester_daemon
     asyncio.create_task(digester_daemon.digestion_loop())
 
 def _encrypt_setting(key: str, val: str) -> str:
-    from tools.utils.secret_manager import encrypt_value
+    from core.tools.utils.secret_manager import encrypt_value
     if "KEY" in key or "TOKEN" in key or "SECRET" in key:
         if val and not val.startswith("enc:"):
             return "enc:" + encrypt_value(val)
@@ -255,7 +255,7 @@ class ConfigUpdateRequest(BaseModel):
 async def get_active_model():
     """Returns ONLY the currently active Primary LLM model name for secure frontend display."""
     try:
-        from tools.infrastructure.config import settings
+        from core.tools.infrastructure.config import settings
         return {"model": settings.models.primary_llm_model}
     except Exception:
         return {"model": "Ollama Llama3.2"}
@@ -334,7 +334,7 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
                 proposed_dict[f] = current_dict[f]
 
         # Trigger Pydantic class validation by instantiating a temporary model
-        from tools.infrastructure.config import KenbunSettings
+        from core.tools.infrastructure.config import KenbunSettings
         # Construct and validate
         KenbunSettings(**proposed_dict)
     except Exception as e:
@@ -448,14 +448,14 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
     # Hot-reload specific components
     if "DAILY_BUDGET" in req.settings:
         try:
-            from tools.strategy.token_governor import token_governor
+            from core.tools.strategy.token_governor import token_governor
             token_governor.daily_budget = float(req.settings["DAILY_BUDGET"])
         except Exception as e:
             logging.error(f"Failed to hot-reload budget: {e}")
             
     # Clear Pydantic's get_settings cache and hot-reload in-memory settings instance
     try:
-        from tools.infrastructure.config import get_settings
+        from core.tools.infrastructure.config import get_settings
         get_settings.cache_clear()
         
         # Instantiate a fresh settings model (will match our validated test)
@@ -705,7 +705,7 @@ async def get_intelligence_history():
     Provides the audit trail for all major AI logic paths.
     """
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from core.tools.memory.chroma_db_connect import get_project_collection
         collection = get_project_collection("history")
         
         # Fetch recent decisions
@@ -903,7 +903,7 @@ async def check_p330_status() -> dict:
         
     try:
         import asyncio
-        from tools.execution.p330_worker import p330_worker
+        from core.tools.execution.p330_worker import p330_worker
         status = await asyncio.to_thread(p330_worker.ping)
     except Exception as e:
         status = {"status": "error", "error": str(e)}
@@ -1158,20 +1158,20 @@ class ChatSessionMessageRequest(BaseModel):
 @app.get("/api/v1/chat/sessions")
 async def get_chat_sessions():
     """Lists summaries of all active chat sessions."""
-    from tools.utils import chat_history_manager
+    from core.tools.utils import chat_history_manager
     return chat_history_manager.list_sessions()
 
 @app.post("/api/v1/chat/sessions")
 async def create_chat_session(req: Optional[CreateSessionRequest] = None):
     """Creates a new empty chat session."""
-    from tools.utils import chat_history_manager
+    from core.tools.utils import chat_history_manager
     title = req.title if req and req.title else "New Transmissions"
     return chat_history_manager.create_session(title=title)
 
 @app.get("/api/v1/chat/sessions/{session_id}")
 async def get_chat_session(session_id: str):
     """Retrieves a single chat session with its full message history."""
-    from tools.utils import chat_history_manager
+    from core.tools.utils import chat_history_manager
     session = chat_history_manager.get_session(session_id)
     if not session:
         return JSONResponse(status_code=404, content={"error": f"Session {session_id} not found"})
@@ -1180,7 +1180,7 @@ async def get_chat_session(session_id: str):
 @app.delete("/api/v1/chat/sessions/{session_id}")
 async def delete_chat_session(session_id: str):
     """Deletes a chat session by ID."""
-    from tools.utils import chat_history_manager
+    from core.tools.utils import chat_history_manager
     success = chat_history_manager.delete_session(session_id)
     if not success:
         return JSONResponse(status_code=404, content={"error": f"Session {session_id} not found"})
@@ -1194,7 +1194,7 @@ def execute_cli_command(command: str) -> str:
     import sys
     import subprocess
     from pathlib import Path
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
 
     try:
         # Load scripts directory
@@ -1238,8 +1238,8 @@ def execute_cli_command(command: str) -> str:
 @app.post("/api/v1/chat/sessions/{session_id}/message")
 async def post_message_to_session(session_id: str, req: ChatSessionMessageRequest):
     """Sends a message within an existing chat session and queries the AI using history context."""
-    from tools.utils import chat_history_manager
-    from tools.utils.llm_router import call_llm_gateway
+    from core.tools.utils import chat_history_manager
+    from core.tools.utils.llm_router import call_llm_gateway
     
     # 1. Verify session exists
     session = chat_history_manager.get_session(session_id)
@@ -1258,7 +1258,7 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
         # 4. Compile full conversational context from history (using Terminal Chat's exact System 1-6 rules)
         import sys
         from pathlib import Path
-        from tools.infrastructure.config import settings
+        from core.tools.infrastructure.config import settings
         
         scripts_dir = Path("/app/scripts")
         if not scripts_dir.exists():
@@ -1341,7 +1341,7 @@ async def get_system_diagnostics():
     """
     import os
     import requests
-    from tools.memory.chroma_db_connect import get_project_collection
+    from core.tools.memory.chroma_db_connect import get_project_collection
     
     status = {
         "mcp_backend": {"status": "online", "message": "FastMCP Server Active"},
@@ -1380,7 +1380,7 @@ async def chat_with_kenbun(req: ChatRequest):
     Now functionally queries the active Primary LLM.
     """
     try:
-        from tools.utils.llm_router import call_llm_gateway
+        from core.tools.utils.llm_router import call_llm_gateway
         
         msg_strip = req.message.strip()
         
@@ -1392,7 +1392,7 @@ async def chat_with_kenbun(req: ChatRequest):
             # 2. Functional Chat Pass-Through to the LLM
             import sys
             from pathlib import Path
-            from tools.infrastructure.config import settings
+            from core.tools.infrastructure.config import settings
             
             scripts_dir = Path("/app/scripts")
             if not scripts_dir.exists():
@@ -1446,7 +1446,7 @@ async def get_hivemind_concepts():
     Groups vectors by file/concept to match the frontend expectations.
     """
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from core.tools.memory.chroma_db_connect import get_project_collection
         collection = get_project_collection("code")
         
         results = await run_in_threadpool(
@@ -1504,7 +1504,7 @@ async def api_retrieve_project_memory(req: MemoryRetrieveRequest):
     Retrieves semantic project memory context using ChromaDB.
     """
     try:
-        from tools.memory.project_memory import build_project_memory_context
+        from core.tools.memory.project_memory import build_project_memory_context
         context = await run_in_threadpool(
             build_project_memory_context,
             query=req.query,
@@ -1524,7 +1524,7 @@ async def api_secrets_status():
     Does NOT return actual decrypted or raw keys for security.
     """
     try:
-        from tools.infrastructure.config import discover_env_file
+        from core.tools.infrastructure.config import discover_env_file
         import os
 
         # Read directly from env file
@@ -1558,7 +1558,7 @@ async def api_encrypt_secret(payload: SecretEncryptRequest):
     Encrypts a plain text value using the master key.
     """
     try:
-        from tools.utils.secret_manager import encrypt_value
+        from core.tools.utils.secret_manager import encrypt_value
         return {"encrypted_text": f"enc:{encrypt_value(payload.plain_text)}"}
     except Exception as e:
         logging.error(f"Secret encryption failed: {e}", exc_info=True)
@@ -1579,8 +1579,8 @@ async def api_update_env_key(payload: SecretUpdateEnvRequest):
         return JSONResponse(status_code=403, content={"error": f"Modifying key {key} is forbidden."})
 
     try:
-        from tools.infrastructure.config import discover_env_file
-        from tools.utils.secret_manager import encrypt_value
+        from core.tools.infrastructure.config import discover_env_file
+        from core.tools.utils.secret_manager import encrypt_value
         import tempfile
         
         env_path = Path(discover_env_file())

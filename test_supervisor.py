@@ -3,11 +3,12 @@ import os
 import asyncio
 from pathlib import Path
 
-# Add core to PYTHONPATH
-core_path = str(Path("/Users/carlosrivas/Dev/kenbun-agent/core").resolve())
-sys.path.insert(0, core_path)
+# Dynamic import root
+project_root = str(Path(__file__).resolve().parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-from tools.audit.adversarial_court import AdversarialCourt
+from core.tools.audit.adversarial_court import AdversarialCourt
 
 async def main():
     code = """

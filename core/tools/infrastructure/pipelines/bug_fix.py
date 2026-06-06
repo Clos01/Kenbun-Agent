@@ -1,5 +1,5 @@
-from tools.utils.orchestrator_helpers import build_context, detect_language
-from tools.audit.reflection_agent import reflect_and_distill
+from core.tools.utils.orchestrator_helpers import build_context, detect_language
+from core.tools.audit.reflection_agent import reflect_and_distill
 
 def build_bug_fix_pipeline(tools):
     """

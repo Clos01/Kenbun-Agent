@@ -1,6 +1,6 @@
 import asyncio
 import pytest
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 @pytest.mark.asyncio
 async def test_ensemble_logic_bomb():
@@ -46,7 +46,7 @@ async def test_ensemble_safe_code():
         print("\n❌ TEST FAILED: Ensemble rejected safe code.")
 
 if __name__ == "__main__":
-    from tools.infrastructure.config import settings
+    from core.tools.infrastructure.config import settings
     if not settings.SWARM_PC_IP:
         settings.SWARM_PC_IP = "127.0.0.1"
         

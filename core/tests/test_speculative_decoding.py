@@ -1,6 +1,6 @@
 import pytest
 import requests
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 def test_speculative_decoding_config_loads():
     """Verify that the speculative decoding settings are correctly loaded."""

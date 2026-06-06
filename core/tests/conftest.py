@@ -2,7 +2,7 @@
 import sys
 from unittest.mock import MagicMock, patch
 import pytest
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 ROOT = settings.PROJECT_ROOT
 if str(ROOT) not in sys.path:
@@ -17,6 +17,6 @@ def mock_security_settings_for_testing():
     mock_sec.approval_timeout = 45
     mock_sec.custom_hook_path = None
     
-    with patch("tools.infrastructure.config.KenbunSettings.security", new_callable=MagicMock) as mock_settings_sec:
+    with patch("core.tools.infrastructure.config.KenbunSettings.security", new_callable=MagicMock) as mock_settings_sec:
         mock_settings_sec.return_value = mock_sec
         yield

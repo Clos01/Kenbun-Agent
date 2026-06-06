@@ -2,10 +2,10 @@ from pathlib import Path
 import re
 from hivemind_memory.hive_memory import hive_memory
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 import asyncio
-from tools.audit.supervisor_agent import run_supervisor_audit
+from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 async def sync_post_mortems_async(dev_root: str = None):
     """

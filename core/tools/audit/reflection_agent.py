@@ -1,9 +1,9 @@
 import json
-from tools.audit.gemini_reviewer import _call_gemini
-from tools.memory.knowledge_manager import learn_concept
+from core.tools.audit.gemini_reviewer import _call_gemini
+from core.tools.memory.knowledge_manager import learn_concept
 import time
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 TELEMETRY_PATH = settings.BRAIN_HEALTH_DIR / "live_telemetry.json"
 
 def log_reflection(message: str, data: dict = None):

@@ -12,9 +12,9 @@ import aiohttp
 from typing import Dict, Any
 from pathlib import Path
 
-from tools.infrastructure.config import settings
-from tools.utils.llm_utils import extract_json
-from tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.config import settings
+from core.tools.utils.llm_utils import extract_json
+from core.tools.infrastructure.topology_manager import log_swarm_event
 
 class AdversarialCourt:
     def __init__(self):
@@ -56,7 +56,7 @@ class AdversarialCourt:
                 pass
 
         # Standard OpenAI compatible client routing (via llm_router compatible format)
-        from tools.utils.llm_router import call_llm_gateway
+        from core.tools.utils.llm_router import call_llm_gateway
         try:
             response = await asyncio.wait_for(
                 asyncio.to_thread(

@@ -5,7 +5,7 @@ Dispatches complex, multi-file coding tasks to Claude Code CLI.
 Kenbun acts as the CTO brain; Claude Code is the execution specialist.
 
 Usage:
-    from tools.execution.claude_code_agent import claude_code_agent
+    from core.tools.execution.claude_code_agent import claude_code_agent
     result = claude_code_agent.dispatch("Refactor guardrails.py to use a plugin pattern")
 """
 import subprocess
@@ -17,7 +17,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Optional
 
-from tools.utils.path_utils import get_project_root
+from core.tools.utils.path_utils import get_project_root
 
 logger = logging.getLogger(__name__)
 

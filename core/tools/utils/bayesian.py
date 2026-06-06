@@ -1,7 +1,7 @@
 import json
 import time
 
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 WEIGHTS_FILE = settings.PROJECT_ROOT / "core" / "weights.json"
 
 def load_weights():

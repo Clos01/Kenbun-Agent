@@ -7,7 +7,7 @@ from typing import List, Optional
 import json
 
 # --- PATH SETUP ---
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 DB_PATH = settings.INTELLIGENCE_DB_PATH
 LOG_FILE = settings.BRAIN_HEALTH_DIR / "swarm_voice.log"
 DATASET_FILE = settings.PROJECT_ROOT / "core" / "training_data" / "kenbun_dataset.jsonl"

@@ -1,6 +1,6 @@
 import re
 from typing import Dict, Tuple
-from tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.topology_manager import log_swarm_event
 
 class MARSAuditor:
     """

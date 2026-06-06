@@ -17,13 +17,14 @@ class ProtocolShield(io.TextIOBase):
         sys.stderr.flush()
 
 # --- Path Setup moved up ---
-from tools.infrastructure.config import settings
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+from core.tools.infrastructure.config import settings
 current_dir = settings.PROJECT_ROOT
 tools_dir = current_dir / "tools"
 project_root = current_dir
 
 # Debug log for host-side issues
-from tools.utils.path_utils import get_project_root
+from core.tools.utils.path_utils import get_project_root
 PROJECT_ROOT = get_project_root()
 LOG_FILE = PROJECT_ROOT / "mcp_debug.log"
 
@@ -47,10 +48,13 @@ if not sys.stdout.isatty():
 # --- 2. IMPORTS (Hierarchical) ---
 # Hierarchical imports moved inside tool functions to prevent startup timeouts
 # Global Strategy Instances
-from tools.strategy.decision_logic import router
-from tools.strategy.strategy_manager import governor
+from core.tools.strategy.decision_logic import router
+from core.tools.strategy.strategy_manager import governor
 
 mcp = FastMCP("Kenbun Tools")
+
+from core.tools.infrastructure.routers.llm_tools import register_llm_tools
+register_llm_tools(mcp)
 
 # ========================================================
 # 📡 DOCKER LOG TAILER DAEMON FOR REAL-TIME DOZZLE LOGGING
@@ -132,7 +136,7 @@ OFFICIAL_DOCS = {
 def query_system_3(query_text, n=3):
     """Internal helper to fetch project concept memories."""
     try:
-        from tools.memory.chroma_db_connect import query_embeddings
+        from core.tools.memory.chroma_db_connect import query_embeddings
         results = query_embeddings(query_text, n_results=n, category="concepts")
         raw_docs = results['documents'][0] if results['documents'] and results['documents'][0] else []
         return [doc[:4000] for doc in raw_docs]
@@ -155,41 +159,7 @@ def _clean_json_response(text):
 
 # (Logic moved to audit.supervisor_agent)
 
-# --- 5. TOOL: SYSTEM 2 (THE SUPERVISOR) ---
-@mcp.tool()
-def consult_supervisor(user_proposal: str, code_snippet: str = "", iterative_mode: bool = False) -> str:
-    """
-    Activates SYSTEM 2 (Local LLM via LM Studio).
-    """
-    # 1. Context from System 3
-    memories = query_system_3(user_proposal)
-    memory_context = "\n---\n".join(memories)
 
-    debug_log(f"🧠 SYSTEM 2 ACTIVATED (Iterative: {iterative_mode})")
-    
-    from tools.audit.supervisor_agent import run_supervisor_audit
-    import asyncio
-
-    coro = run_supervisor_audit(user_proposal, code_snippet, memory_context)
-    try:
-        # No running loop → safe to use asyncio.run()
-        asyncio.get_running_loop()
-        # We ARE in a running loop (e.g. MCP server context). Run the coroutine in
-        # a dedicated worker thread with its own loop to avoid the
-        # "asyncio.run() cannot be called from a running event loop" error.
-        import concurrent.futures
-        def _run_in_thread():
-            return asyncio.run(coro)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            result = pool.submit(_run_in_thread).result()
-    except RuntimeError:
-        # No loop running on this thread — original path is fine.
-        result = asyncio.run(coro)
-
-    if result.get("status") == "error":
-        return f"❌ Supervisor Error: {result.get('critique')}"
-
-    return json.dumps(result, indent=2)
 
 # --- 5.1 TOOL: SYSTEM 2c (THE GUARDRAIL) ---
 @mcp.tool()
@@ -199,7 +169,7 @@ def audit_guardrail(code_snippet: str, task_context: str = "") -> str:
     Use this for continuous checks before calling the full Supervisor.
     """
     debug_log(f"🛡️ SYSTEM 2c ACTIVATED")
-    from tools.audit.guardrail_agent import run_guardrail_audit
+    from core.tools.audit.guardrail_agent import run_guardrail_audit
     result = run_guardrail_audit(code_snippet, task_context)
     return json.dumps(result, indent=2)
 
@@ -211,25 +181,10 @@ def autofix_linter(file_path: str, project_path: str = "") -> str:
     Prunes unused imports/variables and cleans formatting prior to deeper audits.
     """
     debug_log(f"🚀 Pre-flight linter pass activated for: {file_path}")
-    from tools.audit.linter_autofix import autofix_linter as _autofix
+    from core.tools.audit.linter_autofix import autofix_linter as _autofix
     return _autofix(file_path, project_path)
 
-# --- 6. TOOL: RESEARCHER (DOCS) ---
-@mcp.tool()
-def research_official_docs(tech_key: str, query: str) -> str:
-    """Searches official docs (Internet Access)."""
-    tech_key = tech_key.lower()
-    if tech_key not in OFFICIAL_DOCS:
-        return f"Available docs: {list(OFFICIAL_DOCS.keys())}"
-    
-    site = OFFICIAL_DOCS[tech_key]
-    try:
-        debug_log(f"🔍 Researching: {query} site:{site}")
-        from duckduckgo_search import DDGS
-        results = DDGS().text(f"{query} site:{site}", max_results=3)
-        return str(results) if results else "No results."
-    except Exception as e:
-        return f"Research failed: {e}"
+
 
 # --- 7. TOOL: ARCHITECT (DIRECT DB ACCESS) ---
 @mcp.tool()
@@ -241,71 +196,15 @@ def ask_architect(query: str) -> str:
 @mcp.tool()
 def ask_ui_expert(query: str) -> str:
     """Consult the Lead UI Designer for CSS/Layout help."""
-    from tools.audit.ui_designer import consult_ui_expert
+    from core.tools.audit.ui_designer import consult_ui_expert
     return consult_ui_expert(query)
 
 @mcp.tool()
 def get_design_tokens() -> str:
     """Returns the current Design System tokens from DESIGN.md."""
-    from tools.design.oracle import DesignOracle
+    from core.tools.design.oracle import DesignOracle
     rules = DesignOracle.get_rules()
     return json.dumps(rules.get("tokens", {}), indent=2)
-
-# --- 9. TOOL: GEMINI CODE REVIEWER (Cloud AI) ---
-@mcp.tool()
-def review_code_with_gemini(
-    code_snippet: str,
-    review_context: str = "",
-    tech_key: str = "",
-    cross_check: bool = True,
-    thinking: bool = False,
-    thinking_level: str = "medium",
-) -> str:
-    """
-    Full-pipeline code review using Gemini Cloud AI.
-    Pipeline: Gemini Review → Official Docs Research → Supervisor Cross-Check → Consensus Report.
-    Set cross_check=True to also consult the local Supervisor and generate a consensus.
-    Provide tech_key (e.g. 'nextjs', 'fastapi') to ground findings in official docs.
-    """
-    from tools.audit.gemini_reviewer import gemini_code_review
-    return gemini_code_review(
-        code_snippet=code_snippet,
-        review_context=review_context,
-        tech_key=tech_key,
-        cross_check=cross_check,
-        thinking=thinking,
-        thinking_level=thinking_level,
-        official_docs_registry=OFFICIAL_DOCS,
-        supervisor_fn=consult_supervisor,
-    )
-
-# --- 10. TOOL: GEMINI RESEARCH (Cloud AI) ---
-@mcp.tool()
-def research_with_gemini(
-    query: str, 
-    tech_key: str = "",
-    thinking: bool = False,
-    thinking_level: str = "medium",
-) -> str:
-    """
-    Research a topic using Gemini Cloud AI, optionally grounded in official documentation.
-    Provide tech_key (e.g. 'react', 'supabase') to also search official docs.
-    """
-    import time
-    start_time = time.time()
-    with silence_stdout():
-        debug_log("DEBUG: Research tool started")
-        from tools.audit.gemini_reviewer import gemini_research
-        debug_log(f"DEBUG: Import took {time.time() - start_time:.2f}s")
-        res = gemini_research(
-            query=query,
-            tech_key=tech_key,
-            thinking=thinking,
-            thinking_level=thinking_level,
-            official_docs_registry=OFFICIAL_DOCS,
-        )
-        debug_log(f"DEBUG: Total tool execution took {time.time() - start_time:.2f}s")
-        return res
 
 # ============================================================
 # PRO STACK TOOLS (Phases 1-4)
@@ -319,7 +218,7 @@ def run_code_safely(code: str, language: str = "python", timeout: int = 30) -> s
     Safety: No network, memory-limited, CPU-limited, auto-destroyed.
     Supports: python, node/javascript.
     """
-    from tools.execution.sandbox_runner import run_code_safely as _run_code_safely
+    from core.tools.execution.sandbox_runner import run_code_safely as _run_code_safely
     return _run_code_safely(code=code, language=language, timeout=timeout)
 
 # --- 12. TOOL: REPO MAP (Phase 2) ---
@@ -329,7 +228,7 @@ def scan_repo(project_path: str, extensions: str = ".py,.ts,.tsx,.js,.jsx") -> s
     Generate a skeleton map of a project. Shows classes, functions, and signatures
     without implementation code. Fits large codebases into a single prompt.
     """
-    from tools.memory.repo_mapper import scan_repo as _scan_repo
+    from core.tools.memory.repo_mapper import scan_repo as _scan_repo
     return _scan_repo(project_path=project_path, extensions=extensions)
 
 # --- 13. TOOL: ERROR MEMORY — SAVE (Phase 3) ---
@@ -339,7 +238,7 @@ def remember_fix(error_message: str, solution: str, file_context: str = "") -> s
     Save an error->fix mapping to the knowledge base for future recall.
     Uses semantic search so similar (not exact) errors can be found later.
     """
-    from tools.utils.error_memory import remember_fix as _remember_fix
+    from core.tools.utils.error_memory import remember_fix as _remember_fix
     return _remember_fix(
         error_message=error_message,
         solution=solution,
@@ -355,7 +254,7 @@ def recall_fix(error_message: str) -> str:
     Search for similar past errors and their solutions.
     Uses semantic search — 'NoneType has no attribute' matches 'AttributeError on None'.
     """
-    from tools.utils.error_memory import recall_fix as _recall_fix
+    from core.tools.utils.error_memory import recall_fix as _recall_fix
     return _recall_fix(
         error_message=error_message,
         pc_ip=PC_IP,
@@ -369,7 +268,7 @@ def save_checkpoint(file_path: str, label: str = "auto") -> str:
     Snapshot a file's current state before making risky changes.
     Use restore_checkpoint() to revert if the fix fails.
     """
-    from tools.utils.backtracker import save_checkpoint as _save_checkpoint
+    from core.tools.utils.backtracker import save_checkpoint as _save_checkpoint
     return _save_checkpoint(file_path=file_path, label=label)
 
 # --- 16. TOOL: BACKTRACKER — RESTORE (Phase 4) ---
@@ -379,7 +278,7 @@ def restore_checkpoint(file_path: str, label: str = "") -> str:
     Revert a file to a previous checkpoint.
     If no label provided, reverts to the most recent checkpoint.
     """
-    from tools.utils.backtracker import restore_checkpoint as _restore_checkpoint
+    from core.tools.utils.backtracker import restore_checkpoint as _restore_checkpoint
     return _restore_checkpoint(file_path=file_path, label=label)
 
 # --- 17. TOOL: BACKTRACKER — LIST (Phase 4) ---
@@ -388,7 +287,7 @@ def list_checkpoints(file_path: str = "") -> str:
     """
     List all saved checkpoints, optionally filtered by file path.
     """
-    from tools.utils.backtracker import list_checkpoints as _list_checkpoints
+    from core.tools.utils.backtracker import list_checkpoints as _list_checkpoints
     return _list_checkpoints(file_path=file_path)
 
 # ============================================================
@@ -405,16 +304,16 @@ def orchestrate(
     code_snippet: str = "",
     tech_key: str = "",
 ) -> str:
-    from tools.infrastructure.orchestrator import run_pipeline
-    from tools.audit.reflection_agent import reflect_and_distill as _reflect_and_distill
-    from tools.audit.guardrail_agent import run_guardrail_audit
-    from tools.utils.maze_protocol import backward_verify
-    from tools.audit.discovery_agent import generate_discovery_form
-    from tools.memory.repo_mapper import scan_repo
-    from tools.utils.error_memory import remember_fix, recall_fix
-    from tools.utils.backtracker import save_checkpoint, restore_checkpoint
-    from tools.execution.sandbox_runner import run_code_safely
-    from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
+    from core.tools.infrastructure.orchestrator import run_pipeline
+    from core.tools.audit.reflection_agent import reflect_and_distill as _reflect_and_distill
+    from core.tools.audit.guardrail_agent import run_guardrail_audit
+    from core.tools.utils.maze_protocol import backward_verify
+    from core.tools.audit.discovery_agent import generate_discovery_form
+    from core.tools.memory.repo_mapper import scan_repo
+    from core.tools.utils.error_memory import remember_fix, recall_fix
+    from core.tools.utils.backtracker import save_checkpoint, restore_checkpoint
+    from core.tools.execution.sandbox_runner import run_code_safely
+    from core.tools.audit.gemini_reviewer import gemini_code_review, gemini_research
     import asyncio
 
     def _local_view_file(AbsolutePath: str) -> str:
@@ -492,7 +391,7 @@ def save_to_hivemind(title: str, content: str, tags: str, category: str = "conce
     """
     Use this when the user says 'Save this to the Hivemind' or wants to store a new architectural rule, pattern, or concept.
     """
-    from tools.memory.knowledge_manager import learn_concept
+    from core.tools.memory.knowledge_manager import learn_concept
     return learn_concept(title, content, tags, category=category)
 
 @mcp.tool()
@@ -500,7 +399,7 @@ def search_hivemind_concepts(query: str, category: str = "concepts") -> str:
     """
     Use this to pull up past architectural rules or concepts, especially when asked to compare new ideas against old ones.
     """
-    from tools.memory.knowledge_manager import list_concepts
+    from core.tools.memory.knowledge_manager import list_concepts
     return list_concepts(query, category=category)
 
 @mcp.tool()
@@ -508,7 +407,7 @@ def delete_from_hivemind(concept_id: str, category: str = "concepts") -> str:
     """
     Use this to delete outdated concepts from the database when the user explicitly asks to forget them.
     """
-    from tools.memory.knowledge_manager import forget_concept
+    from core.tools.memory.knowledge_manager import forget_concept
     return forget_concept(concept_id, category=category)
 
 
@@ -524,7 +423,7 @@ def index_codebase(project_path: str = "") -> str:
     """
     if not project_path:
         project_path = PROJECT_ROOT
-    from tools.memory.code_indexer import index_project
+    from core.tools.memory.code_indexer import index_project
     return index_project(project_path)
 
 @mcp.tool()
@@ -533,7 +432,7 @@ def search_codebase(query: str) -> str:
     Searches the semantic code index for a specific function, logic, or implementation pattern.
     Use this instead of grep when you need semantic, mathematical understanding of what the code does.
     """
-    from tools.memory.code_indexer import search_code
+    from core.tools.memory.code_indexer import search_code
     return search_code(query)
 
 
@@ -589,7 +488,7 @@ def think_about_tools(task: str) -> str:
     Think before you act — this planner knows all 15 tools and suggests the optimal strategy.
     """
     try:
-        from tools.audit.gemini_reviewer import _call_gemini
+        from core.tools.audit.gemini_reviewer import _call_gemini
 
         # 1. Decision Tree Routing
         strategy_path = router.get_strategy_path(task)
@@ -639,7 +538,7 @@ def think_about_tools(task: str) -> str:
 @mcp.tool()
 def patch_hivemind_concept(concept_id: str, title: str = None, content: str = None, tags: str = None) -> str:
     """Updates an existing concept in the Hivemind. Only provided fields will be updated."""
-    from tools.memory.knowledge_manager import patch_concept
+    from core.tools.memory.knowledge_manager import patch_concept
     return patch_concept(concept_id, title, content, tags)
 
 @mcp.tool()
@@ -648,13 +547,13 @@ def ingest_knowledge_from_pdf(pdf_path: str, tech_key: str = "general") -> str:
     Ingests technical knowledge from a PDF file into the Hivemind.
     Use this to 'teach' the AI new libraries (e.g. Three.js, Next.js) using official PDFs.
     """
-    from tools.memory.pdf_ingestor import ingest_pdf_to_hivemind
+    from core.tools.memory.pdf_ingestor import ingest_pdf_to_hivemind
     return ingest_pdf_to_hivemind(pdf_path, tech_key)
 
 @mcp.tool()
 def prune_hivemind() -> str:
     """Removes outdated or redundant concepts from the Hivemind to maintain precision."""
-    from tools.memory import knowledge_manager
+    from core.tools.memory import knowledge_manager
     return knowledge_manager.prune_hivemind()
 
 @mcp.tool()
@@ -690,7 +589,7 @@ def reflect_on_task(task: str, tool_logs: str) -> str:
     Analyzes tool logs to extract architectural patterns for the Hivemind.
     Usually called automatically by orchestrate(), but can be run manually.
     """
-    from tools.audit.reflection_agent import reflect_and_distill as _reflect_and_distill
+    from core.tools.audit.reflection_agent import reflect_and_distill as _reflect_and_distill
     return _reflect_and_distill(task, tool_logs)
 
 @mcp.tool()

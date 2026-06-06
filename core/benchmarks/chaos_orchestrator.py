@@ -1,13 +1,13 @@
 import json
 import time
 import asyncio
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 # --- 1. SETUP PATHS ---
 PROJECT_ROOT = settings.PROJECT_ROOT
 
-from tools.infrastructure.orchestrator import run_pipeline
-from tools.strategy.token_governor import token_governor
+from core.tools.infrastructure.orchestrator import run_pipeline
+from core.tools.strategy.token_governor import token_governor
 
 # --- MOCK TOOLS ---
 mock_tools = {
@@ -92,7 +92,7 @@ async def run_chaos_test():
     
     # 3. TEST INTELLIGENCE ROUTING (BAYESIAN SELECTION)
     print("\n[CHAOS 3] Testing Bayesian Routing Logic...")
-    from tools.strategy.strategy_manager import governor
+    from core.tools.strategy.strategy_manager import governor
     
     # We'll simulate a tool selection between 'recall_fix' (High Confidence) and 'chaos_generator' (Low)
     candidate_tools = ["recall_fix", "chaos_generator"]

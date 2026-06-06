@@ -1,6 +1,6 @@
-from tools.utils.maze_protocol import backward_verify
-from tools.strategy.decision_logic import router
-from tools.autonomic.autonomic_corrector import corrector
+from core.tools.utils.maze_protocol import backward_verify
+from core.tools.strategy.decision_logic import router
+from core.tools.autonomic.autonomic_corrector import corrector
 
 def test_maze_circular_protection(tmp_path):
     """Verify that Maze Protocol handles circular imports safely."""
@@ -12,7 +12,7 @@ def test_maze_circular_protection(tmp_path):
     b_py = project_root / "b.py"
     
     # Create circular import
-    a_py.write_text("import b\nfrom tools.utils.maze_protocol import backward_verify")
+    a_py.write_text("import b\nfrom core.tools.utils.maze_protocol import backward_verify")
     b_py.write_text("import a")
     
     # Run maze on a.py

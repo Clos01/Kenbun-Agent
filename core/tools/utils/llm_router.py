@@ -5,7 +5,7 @@ import urllib.request
 import urllib.error
 import os
 from typing import List, Optional, Tuple
-from tools.infrastructure.config import settings
+from core.tools.infrastructure.config import settings
 
 def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
     """Strip `/v1` suffix from a base URL to get the native API root."""
@@ -152,7 +152,7 @@ def resolve_google_endpoint_and_model(
     resolved_project = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or os.environ.get("PROJECT_ID")
     if not resolved_project:
         # Check if project-specific credentials JSON exists in project root
-        from tools.utils.path_utils import get_project_root
+        from core.tools.utils.path_utils import get_project_root
         proj_creds_path = get_project_root() / ".google_credentials.json"
         if proj_creds_path.exists():
             try:
@@ -238,7 +238,7 @@ def _make_openai_compatible_call(
         else:
             try:
                 from google.auth.transport.requests import Request as AuthRequest
-                from tools.utils.path_utils import get_project_root
+                from core.tools.utils.path_utils import get_project_root
                 proj_creds_path = get_project_root() / ".google_credentials.json"
                 
                 if proj_creds_path.exists():
@@ -285,7 +285,7 @@ def _make_openai_compatible_call(
             usage = res_json.get("usage", {})
             in_t = usage.get("input_tokens", 0)
             out_t = usage.get("output_tokens", 0)
-            from tools.strategy.token_governor import token_governor
+            from core.tools.strategy.token_governor import token_governor
             token_governor.track_usage(model_name, in_t, out_t, "anthropic_call")
         except Exception as e:
             logging.debug(f"Token Governor failed to track Anthropic usage: {e}")
@@ -313,7 +313,7 @@ def _make_openai_compatible_call(
         usage = res_json.get("usage", {})
         in_t = usage.get("prompt_tokens", 0)
         out_t = usage.get("completion_tokens", 0)
-        from tools.strategy.token_governor import token_governor
+        from core.tools.strategy.token_governor import token_governor
         token_governor.track_usage(model_name, in_t, out_t, "openai_call")
     except Exception as e:
         logging.debug(f"Token Governor failed to track OpenAI/Gemini usage: {e}")
@@ -333,7 +333,7 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     
     # Dynamic Budget-Aware Swapping (System 4)
     try:
-        from tools.strategy.token_governor import token_governor
+        from core.tools.strategy.token_governor import token_governor
         resolved_model = token_governor.get_budget_aware_model(primary_model)
         if resolved_model != primary_model:
             logging.info(f"📉 Budget Governor dynamically swapped model '{primary_model}' ➔ '{resolved_model}'")

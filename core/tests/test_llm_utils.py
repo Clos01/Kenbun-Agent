@@ -1,6 +1,6 @@
 # Standard absolute imports handled by PYTHONPATH or environment
 
-from tools.utils.llm_utils import extract_json, clean_llm_response
+from core.tools.utils.llm_utils import extract_json, clean_llm_response
 
 def test_extract_json_markdown():
     text = "Here is the result: ```json\n{\"decision\": \"APPROVED\", \"confidence\": 0.9}\n``` Hope this helps!"

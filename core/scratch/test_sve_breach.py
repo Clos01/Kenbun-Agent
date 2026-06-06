@@ -1,5 +1,5 @@
 import os
-from tools.infrastructure.sovereign_decorators import sovereign_logic
+from core.tools.infrastructure.sovereign_decorators import sovereign_logic
 
 @sovereign_logic(strict=True)
 def poisoned_function():

@@ -1,5 +1,5 @@
 import asyncio
-from tools.infrastructure.orchestrator import spawn_swarm
+from core.tools.infrastructure.orchestrator import spawn_swarm
 
 async def main():
     print("🚀 Triggering Swarm Objective for Mission Control...")

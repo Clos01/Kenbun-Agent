@@ -1,4 +1,4 @@
-from tools.utils.orchestrator_helpers import detect_language
+from core.tools.utils.orchestrator_helpers import detect_language
 
 def build_shadow_test_pipeline(tools):
     """
