@@ -370,7 +370,11 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     except Exception as e:
         logging.warning(f"⚠️ LLM_ROUTER: Primary call failed: {e}. Attempting Fallback: {fallback_url} ({fallback_model})")
         
-        # Try Fallback
+        if not fallback_url:
+            error_msg = f"❌ LLM_ROUTER CRITICAL: Primary endpoint failed ({e}) and no fallback URL is configured."
+            logging.error(error_msg)
+            raise RuntimeError(error_msg)
+            
         try:
             if "127.0.0.1" in fallback_url or "localhost" in fallback_url or "2065" in fallback_url:
                 ensure_lmstudio_model_loaded(fallback_model, fallback_url)
