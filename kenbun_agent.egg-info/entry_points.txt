@@ -1,0 +1,2 @@
+[console_scripts]
+kenbun = scripts.terminal_chat:main

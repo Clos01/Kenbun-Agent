@@ -55,7 +55,9 @@ class ModelSettings(BaseModel):
     lm_studio_read_timeout: float = 60.0
     ollama_pull_models: str = "llama3.2:3b deepseek-r1:8b"
     primary_llm_model: str = "llama3.2:3b"  # Set by bootstrap.py wizard
-
+    primary_llm_url: Optional[str] = None
+    fallback_llm_url: Optional[str] = None
+    fallback_llm_model: Optional[str] = None
 
 class TelegramSettings(BaseModel):
     bot_token: Optional[SecretStr] = None
@@ -210,7 +212,11 @@ class KenbunSettings(BaseSettings):
             deepseek_model=self.DEEPSEEK_MODEL,
             lm_studio_connect_timeout=self.LM_STUDIO_CONNECT_TIMEOUT,
             lm_studio_read_timeout=self.LM_STUDIO_READ_TIMEOUT,
-            ollama_pull_models=self.OLLAMA_PULL_MODELS
+            ollama_pull_models=self.OLLAMA_PULL_MODELS,
+            primary_llm_model=self.PRIMARY_LLM_MODEL,
+            primary_llm_url=self.PRIMARY_LLM_URL,
+            fallback_llm_url=self.FALLBACK_LLM_URL,
+            fallback_llm_model=self.FALLBACK_LLM_MODEL
         )
 
     # --- TELEGRAM ---

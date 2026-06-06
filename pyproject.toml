@@ -45,5 +45,9 @@ test = [
     "black==23.9.0",
 ]
 
-[tool.setuptools]
-packages = []
+[project.scripts]
+kenbun = "scripts.terminal_chat:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "scripts*"]

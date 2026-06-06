@@ -1990,6 +1990,36 @@ def install_shift_enter_alias() -> int:
             changed += 1
     return changed
 
+def check_and_start_docker_swarm(project_root: Path):
+    """Automatically spins up the Docker Swarm stack if it is down."""
+    import subprocess
+    import shutil
+    import time
+    
+    docker_bin = shutil.which("docker")
+    if not docker_bin:
+        return
+        
+    try:
+        res = subprocess.run([docker_bin, "ps", "--format", "{{.Names}}"], capture_output=True, text=True, timeout=2)
+        if "fastmcp_server" in res.stdout or "ollama_server" in res.stdout:
+            return  # Swarm is already running
+    except Exception:
+        return # Daemon might be offline, don't crash
+        
+    compose_file = project_root / "docker-compose.yml"
+    if not compose_file.exists():
+        return
+        
+    print(f"\n\033[38;5;218m🌸 Automating Swarm Boot Sequence...\033[0m")
+    try:
+        subprocess.run([docker_bin, "compose", "up", "-d"], cwd=str(project_root), check=True)
+        print(f"\033[38;5;224m✓ Swarm containers are online.\033[0m")
+        time.sleep(1)
+    except Exception as e:
+        print(f"\033[38;5;226m⚠️ Failed to auto-start Docker Swarm: {e}\033[0m")
+
+
 def main():
     global active_brain_health_dir, YOLO_MODE
     
@@ -2030,8 +2060,24 @@ def main():
     if cwd != system_root and ((cwd / ".git").exists() or (cwd / ".kenbun").exists()):
         active_brain_health_dir = cwd / "brain_health"
     else:
+        if cwd != system_root:
+            print(f"\n\033[38;5;226m⚠️ [SECURITY WARNING] Path Bleed Detected!\033[0m")
+            print(f"You launched Kenbun from: \033[38;5;246m{cwd}\033[0m")
+            print(f"But the resolved core is: \033[38;5;246m{system_root}\033[0m")
+            print("\n\033[38;5;218mTo prevent executing commands in the wrong folder (Security Violation),\033[0m")
+            print("\033[38;5;218mplease navigate to your project directory before running kenbun.\033[0m")
+            print("\nIf your global CLI symlink is broken, we highly recommend fixing it using uv:")
+            print("  \033[1mcd ~/.kenbun-agent && uv tool install -e .\033[0m")
+            print("\n\033[38;5;224mPress ENTER to continue anyway (at your own risk), or Ctrl+C to abort.\033[0m")
+            try:
+                input()
+            except KeyboardInterrupt:
+                import sys
+                sys.exit(1)
         active_brain_health_dir = system_root / "brain_health"
     active_brain_health_dir.mkdir(parents=True, exist_ok=True)
+    
+    check_and_start_docker_swarm(system_root)
     
     # Audit and dynamically self-heal cloud/local mismatches before displaying banner
     llm_url, llm_model = check_and_heal_mismatch(llm_url, llm_model)

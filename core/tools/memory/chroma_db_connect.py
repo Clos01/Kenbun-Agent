@@ -3,7 +3,14 @@ import hashlib
 import threading
 import logging
 import time
-import chromadb
+
+# Disable telemetry before importing chromadb to prevent PostHog crashes
+os.environ["ANONYMIZED_TELEMETRY"] = "False"
+try:
+    import chromadb
+except Exception as e:
+    logger.error(f"Failed to import chromadb: {e}")
+    chromadb = None
 from pathlib import Path
 from tools.infrastructure.config import settings
 

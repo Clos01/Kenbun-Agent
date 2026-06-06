@@ -326,10 +326,10 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     Routes queries to PRIMARY_LLM_URL and falls back to FALLBACK_LLM_URL upon failure.
     Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
     """
-    primary_url = settings.models.primary_llm_url
-    primary_model = settings.models.primary_llm_model
-    fallback_url = settings.models.fallback_llm_url
-    fallback_model = settings.models.fallback_llm_model
+    primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
+    primary_model = settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
+    fallback_url = settings.FALLBACK_LLM_URL or ""
+    fallback_model = settings.FALLBACK_LLM_MODEL or ""
     
     # Dynamic Budget-Aware Swapping (System 4)
     try:
@@ -346,9 +346,9 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
     
     # Clean trailing slash in URLs
-    if primary_url.endswith("/"):
+    if primary_url and primary_url.endswith("/"):
         primary_url = primary_url[:-1]
-    if fallback_url.endswith("/"):
+    if fallback_url and fallback_url.endswith("/"):
         fallback_url = fallback_url[:-1]
         
     # Try Primary

@@ -1,0 +1,679 @@
+"use client";
+
+import React, { useEffect, useState } from "react";
+import Sidebar from "@/components/Sidebar";
+import { 
+  ShieldCheck,
+  Activity,
+  BrainCircuit,
+  ShieldAlert,
+  Zap,
+  Globe,
+  Database,
+  TrendingUp,
+  Target,
+  ArrowUpRight,
+  ArrowDownRight,
+  X
+} from "lucide-react";
+import { SquarePie, BarLedger, SharpAreaChart, HeatmapGrid, SquareDonut, ToolMatrix, AccuracyGauge, ContextWindowBar } from "@/components/Visuals";
+import GalaxyMap from "@/components/GalaxyMap";
+// import RoamingMascot from "@/components/RoamingMascot";
+import { motion, AnimatePresence } from "framer-motion";
+import { CONFIG } from "@/lib/config";
+
+export default function HeritageObservatory() {
+  const API_BASE = CONFIG.API_BASE;
+  const [stats, setStats] = useState<any[]>([]);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [kanban, setKanban] = useState<any[]>([]);
+  const [budget, setBudget] = useState<any>(null);
+  const [buildStatus, setBuildStatus] = useState<any>({ status: "Healthy" });
+  const [selectedTool, setSelectedTool] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [telemetry, setTelemetry] = useState<any>({ latency: "0ms", uptime: "0h", load: "0.0", memory: { capacity: 0 } });
+  const [pulse, setPulse] = useState<any>({ active_system: "GEMINI-3-FLASH", supervisor: "LM Studio", status: "idle" });
+  const [memorySignals, setMemorySignals] = useState<any[]>([]);
+  const [intelligenceHistory, setIntelligenceHistory] = useState<any[]>([]);
+  const [selectedDecision, setSelectedDecision] = useState<any>(null);
+  const [activeTab, setActiveTab] = useState("overview");
+
+  const fetchData = async () => {
+    try {
+      const [statsRes, logsRes, kanbanRes, buildRes, memoryRes, historyRes] = await Promise.all([
+        fetch(`${API_BASE}/stats`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/logs`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/kanban`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/v1/build/status`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/v1/memory/signals`, { cache: 'no-store' }),
+        fetch(`${API_BASE}/api/v1/intelligence/history`, { cache: 'no-store' })
+      ]);
+
+      if (!statsRes.ok || !logsRes.ok || !kanbanRes.ok) throw new Error("API_ERROR");
+
+      const statsData = await statsRes.json();
+      const kanbanData = await kanbanRes.json();
+      const logsData = await logsRes.json();
+      const memoryData = await memoryRes.json();
+      const historyData = await historyRes.json();
+
+      const tools = statsData.intelligence || [];
+      setStats(tools);
+      setPulse(statsData.pulse || { active_system: "GEMINI-3-FLASH", supervisor: "LM Studio", status: "idle" });
+      setKanban(kanbanData.tasks || []);
+      setBudget(statsData.budget || { remaining: 0.00, daily_usage: 0.0 });
+      
+      // Integrate Telemetry + History Trend
+      setTelemetry({
+        ...(statsData.telemetry || {}),
+        history_trend: statsData.history_trend || []
+      });
+      
+      setLogs(logsData.logs || []);
+      setMemorySignals(memoryData.signals || []);
+      setIntelligenceHistory(historyData.history || []);
+      setBuildStatus(await buildRes.json());
+      
+      // Initialize selected tool if not set
+      if (!selectedTool && tools.length > 0) {
+        setSelectedTool(tools[0]);
+      } else if (selectedTool) {
+        // Update selected tool data from live feed
+        const updated = tools.find((t: any) => t.tool_id === selectedTool.tool_id);
+        if (updated) setSelectedTool(updated);
+      }
+
+      setError(false);
+    } catch (error) {
+      console.warn("BRIDGE_FETCH_ERROR:", error);
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 3000);
+    return () => clearInterval(interval);
+  }, [selectedTool?.tool_id]);
+
+  const totalSuccess = stats.reduce((acc, s) => acc + (s.alpha || 0), 0);
+  const totalSignals = stats.reduce((acc, s) => acc + (s.alpha || 0) + (s.beta || 0), 0);
+  
+  const activeTask = kanban.find(t => t.status === "doing") || kanban[0];
+  const usageHistory = [2, 5, 8, 4, 12, 7, 15, 10, 20, 14, 25, 18, 30, 22, 10, 5, 12, 18, 22, 15, 20];
+
+  const TABS = [
+    { id: "overview", label: "Overview", icon: ShieldCheck },
+    { id: "intelligence", label: "Intelligence", icon: BrainCircuit },
+    { id: "memory", label: "Memory", icon: Database },
+    { id: "feed", label: "Deep Feed", icon: Activity },
+  ];
+
+  return (
+    <div className="min-h-screen bg-neutral flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
+      <Sidebar />
+      
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden">
+        <div className="grain-overlay opacity-20" />
+        
+        {/* Heritage Command Header */}
+        <header className="h-20 lg:h-24 border-b border-primary/5 flex items-center justify-between px-6 lg:px-10 bg-white/40 z-20 sticky top-0 backdrop-blur-xl shrink-0">
+          <div className="flex items-center gap-4 lg:gap-8">
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-30">Node.251649</span>
+            <div className="h-6 w-[1px] bg-primary/10" />
+            <span className="font-bold text-lg lg:text-xl uppercase tracking-tighter italic">Heritage <span className="text-tertiary">Observatory</span></span>
+          </div>
+          
+          <div className="flex items-center gap-6 lg:gap-10">
+            <div className="flex items-center gap-8">
+              <div className="flex flex-col items-end">
+                <span className="text-[8px] uppercase tracking-widest opacity-40 font-bold">Latency</span>
+                <span className="text-xs font-bold text-primary">{telemetry.latency}</span>
+              </div>
+              <div className="flex flex-col items-end border-l border-primary/5 pl-8">
+                <span className="text-[8px] uppercase tracking-widest opacity-40 font-bold">Reserve</span>
+                <span className="text-xl lg:text-2xl font-black text-tertiary italic tracking-tighter">${budget?.remaining?.toFixed(2) || "0.00"}</span>
+              </div>
+            </div>
+          </div>
+        </header>
+          
+        {/* Sub-Navigation Nodes */}
+        <nav className="flex items-center gap-4 px-6 lg:px-10 py-6 border-b border-primary/5 bg-white/20 backdrop-blur-sm z-20 shrink-0 overflow-x-auto no-scrollbar">
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 mr-4 shrink-0">Subsystem</span>
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-3 px-5 py-2.5 rounded-sm transition-all duration-500 border group shrink-0 ${
+                activeTab === tab.id 
+                  ? "bg-primary text-white border-primary shadow-lg shadow-primary/10" 
+                  : "bg-white/40 border-primary/5 text-primary opacity-40 hover:opacity-100 hover:bg-white"
+              }`}
+            >
+              <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? "text-tertiary" : "opacity-40 group-hover:opacity-100"}`} />
+              <span className="text-[10px] font-black uppercase tracking-widest">{tab.label}</span>
+              {activeTab === tab.id && (
+                <motion.div 
+                  layoutId="activeGlow"
+                  className="w-1 h-1 rounded-full bg-tertiary animate-pulse" 
+                />
+              )}
+            </button>
+          ))}
+        </nav>
+
+        <motion.div 
+          key={activeTab}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-12 relative z-10 custom-scrollbar pb-32"
+        >
+          {error && (
+            <div className="p-6 border border-tertiary/20 bg-tertiary/5 flex items-center gap-6 mb-8 rounded-sm">
+              <ShieldAlert className="w-6 h-6 text-tertiary" />
+              <div className="space-y-0">
+                <span className="text-[10px] font-black uppercase tracking-widest text-tertiary">Sync Error</span>
+                <p className="text-[9px] font-bold text-tertiary/60 uppercase tracking-widest">Connection lost with Heritage Control</p>
+              </div>
+            </div>
+          )}
+          
+          {activeTab === "overview" && (
+            <div className="space-y-16">
+              <section className="space-y-10">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4">
+                    <motion.span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Active Mission</motion.span>
+                    <div className="flex-1 h-[1px] bg-tertiary/20" />
+                  </div>
+                  <h1 className="text-[clamp(2rem,4vw,5rem)] font-black text-primary leading-[0.9] break-words italic tracking-tighter uppercase">
+                    {activeTask?.objective || "AWAITING_COMMAND"}
+                  </h1>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 border border-primary/5 bg-white/60 backdrop-blur-xl artisan-shadow divide-x divide-primary/5 rounded-sm">
+                  {[
+                    { label: "Domain", value: activeTask?.project || "Heritage" },
+                    { label: "Betterment", value: totalSignals > 0 ? `+${((totalSuccess / totalSignals) * 100).toFixed(1)}%` : "+0.0%" },
+                    { label: "Neural Capacity", value: telemetry.memory?.capacity ? `${telemetry.memory.capacity.toLocaleString()} Signals` : "0 Signals", color: "text-tertiary" },
+                    { label: "Value", value: activeTask?.est_cost ? `$${(activeTask.est_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00" }
+                  ].map((stat, i) => (
+                    <div key={i} className="p-8 space-y-2">
+                      <span className="text-[10px] uppercase tracking-[0.2em] opacity-30 font-black">{stat.label}</span>
+                      <div className={`text-xl lg:text-3xl font-black tracking-tighter italic ${stat.color || "text-primary"}`}>{stat.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="w-full min-h-[400px] p-10 border border-primary/5 bg-white/60 backdrop-blur-xl shadow-xl shadow-primary/5 flex flex-col space-y-8 rounded-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Topology</span>
+                      <p className="text-[11px] font-bold opacity-30 uppercase tracking-widest italic">Vector Visualization // Node.251649</p>
+                    </div>
+                    <div className="flex items-center gap-3 bg-primary/5 px-4 py-2 border border-primary/5 rounded-full">
+                      <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
+                      <span className="text-[10px] font-black text-tertiary uppercase tracking-widest">{telemetry.memory?.capacity || 0} Registered Signals</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 relative min-h-[600px] border border-primary/5 bg-white/40 rounded-sm overflow-hidden">
+                    <GalaxyMap />
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+                <div className="lg:col-span-8 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">Temporal Load Index</span>
+                    <TrendingUp className="w-4 h-4 text-tertiary" />
+                  </div>
+                  <div className="p-8 border border-primary/5 bg-white/60 backdrop-blur-md shadow-sm rounded-sm">
+                    <SharpAreaChart data={usageHistory} />
+                  </div>
+                </div>
+                <div className="lg:col-span-4 space-y-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">Signal Entropy</span>
+                    <Database className="w-4 h-4 opacity-20" />
+                  </div>
+                  <div className="p-8 border border-primary/5 bg-white/60 backdrop-blur-md shadow-sm rounded-sm">
+                    <SquareDonut data={[
+                      { label: "Neural", value: 45, color: "#1A1C1E" },
+                      { label: "Exec", value: 30, color: "#6C7278" },
+                      { label: "Rec", value: 25, color: "#B8422E" },
+                    ]} />
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === "intelligence" && (
+            <div className="space-y-12 pb-20">
+              <section className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12">
+                <div className="xl:col-span-4">
+                  <motion.div layout className="p-10 border border-primary/5 bg-white/60 backdrop-blur-xl shadow-sm space-y-10 h-full rounded-sm">
+                    <div className="flex items-center justify-between">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Fidelity</span>
+                        <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest">{selectedTool?.tool_id || "Global_State"}</span>
+                      </div>
+                      <Target className="w-5 h-5 text-tertiary" />
+                    </div>
+                    <AccuracyGauge 
+                      success={selectedTool ? (selectedTool.alpha || 0) : totalSuccess} 
+                      total={selectedTool ? (selectedTool.alpha || 0) + (selectedTool.beta || 0) : totalSignals} 
+                    />
+                    <div className="space-y-6 pt-6 border-t border-primary/5">
+                       <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Confidence</span>
+                        <span className="text-[10px] font-bold text-tertiary">{selectedTool?.confidence || "OPTIMIZED"}</span>
+                      </div>
+                      <div className="h-1 bg-primary/5 w-full relative overflow-hidden rounded-full">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: "88%" }}
+                          className="absolute inset-y-0 left-0 bg-tertiary"
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-6 pt-6 border-t border-primary/5">
+                      <ContextWindowBar usedTokens={telemetry.performance?.context_tokens || 6144} maxTokens={8192} label="Gemma 4 Context Window" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-8 pt-8 border-t border-primary/5">
+                      <div className="space-y-2">
+                        <span className="text-[8px] font-black uppercase tracking-widest opacity-30">Day Δ</span>
+                        <div className={`text-xl font-black italic ${parseFloat(selectedTool?.delta || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {parseFloat(selectedTool?.delta || 0) >= 0 ? '+' : ''}{selectedTool?.delta || "0.0"}%
+                        </div>
+                      </div>
+                      <div className="space-y-2 text-right">
+                        <span className="text-[8px] font-black uppercase tracking-widest opacity-30">Mo Δ</span>
+                        <div className={`text-xl font-black italic ${parseFloat(selectedTool?.mom_delta || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {parseFloat(selectedTool?.mom_delta || 0) >= 0 ? '+' : ''}{selectedTool?.mom_delta || "0.0"}%
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </div>
+                <div className="xl:col-span-8">
+                  <div className="p-10 border border-primary/5 bg-white/60 backdrop-blur-xl shadow-sm space-y-8 h-full rounded-sm">
+                    <div className="flex items-center justify-between border-b border-primary/5 pb-6">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">
+                          {selectedTool ? `${selectedTool.tool_id.toUpperCase()} Performance` : 'Global Performance'}
+                        </span>
+                        <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Accuracy vs Load Topology</p>
+                      </div>
+                      <div className="flex items-center gap-6">
+                         <div className="flex items-center gap-2">
+                           <div className="w-2 h-2 bg-tertiary" />
+                           <span className="text-[9px] font-black opacity-50 uppercase tracking-widest">Fidelity</span>
+                         </div>
+                         <div className="flex items-center gap-2">
+                           <div className="w-2 h-2 bg-primary/20" />
+                           <span className="text-[9px] font-black opacity-50 uppercase tracking-widest">Load</span>
+                         </div>
+                      </div>
+                    </div>
+                    <div className="h-[240px] w-full relative">
+                       {(() => {
+                         const activeTrend = selectedTool?.history_trend || telemetry.history_trend;
+                         if (activeTrend && activeTrend.length > 0) {
+                           return (
+                             <svg className="w-full h-full" viewBox="0 0 1000 240" preserveAspectRatio="none">
+                               {(() => {
+                                 const trend = activeTrend;
+                                 const count = trend.length > 1 ? trend.length - 1 : 1;
+                                 const step = 1000 / count;
+                                 
+                                 const loadD = `M ${trend.map((d: any, i: number) => `${i * step},${240 - (d.load || 0) * 2}`).join(' L ')}`;
+                                 const accuracyD = `M ${trend.map((d: any, i: number) => `${i * step},${240 - (d.accuracy || 0) * 2.2}`).join(' L ')}`;
+                                 
+                                 return (
+                                   <>
+                                     <motion.path 
+                                       initial={{ pathLength: 0 }}
+                                       animate={{ pathLength: 1 }}
+                                       transition={{ duration: 1.5, ease: "easeInOut" }}
+                                       key={selectedTool?.tool_id + "-load"}
+                                       d={loadD}
+                                       fill="none"
+                                       stroke="#1A1C1E"
+                                       strokeOpacity="0.1"
+                                     />
+                                     <motion.path 
+                                       initial={{ pathLength: 0 }}
+                                       animate={{ pathLength: 1 }}
+                                       transition={{ duration: 1.5, ease: "easeInOut" }}
+                                       key={selectedTool?.tool_id + "-accuracy"}
+                                       d={accuracyD}
+                                       fill="none"
+                                       stroke="#B8422E"
+                                       strokeWidth="2.5"
+                                     />
+                                   </>
+                                 );
+                               })()}
+                             </svg>
+                           );
+                         }
+                         return (
+                           <div className="w-full h-full flex items-center justify-center border border-dashed border-primary/10 opacity-20 italic text-xs font-bold uppercase tracking-widest">
+                             Awaiting temporal propagation...
+                           </div>
+                         );
+                       })()}
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* --- MIDDLE ROW: Reasoning Horizon (Horizontal) --- */}
+              <section className="space-y-8">
+                <div className="flex items-center justify-between border-b border-primary/5 pb-4">
+                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Reasoning Horizon</span>
+                  <div className="flex items-center gap-4">
+                    <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest">{intelligenceHistory.length} Historical Pulses</span>
+                    <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
+                  </div>
+                </div>
+
+                {intelligenceHistory.length > 0 && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="p-10 border border-tertiary/20 bg-white/60 artisan-shadow space-y-8 relative overflow-hidden group rounded-sm"
+                  >
+                    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                      <BrainCircuit className="w-40 h-40" />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="px-3 py-1 bg-tertiary text-white text-[9px] font-black uppercase tracking-widest">Priority Intelligence</div>
+                      <div className="h-[1px] flex-1 bg-tertiary/20" />
+                      <span className="text-[10px] font-black text-tertiary">{(Math.max(...intelligenceHistory.map(h => h.confidence || 0)) * 100).toFixed(0)}% Confidence</span>
+                    </div>
+                    
+                    {(() => {
+                      const best = [...intelligenceHistory].sort((a, b) => (b.confidence || 0) - (a.confidence || 0))[0];
+                      return (
+                        <div className="space-y-6 relative z-10">
+                          <h2 className="text-3xl md:text-4xl font-black text-primary leading-tight max-w-4xl italic tracking-tighter uppercase">
+                            "{best.logic}"
+                          </h2>
+                          <div className="flex items-center gap-8">
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Agent</span>
+                              <div className="text-xs font-bold text-tertiary uppercase">{best.tool}</div>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Status</span>
+                              <div className={`text-xs font-bold ${best.result === 'success' ? 'text-green-600' : 'text-red-600'} uppercase`}>{best.result.toUpperCase()}</div>
+                            </div>
+                            <button 
+                              onClick={() => setSelectedDecision(best)}
+                              className="ml-auto px-6 py-2.5 bg-primary text-white text-[9px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all rounded-sm shadow-lg shadow-primary/10"
+                            >
+                              Audit Logic
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </motion.div>
+                )}
+                
+                <div className="relative group">
+                  <div className="flex items-center gap-6 overflow-x-auto custom-scrollbar pb-8 snap-x snap-mandatory">
+                    {intelligenceHistory.length > 0 ? intelligenceHistory.map((item: any, idx: number) => (
+                      <motion.div 
+                        key={item.id}
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: idx * 0.05 }}
+                        onClick={() => setSelectedDecision(item)}
+                        className="min-w-[400px] snap-center p-8 border border-primary/5 bg-white/60 hover:border-tertiary/40 hover:bg-white transition-all group cursor-pointer space-y-4 rounded-sm shadow-sm"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">{item.tool}</span>
+                          <span className="text-[9px] font-bold opacity-20">{item.timestamp?.split('T')[1].split(':')[0]}</span>
+                        </div>
+                        <p className="text-sm font-bold text-primary/90 line-clamp-2 min-h-[40px] uppercase tracking-tighter">"{item.logic}"</p>
+                        <div className="pt-4 border-t border-primary/5 flex items-center justify-between">
+                           <span className={`text-[9px] font-black ${item.result === 'success' ? 'text-green-600' : 'text-red-600'} uppercase`}>{item.result.toUpperCase()}</span>
+                           <div className="h-1.5 w-1.5 bg-tertiary rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      </motion.div>
+                    )) : (
+                      <div className="w-full py-20 text-center border border-dashed border-primary/10 opacity-20 italic text-xs font-bold uppercase tracking-widest">
+                        Awaiting historical propagation...
+                      </div>
+                    )}
+                  </div>
+                  {/* Visual Fade indicators */}
+                  <div className="absolute inset-y-0 left-0 w-20 bg-gradient-to-r from-[#F7F5F2] to-transparent pointer-events-none z-10" />
+                  <div className="absolute inset-y-0 right-0 w-20 bg-gradient-to-l from-[#F7F5F2] to-transparent pointer-events-none z-10" />
+                  <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-[#F7F5F2] to-transparent pointer-events-none z-10" />
+                </div>
+              </section>
+
+              <section>
+                  <div className="p-10 border border-primary/5 bg-white/60 backdrop-blur-xl artisan-shadow space-y-10 rounded-sm">
+                    <div className="flex items-center justify-between border-b border-primary/5 pb-6">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Tool Matrix</span>
+                        <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Neural Capability Topology</p>
+                      </div>
+                      <span className="px-3 py-1 border border-primary/10 text-[9px] font-black opacity-40 uppercase tracking-widest rounded-sm">{stats.length} Nodes Active</span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+                       {stats.map((tool: any, idx: number) => (
+                         <div 
+                           key={idx}
+                           onClick={() => setSelectedTool(tool)}
+                           className={`p-6 border transition-all cursor-pointer group rounded-sm ${selectedTool?.tool_id === tool.tool_id ? 'border-tertiary bg-white shadow-xl shadow-tertiary/5' : 'border-primary/5 bg-white/40 hover:border-tertiary/20'}`}
+                         >
+                           <div className="flex items-center justify-between mb-4">
+                             <span className="text-[10px] font-black text-primary/40 truncate pr-2 uppercase tracking-tighter">{tool.tool_id.split('_').pop()}</span>
+                             {parseFloat(tool.delta) > 0 ? (
+                               <ArrowUpRight className="w-3 h-3 text-green-600" />
+                             ) : (
+                               <ArrowDownRight className="w-3 h-3 text-red-600" />
+                             )}
+                           </div>
+                           <div className="text-2xl font-black italic tracking-tighter text-primary">{Math.round(tool.success_rate * 100)}%</div>
+                         </div>
+                       ))}
+                    </div>
+                  </div>
+              </section>              <AnimatePresence>
+                {selectedDecision && (
+                  <div className="fixed inset-0 z-[150] flex items-center justify-center p-6 md:p-20">
+                    <motion.div 
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setSelectedDecision(null)}
+                      className="absolute inset-0 bg-primary/40 backdrop-blur-md"
+                    />
+                    <motion.div 
+                      initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                      animate={{ scale: 1, opacity: 1, y: 0 }}
+                      exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                      className="relative w-full max-w-5xl bg-[#F7F5F2] shadow-[0_0_100px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col md:flex-row rounded-sm border border-primary/10"
+                    >
+                       <div className="md:w-2/5 p-12 bg-white flex flex-col justify-between border-r border-primary/5">
+                          <div className="space-y-10">
+                            <div className="flex flex-col gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Audit Pulse</span>
+                              <h3 className="text-4xl font-black text-primary uppercase tracking-tighter italic">Reasoning Process</h3>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 gap-8">
+                               <div className="space-y-2">
+                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Neural Origin</span>
+                                 <p className="text-sm font-bold text-primary uppercase">{selectedDecision.tool}</p>
+                               </div>
+                               <div className="space-y-2">
+                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Confidence Rating</span>
+                                 <p className="text-2xl font-black italic text-tertiary">{(selectedDecision.confidence * 100).toFixed(1)}%</p>
+                               </div>
+                               <div className="space-y-2">
+                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Temporal Stamp</span>
+                                 <p className="text-sm font-bold text-primary">{new Date(selectedDecision.timestamp).toLocaleString()}</p>
+                               </div>
+                            </div>
+                          </div>
+
+                          <button 
+                            onClick={() => setSelectedDecision(null)}
+                            className="mt-12 w-full py-4 bg-primary text-white text-[10px] font-black uppercase tracking-[0.3em] hover:bg-primary/90 transition-all rounded-sm"
+                          >
+                            Close Audit
+                          </button>
+                       </div>
+
+                       <div className="flex-1 p-12 md:p-16 space-y-10 overflow-y-auto max-h-[80vh] custom-scrollbar">
+                          <div className="space-y-4">
+                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Proposed Logic</span>
+                            <blockquote className="text-2xl md:text-3xl font-black text-primary leading-tight uppercase tracking-tighter italic">
+                              "{selectedDecision.logic}"
+                            </blockquote>
+                          </div>
+
+                          <div className="space-y-6">
+                             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Result set</span>
+                             <div className="p-8 bg-white border border-primary/5 space-y-4 rounded-sm">
+                                <div className="flex items-center justify-between border-b border-primary/5 pb-4">
+                                  <span className="text-[9px] font-black uppercase tracking-widest">Execution Result</span>
+                                  <span className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest ${selectedDecision.result === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'} rounded-sm`}>
+                                    {selectedDecision.result}
+                                  </span>
+                                </div>
+                                <div className="space-y-4 pt-4">
+                                  <div className="flex flex-col gap-2">
+                                    <span className="text-[9px] font-black uppercase tracking-widest opacity-30">Raw Output</span>
+                                    <pre className="text-xs font-bold text-primary/70 whitespace-pre-wrap leading-relaxed font-mono p-4 bg-primary/[0.02] border border-primary/5 rounded-sm">
+                                      {selectedDecision.output || "No supplementary trace data available."}
+                                    </pre>
+                                  </div>
+                                </div>
+                             </div>
+                          </div>
+                       </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+
+          {activeTab === "memory" && (
+            <div className="space-y-12">
+              <div className="flex items-center justify-between border-b border-primary/5 pb-6">
+                <div className="space-y-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Memory</span>
+                  <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">System 3 Signal Propagation // Recent Captures</p>
+                </div>
+                <div className="flex items-center gap-4">
+                   <div className="text-[10px] font-black opacity-30 uppercase tracking-widest">{memorySignals.length} Active Logic Pulses</div>
+                   <Database className="w-5 h-5 text-tertiary" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {memorySignals.length > 0 ? memorySignals.map((signal: any, idx: number) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    key={idx} 
+                    className="p-8 border border-primary/5 bg-white/60 backdrop-blur-xl shadow-sm space-y-6 hover:border-tertiary/30 transition-all group cursor-pointer rounded-sm"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">Signal Node</span>
+                      <span className="text-[9px] font-bold opacity-20">POS_L{signal.line}</span>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{signal.file.split(':').pop()?.split('/').pop()}</div>
+                      <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file}</div>
+                    </div>
+
+                    <div className="text-xs font-bold text-primary/80 bg-primary/[0.02] p-5 leading-relaxed border border-primary/5 rounded-sm overflow-hidden whitespace-pre-wrap min-h-[140px] max-h-[200px] overflow-y-auto custom-scrollbar font-mono">
+                      {signal.content}
+                    </div>
+                    
+                    <div className="pt-4 border-t border-primary/5 flex items-center justify-between">
+                      <span className="text-[10px] font-black opacity-30 uppercase tracking-widest">Type: Child_Logic</span>
+                      <div className="h-2 w-2 rounded-full bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  </motion.div>
+                )) : (
+                  <div className="col-span-full py-32 text-center border border-dashed border-primary/10 opacity-20 italic text-xs font-bold uppercase tracking-widest">
+                    Awaiting memory crystallization...
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "feed" && (
+            <div className="space-y-8">
+              <div className="p-10 border border-primary/5 bg-white/60 backdrop-blur-xl artisan-shadow space-y-8 h-[800px] flex flex-col rounded-sm">
+                <div className="flex items-center justify-between border-b border-primary/5 pb-6">
+                  <div className="flex items-center gap-4">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Signal Archive</span>
+                    <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Live Terminal // Raw Feed</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
+                    <span className="text-[10px] font-black text-tertiary uppercase tracking-widest">Recording</span>
+                  </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto space-y-4 font-mono pr-4 scrollbar-thin scrollbar-thumb-primary/10">
+                  {logs.length > 0 ? logs.slice(-50).map((log: any, idx: number) => (
+                    <div key={idx} className="group flex items-start gap-6 opacity-60 hover:opacity-100 transition-opacity border-b border-primary/[0.02] pb-3">
+                      <span className="text-[10px] font-black text-tertiary shrink-0">[{new Date().toLocaleTimeString()}]</span>
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-3">
+                          <span className="text-[9px] font-black uppercase tracking-widest opacity-30 italic">System_Log //</span>
+                        </div>
+                        <p className="text-[11px] font-bold text-primary/90 leading-relaxed uppercase tracking-tighter">
+                          {typeof log === 'string' ? log : (log.content || log.message || JSON.stringify(log))}
+                        </p>
+                      </div>
+                    </div>
+                  )) : (
+                    <div className="h-full flex items-center justify-center border border-dashed border-primary/10 opacity-20 italic text-xs font-bold uppercase tracking-widest">
+                      Awaiting terminal stream...
+                    </div>
+                  )}
+                  <div className="text-[10px] font-bold text-tertiary animate-pulse pt-4 uppercase tracking-widest italic">_ Awaiting next signal pulse...</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </motion.div>
+
+        {/* <RoamingMascot /> */}
+
+        <footer className="h-16 border-t border-primary/10 flex items-center justify-between px-10 bg-white/60 text-[8px] font-black uppercase tracking-[0.8em] text-primary opacity-40 sticky bottom-0 lg:static backdrop-blur-xl">
+          <span>NODE.251649 // Heritage.HIVE</span>
+          <div className="flex items-center gap-6">
+            <span>LOC_127.0.0.1</span>
+            <span className="text-tertiary opacity-80">/ ARCH: {pulse?.supervisor || "SYSTEM 2"}</span>
+          </div>
+        </footer>
+      </main>
+    </div>
+  );
+}

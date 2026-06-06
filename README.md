@@ -83,13 +83,19 @@ For manual audits or isolated workspace checkouts, perform these exact steps in 
 git clone https://github.com/Clos01/Kenbun-Agent.git kenbun-agent
 cd kenbun-agent
 ```
-> [!IMPORTANT]
-> **Directory Check:** You must change directories (`cd kenbun-agent`) before executing any subsequent commands to avoid "No such file or directory" interpreter failures.
 
-##### 2️⃣ Step 2: Run the Automated Bootstrapper
-Initialize the environment configuration file, telemetry metrics, and local SQLite databases:
+##### 2️⃣ Step 2: Install Global CLI with UV (Recommended)
+Use `uv` (the lightning-fast Python package manager) to install the CLI globally in an isolated environment, avoiding `EXTERNALLY-MANAGED` Debian errors:
 ```bash
-python3 scripts/bootstrap.py
+uv tool install -e .
+```
+> [!NOTE]
+> If you do not have `uv` installed, you can install it via `curl -LsSf https://astral.sh/uv/install.sh | sh` or use `pipx install -e .`.
+
+##### 3️⃣ Step 3: Run the Setup Wizard
+Initialize the environment configuration file, telemetry metrics, and local SQLite databases using the newly installed global command:
+```bash
+kenbun
 ```
 
 ### 3️⃣ Step 3: Boot up the Swarm & The Portable UI

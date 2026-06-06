@@ -329,14 +329,14 @@ TOOL_TIMEOUT = settings.BASE_TIMEOUT  # Safety: baseline timeout
 
 async def _get_active_brain() -> str:
     """Detects where the "Brain" is currently located based on active configuration."""
-    primary_url = settings.models.primary_llm_url
-    fallback_url = settings.models.fallback_llm_url
+    primary_url = settings.PRIMARY_LLM_URL
+    fallback_url = settings.FALLBACK_LLM_URL
     
     # Check primary
     try:
         url = f"{primary_url}/models"
         with urllib.request.urlopen(url, timeout=0.5):
-            return f"🧠 [PRIMARY-GATEWAY] ({settings.models.primary_llm_model})"
+            return f"🧠 [PRIMARY-GATEWAY] ({settings.PRIMARY_LLM_MODEL})"
     except (urllib.error.URLError, Exception):
         pass
         
@@ -344,7 +344,7 @@ async def _get_active_brain() -> str:
     try:
         url = f"{fallback_url}/models"
         with urllib.request.urlopen(url, timeout=0.5):
-            return f"🧠 [FALLBACK-GATEWAY] ({settings.models.fallback_llm_model})"
+            return f"🧠 [FALLBACK-GATEWAY] ({settings.FALLBACK_LLM_MODEL})"
     except (urllib.error.URLError, Exception):
         pass
         
@@ -352,7 +352,7 @@ async def _get_active_brain() -> str:
 
 def get_timeout_multiplier() -> float:
     """Detects the loaded model in the primary gateway and adjusts the timeout multiplier."""
-    primary_url = settings.models.primary_llm_url
+    primary_url = settings.PRIMARY_LLM_URL
     if primary_url.endswith("/"):
         primary_url = primary_url[:-1]
     base_url = f"{primary_url}/models"

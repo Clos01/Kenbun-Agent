@@ -459,6 +459,7 @@ def orchestrate(
         "maze_verification": backward_verify,
         "generate_discovery_form": generate_discovery_form,
         "view_file": _local_view_file,
+        "autofix_linter": autofix_linter,
     }
 
     coro = run_pipeline(
