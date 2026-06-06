@@ -28,11 +28,11 @@ RUN pip install --no-cache-dir uv && \
 COPY . .
 
 # Set PYTHONPATH so the core module can be imported properly
-ENV PYTHONPATH=/app/core
+ENV PYTHONPATH=/app
 
 # Create a non-root user and switch to it for execution (Privilege Escalation Mitigation)
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
 # Run the Swarm Mission Control API server
-CMD ["python", "core/tools/infrastructure/api_server.py"]
+CMD ["python", "-m", "core.tools.infrastructure.api_server"]
