@@ -6,6 +6,10 @@ import time
 
 # Disable telemetry before importing chromadb to prevent PostHog crashes
 os.environ["ANONYMIZED_TELEMETRY"] = "False"
+import posthog
+# Monkey-patch posthog capture to safely swallow all arguments and prevent crashes
+posthog.capture = lambda *args, **kwargs: None
+
 try:
     import chromadb
 except Exception as e:
