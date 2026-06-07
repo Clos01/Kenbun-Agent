@@ -980,6 +980,16 @@ def check_interactive_command(parts: list[str]) -> Optional[str]:
         
     executable = Path(parts[0]).name.lower()
     
+    # Helper to check if a specific flag is set in the arguments (handles combined short flags like -yq)
+    def has_flag(flag_char: str, full_flag: str) -> bool:
+        for part in parts[1:]:
+            if part.startswith("--") and part == full_flag:
+                return True
+            elif part.startswith("-") and not part.startswith("--"):
+                if flag_char in part[1:]:
+                    return True
+        return False
+
     # 1. Text editors and pagers
     editors = {"nano", "vim", "vi", "emacs", "neovim", "nvim", "micro", "ed", "less", "more", "most"}
     if executable in editors:
@@ -996,19 +1006,32 @@ def check_interactive_command(parts: list[str]) -> Optional[str]:
             return f"Command '{executable}' will open an interactive REPL shell. To run code, write a script file and run it, or pass the command string (e.g. '{executable} -c \"...\"')."
             
     if executable in {"bash", "zsh", "sh"}:
-        if len(parts) == 1 or not any(arg in parts for arg in ("-c", "-s")):
+        if len(parts) == 1 or not (has_flag("c", "--cmd") or has_flag("s", "--stdin")):
             return f"Command '{executable}' without '-c' opens an interactive shell. Please run with '-c' (e.g. '{executable} -c \"your command\"')."
             
     # 4. Git commits without a message
     if executable == "git" and len(parts) > 1 and parts[1] == "commit":
-        if not any(arg in parts for arg in ("-m", "--message", "-F", "--file", "-C", "--reuse-message", "-c", "--reedit-message", "--amend")):
+        has_msg = (
+            has_flag("m", "--message") or 
+            has_flag("F", "--file") or 
+            has_flag("C", "--reuse-message") or 
+            has_flag("c", "--reedit-message") or 
+            "--amend" in parts
+        )
+        if not has_msg:
             return "Command 'git commit' without a message flag will open an interactive text editor. Please pass a message using the '-m' flag (e.g. 'git commit -m \"message\"')."
             
     # 5. Package managers without -y
     if executable in {"apt", "apt-get", "yum", "dnf", "pacman", "zypper", "apk"}:
         is_modifying = any(arg in parts for arg in ("install", "remove", "upgrade", "update", "dist-upgrade", "purge", "add", "del"))
-        if is_modifying and not any(arg in parts for arg in ("-y", "--yes", "-q", "--quiet", "--noconfirm")):
-            return f"Command '{executable}' requires user confirmation. Please append a yes/quiet flag (e.g. '-y' or '--noconfirm') to run non-interactively."
+        if is_modifying:
+            has_yes = (
+                has_flag("y", "--yes") or 
+                has_flag("q", "--quiet") or 
+                "--noconfirm" in parts
+            )
+            if not has_yes:
+                return f"Command '{executable}' requires user confirmation. Please append a yes/quiet flag (e.g. '-y' or '--noconfirm') to run non-interactively."
             
     return None
 
