@@ -72,6 +72,7 @@ Pygments==2.20.0
 PyJWT==2.12.1
 pyparsing==3.3.2
 PyPika==0.51.1
+prompt_toolkit>=3.0.43
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
