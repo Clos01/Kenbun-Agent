@@ -59,6 +59,22 @@ try:
 except Exception:
     _ui = None
 
+# ANSI escape sequence to restore standard terminal input modes and clear raw state
+TERMINAL_RESET_SEQUENCE = (
+    "\x1b[?1006l"  # disable SGR mouse
+    "\x1b[?1003l"  # disable any-motion tracking
+    "\x1b[?1002l"  # disable button-motion tracking
+    "\x1b[?1000l"  # disable click tracking
+    "\x1b[?1004l"  # disable focus events
+    "\x1b[?2004l"  # disable bracketed paste
+    "\x1b[?1049l"  # leave alt screen (if stuck there)
+    "\x1b[<u"      # pop kitty keyboard mode
+    "\x1b[>4m"     # reset modifyOtherKeys
+    "\x1b[0m"      # reset text attributes
+    "\x1b[?25h"    # ensure cursor visible
+)
+
+
 def draw_box(lines, title=None, border_color=C_G, text_color=C_W):
     if _ui:
         style = "default"
@@ -1061,7 +1077,7 @@ class TerminalSession:
         finally:
             try:
                 # Restore terminal input modes to recover from any raw/interactive drift caused by the command
-                sys.stdout.write("\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?1004l\x1b[?2004l\x1b[?1049l\x1b[<u\x1b[>4m\x1b[0m\x1b[?25h")
+                sys.stdout.write(TERMINAL_RESET_SEQUENCE)
                 sys.stdout.flush()
             except Exception:
                 pass
