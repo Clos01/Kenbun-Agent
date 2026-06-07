@@ -1,4 +1,5 @@
 from typing import Optional, List
+from core.tools.utils.path_utils import get_project_root
 """
 🏛️ Kenbun-Agent Interactive Setup Wizard & Bootstrapper (Sakura Edition)
 Dynamically resolves port conflicts, configures absolute paths, provides interactive
@@ -50,7 +51,7 @@ def should_enable_color() -> bool:
 
 def get_python_executable() -> str:
     # Resolve project root relative to this script safely
-    project_root = Path(__file__).resolve().parent.parent
+    project_root = get_project_root()
     if not project_root.is_dir():
         return sys.executable
         
@@ -207,12 +208,7 @@ def bootstrap_core(silent=False):
         print(f"\n{c_c}🚀 INITIATING PORTABLE KENBUN-AGENT STANDALONE BOOTSTRAPPER{c_r}\n")
     
     # 1. Resolve workspace paths dynamically
-    cwd = Path.cwd()
-    if (cwd / "docker-compose.yml").exists() or (cwd / ".env.example").exists():
-        project_root = cwd
-    else:
-        script_dir = Path(__file__).resolve().parent
-        project_root = script_dir.parent
+    project_root = get_project_root()
     log_status(1, "Resolving dynamic workspace root paths", str(project_root.resolve()), status="OK")
 
     # 2. Check and copy environment template (.env.example -> .env)
@@ -678,8 +674,7 @@ def auto_register_claude_desktop_mcp():
     print(f"Target file: {config_path}")
 
     # Build the server config dictionary using direct virtualenv interpreter
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     venv_python = Path(get_python_executable())
 
     kenbun_server_node = {
@@ -733,8 +728,7 @@ def auto_register_cursor_mcp():
     print(f"\n{c_m}🤖 AUTO-CONFIGURING CURSOR MCP INTEGRATION{c_r}")
     print(f"Target file: {config_path}")
 
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     venv_python = Path(get_python_executable())
 
     kenbun_server_node = {
@@ -845,8 +839,7 @@ def configure_api_keys():
     if not use_color:
         c_m = c_c = c_g = c_y = c_w = c_r = ""
 
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     env_file = project_root / ".env"
     
     if not env_file.exists():
@@ -1532,8 +1525,7 @@ def configure_local_models():
     if not use_color:
         c_m = c_c = c_g = c_y = c_w = c_r = ""
 
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     env_file = project_root / ".env"
     
     if not env_file.exists():
@@ -1739,8 +1731,7 @@ def showcase_dashboard():
     if not use_color:
         c_m = c_g = c_r = ""
 
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     env_file = project_root / ".env"
     dashboard_port = "3000"
     if env_file.exists():
@@ -1781,8 +1772,7 @@ def run_quick_setup():
     if not use_color:
         c_m = c_c = c_g = c_y = c_w = c_r = ""
 
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     env_file = project_root / ".env"
     
     if not env_file.exists():
@@ -2036,8 +2026,7 @@ def run_interactive_wizard():
         "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)"
     ]
 
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    project_root = get_project_root()
     env_file = project_root / ".env"
 
     # Detect first-time setup
@@ -2148,8 +2137,7 @@ def run_interactive_wizard():
             current_selection = 8
         elif selection == 8:
             # Launch Kenbun Cognitive Shell (Termchat) in-place
-            script_dir = Path(__file__).parent.resolve()
-            project_root = script_dir.parent
+            project_root = get_project_root()
             launch_termchat(project_root)
             current_selection = 8
         elif selection == 9:
@@ -2169,15 +2157,13 @@ def main():
                 bootstrap_core()
             elif cmd in ("chat", "shell", "termchat"):
                 # Launch Termchat in-place
-                script_dir = Path(__file__).parent.resolve()
-                project_root = script_dir.parent
+                project_root = get_project_root()
                 launch_termchat(project_root)
             elif cmd in ("start", "up"):
                 launch_docker_swarm()
             elif cmd in ("stop", "down"):
                 # Execute docker compose down
-                script_dir = Path(__file__).parent.resolve()
-                project_root = script_dir.parent
+                project_root = get_project_root()
                 print(f"\n{c_m}🐳 Stopping Swarm Stack...{c_r}")
                 import subprocess
                 try:
