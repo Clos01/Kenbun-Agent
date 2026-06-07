@@ -17,6 +17,7 @@ Usage:
 
 import sys
 import shutil
+import threading
 from contextlib import contextmanager
 from typing import Generator, List, Optional
 
@@ -37,6 +38,47 @@ from core.tools.cli.ui.skin_engine import SkinConfig, get_active_skin, set_activ
 from core.tools.cli.ui.banner import build_welcome_banner
 
 
+class NullLive:
+    """Null Object pattern for rich.Live when rich is unavailable."""
+    def update(self, *args, **kwargs) -> None:
+        pass
+    def refresh(self, *args, **kwargs) -> None:
+        pass
+
+
+class NullStatus:
+    """Null Object pattern for rich.status.Status when rich is unavailable."""
+    def update(self, *args, **kwargs) -> None:
+        pass
+    def start(self) -> None:
+        pass
+    def stop(self) -> None:
+        pass
+    def __enter__(self) -> "NullStatus":
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        pass
+
+
+class NullLiveContext:
+    """Null context manager for rich.Live when rich is unavailable."""
+    def __enter__(self) -> NullLive:
+        return NullLive()
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        pass
+
+
+class NullConsole:
+    """Null Object pattern for rich.Console when rich is unavailable."""
+    def print(self, *args, **kwargs) -> None:
+        pass
+
+    @contextmanager
+    def status(self, message: str, *args, **kwargs) -> Generator:
+        print(f"⏳ {message}")
+        yield NullStatus()
+
+
 class UIRenderer:
     """
     Decoupled UI renderer for Kenbun terminal shell.
@@ -44,13 +86,19 @@ class UIRenderer:
 
     Falls back gracefully to ANSI print() if Rich is unavailable.
     """
+    _lock = threading.RLock()
 
     def __init__(self, skin: Optional[SkinConfig] = None):
         self._skin = skin or get_active_skin()
+        
         if RICH_AVAILABLE:
             self._console = Console(highlight=False, markup=True)
+            self._status_context = self._console.status
+            self._live_context = lambda: Live(console=self._console, refresh_per_second=15)
         else:
-            self._console = None
+            self._console = NullConsole()
+            self._status_context = self._console.status
+            self._live_context = lambda: NullLiveContext()
 
     # ── Skin management ──────────────────────────────────────────────────────
 
@@ -87,18 +135,19 @@ class UIRenderer:
         yolo_mode: bool = False,
     ) -> None:
         """Print the full Kenbun welcome banner."""
-        if RICH_AVAILABLE and self._console:
-            build_welcome_banner(
-                console=self._console,
-                model=model,
-                health=health,
-                skin=self._skin,
-                version=version,
-                yolo_mode=yolo_mode,
-            )
-        else:
-            # Graceful ANSI fallback
-            self._fallback_banner(model, health, version, yolo_mode)
+        with self._lock:
+            if isinstance(self._console, NullConsole):
+                # Graceful ANSI fallback
+                self._fallback_banner(model, health, version, yolo_mode)
+            else:
+                build_welcome_banner(
+                    console=self._console,
+                    model=model,
+                    health=health,
+                    skin=self._skin,
+                    version=version,
+                    yolo_mode=yolo_mode,
+                )
 
     # ── Panel (replaces draw_box) ────────────────────────────────────────────
 
@@ -116,32 +165,33 @@ class UIRenderer:
             title: Panel title text (plain text or ANSI).
             style: One of 'default', 'success', 'warning', 'error', 'info', 'yolo'.
         """
-        if not RICH_AVAILABLE or not self._console:
-            self._fallback_box(lines, title)
-            return
+        with self._lock:
+            if isinstance(self._console, NullConsole):
+                self._fallback_box(lines, title)
+                return
 
-        border_color = self._resolve_panel_color(style)
-        content = "\n".join(lines)
+            border_color = self._resolve_panel_color(style)
+            content = "\n".join(lines)
 
-        if "\033[" in content:
-            renderable = Text.from_ansi(content)
-        else:
-            renderable = content
-
-        title_renderable = None
-        if title:
-            if "\033[" in title:
-                title_renderable = Text.from_ansi(title)
+            if "\033[" in content:
+                renderable = Text.from_ansi(content)
             else:
-                title_renderable = Text.from_markup(f"[bold]{title}[/]")
+                renderable = content
 
-        panel = Panel(
-            renderable,
-            title=title_renderable,
-            border_style=border_color,
-            padding=(0, 1),
-        )
-        self._console.print(panel)
+            title_renderable = None
+            if title:
+                if "\033[" in title:
+                    title_renderable = Text.from_ansi(title)
+                else:
+                    title_renderable = Text.from_markup(f"[bold]{title}[/]")
+
+            panel = Panel(
+                renderable,
+                title=title_renderable,
+                border_style=border_color,
+                padding=(0, 1),
+            )
+            self._console.print(panel)
 
     def _resolve_panel_color(self, style: str) -> str:
         s = self._skin
@@ -159,24 +209,26 @@ class UIRenderer:
 
     def print_response_header(self, model_name: str) -> None:
         """Print the response label before an AI reply."""
-        if RICH_AVAILABLE and self._console:
-            label = self._skin.get_branding("response_label", " 🌸 Kenbun ")
-            accent = self._skin.get_color("banner_accent", "#DA70D6")
-            border = self._skin.get_color("response_border", "#FF69B4")
-            self._console.print(
-                f"[{border}]─[/][bold {accent}]{label}[/][{border}]▸[/]",
-                end=" ",
-            )
-        else:
-            sys.stdout.write("\n🌸 Kenbun ▸ ")
-            sys.stdout.flush()
+        with self._lock:
+            if isinstance(self._console, NullConsole):
+                sys.stdout.write("\n🌸 Kenbun ▸ ")
+                sys.stdout.flush()
+            else:
+                label = self._skin.get_branding("response_label", " 🌸 Kenbun ")
+                accent = self._skin.get_color("banner_accent", "#DA70D6")
+                border = self._skin.get_color("response_border", "#FF69B4")
+                self._console.print(
+                    f"[{border}]─[/][bold {accent}]{label}[/][{border}]▸[/]",
+                    end=" ",
+                )
 
     def print_markdown(self, text: str) -> None:
         """Render a complete response as Rich Markdown."""
-        if RICH_AVAILABLE and self._console:
-            self._console.print(Markdown(text))
-        else:
-            print(text)
+        with self._lock:
+            if isinstance(self._console, NullConsole):
+                print(text)
+            else:
+                self._console.print(Markdown(text))
 
     # ── Live streaming ───────────────────────────────────────────────────────
 
@@ -184,17 +236,14 @@ class UIRenderer:
     def live_stream(self) -> Generator:
         """
         Context manager for live-updating streaming output (no flicker).
-        Yields a Rich Live object.
+        Yields a Rich Live or NullLive object.
 
         Usage:
             with renderer.live_stream() as live:
-                live.update(Text(chunk))
+                live.update(Markdown(chunk))
         """
-        if RICH_AVAILABLE and self._console:
-            with Live(console=self._console, refresh_per_second=15) as live:
-                yield live
-        else:
-            yield None
+        with self._live_context() as live:
+            yield live
 
     # ── Spinner ──────────────────────────────────────────────────────────────
 
@@ -207,56 +256,52 @@ class UIRenderer:
             with renderer.spinner("Calling Hivemind...") as s:
                 result = do_work()
         """
-        if RICH_AVAILABLE and self._console:
-            accent = self._skin.get_color("banner_accent", "#DA70D6")
-            with self._console.status(
-                f"[{accent}]{message}[/]",
-                spinner="dots",
-            ) as status:
-                yield status
-        else:
-            print(f"⏳ {message}")
-            yield None
+        accent = self._skin.get_color("banner_accent", "#DA70D6")
+        status_msg = f"[{accent}]{message}[/]" if RICH_AVAILABLE else message
+        with self._status_context(status_msg) as status:
+            yield status
 
     # ── System health ─────────────────────────────────────────────────────────
 
     def print_health_table(self, health: dict) -> None:
         """Print system health as a Rich table."""
-        if not RICH_AVAILABLE or not self._console:
-            for k, v in health.items():
-                print(f"  {k}: {v}")
-            return
+        with self._lock:
+            if isinstance(self._console, NullConsole):
+                for k, v in health.items():
+                    print(f"  {k}: {v}")
+                return
 
-        ok_c  = self._skin.get_color("ui_ok",    "#90EE90")
-        err_c = self._skin.get_color("ui_error",  "#FF6B6B")
-        dim   = self._skin.get_color("banner_dim","#4B0082")
+            ok_c  = self._skin.get_color("ui_ok",    "#90EE90")
+            err_c = self._skin.get_color("ui_error",  "#FF6B6B")
+            dim   = self._skin.get_color("banner_dim","#4B0082")
 
-        table = Table(show_header=False, box=None, padding=(0, 2))
-        table.add_column("icon",    style="bold", width=3)
-        table.add_column("service", style=f"dim {dim}", width=12)
-        table.add_column("status")
+            table = Table(show_header=False, box=None, padding=(0, 2))
+            table.add_column("icon",    style="bold", width=3)
+            table.add_column("service", style=f"dim {dim}", width=12)
+            table.add_column("status")
 
-        for service, status in health.items():
-            s = str(status).lower()
-            if any(x in s for x in ["online", "active", "running", "ok"]):
-                icon = f"[{ok_c}]✓[/]"
-            else:
-                icon = f"[{err_c}]✗[/]"
-            table.add_row(icon, service, str(status))
+            for service, status in health.items():
+                s = str(status).lower()
+                if any(x in s for x in ["online", "active", "running", "ok"]):
+                    icon = f"[{ok_c}]✓[/]"
+                else:
+                    icon = f"[{err_c}]✗[/]"
+                table.add_row(icon, service, str(status))
 
-        self._console.print(table)
+            self._console.print(table)
 
     # ── Rule / divider ────────────────────────────────────────────────────────
 
     def print_rule(self, title: str = "") -> None:
         """Print a horizontal divider rule."""
-        if RICH_AVAILABLE and self._console:
-            from rich.rule import Rule
-            border = self._skin.get_color("input_rule", "#7B2D8B")
-            self._console.print(Rule(title, style=border))
-        else:
-            cols = shutil.get_terminal_size().columns
-            print("─" * cols)
+        with self._lock:
+            if isinstance(self._console, NullConsole):
+                cols = shutil.get_terminal_size().columns
+                print("─" * cols)
+            else:
+                from rich.rule import Rule
+                border = self._skin.get_color("input_rule", "#7B2D8B")
+                self._console.print(Rule(title, style=border))
 
     # ── Graceful ANSI fallbacks ───────────────────────────────────────────────
 
