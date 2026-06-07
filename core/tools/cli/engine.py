@@ -44,9 +44,37 @@ except ImportError:
 from core.tools.audit.yolo_sandbox import YOLO_BLOCKLIST, is_yolo_safe, is_command_destructive
 from core.tools.utils.console_ui import (
     C_P, C_G, C_Y, C_C, C_W, C_D, C_R, C_RED, C_BOLD, C_DIM,
-    ANSI_ESCAPE, visible_len, get_columns, clean_wrap_text, draw_box,
+    ANSI_ESCAPE, visible_len, get_columns, clean_wrap_text,
+    draw_box as _fallback_draw_box,
     print_ollama_memory_education, explain_command, StreamingRenderer, StreamingWordWrapper
 )
+# 🌸 Premium Rich UI layer (Hermes-inspired)
+try:
+    from core.tools.cli.ui.renderer import UIRenderer
+    _ui = UIRenderer()
+except Exception:
+    _ui = None
+
+def draw_box(lines, title=None, border_color=C_G, text_color=C_W):
+    if _ui:
+        style = "default"
+        if border_color == C_RED or border_color == C_R:
+            style = "error"
+        elif border_color == C_Y:
+            style = "warning"
+        elif border_color == C_G:
+            style = "success"
+        elif border_color == C_P:
+            style = "default"
+        elif border_color == C_C:
+            style = "info"
+            
+        if isinstance(lines, str):
+            lines = [lines]
+        _ui.print_panel(lines, title=title or "", style=style)
+    else:
+        _fallback_draw_box(lines, title=title, border_color=border_color, text_color=text_color)
+
 from core.tools.utils.env_builder import decrypt_value, update_env_value, load_env_vars
 from core.tools.infrastructure.ai_gateway import (
     detect_configuration_mismatch, check_and_heal_mismatch,
@@ -1207,45 +1235,42 @@ def main():
         ], title=f"{C_RED}🚨 SECURITY INTEGRITY ALERT", border_color=C_RED, text_color=C_Y)
         print()
 
-    # Print banner (compact)
-    cols = get_columns()
-    if cols >= 70:
-        print(f"\n{C_P}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗")
-        print("██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
-        print("█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
-        print("██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
-        print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║  {C_Y}COGNITIVE AGENT SHELL v2.9.0")
-        print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
-    else:
-        print(f"\n{C_P}🌸 KENBUN COGNITIVE AGENT SHELL v2.9.0{C_R}")
-
-    # Compact banner — only the essentials
-    tier_label = {"nano": f"{C_Y}Nano (lightweight){C_R}", "standard": f"{C_G}Standard{C_R}", "cloud": f"{C_C}Cloud API{C_R}"}.get(model_tier, model_tier)
-    banner_lines = [
-        f"  🌸 Model:   {C_W}{llm_model}{C_R}  [{tier_label}]",
-        f"  ⚡ Gateway: {C_W}{llm_url}{C_R}",
-        f"  💡 Commands: {C_G}/tools{C_R} (inspect tools) | {C_G}/skills{C_R} (design blueprints) | {C_G}/run{C_R} (execute) | {C_G}/help{C_R}",
-    ]
-    draw_box(banner_lines, title=f"🌸 {C_Y}COGNITIVE AGENT SHELL", border_color=C_G, text_color=C_G)
-    print()
-
-    # Run startup health probe and show card
+    # 🌸 Premium Rich banner — Hermes-style panel layout
     print(f"{C_D}  Probing system health...{C_R}", end="\r")
     probe_results = run_startup_probe(llm_url, llm_model, chroma_host, chroma_port)
     print(" " * 40, end="\r")  # clear probe line
-    print_health_card(probe_results)
-    print()
 
-    # 🌸 Quick-Start Guide for Sovereign CLI Actions
-    guide_lines = [
-        f"  • {C_C}/tools{C_R}           ➟ List all harvested sovereign tools grouped by category",
-        f"  • {C_C}/tools <tool>{C_R}    ➟ Inspect parameters, signature, and async requirements",
-        f"  • {C_C}/skills{C_R}          ➟ Discover design and template skills from the catalog",
-        f"  • {C_C}/run <tool> args{C_R} ➟ Direct live parameter execution with sync/async auto-safety",
-        "",
-        f"  {C_D}Example:{C_R} {C_G}/run search_hivemind_concepts query=\"lemon\"{C_R}"
-    ]
-    draw_box(guide_lines, title="🌸 SOVEREIGN CLI QUICK-START GUIDE", border_color=C_Y, text_color=C_W)
+    health_summary = {
+        "Ollama":   probe_results.get("ollama_status", "unknown"),
+        "ChromaDB": probe_results.get("chroma_status", "unknown"),
+        "Docker":   probe_results.get("docker_status", "unknown"),
+    }
+
+    if _ui:
+        _ui.print_banner(
+            model=llm_model,
+            health=health_summary,
+            version="2.9.0",
+            yolo_mode=YOLO_MODE,
+        )
+    else:
+        # Fallback ANSI banner
+        cols = get_columns()
+        if cols >= 70:
+            print(f"\n{C_P}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗")
+            print(f"██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║")
+            print(f"█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║")
+            print(f"██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║")
+            print(f"██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║  {C_Y}COGNITIVE AGENT SHELL v2.9.0")
+            print(f"{C_P}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝{C_R}")
+        else:
+            print(f"\n{C_P}🌸 KENBUN COGNITIVE AGENT SHELL v2.9.0{C_R}")
+        tier_label = {"nano": f"{C_Y}Nano{C_R}", "standard": f"{C_G}Standard{C_R}", "cloud": f"{C_C}Cloud API{C_R}"}.get(model_tier, model_tier)
+        draw_box(
+            [f"  🌸 Model: {C_W}{llm_model}{C_R} [{tier_label}]", f"  ⚡ Gateway: {C_W}{llm_url}{C_R}"],
+            title=f"🌸 {C_Y}COGNITIVE AGENT SHELL", border_color=C_G, text_color=C_G
+        )
+        print_health_card(probe_results)
     print()
 
     log_event("🌸 Termchat Session Started. Model: {}, URL: {}, Tier: {}".format(llm_model, llm_url, model_tier))
@@ -1421,6 +1446,7 @@ def main():
                                 f"  {C_BOLD}{C_C}/exit{C_R}{C_D}              ➟ Gracefully close session{C_R}",
                                 f"  {C_BOLD}{C_C}/reset{C_R}{C_D}             ➟ Clear dialogue history{C_R}",
                                 f"  {C_BOLD}{C_C}/system{C_R}{C_D}            ➟ Show environment config{C_R}",
+                                f"  {C_BOLD}{C_C}/skin [name]{C_R}{C_D}       ➟ Change CLI skin theme{C_R}",
                                 f"  {C_BOLD}{C_C}/spawn <cmd>{C_R}{C_D}       ➟ Run command in background agent{C_R}",
                                 f"  {C_BOLD}{C_C}/agents{C_R}{C_D}            ➟ List all running background agents{C_R}",
                                 f"  {C_BOLD}{C_C}/kill <id>{C_R}{C_D}         ➟ Kill a background agent{C_R}",
@@ -1714,6 +1740,20 @@ def main():
                                     print(f"\n{C_G}✓ YOLO mode OFF. Manual approval restored.{C_R}\n")
                                 continue
 
+                            elif cmd == "/skin":
+                                if not _ui:
+                                    print(f"\n{C_Y}⚠️ Skin system is only available when Rich is installed.{C_R}\n")
+                                else:
+                                    args_str = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
+                                    if args_str:
+                                        msg = _ui.switch_skin(args_str)
+                                        print(f"\n{msg}\n")
+                                    else:
+                                        table_str = _ui.list_skins_table()
+                                        draw_box(table_str.split("\n"), title="🎨 active skin", border_color=C_P, text_color=C_W)
+                                        print()
+                                continue
+
                             elif cmd == "/spawn":
                                 if spawn_agent and len(cmd_parts) > 1:
                                     task_cmd = cmd_parts[1].strip()
@@ -1930,20 +1970,34 @@ def main():
                         "stream": True
                     }
                     
-                    print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
-                    
-                    # Retry loop with exponential backoff for primary LLM endpoint
-                    for attempt in range(max_retries + 1):
-                        try:
-                            response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
-                            break
-                        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                            if attempt < max_retries:
-                                backoff = 2 ** attempt
-                                print(f"\n{C_Y}⚠️ Connection/Timeout on primary LLM: {e}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
-                                time.sleep(backoff)
-                            else:
-                                raise e
+                    if _ui:
+                        _ui.print_response_header(llm_model)
+                        with _ui.spinner("Thinking..."):
+                            for attempt in range(max_retries + 1):
+                                try:
+                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                    break
+                                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                                    if attempt < max_retries:
+                                        backoff = 2 ** attempt
+                                        time.sleep(backoff)
+                                    else:
+                                        raise e
+                    else:
+                        print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
+                        
+                        # Retry loop with exponential backoff for primary LLM endpoint
+                        for attempt in range(max_retries + 1):
+                            try:
+                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                break
+                            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
+                                if attempt < max_retries:
+                                    backoff = 2 ** attempt
+                                    print(f"\n{C_Y}⚠️ Connection/Timeout on primary LLM: {e}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
+                                    time.sleep(backoff)
+                                else:
+                                    raise e
                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as primary_err:
                     # Catch primary connection failure, and trigger fallback gateway
                     fallback_url = env.get("FALLBACK_LLM_URL", "").strip()
@@ -2080,52 +2134,97 @@ def main():
                         "stream": True
                     }
                     
-                    print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
-                    
-                    # Retry loop with exponential backoff for fallback LLM endpoint
-                    for attempt in range(max_retries + 1):
-                        try:
-                            response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
-                            break
-                        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
-                            if attempt < max_retries:
-                                backoff = 2 ** attempt
-                                print(f"\n{C_Y}⚠️ Connection/Timeout on fallback LLM: {fallback_err}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
-                                time.sleep(backoff)
-                            else:
-                                raise fallback_err
+                    if _ui:
+                        _ui.print_response_header(llm_model)
+                        with _ui.spinner("Thinking (fallback)..."):
+                            for attempt in range(max_retries + 1):
+                                try:
+                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                    break
+                                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
+                                    if attempt < max_retries:
+                                        backoff = 2 ** attempt
+                                        time.sleep(backoff)
+                                    else:
+                                        raise fallback_err
+                    else:
+                        print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
+                        
+                        # Retry loop with exponential backoff for fallback LLM endpoint
+                        for attempt in range(max_retries + 1):
+                            try:
+                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                break
+                            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
+                                if attempt < max_retries:
+                                    backoff = 2 ** attempt
+                                    print(f"\n{C_Y}⚠️ Connection/Timeout on fallback LLM: {fallback_err}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
+                                    time.sleep(backoff)
+                                else:
+                                    raise fallback_err
 
                 response.raise_for_status()
                 
-                cols = get_columns()
-                wrapper = StreamingRenderer(cols - 4)
-                wrapper.current_line_len = 20 if is_fallback else 9
-                
                 full_reply = ""
-                for line in response.iter_lines():
-                    if line:
-                        decoded = line.decode("utf-8").strip()
-                        if decoded.startswith("data: "):
-                            data_str = decoded[6:]
-                            if data_str == "[DONE]":
-                                break
-                            try:
-                                data_json = json.loads(data_str)
-                                choices = data_json.get("choices", [])
-                                if not choices:
-                                    continue
-                                chunk = choices[0].get("delta", {}).get("content") or ""
-                                wrapper.write(chunk)
-                                full_reply += chunk
-                            except Exception as e:
-                                print(f"\n{C_RED}STREAM PARSE ERROR:{C_R} {repr(e)} on chunk: {data_str[:50]}...", flush=True)
-                                log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
-                        else:
-                            # Not a data line, could be an API error embedded in the stream body!
-                            if decoded.startswith("{") or decoded.startswith("["):
-                                print(f"\n{C_Y}API WARNING:{C_R} {decoded}", flush=True)
-                                log_event(f"API WARNING: {decoded}")
-                wrapper.flush()
+                if _ui and _ui._console:
+                    from rich.markdown import Markdown
+                    
+                    def clean_markdown_stream(text: str) -> str:
+                        cleaned = re.sub(r"```(?:execute|bash|sh|spawn)\n.*?\n```", "", text, flags=re.DOTALL | re.IGNORECASE)
+                        cleaned = re.sub(r"```(?:execute|bash|sh|spawn)\n.*$", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
+                        return cleaned
+
+                    with _ui.live_stream() as live:
+                        for line in response.iter_lines():
+                            if line:
+                                decoded = line.decode("utf-8").strip()
+                                if decoded.startswith("data: "):
+                                    data_str = decoded[6:]
+                                    if data_str == "[DONE]":
+                                        break
+                                    try:
+                                        data_json = json.loads(data_str)
+                                        choices = data_json.get("choices", [])
+                                        if not choices:
+                                            continue
+                                        chunk = choices[0].get("delta", {}).get("content") or ""
+                                        full_reply += chunk
+                                        cleaned = clean_markdown_stream(full_reply)
+                                        if live:
+                                            live.update(Markdown(cleaned))
+                                    except Exception as e:
+                                        log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
+                                else:
+                                    if decoded.startswith("{") or decoded.startswith("["):
+                                        log_event(f"API WARNING: {decoded}")
+                else:
+                    cols = get_columns()
+                    wrapper = StreamingRenderer(cols - 4)
+                    wrapper.current_line_len = 20 if is_fallback else 9
+                    
+                    for line in response.iter_lines():
+                        if line:
+                            decoded = line.decode("utf-8").strip()
+                            if decoded.startswith("data: "):
+                                data_str = decoded[6:]
+                                if data_str == "[DONE]":
+                                    break
+                                try:
+                                    data_json = json.loads(data_str)
+                                    choices = data_json.get("choices", [])
+                                    if not choices:
+                                        continue
+                                    chunk = choices[0].get("delta", {}).get("content") or ""
+                                    wrapper.write(chunk)
+                                    full_reply += chunk
+                                except Exception as e:
+                                    print(f"\n{C_RED}STREAM PARSE ERROR:{C_R} {repr(e)} on chunk: {data_str[:50]}...", flush=True)
+                                    log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
+                            else:
+                                if decoded.startswith("{") or decoded.startswith("["):
+                                    print(f"\n{C_Y}API WARNING:{C_R} {decoded}", flush=True)
+                                    log_event(f"API WARNING: {decoded}")
+                    wrapper.flush()
                 print("\n")
                 
                 # Register response
