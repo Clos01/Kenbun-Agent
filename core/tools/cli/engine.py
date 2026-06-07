@@ -28,9 +28,13 @@ os.environ["ORT_LOGGING_LEVEL"] = "3"
 try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import ANSI
+    from prompt_toolkit.patch_stdout import patch_stdout
 except ImportError:
     PromptSession = None
     ANSI = None
+    from contextlib import nullcontext
+    patch_stdout = nullcontext
+
 
 # Sub-agent bus
 try:
@@ -1054,6 +1058,14 @@ class TerminalSession:
         except Exception as e:
             log_event("❌ Reflex command failed with start exception: {}".format(e))
             return -1, f"[Execution Error: Failed to start command: {e}]"
+        finally:
+            try:
+                # Restore terminal input modes to recover from any raw/interactive drift caused by the command
+                sys.stdout.write("\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?1004l\x1b[?2004l\x1b[?1049l\x1b[<u\x1b[>4m\x1b[0m\x1b[?25h")
+                sys.stdout.flush()
+            except Exception:
+                pass
+
 
 # Global session instance for the main REPL thread
 _active_terminal_session = TerminalSession()
@@ -1426,10 +1438,12 @@ def main():
                         for sl in status_lines:
                             print(f"{C_D}{sl}{C_R}")
                     prompt_str = f"{C_P}{username}@kenbun-agent{C_R}:{C_G}~{C_R}$ "
-                    if pt_session:
-                        user_input = pt_session.prompt(ANSI(prompt_str)).strip()
-                    else:
-                        user_input = input(prompt_str).strip()
+                    with patch_stdout():
+                        if pt_session:
+                            user_input = pt_session.prompt(ANSI(prompt_str)).strip()
+                        else:
+                            user_input = input(prompt_str).strip()
+
                     user_input = sanitize_input(user_input)
                     if not user_input:
                         continue
