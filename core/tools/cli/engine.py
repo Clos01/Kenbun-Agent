@@ -1253,7 +1253,7 @@ def main():
     system_prompt = build_system_prompt(model_tier, llm_model)
     # Append AST tool runner note for all tiers
     system_prompt += (
-        "You can execute any of Kenbun's harvested agent tools globally by running standard 'kenbun <command>' wrappers directly via the execute block. "
+        "You have access to Kenbun's harvested agent tools. To call a tool, use the /run command in the chat (e.g. /run search_hivemind_concepts query=\"test\") or invoke them natively via the tool dispatcher — do NOT wrap tool calls as 'kenbun <toolname>' shell commands, as this spawns a recursive subprocess and will always time out. For system operations, use standard shell commands (e.g. docker, git, ls) directly in execute blocks. "
         "If the user asks you to create a new project directory (e.g. `mkdir my-new-project`), once created, your terminal chat client will automatically "
         "detect the folder birth, prompt the user for approval, and seamlessly MIGRATE and ATTACH all your active chat memories, SQLite databases, "
         "and logs straight inside the new project's local 'brain_health' directory!"
