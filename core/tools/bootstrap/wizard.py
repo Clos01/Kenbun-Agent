@@ -206,9 +206,13 @@ def bootstrap_core(silent=False):
     if not silent:
         print(f"\n{c_c}🚀 INITIATING PORTABLE KENBUN-AGENT STANDALONE BOOTSTRAPPER{c_r}\n")
     
-    # 1. Resolve workspace paths dynamically relative to this script
-    script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
+    # 1. Resolve workspace paths dynamically
+    cwd = Path.cwd()
+    if (cwd / "docker-compose.yml").exists() or (cwd / ".env.example").exists():
+        project_root = cwd
+    else:
+        script_dir = Path(__file__).resolve().parent
+        project_root = script_dir.parent
     log_status(1, "Resolving dynamic workspace root paths", str(project_root.resolve()), status="OK")
 
     # 2. Check and copy environment template (.env.example -> .env)

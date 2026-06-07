@@ -9,7 +9,12 @@ def get_project_root() -> Path:
     if os.getenv("PROJECT_ROOT"):
         return Path(os.getenv("PROJECT_ROOT"))
 
-    # Priority 2: Docker Container Standard Mount
+    # Priority 2: Current Working Directory if it contains codebase files (Standard Dev setup)
+    cwd = Path.cwd()
+    if (cwd / "docker-compose.yml").exists() or (cwd / ".env.example").exists():
+        return cwd
+
+    # Priority 3: Docker Container Standard Mount
     docker_path = Path("/app")
     if docker_path.exists() and (docker_path / "tools").exists():
         return docker_path
