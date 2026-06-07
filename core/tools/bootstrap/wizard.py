@@ -864,7 +864,7 @@ def configure_api_keys():
                 pass
 
         primary_url = env_vars.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
-        primary_model = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
+        primary_model = env_vars.get("PRIMARY_LLM_MODEL", "gemma-4-12b")
 
         # Decrypt for screen display to make it clear for the user
         decrypted_url = decrypt_value_local(primary_url, project_root)
@@ -1548,8 +1548,8 @@ def configure_local_models():
     except Exception:
         pass
 
-    current_pull = env_vars.get("OLLAMA_PULL_MODELS", "llama3.2:3b deepseek-r1:8b")
-    current_primary = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
+    current_pull = env_vars.get("OLLAMA_PULL_MODELS", "gemma-4-12b deepseek-r1:8b")
+    current_primary = env_vars.get("PRIMARY_LLM_MODEL", "gemma-4-12b")
 
     # 2.5 Dynamic Hardware VRAM & RAM Sensing Autopilot
     total_ram_gb, vram_gb = detect_hardware()
@@ -1566,15 +1566,15 @@ def configure_local_models():
     profiles = [
         {
             "name": "Ultra-Light (8GB RAM / ~2.5GB Disk)",
-            "desc": "Pulls llama3.2:1b and deepseek-r1:1.5b. Best for older laptops, light VPS nodes, or low specs.",
-            "pull": "llama3.2:1b deepseek-r1:1.5b",
-            "primary": "llama3.2:1b"
+            "desc": "Pulls gemma-4:1b and deepseek-r1:1.5b. Best for older laptops, light VPS nodes, or low specs.",
+            "pull": "gemma-4:1b deepseek-r1:1.5b",
+            "primary": "gemma-4:1b"
         },
         {
             "name": "Standard (16GB RAM / ~6GB Disk)",
-            "desc": "Pulls llama3.2:3b and deepseek-r1:8b. Standard hardware profile.",
-            "pull": "llama3.2:3b deepseek-r1:8b",
-            "primary": "llama3.2:3b"
+            "desc": "Pulls gemma-4-12b and deepseek-r1:8b. Standard hardware profile.",
+            "pull": "gemma-4-12b deepseek-r1:8b",
+            "primary": "gemma-4-12b"
         },
         {
             "name": "Pro (32GB+ RAM / ~18GB Disk)",

@@ -248,16 +248,16 @@ generate_sovereign_env() {
     fi
 
     # Model recommendations based on hardware capacity
-    local rec_model="llama3.2:1b"
-    local pull_models="llama3.2:1b nomic-embed-text"
+    local rec_model="gemma-4:1b"
+    local pull_models="gemma-4:1b nomic-embed-text"
     
     if [ "$system_ram_gb" -ge 16 ]; then
-        rec_model="llama3.2:3b"
-        pull_models="llama3.2:3b nomic-embed-text"
+        rec_model="gemma-4-12b"
+        pull_models="gemma-4-12b nomic-embed-text"
     fi
     if [ "$system_ram_gb" -ge 32 ]; then
         # On high memory nodes, we can support a small reasoning fallback model
-        pull_models="llama3.2:3b deepseek-r1:1.5b nomic-embed-text"
+        pull_models="gemma-4-12b deepseek-r1:1.5b nomic-embed-text"
     fi
 
     log_info "Detected Hardware Capacity: ${system_cores} CPU Cores, ${system_ram_gb}GB RAM"
@@ -413,7 +413,7 @@ post_installation_diagnostics() {
     echo -e "       ➔ Step 1: Bootstrap Core Environment & File Structures"
     echo -e "       ➔ Step 2: Configure AI Provider (Local Ollama vs Cloud Reasoning)"
     echo -e "       ➔ Step 3: Secure API keys (stored owner-only)"
-    echo -e "       ➔ Step 4: Audit RAM/CPU and download local models (llama3.2)"
+    echo -e "       ➔ Step 4: Audit RAM/CPU and download local models (gemma-4)"
     echo -e "       ➔ Step 5: Compile & spin up the Docker Swarm Stack"
     echo -e "       ➔ Step 6: Register FastMCP endpoints in Claude Desktop & Cursor"
     echo -e "       ➔ Step 7: Showcase Telemetry Port guidelines"

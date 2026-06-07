@@ -14,7 +14,7 @@ class SystemDigester:
     """
     def __init__(self):
         self.ollama_url = settings.workers.ollama_url  # Points to host.docker.internal:11434
-        self.model = "llama3.2:3b"  # Fast, efficient local model for digestion
+        self.model = "gemma-4-12b"  # Fast, efficient local model for digestion
         self.interval = 300  # Wake up every 5 minutes
     
     def fetch_recent_telemetry(self) -> str:

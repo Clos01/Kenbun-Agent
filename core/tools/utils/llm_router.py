@@ -327,7 +327,7 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
     """
     primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
-    primary_model = settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
+    primary_model = settings.PRIMARY_LLM_MODEL or "gemma-4-12b"
     fallback_url = settings.FALLBACK_LLM_URL or ""
     fallback_model = settings.FALLBACK_LLM_MODEL or ""
     
@@ -341,7 +341,7 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
             # If forced to local, dynamically map the local container endpoint
             if primary_model == "local":
                 primary_url = "http://ollama_server:11434/v1"
-                primary_model = "llama3.2:1b"
+                primary_model = "gemma-4:1b"
     except Exception as e:
         logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
     

@@ -23,7 +23,7 @@ Run it on a $5 Linux VPS, a serverless cluster, or directly on your local workst
     *   *Example:* Pre-commit hooks run generated scripts through an AST security linter to block unsafe code blocks.
 *   **AST Code Indexing & Semantic Search**: Uses ChromaDB (a local vector database) to chunk, embed, and index your codebase. This enables context-aware queries to find the exact parts of your codebase you need without relying on exact keyword matches.
     *   *Example:* Searching for *"How do we handle API authentication?"* returns the correct security functions and file paths, even if they don't contain that exact phrase.
-*   **Resource & Token Budget Optimizer**: Automatically routes tasks between local models (e.g., running `llama3.2:3b` on Ollama for simple tasks like syntax parsing) and cloud models (e.g., using `gemini-2.5-pro` for complex tasks like architecture audits), minimizing token usage and cost.
+*   **Resource & Token Budget Optimizer**: Automatically routes tasks between local models (e.g., running `gemma-4-12b` on Ollama for simple tasks like syntax parsing) and cloud models (e.g., using `gemini-2.5-pro` for complex tasks like architecture audits), minimizing token usage and cost.
 *   **Dynamic AST Tool Harvester (Zero-Config Extension)**: Extend the agent's tools simply by adding a standard Python script decorated with `@sovereign_tool` in `core/tools/` subdirectories. The bootstrapper uses non-executing AST parsing to discover, validate, and load tools dynamically.
     *   *Example:* Placing a script at `core/tools/send_slack.py` automatically registers the Slack tool globally across the agent framework without editing database tables or configuration files.
 *   **Write-Ahead Logging (WAL) Persistence**: Built-in SQLite persistence engine utilizing Write-Ahead Logging (WAL) for safe, concurrent database reads and writes during heavy concurrent processing.
@@ -37,7 +37,7 @@ Run it on a $5 Linux VPS, a serverless cluster, or directly on your local workst
 Before launching, ensure your machine meets the following:
 - **Docker & Docker Compose** installed and running
 - **Python 3.10+**
-- **Minimum 15 GB Free Disk Space** (The local stack downloads container images and local model weights, including `llama3.2` and `deepseek-r1`, on first boot).
+- **Minimum 15 GB Free Disk Space** (The local stack downloads container images and local model weights, including `gemma-4` and `deepseek-r1`, on first boot).
 - **Recommended 16GB+ RAM** (to comfortably host local LLMs in memory).
 
 ### 📦 Installation Pathways
@@ -143,7 +143,7 @@ The setup wizard (`kenbun` or `python3 scripts/bootstrap.py`) provides an automa
 *   **Light Clean (Option 1)**: Stops the compose stack and deletes local containers, volumes, and local build images. This is **fast** and leaves standard pulled base images untouched.
 *   **Deep Purge (Option 2)**: Completely prunes the stack. It deletes all containers, volumes, and large cached Docker base images (e.g. Ollama, ChromaDB, Next.js). Then, it runs `docker builder prune -f` and `docker image prune -f` to recover maximum host storage.
 
-*Note on Zero-Config local models:* Kenbun automatically bundles a Dockerized Ollama container! When you run `docker compose up`, it will boot up the local engine and pull `llama3.2` and `deepseek-r1` in the background.
+*Note on Zero-Config local models:* Kenbun automatically bundles a Dockerized Ollama container! When you run `docker compose up`, it will boot up the local engine and pull `gemma-4` and `deepseek-r1` in the background.
 
 ---
 
@@ -161,7 +161,7 @@ CHROMA_PORT=8000
 
 # Ollama Binding
 PRIMARY_LLM_URL=http://localhost:11434/v1
-PRIMARY_LLM_MODEL=llama3.2:3b
+PRIMARY_LLM_MODEL=gemma-4-12b
 ```
 
 **Option B: Cloud Reasoning Integration**
@@ -199,7 +199,7 @@ Instead of just chatting, the terminal agent acts as a fully situated developer 
 3. **Dynamic Intent-Based RAG**: The CLI pre-flight pipeline checks the prompt's intent in the background:
    * **System Telemetry**: If asking about errors or Docker, it audits VM socket permissions, active containers, and UFW firewalls, injecting live metrics directly into context.
    * **Design Grounding**: If asking about UI/UX or styling, it runs a local BM25 query on the UI-UX Pro Max database, grounding the LLM with HSL palettes and typography tokens.
-4. **Offline Local First**: Designed to run 100% free and private using your local Ollama models (`llama3.2:3b` or `deepseek-r1:8b`).
+4. **Offline Local First**: Designed to run 100% free and private using your local Ollama models (`gemma-4-12b` or `deepseek-r1:8b`).
 
 ### 🚀 How to Launch the Termchat
 ```bash

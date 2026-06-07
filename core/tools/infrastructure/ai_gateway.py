@@ -66,8 +66,8 @@ def check_and_heal_mismatch(llm_url, llm_model):
 def detect_model_tier(llm_model: str, llm_url: str) -> str:
     """
     Returns the capability tier of the active model:
-      'nano'     — ≤3B params (llama3.2:1b, deepseek-r1:1.5b, phi3:mini)
-      'standard' — 3B-14B (llama3.2:3b, gemma3:9b, mistral:7b)
+      'nano'     — ≤3B params (gemma-4:1b, deepseek-r1:1.5b, phi3:mini)
+      'standard' — 3B-14B (gemma-4-12b, gemma3:9b, mistral:7b)
       'cloud'    — Remote APIs (gpt-*, gemini-*, claude-*)
     """
     is_cloud = any(d in llm_url.lower() for d in ["openai.com", "anthropic.com", "googleapis.com", "deepseek.com"])

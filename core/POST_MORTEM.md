@@ -44,13 +44,13 @@ When running local ensemble validation via System 2 (`ensemble_audit.py`), model
 
 ## The "Senior Version" Solution
 1. **Container Isolation (Ext4 Named Volume)**: Removed WSL2 home-directory host bind-mounts shadowing tiny virtual memory overlays, replacing them with a named Docker volume (`ollama_data`). This successfully mounted the workstation's `/root/.ollama` path to the primary 914 GB ext4 volume (`/dev/sde`), resolving the storage bottleneck permanently.
-2. **Warm-VRAM Pre-flight Check**: Verified all three models are actively cached in parallel (`gemma2:latest`, `llama3.2:latest`, `phi3:latest`).
+2. **Warm-VRAM Pre-flight Check**: Verified all three models are actively cached in parallel (`gemma2:latest`, `gemma-4-12b`, `phi3:latest`).
 3. **Dependency Hardening**: Integrated `aiohttp` into the local virtual environment to restore the async HTTP parallel processing layer.
 4. **Resilient Key Triage**: Patched assertion parsing in `test_ensemble.py` to seamlessly accept both dynamic and executive audit response keys (`status`/`critique` vs. `decision`/`reason`).
 
 ## Lessons Learned
 - **WSL2 Shadowing**: WSL2 mounts under user home directories on Windows hosts can be silently capped by `tmpfs` overlays. Named volumes are mandatory for heavy local LLM directories to inherit physical hard disk partitions.
-- **Warm VRAM Loading Time**: Initial loading times of concurrent local LLMs (e.g., 9.2B gemma2 + 3B llama3.2 + 3.8B phi3) can exceed standard 45s HTTP client timeouts. Subsequent requests are warm and sub-second.
+- **Warm VRAM Loading Time**: Initial loading times of concurrent local LLMs (e.g., 9.2B gemma2 + 3B gemma-4 + 3.8B phi3) can exceed standard 45s HTTP client timeouts. Subsequent requests are warm and sub-second.
 
 ---
 

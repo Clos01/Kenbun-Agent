@@ -53,8 +53,8 @@ class ModelSettings(BaseModel):
     deepseek_model: str = "deepseek-chat"
     lm_studio_connect_timeout: float = 3.0
     lm_studio_read_timeout: float = 60.0
-    ollama_pull_models: str = "llama3.2:3b deepseek-r1:8b"
-    primary_llm_model: str = "llama3.2:3b"  # Set by bootstrap.py wizard
+    ollama_pull_models: str = "gemma-4-12b deepseek-r1:8b"
+    primary_llm_model: str = "gemma-4-12b"  # Set by bootstrap.py wizard
     primary_llm_url: Optional[str] = None
     fallback_llm_url: Optional[str] = None
     fallback_llm_model: Optional[str] = None
@@ -187,9 +187,9 @@ class KenbunSettings(BaseSettings):
     DAILY_BUDGET: float = Field(default=50.00, validation_alias="DAILY_BUDGET", gt=0.0)
     LM_STUDIO_CONNECT_TIMEOUT: float = Field(default=3.0)
     LM_STUDIO_READ_TIMEOUT: float = Field(default=60.0)
-    OLLAMA_PULL_MODELS: str = "llama3.2:3b deepseek-r1:8b"
+    OLLAMA_PULL_MODELS: str = "gemma-4-12b deepseek-r1:8b"
     PRIMARY_LLM_URL: Optional[str] = None
-    PRIMARY_LLM_MODEL: str = "llama3.2:3b"
+    PRIMARY_LLM_MODEL: str = "gemma-4-12b"
     OLLAMA_PORT: int = 11434
     FALLBACK_LLM_URL: Optional[str] = None
     FALLBACK_LLM_MODEL: Optional[str] = None

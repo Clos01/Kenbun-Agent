@@ -33,7 +33,7 @@ config = AuditConfig()
 # Default Ensemble Members (Optimized for user's Parallel=4 setting)
 DEFAULT_MODELS = [
     {"id": "gemma2:latest", "role": "Architect", "weight_bonus": 1.2},
-    {"id": "llama3.2:latest", "role": "Security", "weight_bonus": 1.0},
+    {"id": "gemma-4-12b", "role": "Security", "weight_bonus": 1.0},
     {"id": "phi3:latest", "role": "Logic", "weight_bonus": 0.8}
 ]
 
