@@ -974,6 +974,44 @@ def save_clean_exit_reflection(history):
         print(f"\n{C_Y}⚠️  Reflection Engine Warning: Failed to save session post-mortem: {e}{C_R}\n")
         return None
 
+def check_interactive_command(parts: list[str]) -> Optional[str]:
+    if not parts:
+        return None
+        
+    executable = Path(parts[0]).name.lower()
+    
+    # 1. Text editors and pagers
+    editors = {"nano", "vim", "vi", "emacs", "neovim", "nvim", "micro", "ed", "less", "more", "most"}
+    if executable in editors:
+        return f"Command '{executable}' is an interactive text editor/pager. Since Kenbun runs commands non-interactively, it will hang. Please use a file edit tool or 'cat << \"EOF\" > ...' to write/edit files."
+        
+    # 2. Interactive system monitors
+    monitors = {"top", "htop", "btop", "atop", "iotop", "iftop", "watch"}
+    if executable in monitors:
+        return f"Command '{executable}' is an interactive system monitor/loop. Please run a non-interactive equivalent (e.g. 'ps aux', 'df -h', or 'free -m')."
+        
+    # 3. Interactive shells / REPLs without execution flags
+    if executable in {"python", "python3", "node", "ruby", "irb", "php"}:
+        if len(parts) == 1:
+            return f"Command '{executable}' will open an interactive REPL shell. To run code, write a script file and run it, or pass the command string (e.g. '{executable} -c \"...\"')."
+            
+    if executable in {"bash", "zsh", "sh"}:
+        if len(parts) == 1 or not any(arg in parts for arg in ("-c", "-s")):
+            return f"Command '{executable}' without '-c' opens an interactive shell. Please run with '-c' (e.g. '{executable} -c \"your command\"')."
+            
+    # 4. Git commits without a message
+    if executable == "git" and len(parts) > 1 and parts[1] == "commit":
+        if not any(arg in parts for arg in ("-m", "--message", "-F", "--file", "-C", "--reuse-message", "-c", "--reedit-message", "--amend")):
+            return "Command 'git commit' without a message flag will open an interactive text editor. Please pass a message using the '-m' flag (e.g. 'git commit -m \"message\"')."
+            
+    # 5. Package managers without -y
+    if executable in {"apt", "apt-get", "yum", "dnf", "pacman", "zypper", "apk"}:
+        is_modifying = any(arg in parts for arg in ("install", "remove", "upgrade", "update", "dist-upgrade", "purge", "add", "del"))
+        if is_modifying and not any(arg in parts for arg in ("-y", "--yes", "-q", "--quiet", "--noconfirm")):
+            return f"Command '{executable}' requires user confirmation. Please append a yes/quiet flag (e.g. '-y' or '--noconfirm') to run non-interactively."
+            
+    return None
+
 class TerminalSession:
     """Class-based execution context for isolated state tracking and secure command execution."""
     def __init__(self):
@@ -1018,6 +1056,12 @@ class TerminalSession:
             
             if not parts:
                 return 0, "[Success: Empty command]"
+            
+            # Check if the command is interactive and will hang/fail
+            interactive_warning = check_interactive_command(parts)
+            if interactive_warning:
+                log_event(f"⚠️ Interactive command blocked: {interactive_warning}")
+                return -1, f"[UX Blocked: {interactive_warning}]"
             
             executable = parts[0]
         
