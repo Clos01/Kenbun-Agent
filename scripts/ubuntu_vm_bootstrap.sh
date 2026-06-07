@@ -248,16 +248,16 @@ generate_sovereign_env() {
     fi
 
     # Model recommendations based on hardware capacity
-    local rec_model="gemma-4:1b"
-    local pull_models="gemma-4:1b nomic-embed-text"
+    local rec_model="gemma4:e2b"
+    local pull_models="gemma4:e2b nomic-embed-text"
     
     if [ "$system_ram_gb" -ge 16 ]; then
-        rec_model="gemma-4-12b"
-        pull_models="gemma-4-12b nomic-embed-text"
+        rec_model="gemma4:12b"
+        pull_models="gemma4:12b nomic-embed-text"
     fi
     if [ "$system_ram_gb" -ge 32 ]; then
         # On high memory nodes, we can support a small reasoning fallback model
-        pull_models="gemma-4-12b deepseek-r1:1.5b nomic-embed-text"
+        pull_models="gemma4:12b deepseek-r1:1.5b nomic-embed-text"
     fi
 
     log_info "Detected Hardware Capacity: ${system_cores} CPU Cores, ${system_ram_gb}GB RAM"

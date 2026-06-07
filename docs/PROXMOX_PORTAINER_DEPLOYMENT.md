@@ -53,7 +53,7 @@ To deploy a highly performant and cost-efficient sovereign node, we target the f
 *   **Processing Power:** Intel Core i5/i7/i9 or AMD Ryzen / Intel Xeon (typically 4-8 physical cores / 8-16 threads).
 *   **Dynamic Resource Allocation:** 
     *   Our custom bootstrapper dynamically inspects your VM's allocated CPU cores and RAM size.
-    *   It automatically custom-tailors the local environment configuration (`.env`) to run optimized quantized models matching your exact hardware (e.g., `gemma-4:1b` for lower-tier setups, `gemma-4-12b` for standard configurations, and adding `deepseek-r1:1.5b` fallbacks for higher-end builds).
+    *   It automatically custom-tailors the local environment configuration (`.env`) to run optimized quantized models matching your exact hardware (e.g., `gemma4:e2b` for lower-tier setups, `gemma4:12b` for standard configurations, and adding `deepseek-r1:1.5b` fallbacks for higher-end builds).
 *   **Inference Rationale:** In typical home-lab virtualization settings where discrete GPU memory is small (< 8GB VRAM), we optimize the stack specifically for **high-thread CPU-only execution**. Allocating **6 CPU cores** and **16GB-24GB RAM** to the VM, combined with the **`host` CPU passthrough flag** in Proxmox, enables local vector execution extensions (AVX/AVX2) that speed up CPU inference up to 3x!
 
 ---
@@ -148,7 +148,7 @@ sudo ./ubuntu_vm_bootstrap.sh
 *   Installs **Docker Engine** and **Docker Compose** directly from official Docker repositories.
 *   Provisions **Portainer CE** inside Docker mapping secure HTTPS on port `9443`.
 *   Clones the **Kenbun-Agent** codebase to `/opt/kenbun-agent`.
-*   Writes a **CPU-optimized `.env`** customized to the P330 (quantized `gemma-4-12b` and `nomic-embed-text` on CPU).
+*   Writes a **CPU-optimized `.env`** customized to the P330 (quantized `gemma4:12b` and `nomic-embed-text` on CPU).
 *   Enables the **UFW Firewall** while keeping rate-limited SSH (`22`) and routing metrics (`3000`, `8001`, `8000`, `8888`, `9443`) open.
 
 ---

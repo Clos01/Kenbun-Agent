@@ -44,7 +44,7 @@ When running local ensemble validation via System 2 (`ensemble_audit.py`), model
 
 ## The "Senior Version" Solution
 1. **Container Isolation (Ext4 Named Volume)**: Removed WSL2 home-directory host bind-mounts shadowing tiny virtual memory overlays, replacing them with a named Docker volume (`ollama_data`). This successfully mounted the workstation's `/root/.ollama` path to the primary 914 GB ext4 volume (`/dev/sde`), resolving the storage bottleneck permanently.
-2. **Warm-VRAM Pre-flight Check**: Verified all three models are actively cached in parallel (`gemma2:latest`, `gemma-4-12b`, `phi3:latest`).
+2. **Warm-VRAM Pre-flight Check**: Verified all three models are actively cached in parallel (`gemma2:latest`, `gemma4:12b`, `phi3:latest`).
 3. **Dependency Hardening**: Integrated `aiohttp` into the local virtual environment to restore the async HTTP parallel processing layer.
 4. **Resilient Key Triage**: Patched assertion parsing in `test_ensemble.py` to seamlessly accept both dynamic and executive audit response keys (`status`/`critique` vs. `decision`/`reason`).
 

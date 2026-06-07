@@ -327,7 +327,7 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
     """
     primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
-    primary_model = settings.PRIMARY_LLM_MODEL or "gemma-4-12b"
+    primary_model = settings.PRIMARY_LLM_MODEL or "gemma4:12b"
     fallback_url = settings.FALLBACK_LLM_URL or ""
     fallback_model = settings.FALLBACK_LLM_MODEL or ""
     

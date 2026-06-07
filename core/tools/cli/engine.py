@@ -1132,7 +1132,7 @@ def main():
     
     # Extract configs
     llm_url = env.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
-    llm_model = env.get("PRIMARY_LLM_MODEL", "gemma-4-12b")
+    llm_model = env.get("PRIMARY_LLM_MODEL", "gemma4:12b")
     
     # Resolve initial brain health dir per v2.8.0 specification
     cwd = Path.cwd().resolve()

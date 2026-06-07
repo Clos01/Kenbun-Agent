@@ -23,7 +23,7 @@ Run it on a $5 Linux VPS, a serverless cluster, or directly on your local workst
     *   *Example:* Pre-commit hooks run generated scripts through an AST security linter to block unsafe code blocks.
 *   **AST Code Indexing & Semantic Search**: Uses ChromaDB (a local vector database) to chunk, embed, and index your codebase. This enables context-aware queries to find the exact parts of your codebase you need without relying on exact keyword matches.
     *   *Example:* Searching for *"How do we handle API authentication?"* returns the correct security functions and file paths, even if they don't contain that exact phrase.
-*   **Resource & Token Budget Optimizer**: Automatically routes tasks between local models (e.g., running `gemma-4-12b` on Ollama for simple tasks like syntax parsing) and cloud models (e.g., using `gemini-2.5-pro` for complex tasks like architecture audits), minimizing token usage and cost.
+*   **Resource & Token Budget Optimizer**: Automatically routes tasks between local models (e.g., running `gemma4:12b` on Ollama for simple tasks like syntax parsing) and cloud models (e.g., using `gemini-2.5-pro` for complex tasks like architecture audits), minimizing token usage and cost.
 *   **Dynamic AST Tool Harvester (Zero-Config Extension)**: Extend the agent's tools simply by adding a standard Python script decorated with `@sovereign_tool` in `core/tools/` subdirectories. The bootstrapper uses non-executing AST parsing to discover, validate, and load tools dynamically.
     *   *Example:* Placing a script at `core/tools/send_slack.py` automatically registers the Slack tool globally across the agent framework without editing database tables or configuration files.
 *   **Write-Ahead Logging (WAL) Persistence**: Built-in SQLite persistence engine utilizing Write-Ahead Logging (WAL) for safe, concurrent database reads and writes during heavy concurrent processing.
@@ -161,7 +161,7 @@ CHROMA_PORT=8000
 
 # Ollama Binding
 PRIMARY_LLM_URL=http://localhost:11434/v1
-PRIMARY_LLM_MODEL=gemma-4-12b
+PRIMARY_LLM_MODEL=gemma4:12b
 ```
 
 **Option B: Cloud Reasoning Integration**
@@ -199,7 +199,7 @@ Instead of just chatting, the terminal agent acts as a fully situated developer 
 3. **Dynamic Intent-Based RAG**: The CLI pre-flight pipeline checks the prompt's intent in the background:
    * **System Telemetry**: If asking about errors or Docker, it audits VM socket permissions, active containers, and UFW firewalls, injecting live metrics directly into context.
    * **Design Grounding**: If asking about UI/UX or styling, it runs a local BM25 query on the UI-UX Pro Max database, grounding the LLM with HSL palettes and typography tokens.
-4. **Offline Local First**: Designed to run 100% free and private using your local Ollama models (`gemma-4-12b` or `deepseek-r1:8b`).
+4. **Offline Local First**: Designed to run 100% free and private using your local Ollama models (`gemma4:12b` or `deepseek-r1:8b`).
 
 ### 🚀 How to Launch the Termchat
 ```bash

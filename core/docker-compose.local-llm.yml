@@ -50,7 +50,7 @@ services:
       - ollama_data:/root/.ollama
     environment:
       - OLLAMA_HOST=ollama:11434
-      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen2.5-coder:7b gemma-4-12b phi3:mini}
+      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen2.5-coder:7b gemma4:12b phi3:mini}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

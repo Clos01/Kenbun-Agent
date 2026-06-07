@@ -861,7 +861,7 @@ def configure_api_keys():
                 pass
 
         primary_url = env_vars.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
-        primary_model = env_vars.get("PRIMARY_LLM_MODEL", "gemma-4-12b")
+        primary_model = env_vars.get("PRIMARY_LLM_MODEL", "gemma4:12b")
 
         # Decrypt for screen display to make it clear for the user
         decrypted_url = decrypt_value_local(primary_url, project_root)
@@ -1544,8 +1544,8 @@ def configure_local_models():
     except Exception:
         pass
 
-    current_pull = env_vars.get("OLLAMA_PULL_MODELS", "gemma-4-12b deepseek-r1:8b")
-    current_primary = env_vars.get("PRIMARY_LLM_MODEL", "gemma-4-12b")
+    current_pull = env_vars.get("OLLAMA_PULL_MODELS", "gemma4:12b deepseek-r1:8b")
+    current_primary = env_vars.get("PRIMARY_LLM_MODEL", "gemma4:12b")
 
     # 2.5 Dynamic Hardware VRAM & RAM Sensing Autopilot
     total_ram_gb, vram_gb = detect_hardware()
@@ -1562,15 +1562,15 @@ def configure_local_models():
     profiles = [
         {
             "name": "Ultra-Light (8GB RAM / ~2.5GB Disk)",
-            "desc": "Pulls gemma-4:1b and deepseek-r1:1.5b. Best for older laptops, light VPS nodes, or low specs.",
-            "pull": "gemma-4:1b deepseek-r1:1.5b",
-            "primary": "gemma-4:1b"
+            "desc": "Pulls gemma4:e2b and deepseek-r1:1.5b. Best for older laptops, light VPS nodes, or low specs.",
+            "pull": "gemma4:e2b deepseek-r1:1.5b",
+            "primary": "gemma4:e2b"
         },
         {
             "name": "Standard (16GB RAM / ~6GB Disk)",
-            "desc": "Pulls gemma-4-12b and deepseek-r1:8b. Standard hardware profile.",
-            "pull": "gemma-4-12b deepseek-r1:8b",
-            "primary": "gemma-4-12b"
+            "desc": "Pulls gemma4:12b and deepseek-r1:8b. Standard hardware profile.",
+            "pull": "gemma4:12b deepseek-r1:8b",
+            "primary": "gemma4:12b"
         },
         {
             "name": "Pro (32GB+ RAM / ~18GB Disk)",
@@ -1626,13 +1626,13 @@ def configure_local_models():
     primary_val = selected_profile["primary"]
 
     if pull_val == "custom":
-        print(f"\n{c_c}Enter space-separated Ollama models to pull (e.g. deepseek-r1:8b gemma-4-12b): {c_r}")
+        print(f"\n{c_c}Enter space-separated Ollama models to pull (e.g. deepseek-r1:8b gemma4:12b): {c_r}")
         pull_val = input("➔ Model List: ").strip()
         if not pull_val:
             print(f"❌ {c_y}Invalid model list. Cancelled.{c_r}\n")
             return
             
-        print(f"\n{c_c}Enter the primary model name to invoke for task planning (e.g. gemma-4-12b): {c_r}")
+        print(f"\n{c_c}Enter the primary model name to invoke for task planning (e.g. gemma4:12b): {c_r}")
         primary_val = input("➔ Primary Model: ").strip()
         if not primary_val:
             print(f"❌ {c_y}Invalid primary model. Cancelled.{c_r}\n")
