@@ -1223,6 +1223,22 @@ def check_and_start_docker_swarm(project_root: Path):
         print(f"\033[38;5;226m⚠️ Failed to auto-start Docker Swarm: {e}\033[0m")
 
 
+def check_case_collisions(directory: Path) -> list[tuple[str, str]]:
+    """Detects if there are files in the directory that differ only by case."""
+    seen = {}
+    collisions = []
+    try:
+        for p in directory.iterdir():
+            lower_name = p.name.lower()
+            if lower_name in seen:
+                collisions.append((seen[lower_name], p.name))
+            else:
+                seen[lower_name] = p.name
+    except Exception:
+        pass
+    return collisions
+
+
 def main():
     global active_brain_health_dir, YOLO_MODE
     
@@ -1259,6 +1275,15 @@ def main():
     
     # Resolve initial brain health dir per v2.8.0 specification
     cwd = Path.cwd().resolve()
+    
+    # Pre-flight case-sensitivity integrity check to avoid Linux volume mount errors
+    collisions = check_case_collisions(cwd)
+    if collisions:
+        print(f"\n{C_Y}⚠️ [PORTABILITY WARNING] Case-Sensitivity Collision Detected in Active Directory!{C_R}")
+        for c1, c2 in collisions:
+            print(f"  ➔ Duplicate file names differing only by case: '{c1}' and '{c2}'")
+        print(f"{C_D}This will cause non-deterministic behavior inside Linux Docker containers.{C_R}\n")
+        
     system_root = get_active_project_root()
     if cwd != system_root and ((cwd / ".git").exists() or (cwd / ".kenbun").exists()):
         active_brain_health_dir = cwd / "brain_health"
@@ -1286,6 +1311,9 @@ def main():
     llm_url, llm_model = check_and_heal_mismatch(llm_url, llm_model)
     
     # Proactive URL Normalization for standard local/tailscale APIs (Ollama compatibility endpoint)
+    if "localhost" in llm_url:
+        llm_url = llm_url.replace("localhost", "127.0.0.1")
+        
     if ("localhost" in llm_url or "127.0.0.1" in llm_url or ".ts.net" in llm_url or "100." in llm_url or "192.168." in llm_url) and not llm_url.endswith("/v1"):
         if not llm_url.endswith("/"):
             llm_url += "/"
