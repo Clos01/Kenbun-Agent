@@ -7,7 +7,7 @@ This document outlines the architecture for evolving the Kenbun AI stack from a 
 | Layer | System | Responsibility | Implementation |
 | :--- | :--- | :--- | :--- |
 | **Execution** | **System 1** | Fast draft generation, initial tool execution. | Gemini 2.0 Flash (Cloud) / Gemma (Local) |
-| **Guardrail** | **System 2c** | Fast heuristic & local security constraint audit. | Python Heuristics + Llama 3 (Local) |
+| **Guardrail** | **System 2c** | Fast heuristic & local security constraint audit. | Python Heuristics + Gemma 4 (Local) |
 | **Audit** | **System 2** | Security review, logic validation, "Senior" critique. | Executive consult_supervisor (High-Fidelity) |
 | **Memory** | **System 3** | Semantic search with Parent-Child Hierarchy. | ChromaDB (Vector DB) + Recursive AST |
 | **Strategy** | **System 4** | **The Bayesian Governor.** Tool selection & confidence. | Python + SQLite (Local Bayesian Store) |

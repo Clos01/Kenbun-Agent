@@ -1634,13 +1634,13 @@ def configure_local_models():
     primary_val = selected_profile["primary"]
 
     if pull_val == "custom":
-        print(f"\n{c_c}Enter space-separated Ollama models to pull (e.g. phi3:mini llama3:8b): {c_r}")
+        print(f"\n{c_c}Enter space-separated Ollama models to pull (e.g. deepseek-r1:8b gemma-4-12b): {c_r}")
         pull_val = input("➔ Model List: ").strip()
         if not pull_val:
             print(f"❌ {c_y}Invalid model list. Cancelled.{c_r}\n")
             return
             
-        print(f"\n{c_c}Enter the primary model name to invoke for task planning (e.g. phi3:mini): {c_r}")
+        print(f"\n{c_c}Enter the primary model name to invoke for task planning (e.g. gemma-4-12b): {c_r}")
         primary_val = input("➔ Primary Model: ").strip()
         if not primary_val:
             print(f"❌ {c_y}Invalid primary model. Cancelled.{c_r}\n")

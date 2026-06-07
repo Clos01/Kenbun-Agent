@@ -78,7 +78,7 @@ export default function KenbunChat() {
         if (data.model) {
           setActiveModel(data.model);
         } else {
-          setActiveModel("Ollama Llama3.2");
+          setActiveModel("Ollama Gemma-4-12b");
         }
       }
     } catch {

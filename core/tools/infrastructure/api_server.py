@@ -258,7 +258,7 @@ async def get_active_model():
         from core.tools.infrastructure.config import settings
         return {"model": settings.models.primary_llm_model}
     except Exception:
-        return {"model": "Ollama Llama3.2"}
+        return {"model": "Ollama Gemma-4-12b"}
 
 @app.get("/api/v1/config")
 async def get_config(request: Request):

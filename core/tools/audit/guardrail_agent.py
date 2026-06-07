@@ -21,7 +21,7 @@ _SECURE_ROOT = Path(settings.PROJECT_ROOT).resolve().absolute()
 
 # Configuration
 LOCAL_LLM_URL = f"{settings.OLLAMA_URL.rstrip('/')}/api/generate"
-OLLAMA_MODEL = "llama3"
+OLLAMA_MODEL = settings.PRIMARY_LLM_MODEL
 DEFAULT_TIMEOUT = 30 
 
 class GuardrailAgent:
