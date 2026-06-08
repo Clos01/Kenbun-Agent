@@ -101,6 +101,8 @@ from core.tools.infrastructure.ai_gateway import (
     detect_model_tier, run_startup_probe, print_health_card,
     build_system_prompt
 )
+from core.tools.cli.edge_router import process_edge_routing
+from core.tools.utils.bayesian import tune_swarm
 
 # Thread lock to guarantee safe parallel writes
 _backup_lock = threading.Lock()
@@ -2014,16 +2016,23 @@ def main():
                     # Primary request parameters
                     actual_url = llm_url
                     actual_model = llm_model
-                    is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
+                    
+                    # ========================================================
+                    # 🚀 EDGE AI ROUTER (Modular Override)
+                    # ========================================================
+                    active_history, actual_url, actual_model = process_edge_routing(
+                        user_input, history, actual_url, actual_model, llm_model, env
+                    )
+                    is_gemini_route = "gemini" in actual_url.lower() or "googleapis" in actual_url.lower() or "generativelanguage" in actual_url.lower()
                     headers = {"Content-Type": "application/json"}
                     
                     if "GEMINI_API_KEY" in env and is_gemini_route:
                         headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
-                        if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
+                        if "cloudaidoc-pa.googleapis.com" in actual_url.lower():
                             actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
                             if actual_model == "code-assist":
                                 actual_model = "gemini-1.5-pro"
-                    elif ("cloudaidoc-pa.googleapis.com" in llm_url.lower() or "googleapis.com" in llm_url.lower()) and is_gemini_route:
+                    elif ("cloudaidoc-pa.googleapis.com" in actual_url.lower() or "googleapis.com" in actual_url.lower()) and is_gemini_route:
                         try:
                             from google.auth.transport.requests import Request as AuthRequest
                             scopes = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -2120,7 +2129,7 @@ def main():
                     endpoint = f"{actual_url}/chat/completions"
                     payload = {
                         "model": actual_model,
-                        "messages": history,
+                        "messages": active_history,
                         "temperature": 0.7 if model_tier == "nano" else 0.2,
                         "stream": True
                     }
@@ -2139,7 +2148,8 @@ def main():
                                     else:
                                         raise e
                     else:
-                        print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
+                        print(f"\n{C_D}────────────────────────────────────────────────────────────────────────{C_R}")
+                        print(f"{C_P}{C_BOLD}Kenbun ({actual_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
                         
                         # Retry loop with exponential backoff for primary LLM endpoint
                         for attempt in range(max_retries + 1):
@@ -2152,6 +2162,8 @@ def main():
                                     print(f"\n{C_Y}⚠️ Connection/Timeout on primary LLM: {e}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
                                     time.sleep(backoff)
                                 else:
+                                    if actual_url == "http://localhost:11434/v1":
+                                        tune_swarm(actual_model, success=False, category="local_routing")
                                     raise e
                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as primary_err:
                     # Catch primary connection failure, and trigger fallback gateway
@@ -2284,7 +2296,7 @@ def main():
                     endpoint = f"{actual_url}/chat/completions"
                     payload = {
                         "model": actual_model,
-                        "messages": history,
+                        "messages": active_history,
                         "temperature": 0.7 if model_tier == "nano" else 0.2,
                         "stream": True
                     }
@@ -2303,7 +2315,8 @@ def main():
                                     else:
                                         raise fallback_err
                     else:
-                        print(f"\n{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
+                        print(f"\n{C_D}────────────────────────────────────────────────────────────────────────{C_R}")
+                        print(f"{C_P}{C_BOLD}Kenbun ({actual_model}){C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
                         
                         # Retry loop with exponential backoff for fallback LLM endpoint
                         for attempt in range(max_retries + 1):
@@ -2373,6 +2386,8 @@ def main():
                                     wrapper.write(chunk)
                                     full_reply += chunk
                                 except Exception as e:
+                                    if actual_url == "http://localhost:11434/v1":
+                                        tune_swarm(actual_model, success=False, category="local_routing")
                                     print(f"\n{C_RED}STREAM PARSE ERROR:{C_R} {repr(e)} on chunk: {data_str[:50]}...", flush=True)
                                     log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
                             else:
@@ -2386,6 +2401,10 @@ def main():
                 history.append({"role": "assistant", "content": scrub_secrets(full_reply)})
                 history = prune_dialog_history(history)
                 save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                
+                # Auto-tune bayesian router if edge routing succeeded
+                if actual_url == "http://localhost:11434/v1" and not is_gemini_route:
+                    tune_swarm(actual_model, success=True, category="local_routing")
                 
                 # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
                 execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)

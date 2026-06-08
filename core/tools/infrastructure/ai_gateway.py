@@ -205,11 +205,12 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
 
     if tier == "nano":
         return (
-            base +
-            "Keep all responses short and direct. No walls of text.\n"
-            "Converse naturally. Only use the execute block if the user explicitly asks "
-            "you to run something or you need live system data to answer.\n" +
-            execute_block
+            f"You are Kenbun, an AI assistant running locally on the user's machine. You are currently powered by the LLM: {llm_model}.\n"
+            "Your job is to have a helpful conversation. Keep responses short, direct, and conversational.\n"
+            "--- HERITAGE DESIGN SYSTEM MANDATE ---\n"
+            "You must adhere to the Heritage Design System. Do not use 'neon' colors.\n"
+            "--- END MANDATE ---\n"
+            "Do NOT use markdown execute or spawn blocks. Just answer the user's question directly."
         )
     elif tier == "standard":
         return base + execute_block + spawn_block + memory_block
