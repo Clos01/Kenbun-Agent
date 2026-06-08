@@ -24,6 +24,7 @@ Run it on a $5 Linux VPS, a serverless cluster, or directly on your local workst
 *   **AST Code Indexing & Semantic Search**: Uses ChromaDB (a local vector database) to chunk, embed, and index your codebase. This enables context-aware queries to find the exact parts of your codebase you need without relying on exact keyword matches.
     *   *Example:* Searching for *"How do we handle API authentication?"* returns the correct security functions and file paths, even if they don't contain that exact phrase.
 *   **Resource & Token Budget Optimizer**: Automatically routes tasks between local models (e.g., running `gemma4:12b` on Ollama for simple tasks like syntax parsing) and cloud models (e.g., using `gemini-2.5-pro` for complex tasks like architecture audits), minimizing token usage and cost.
+*   **Bayesian Edge Router**: By using tags like `@local`, Kenbun intelligently evaluates historical telemetry to automatically route prompts to your most successful local Ollama model (e.g., `gemma4:12b` or `deepseek-r1:8b`). You can also explicitly override the active model mid-conversation using specific dynamic tags (e.g., `@gemma` or `@deepseek`).
 *   **Dynamic AST Tool Harvester (Zero-Config Extension)**: Extend the agent's tools simply by adding a standard Python script decorated with `@sovereign_tool` in `core/tools/` subdirectories. The bootstrapper uses non-executing AST parsing to discover, validate, and load tools dynamically.
     *   *Example:* Placing a script at `core/tools/send_slack.py` automatically registers the Slack tool globally across the agent framework without editing database tables or configuration files.
 *   **Write-Ahead Logging (WAL) Persistence**: Built-in SQLite persistence engine utilizing Write-Ahead Logging (WAL) for safe, concurrent database reads and writes during heavy concurrent processing.
@@ -113,6 +114,12 @@ Spin up the unified microservices stack:
 ```bash
 docker compose up -d --build
 ```
+
+> [!TIP]
+> **NVIDIA GPU Acceleration (Linux):** If you have an NVIDIA GPU and the NVIDIA Container Toolkit installed, you can dramatically accelerate local LLM inference by appending the optional GPU compose configuration:
+> ```bash
+> docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
+> ```
 
 > [!IMPORTANT]
 > **AI Orchestration vs. Docker Swarm Clarification:**
@@ -218,6 +225,8 @@ python3 scripts/terminal_chat.py
 ```
 
 ### 🎨 Active Dialogue Commands
+* `@local` — Routes your prompt to the best performing local model via the Bayesian Engine.
+* `@<model>` — Overrides the engine to route your prompt directly to a specific model (e.g., `@gemma`, `@deepseek`).
 * `/exit` — Gracefully terminate the chat session.
 * `/reset` — Purge conversation history to start fresh.
 * `/system` — Prints a secure audit of your active `.env` configuration.
