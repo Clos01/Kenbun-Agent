@@ -1108,14 +1108,25 @@ class TerminalSession:
                 except Exception as e:
                     return 1, f"cd error: {e}"
         
-            result = subprocess.run(
-                cmd,
-                shell=True,
-                cwd=str(self.cwd),
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
+            if _ui:
+                with _ui.spinner("Executing system command..."):
+                    result = subprocess.run(
+                        cmd,
+                        shell=True,
+                        cwd=str(self.cwd),
+                        capture_output=True,
+                        text=True,
+                        timeout=300
+                    )
+            else:
+                result = subprocess.run(
+                    cmd,
+                    shell=True,
+                    cwd=str(self.cwd),
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
         
             # Check if a new folder was created and prompt for memory migration relative to original_cwd!
             if should_scan:
