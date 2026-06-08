@@ -96,7 +96,7 @@ services:
       - NEXT_PUBLIC_API_PORT=${API_PORT:-8001}
       - INTERNAL_API_URL=http://fastmcp_server:8001
       - NODE_OPTIONS=--dns-result-order=ipv4first
-    command: sh -c "if [ ! -d /app/node_modules ] || [ ! -f /app/node_modules/.package-lock.json ] || [ /app/package.json -nt /app/node_modules/.package-lock.json ]; then npm install --include=optional && cp /app/package-lock.json /app/node_modules/.package-lock.json; fi && npm run dev"
+    command: sh -c "npm install -g pnpm && if [ ! -d /app/node_modules ] || [ ! -f /app/node_modules/.pnpm-lock.yaml ] || [ /app/package.json -nt /app/node_modules/.pnpm-lock.yaml ]; then pnpm install && cp /app/pnpm-lock.yaml /app/node_modules/.pnpm-lock.yaml; fi && pnpm dev"
     depends_on:
       - fastmcp_server
     restart: always
