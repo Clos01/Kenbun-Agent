@@ -1580,6 +1580,7 @@ def main():
                                 f"  {C_BOLD}{C_C}/search <topic>{C_R}{C_D}    ➟ Search UI/UX design database{C_R}",
                                 f"  {C_BOLD}{C_C}/tools [name]{C_R}{C_D}     ➟ List or inspect harvested sovereign tools{C_R}",
                                 f"  {C_BOLD}{C_C}/skills [name]{C_R}{C_D}    ➟ List or inspect design & template skills{C_R}",
+                                f"  {C_BOLD}{C_C}/stats{C_R}{C_D}             ➟ Dump Bayesian & Hivemind governance metrics{C_R}",
                                 f"  {C_BOLD}{C_C}/run <tool> [args]{C_R}{C_D}  ➟ Live REPL execution of a harvested tool{C_R}",
                                 f"  {C_BOLD}{C_RED}/yolo{C_R}{C_D}              ➟ Toggle YOLO mode (auto-approve commands){C_R}",
                             ]
@@ -1789,6 +1790,24 @@ def main():
                                     draw_box(details, title=f"🌸 SKILL: {s_data['name'].upper()}", border_color=C_G, text_color=C_W)
                                     print()
                             continue
+
+                        elif cmd == "/stats":
+                            try:
+                                from core.tools.utils.bayesian import get_confidence
+                                print(f"\n{C_G}📊 SYSTEM 3 GOVERNANCE & BAYESIAN METRICS{C_R}")
+                                stats = [
+                                    f"  {C_C}Tool Executions{C_R}",
+                                    f"  • consult_supervisor (Security): {get_confidence('consult_supervisor', 'security'):.2f}%",
+                                    f"  • review_code_with_gemini: {get_confidence('review_code_with_gemini', 'code_review'):.2f}%",
+                                    f"  • research_official_docs: {get_confidence('research_official_docs', 'research'):.2f}%",
+                                    f"  • scan_repo (Codebase): {get_confidence('scan_repo', 'codebase'):.2f}%"
+                                ]
+                                draw_box(stats, title="🌸 METRICS", border_color=C_P, text_color=C_W)
+                                print()
+                            except Exception as e:
+                                print(f"\n{C_Y}⚠️ Unable to fetch Bayesian metrics: {e}{C_R}\n")
+                            continue
+
 
                         elif cmd == "/run":
                             if len(cmd_parts) < 2:
