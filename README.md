@@ -1,10 +1,17 @@
-# Kenbun-Agent
+<div align="center">
+  
+# 🌸 Kenbun-Agent
+**Cognitive Sovereignty & Self-Healing AI Swarm**
 
-[README](README.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE) · [Security](docs/SECURITY.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 
-# Kenbun-Agent
+[**Documentation**](docs/) · [**Contributing**](CONTRIBUTING.md) · [**Security**](docs/SECURITY.md)
 
-> [Documentation](docs/) · [License: MIT](LICENSE) · [GitHub Repository](https://github.com/Clos01/Kenbun-Agent)
+</div>
+
+---
 
 **Kenbun-Agent** is an extensible, local-first AI development harness designed to safely execute, optimize, and persist automated tools in isolated workspaces. It connects local LLMs (such as Llama and DeepSeek) and cloud engines (such as Gemini) to a secure Docker runtime environment, using Abstract Syntax Tree (AST) analysis to dynamically load custom tools and index codebases without risking host system exposure.
 
