@@ -294,12 +294,25 @@ def save_session_backup(history, cwd, llm_url, llm_model):
         if not any(resolved_dir == root or resolved_dir.is_relative_to(root) for root in allowed_roots):
             raise ValueError("Security Violation: Backup directory outside allowed boundaries.")
             
-        # Strict validation on user-influenced parameters using robust whitelist to prevent shell injections (no slash allowed)
-        if not re.match(r"^[a-zA-Z0-9.:\-_]+$", str(llm_model)):
+        safe_model = str(llm_model)
+        if safe_model.startswith("enc:"):
+            from core.tools.utils.env_builder import decrypt_value
+            try:
+                safe_model = decrypt_value(safe_model)
+            except Exception:
+                pass
+
+        if not re.match(r"^[a-zA-Z0-9.:\-_]+$", safe_model):
             raise ValueError("Security Violation: Invalid character in LLM model name.")
             
-        safe_model = str(llm_model)
-        safe_url = scrub_secrets(str(llm_url))
+        safe_url = str(llm_url)
+        if safe_url.startswith("enc:"):
+            from core.tools.utils.env_builder import decrypt_value
+            try:
+                safe_url = decrypt_value(safe_url)
+            except Exception:
+                pass
+        safe_url = scrub_secrets(safe_url)
         
         backup_path = resolved_dir / "active_session_backup.json"
         
