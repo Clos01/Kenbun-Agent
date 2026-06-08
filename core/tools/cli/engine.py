@@ -2139,7 +2139,7 @@ def main():
                         with _ui.spinner("Thinking..."):
                             for attempt in range(max_retries + 1):
                                 try:
-                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
                                     break
                                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                                     if attempt < max_retries:
@@ -2154,7 +2154,7 @@ def main():
                         # Retry loop with exponential backoff for primary LLM endpoint
                         for attempt in range(max_retries + 1):
                             try:
-                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
                                 break
                             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
                                 if attempt < max_retries:
@@ -2306,7 +2306,7 @@ def main():
                         with _ui.spinner("Thinking (fallback)..."):
                             for attempt in range(max_retries + 1):
                                 try:
-                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
                                     break
                                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
                                     if attempt < max_retries:
@@ -2321,7 +2321,7 @@ def main():
                         # Retry loop with exponential backoff for fallback LLM endpoint
                         for attempt in range(max_retries + 1):
                             try:
-                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=30)
+                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
                                 break
                             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
                                 if attempt < max_retries:
