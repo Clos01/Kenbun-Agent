@@ -49,6 +49,19 @@ sudo nvidia-ctk runtime configure --runtime=docker
 echo -e "\033[38;5;38m→\033[0m Restarting Docker daemon..."
 sudo systemctl restart docker
 
+echo -e "\033[38;5;38m→\033[0m Configuring Docker Compose to pass GPU to Ollama..."
+cat <<EOF > docker-compose.override.yml
+services:
+  ollama_server:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+EOF
+
 echo -e "\033[38;5;38m→\033[0m Restarting Kenbun-Agent container stack (if running)..."
 if [ -f "docker-compose.yml" ]; then
     docker compose down || true
