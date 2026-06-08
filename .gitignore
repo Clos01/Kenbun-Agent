@@ -103,3 +103,4 @@ temp/
 # --- External Dependencies / Third-Party Repos ---
 core/external/
 
+docker-compose.override.yml
