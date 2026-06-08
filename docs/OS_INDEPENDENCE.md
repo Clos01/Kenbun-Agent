@@ -73,3 +73,12 @@ Modern Linux distributions and macOS Homebrew implementations strictly enforce P
     ```bash
     sudo python3 -m pip install -e . --break-system-packages
     ```
+
+### NVIDIA GPU Acceleration on Linux/Ubuntu
+Local models (via Ollama or Docker) will default to CPU inference unless the host has the NVIDIA Container Toolkit correctly installed and the Docker daemon is configured to use the NVIDIA runtime.
+*   **Symptom:** Running local models like `gemma4:12b` or `deepseek-r1:8b` is extremely slow, and running `ollama ps` shows `CPU` instead of `100% GPU`.
+*   **Resolution:**
+    Execute the provided setup script on your Ubuntu/Debian server to automatically install the toolkit, configure Docker, and restart the swarm containers:
+    ```bash
+    sudo ./scripts/setup_nvidia_gpu.sh
+    ```

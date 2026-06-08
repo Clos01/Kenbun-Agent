@@ -39,6 +39,7 @@ Before launching, ensure your machine meets the following:
 - **Python 3.10+**
 - **Minimum 15 GB Free Disk Space** (The local stack downloads container images and local model weights, including `gemma-4` and `deepseek-r1`, on first boot).
 - **Recommended 16GB+ RAM** (to comfortably host local LLMs in memory).
+- 💡 **Ubuntu/Linux NVIDIA Users:** If you have an NVIDIA GPU, run `sudo ./scripts/setup_nvidia_gpu.sh` to install the NVIDIA Container Toolkit and accelerate Ollama 10x!
 
 ### 📦 Installation Pathways
 
