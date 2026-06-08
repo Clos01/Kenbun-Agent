@@ -211,14 +211,14 @@ class UIRenderer:
         """Print the response label before an AI reply."""
         with self._lock:
             if isinstance(self._console, NullConsole):
-                sys.stdout.write("\n🌸 Kenbun ▸ ")
+                sys.stdout.write(f"\n🌸 Kenbun ({model_name}) ▸ ")
                 sys.stdout.flush()
             else:
                 label = self._skin.get_branding("response_label", " 🌸 Kenbun ")
                 accent = self._skin.get_color("banner_accent", "#DA70D6")
                 border = self._skin.get_color("response_border", "#FF69B4")
                 self._console.print(
-                    f"[{border}]─[/][bold {accent}]{label}[/][{border}]▸[/]",
+                    f"[{border}]─[/][bold {accent}]{label} ({model_name})[/][{border}]▸[/]",
                     end=" ",
                 )
 
