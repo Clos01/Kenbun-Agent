@@ -29,16 +29,22 @@ def process_edge_routing(user_input: str, history: list, actual_url: str, actual
             if tag_lower in ["local", "fast", "ollama", "lmstudio"]:
                 continue # Skip reserved generic tags
             
-            # Fuzzy match
-            for candidate in candidates:
-                if tag_lower in candidate.lower():
-                    matched_specific_model = candidate
-                    break
-            if matched_specific_model:
+            # Collect all candidates that fuzzy match the tag
+            matches = [c for c in candidates if tag_lower in c.lower()]
+            
+            if matches:
+                if len(matches) == 1:
+                    matched_specific_model = matches[0]
+                else:
+                    # Collision detected! Delegate to Bayesian Router to pick the best variant
+                    best_match, _ = get_best_tool(category="local_routing", candidate_tools=matches)
+                    matched_specific_model = best_match
                 break
 
+    ollama_url = env.get("OLLAMA_API_BASE", "http://localhost:11434/v1")
+
     if matched_specific_model:
-        actual_url = "http://localhost:11434/v1"
+        actual_url = ollama_url
         actual_model = matched_specific_model
         print(f"\n{C_P}⚡ Edge Router Active: Direct Model Override -> {actual_model}{C_R}")
         
@@ -47,7 +53,7 @@ def process_edge_routing(user_input: str, history: list, actual_url: str, actual
             active_history[0]["content"] = build_system_prompt("nano", actual_model)
 
     elif re.search(r'@(local|fast|ollama)\b', user_input, re.IGNORECASE):
-        actual_url = "http://localhost:11434/v1"
+        actual_url = ollama_url
         
         if candidates:
             best_model, confidence = get_best_tool(category="local_routing", candidate_tools=candidates)
