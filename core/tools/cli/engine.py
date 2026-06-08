@@ -22,7 +22,7 @@ from typing import Optional
 
 # Silence noisy ONNX C++ runtime warnings on CPU-only or non-standard GPU architectures
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["ORT_LOGGING_LEVEL"] = "3"
+os.environ["ORT_LOGGING_LEVEL"] = "4"
 
 # prompt_toolkit for robust terminal input
 try:
