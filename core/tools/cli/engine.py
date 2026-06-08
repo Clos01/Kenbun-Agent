@@ -1114,7 +1114,7 @@ class TerminalSession:
                 cwd=str(self.cwd),
                 capture_output=True,
                 text=True,
-                timeout=45
+                timeout=300
             )
         
             # Check if a new folder was created and prompt for memory migration relative to original_cwd!
@@ -1134,7 +1134,7 @@ class TerminalSession:
             log_event("❌ Reflex command failed with execution timeout")
             stdout = e.stdout or ""
             stderr = e.stderr or ""
-            output = f"[Timeout Error: The system command exceeded the 45-second execution limit]\n{stdout}"
+            output = f"[Timeout Error: The system command exceeded the 300-second execution limit]\n{stdout}"
             if stderr:
                 output += f"\n[stderr]\n{stderr}"
             return -1, scrub_secrets(output)

@@ -91,6 +91,15 @@ uv tool install -e .
 ```
 > [!NOTE]
 > If you do not have `uv` installed, you can install it via `curl -LsSf https://astral.sh/uv/install.sh | sh` or use `pipx install -e .`.
+> 
+> **PEP 668 Alternative (Ubuntu 24.04 / Homebrew):**
+> If you encounter `EXTERNALLY-MANAGED-ENVIRONMENT` errors when using pip, explicitly create a virtual environment first or use the `--break-system-packages` flag if you prefer a global YOLO installation:
+> ```bash
+> sudo apt install python3-venv  # Ubuntu/Debian
+> python3 -m venv venv
+> source venv/bin/activate
+> pip install -e .
+> ```
 
 ##### 3️⃣ Step 3: Run the Setup Wizard
 Initialize the environment configuration file, telemetry metrics, and local SQLite databases using the newly installed global command:
@@ -200,6 +209,7 @@ Instead of just chatting, the terminal agent acts as a fully situated developer 
    * **System Telemetry**: If asking about errors or Docker, it audits VM socket permissions, active containers, and UFW firewalls, injecting live metrics directly into context.
    * **Design Grounding**: If asking about UI/UX or styling, it runs a local BM25 query on the UI-UX Pro Max database, grounding the LLM with HSL palettes and typography tokens.
 4. **Offline Local First**: Designed to run 100% free and private using your local Ollama models (`gemma4:12b` or `deepseek-r1:8b`).
+5. **Thread-Safe UI Renderer**: A decoupled `UIRenderer` presentation layer provides gorgeous, thread-safe asynchronous updates (using `rich` and `prompt_toolkit`), gracefully degrading to standard ANSI streams on low-spec SSH connections.
 
 ### 🚀 How to Launch the Termchat
 ```bash

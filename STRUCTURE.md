@@ -47,6 +47,7 @@ Kenbun/
 │   ├── services/               # Background Daemons (System 6)
 │   ├── tools/                  # The Toolbelt (Systems 1-5)
 │   │   ├── audit/              # Supervisor & Oracle logic
+│   │   ├── cli/                # Interactive Cognitive Shell & UIRenderer
 │   │   ├── design/             # Design Oracle & UI Rules
 │   │   ├── execution/          # Worker Nodes & Sandbox
 │   │   ├── infrastructure/     # API Server, Config, Orchestrator
