@@ -1,7 +1,7 @@
 import re
 import copy
 from core.tools.infrastructure.ai_gateway import build_system_prompt
-from core.tools.cli.constants import C_P, C_R, C_D
+from core.tools.utils.console_ui import C_P, C_R, C_D
 from core.tools.utils.bayesian import get_best_tool
 
 def process_edge_routing(user_input: str, history: list, actual_url: str, actual_model: str, llm_model: str, env: dict):
