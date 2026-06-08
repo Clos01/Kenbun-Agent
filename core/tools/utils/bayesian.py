@@ -2,7 +2,7 @@ import json
 import time
 
 from core.tools.infrastructure.config import settings
-WEIGHTS_FILE = settings.PROJECT_ROOT / "core" / "weights.json"
+WEIGHTS_FILE = settings.BRAIN_HEALTH_DIR / "bayesian_weights.json"
 
 def load_weights():
     if not WEIGHTS_FILE.exists():
