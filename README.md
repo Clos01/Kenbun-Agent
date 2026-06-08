@@ -120,6 +120,8 @@ docker compose up -d --build
 > ```bash
 > docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build
 > ```
+> 
+> **How to verify your GPU is working:** Once running, Docker may still report high RAM usage (e.g. in Dozzle or `top`). This is normal as Docker maps the model into shared system memory. To verify true hardware acceleration, run `watch -n 1 nvidia-smi` in your terminal and look for VRAM consumption and GPU utilization spikes when chatting with local models.
 
 > [!IMPORTANT]
 > **AI Orchestration vs. Docker Swarm Clarification:**
