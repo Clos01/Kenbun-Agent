@@ -6,6 +6,7 @@ import urllib.error
 import os
 from typing import List, Optional, Tuple
 from core.tools.infrastructure.config import settings
+from core.tools.utils.secret_manager import decrypt_value
 
 def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
     """Strip `/v1` suffix from a base URL to get the native API root."""
@@ -203,38 +204,38 @@ def _make_openai_compatible_call(
     # Resolve Authorization dynamically
     api_key = None
     if "api.openai.com" in base_url and settings.OPENAI_API_KEY:
-        api_key = settings.OPENAI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.OPENAI_API_KEY.get_secret_value())
     elif "api.deepseek.com" in base_url and settings.DEEPSEEK_API_KEY:
-        api_key = settings.DEEPSEEK_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.DEEPSEEK_API_KEY.get_secret_value())
     elif "openrouter.ai" in base_url and hasattr(settings, "OPENROUTER_API_KEY") and settings.OPENROUTER_API_KEY:
-        api_key = settings.OPENROUTER_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.OPENROUTER_API_KEY.get_secret_value())
     elif "nous.mesolitica.com" in base_url and hasattr(settings, "NOUS_PORTAL_API_KEY") and settings.NOUS_PORTAL_API_KEY:
-        api_key = settings.NOUS_PORTAL_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.NOUS_PORTAL_API_KEY.get_secret_value())
     elif "nvidia" in base_url and hasattr(settings, "NVIDIA_API_KEY") and settings.NVIDIA_API_KEY:
-        api_key = settings.NVIDIA_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.NVIDIA_API_KEY.get_secret_value())
     elif "x.ai" in base_url and hasattr(settings, "XAI_API_KEY") and settings.XAI_API_KEY:
-        api_key = settings.XAI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.XAI_API_KEY.get_secret_value())
     elif "bigmodel.cn" in base_url and hasattr(settings, "ZHIPU_API_KEY") and settings.ZHIPU_API_KEY:
-        api_key = settings.ZHIPU_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.ZHIPU_API_KEY.get_secret_value())
     elif "api.kimi.com" in base_url and hasattr(settings, "KIMI_API_KEY") and settings.KIMI_API_KEY:
-        api_key = settings.KIMI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.KIMI_API_KEY.get_secret_value())
     elif "api.moonshot.cn" in base_url and hasattr(settings, "MOONSHOT_API_KEY") and settings.MOONSHOT_API_KEY:
-        api_key = settings.MOONSHOT_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.MOONSHOT_API_KEY.get_secret_value())
     elif "stepfun.com" in base_url and hasattr(settings, "STEPFUN_API_KEY") and settings.STEPFUN_API_KEY:
-        api_key = settings.STEPFUN_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.STEPFUN_API_KEY.get_secret_value())
     elif "dashscope" in base_url and hasattr(settings, "DASHSCOPE_API_KEY") and settings.DASHSCOPE_API_KEY:
-        api_key = settings.DASHSCOPE_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.DASHSCOPE_API_KEY.get_secret_value())
     elif "api.mimo.xiaomi.com" in base_url and hasattr(settings, "MIMO_API_KEY") and settings.MIMO_API_KEY:
-        api_key = settings.MIMO_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.MIMO_API_KEY.get_secret_value())
     elif "tokenhub.tencentmaas.com" in base_url and hasattr(settings, "TOKENHUB_API_KEY") and settings.TOKENHUB_API_KEY:
-        api_key = settings.TOKENHUB_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.TOKENHUB_API_KEY.get_secret_value())
     elif "api-inference.huggingface.co" in base_url and hasattr(settings, "HF_API_KEY") and settings.HF_API_KEY:
-        api_key = settings.HF_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.HF_API_KEY.get_secret_value())
     elif "generativelanguage.googleapis.com" in base_url and settings.GEMINI_API_KEY:
-        api_key = settings.GEMINI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.GEMINI_API_KEY.get_secret_value())
     elif "cloudaidoc-pa.googleapis.com" in base_url or "googleapis.com" in base_url:
         if settings.GEMINI_API_KEY:
-            api_key = settings.GEMINI_API_KEY.get_secret_value()
+            api_key = decrypt_value(settings.GEMINI_API_KEY.get_secret_value())
         else:
             try:
                 from google.auth.transport.requests import Request as AuthRequest
@@ -262,7 +263,7 @@ def _make_openai_compatible_call(
         
     if "api.anthropic.com" in base_url and settings.ANTHROPIC_API_KEY:
         # Handle Anthropic custom gateway mapping
-        headers["x-api-key"] = settings.ANTHROPIC_API_KEY.get_secret_value()
+        headers["x-api-key"] = decrypt_value(settings.ANTHROPIC_API_KEY.get_secret_value())
         headers["anthropic-version"] = "2023-06-01"
         
         # Map Anthropic request format
@@ -371,9 +372,14 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         logging.warning(f"⚠️ LLM_ROUTER: Primary call failed: {e}. Attempting Fallback: {fallback_url} ({fallback_model})")
         
         if not fallback_url:
-            error_msg = f"❌ LLM_ROUTER CRITICAL: Primary endpoint failed ({e}) and no fallback URL is configured."
-            logging.error(error_msg)
-            raise RuntimeError(error_msg)
+            if settings.GEMINI_API_KEY:
+                logging.info(f"🔄 Dynamic fallback to Gemini Cloud triggered because GEMINI_API_KEY is configured.")
+                fallback_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+                fallback_model = "gemini-1.5-pro"
+            else:
+                error_msg = f"❌ LLM_ROUTER CRITICAL: Primary endpoint failed ({e}) and no fallback URL or Gemini API Key is configured."
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
             
         try:
             if "127.0.0.1" in fallback_url or "localhost" in fallback_url or "2065" in fallback_url:
