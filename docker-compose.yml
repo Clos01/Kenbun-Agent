@@ -37,7 +37,7 @@ services:
       - 8.8.4.4
     environment:
       - OLLAMA_HOST=ollama_server:11434
-      - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-gemma4:e2b deepseek-r1:1.5b}
+      - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-gemma2:2b deepseek-r1:1.5b}
     entrypoint: >
       /bin/sh -c "
       sleep 5;
