@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🌊  FUJITORA OS PORTABILITY AUDIT TOOL (藤虎 - Wisteria Tiger)
+🌊  FUJITORA OS PORTABILITY AUDIT TOOL (Fujitora - Wisteria Tiger)
 Autonomic System 6 Batching Scanner for OS-Generalization and Portability.
 
 Designed to scan the entire codebase file-by-file (avoiding OOM) to detect:

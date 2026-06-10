@@ -7,10 +7,15 @@ The system is segmented into two primary domains to ensure infinite scalability 
 ## 📂 Project Hierarchy
 
 * **kenbun/core/**: The "Brain" and "Engine" of the system.
-  * **tools/**: All MCP tools, strategy logic, and the API server.
-  * **brain_health/**: Pure telemetry stream (JSON, JSONL, Logs).
+  * **agents/**: Swarm agent adapters and traceability.
   * **benchmarks/**: Performance and reliability testing scripts.
-  * **ingestion/**: Knowledge processing logic.
+  * **dev/self_evolution/**: Self-awareness and State-of-the-Union audits.
+  * **hivemind_memory/**: Semantic long-term persistence.
+  * **scripts/**: Diagnostics and brain-sync utilities.
+  * **services/**: Background daemons running the swarm.
+  * **tests/**: Sovereign verification and unit testing.
+  * **tools/**: All MCP tools, strategy logic, and the API server.
+  * **training_data/**: Export and LoRA fine-tuning pipelines.
 * **kenbun/scripts/**: Core setup, onboarding bootstrap, and terminal agent entry points.
   * **bootstrap.py**: Guided hardware-sensing setup wizard, port remap, and Docker stack controls.
   * **terminal_chat.py**: Autonomous self-healing terminal developer chat shell (termchat).
@@ -34,45 +39,55 @@ The system is segmented into two primary domains to ensure infinite scalability 
 
 ## 📂 Detailed File Directory
 
-### 🧠 System 4 & 5: Strategy & Reflection
-*   **`tools/strategy/decision_logic.py`**: Hardened routing engine that orchestrates sub-modules.
-*   **`tools/strategy/keyword_processor.py`**: [NEW] Encapsulates signal detection and regex matching.
-*   **`tools/strategy/neural_learner.py`**: [NEW] Handles Alpha-Go style reward/decay weights.
-*   **`tools/strategy/token_governor.py`**: Real-time budget enforcement and cost tracking.
-*   **`tools/strategy/strategy_manager.py`**: Manages tool intelligence weights (Bayesian sampling).
+### 🧠 System 4 & 5: Strategy & Reflection (`tools/strategy/`)
+*   **`decision_logic.py`**: Hardened routing engine that orchestrates sub-modules.
+*   **`keyword_processor.py`**: Encapsulates signal detection and regex matching.
+*   **`neural_learner.py`**: Handles Alpha-Go style reward/decay weights.
+*   **`token_governor.py`**: Real-time budget enforcement and cost tracking.
+*   **`strategy_manager.py`**: Manages tool intelligence weights (Bayesian sampling).
+*   **`hme_router.py`**: Hierarchical Mixture of Experts routing core.
 *   **`tools/audit/reflection_agent.py`**: Self-auditing loop that generates Hivemind entries (System 5).
 
-### 📖 System 3: Memory & Knowledge
-*   **`tools/memory/knowledge_manager.py`**: Core API for ChromaDB interactions (CRUD concepts).
-*   **`tools/memory/pdf_ingestor.py`**: Ingests technical PDFs to teach the AI new frameworks.
-*   **`tools/memory/code_indexer.py`**: Semantic indexing of the current repository's source code.
-*   **`tools/memory/repo_mapper.py`**: Generates logical topologies of the codebase for RAG.
-*   **`tools/memory/chroma_db_connect.py`**: Low-level connection handler for remote ChromaDB.
+### 📖 System 3: Memory & Knowledge (`tools/memory/` & `hivemind_memory/`)
+*   **`knowledge_manager.py`**: Core API for ChromaDB interactions (CRUD concepts).
+*   **`pdf_ingestor.py`**: Ingests technical PDFs to teach the AI new frameworks.
+*   **`code_indexer.py`**: Semantic indexing of the current repository's source code.
+*   **`repo_mapper.py`**: Generates logical topologies of the codebase for RAG.
+*   **`chroma_db_connect.py`**: Low-level connection handler for remote ChromaDB.
 
-### 🛡️ System 2 & 2c: Audit & Quality
-*   **`tools/audit/supervisor_agent.py`**: (System 2) Executive audit agent with Tiered Ensemble logic.
-*   **`tools/audit/ensemble_audit.py`**: [NEW] Multi-model consensus auditor (Weighted Parallel Voting).
-*   **`tools/audit/guardrail_agent.py`**: (System 2c) Continuous guardrail for fast security audits.
-*   **`tools/audit/gemini_reviewer.py`**: Cloud-based deep code review and audio transcription.
-*   **`tools/audit/consult_architect.py`**: Internal consultation tool for complex structural decisions.
-*   **`tools/audit/ui_designer.py`**: Specialized agent (UI Expert) for enforcing premium design standards. **MANDATE:** Must consult Stitch for all web tasks.
+### 🛡️ System 2 & 2c: Audit & Quality (`tools/audit/`)
+*   **`supervisor_agent.py`**: (System 2) Executive audit agent with Tiered Ensemble logic.
+*   **`ensemble_audit.py`**: Multi-model consensus auditor (Weighted Parallel Voting).
+*   **`guardrail_agent.py`**: (System 2c) Continuous guardrail for fast security audits.
+*   **`gemini_reviewer.py`**: Cloud-based deep code review and audio transcription.
+*   **`consult_architect.py`**: Internal consultation tool for complex structural decisions.
+*   **`ui_designer.py`**: Specialized agent (UI Expert) for enforcing premium design standards.
+*   **`adversarial_court.py`**: (System 2a) Adversarial LLM Auditing Court.
+*   **`safe_linter.py`**: Deterministic static analysis wrapper.
 
-### 🛠️ System 1: Execution & Tools
-*   **`tools/execution/sandbox_runner.py`**: Runs generated code in a safe, isolated environment.
-*   **`tools/execution/shadow_tester.py`**: Automatically generates unit tests for new/modified code.
+### 🛠️ System 1: Execution & Tools (`tools/execution/`)
+*   **`sandbox_runner.py`**: Runs generated code in a safe, isolated environment.
+*   **`shadow_tester.py`**: Automatically generates unit tests for new/modified code.
+*   **`claude_code_agent.py`**: Claude Code Sub-Agent Bridge for complex refactors.
+*   **`shell_sentinel.py`**: Securely executes terminal commands, intercepting dangerous patterns.
 
-### 📡 System 6: Sensory Layer
-*   **`tools/infrastructure/swarm_voice.py`**: Telegram voice-note listener with Gemini 3 transcription.
-*   **`tools/infrastructure/native_ears.py`**: [ASYNC] macOS native always-listening sensory layer with ensemble gating.
-*   **`tools/infrastructure/design_bridge.py`**: [NEW] ACP-to-MCP Bridge for orchestrating 13+ external design CLIs.
-*   **`tools/utils/notifications.py`**: Native macOS notification bridge and audio feedback (say).
+### 📡 System 6: Sensory Layer (`tools/infrastructure/`)
+*   **`swarm_voice.py`**: Telegram voice-note listener with Gemini 3 transcription.
+*   **`native_ears.py`**: [ASYNC] macOS native always-listening sensory layer with ensemble gating.
+*   **`design_bridge.py`**: ACP-to-MCP Bridge for orchestrating external design CLIs.
 
 ### 🔌 Infrastructure Layer (`tools/infrastructure/`)
-*   **`tools/infrastructure/orchestrator.py`**: The main state-machine engine. Features non-blocking connectivity heartbeats, circuit breakers, and automatic local-PC failover.
-*   **`tools/infrastructure/server.py`**: The MCP server that exposes these tools to your IDE.
-*   **`tools/infrastructure/agents.py`**: Definitions for Agent Personas (Architect, Security, Swarm).
-*   **`tools/infrastructure/tech_registry.py`**: Central registry of allowed technologies and documentation URIs.
-*   **`tools/infrastructure/api_server.py`**: FastAPI wrapper with real-time SSE topology streaming (`/api/v1/topology/stream`).
+*   **`orchestrator.py`**: The main state-machine engine orchestrating complex logic.
+*   **`server.py`**: The MCP server that exposes tools to IDEs.
+*   **`agents.py`**: Definitions for Agent Personas (Architect, Security, Swarm).
+*   **`tech_registry.py`**: Central registry of allowed technologies and documentation URIs.
+*   **`api_server.py`**: FastAPI wrapper with real-time SSE topology streaming.
+*   **`pipelines/`**: Contains execution sequences (`bug_fix.py`, `code_review.py`, `research.py`).
+*   **`routers/`**: FastAPI routers mapping API endpoints (`chat_router.py`, `topology_router.py`).
+
+### 🤖 Agents & Interfaces (`agents/` & `tools/cli/`)
+*   **`agents/adapter.py`**: Agent tool interfaces for the Swarm.
+*   **`tools/cli/engine.py`**: Termchat and Reflex Shell REPL for local users.
 
 ### 🛠️ Shared Utilities (`tools/utils/`)
 *   **`telemetry.py`**: Performance benchmarking and success-rate tracking.
@@ -80,19 +95,21 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`secret_manager.py`**: AES-encrypted storage for API keys.
 *   **`backtracker.py`**: Checkpoint/Restore system for rolling back failed code changes.
 *   **`error_memory.py`**: Tracks recurring errors to prevent the AI from repeating mistakes.
-*   **`path_utils.py`**: Universal path resolution for cross-platform (Mac/PC) compatibility.
-*   **`workspace_manager.py`**: [NEW] Dynamic project discovery and registry management.
-*   **`maze_protocol.py`**: [NEW] Utility for "Backward Verification" (The Maze Protocol).
+*   **`path_utils.py`**: Universal path resolution for cross-platform compatibility.
+*   **`workspace_manager.py`**: Dynamic project discovery and registry management.
+*   **`maze_protocol.py`**: Utility for "Backward Verification" (The Maze Protocol).
+*   **`deepseek_client.py`**: Integration with DeepSeek cloud providers.
 
-### 🩺 Sovereign Testing & Benchmarks
-*   **`tests/`**: Functional unit and integration tests.
-    *   **`test_autopilot.py`**: [NEW] Automated tests for dynamic VRAM/RAM platform-sensing profiles.
-    *   **`test_ralph_loop.py`**: [NEW] Automated tests for the autonomic Ralph-Loop self-healing recovery engine.
+### 🩺 Sovereign Testing & Benchmarks (`tests/` & `benchmarks/`)
+*   **`tests/test_autopilot.py`**: Automated tests for hardware-sensing profiles.
+*   **`tests/test_ralph_loop.py`**: Autonomic rollback and self-healing tests.
+*   **`tests/master_swarm_test.py`**: End-to-end integration tests of the swarm.
 *   **`benchmarks/benchmark_protocol.py`**: Performance verification suite.
-*   **`benchmarks/chaos_orchestrator.py`**: Stress-test script for budget and network failure.
+*   **`benchmarks/chaos_orchestrator.py`**: Stress-test script for failure injection.
 
-### 🧠 Self-Evolution & Awareness [NEW]
-*   **`dev/self_evolution/awareness_engine.py`**: Runs closed-loop State of the Union (SOTU) audits, evaluating memory density, tool performance, and security posture.
+### 🧠 Self-Evolution & Training (`dev/self_evolution/` & `training_data/`)
+*   **`dev/self_evolution/awareness_engine.py`**: Runs closed-loop SOTU audits.
+*   **`training_data/export_brain.py`**: Exports the Hivemind for LoRA fine-tuning.
 
 ### 📊 Brain Health (Telemetry)
 *   **`brain_health/usage_stats.json`**: Current session token expenditure log.
@@ -100,9 +117,9 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`brain_health/POST_MORTEM.md`**: Database of historical bugs and their architectural fixes.
 
 ### ⌨️ Core Setup & Onboarding Scripts (`scripts/`)
-*   **`scripts/bootstrap.py`**: Guided hardware-sensing setup wizard, provider credentials config, port remapping, and Docker stack controls with deep cleanup options.
-*   **`scripts/terminal_chat.py`**: Interactively runs the cognitive LLM developer agent shell with hybrid network socket probes, dynamic RAG, and terminal layout rendering.
-*   **`scripts/full_audit_scan.py`**: Autonomic code scanning tool verifying AST rules, hardcoded developer paths, import path shims, and exception safety blocks.
+*   **`scripts/bootstrap.py`**: Guided setup wizard and Docker stack controls.
+*   **`scripts/terminal_chat.py`**: Cognitive LLM developer agent shell.
+*   **`scripts/full_audit_scan.py`**: Autonomic code scanning tool.
 
 ### 🛠️ Root Directory Files
 - **`STRUCTURE.md`**: The root topological map and source of truth for the repository.
@@ -112,25 +129,18 @@ The system is segmented into two primary domains to ensure infinite scalability 
 - **`pyproject.toml`**: Metadata and dependencies configuration.
 - **`docker-compose.yml`**: Docker services orchestrating the local environment.
 - **`.env` / `.env.example`**: Environment configuration and API key placeholders.
-- **`.kenbun_master.key`**: AES master key for the encrypted `secret_manager.py`.
 
 ### 🛠️ Core Workspace Metadata (`core/`)
 - **`core/STRUCTURE.md`**: (You are here) The technical codebase map for the intelligence engine.
 - **`core/SYSTEM_MAP.md`**: The Spatial Root and "Memory Palace" of the system.
 - **`core/FILE_GLOSSARY.md`**: Exhaustive 1:1 functional descriptions of all Python modules.
-- **`core/NEURAL_HIERARCHY.md`**: Deep-dive into the six-system agentic architecture (with Maze Protocol).
+- **`core/NEURAL_HIERARCHY.md`**: Deep-dive into the six-system agentic architecture.
 - **`core/DEPLOYMENT_GUIDE.md`**: Setup manual for local-first swarm execution.
 - **`core/POST_MORTEM.md`**: Historical log of software bugs and architectural resolutions.
-- **`core/OPERATIONS_MANUAL.md`**: DevOps operations, health diagnostics, and logs reference.
-- **`core/VOIP_SETUP.md`**: Setup guidelines for voice sensory features.
-- **`core/DESIGN.md`**: The Heritage Design System specification rules.
-- **`core/requirements.txt`**: Python dependencies for the core engine.
-- **`core/workspace_config.json`**: Central registry for all projects watched by Kenbun.
-- **`core/.agent/rules/the-augmented-cto.md`**: The Orchestrator core rules (Source of Behavior Rules).
-### 🛠️ Service Layer (`core/services/`)
-- **`services/swarm_daemon.py`**: Background service that monitors for autonomous task triggers and runs the Autonomic Heartbeat.
-- **`tools/autonomic/autonomic_corrector.py`**: [NEW] Closed-loop self-healing engine with "Death Spiral" circuit breakers and log-rotation support.
-- **`services/production_swarm.py`**: Entry point for high-reliability, long-running agent tasks.
+
+### 🛠️ Service Layer (`core/services/` & `core/tools/autonomic/`)
+- **`services/swarm_daemon.py`**: Background service executing the Autonomic Heartbeat.
+- **`tools/autonomic/autonomic_corrector.py`**: Closed-loop self-healing engine with circuit breakers.
 
 ### 🖥️ UI & Observability
 *   **`dashboard/`**: Next.js 16 dashboard for real-time swarm visualization.
@@ -145,6 +155,6 @@ The system is segmented into two primary domains to ensure infinite scalability 
 ---
 
 ## 🛑 Maintenance Mandates
-1. **Documentation Parity**: If a file is created, it MUST be added to this map.
+1. **Documentation Parity**: If a file is created, it MUST be added to this map and `FILE_GLOSSARY.md`.
 2. **System Integrity**: No file should exist outside of a defined System Level (1-5) or Infra layer.
 3. **Periodic Pruning**: Review this map weekly to remove "Ghost Files" (deprecated logic).

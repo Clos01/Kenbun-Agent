@@ -10,7 +10,7 @@ description: |
 triggers:
   - "replit deck"
   - "replit slides"
-  - "replit 风格 ppt"
+  - "replit style ppt"
   - "replit style deck"
   - "helix deck"
   - "holm memo"

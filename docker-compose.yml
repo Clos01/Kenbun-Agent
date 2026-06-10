@@ -1,3 +1,10 @@
+# ─────────────────────────────────────────────────────────────────────
+# ⚠️  SECURITY: All 'ports:' MUST keep the 127.0.0.1 prefix.
+#    Removing it binds to 0.0.0.0 (all interfaces), which:
+#      1. Exposes services to the entire LAN / internet
+#      2. Shifts the browser origin, breaking CORS authentication
+#    Correct:  "127.0.0.1:8001:8001"    Wrong: "8001:8001"
+# ─────────────────────────────────────────────────────────────────────
 services:
   # 1. Standalone Vector Database (ChromaDB)
   chromadb:
@@ -11,6 +18,9 @@ services:
       - CHROMA_DB_IMPL=sqlite
       - PERSIST_DIRECTORY=/chroma_data
     restart: always
+    networks:
+      - kenbun_net
+
 
   # 2. Local AI Inference Engine (Ollama)
   ollama_server:
@@ -25,6 +35,8 @@ services:
       - 8.8.8.8
       - 8.8.4.4
     restart: always
+    networks:
+      - kenbun_net
 
   # 3. Model Initializer (Dynamic Loop & Bypass State)
   ollama_init:
@@ -51,6 +63,8 @@ services:
         echo \"💡 [OLLAMA_INIT] Cloud-Only or Host-Only profile. Skipping pull.\";
       fi
       "
+    networks:
+      - kenbun_net
 
 
   # 4. Portable FastMCP Swarm Server
@@ -76,9 +90,12 @@ services:
       - SWARM_PC_IP=ollama_server
       - PRIMARY_LLM_URL=http://ollama_server:11434/v1
       - OLLAMA_URL=http://ollama_server:11434/api/generate
+      - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
     depends_on:
       - chromadb
     restart: always
+    networks:
+      - kenbun_net
 
   # 3. Telemetry Next.js Dashboard
   dashboard:
@@ -100,6 +117,8 @@ services:
     depends_on:
       - fastmcp_server
     restart: always
+    networks:
+      - kenbun_net
 
   # 5. Container Log Viewer (Dozzle)
   dozzle:
@@ -110,6 +129,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: always
+    networks:
+      - kenbun_net
 
 
 volumes:
@@ -117,3 +138,13 @@ volumes:
   ollama_data:
   dashboard_node_modules:
   dashboard_next_cache:
+
+# ─────────────────────────────────────────────────────────────────────
+# NETWORK: Explicit bridge for deterministic inter-container DNS.
+# All services share this network. Even if the host subnet changes,
+# service-name DNS (e.g., http://fastmcp_server:8001) always resolves.
+# ─────────────────────────────────────────────────────────────────────
+networks:
+  kenbun_net:
+    driver: bridge
+    name: kenbun_net

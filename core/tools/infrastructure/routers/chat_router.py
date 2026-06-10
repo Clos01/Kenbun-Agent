@@ -42,7 +42,7 @@ def execute_cli_command(command: str) -> str:
         if not scripts_dir.exists():
             scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
             
-        from scripts.terminal_chat import is_yolo_safe
+        from core.tools.audit.yolo_sandbox import is_yolo_safe
     except Exception as e:
         return f"❌ Internal Error: Failed to load CLI security engine: {e}"
         
@@ -125,7 +125,7 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
             scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
         if str(scripts_dir) not in sys.path: pass
             
-        from scripts.terminal_chat import build_system_prompt
+        from core.tools.infrastructure.ai_gateway import build_system_prompt
         system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
         
         session = chat_history_manager.get_session(session_id)
@@ -202,7 +202,7 @@ async def chat_with_kenbun(req: ChatRequest):
             if not scripts_dir.exists():
                 scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
             if str(scripts_dir) not in sys.path: pass                
-            from scripts.terminal_chat import build_system_prompt
+            from core.tools.infrastructure.ai_gateway import build_system_prompt
             system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
             
             response_text = await run_in_threadpool(

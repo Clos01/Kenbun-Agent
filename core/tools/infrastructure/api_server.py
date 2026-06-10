@@ -42,16 +42,31 @@ from urllib.parse import urlparse
 def build_cors_origins() -> List[str]:
     """
     Constructs a hardened, explicit CORS origin whitelist.
-    Adheres strictly to the CTO-Consensus security standards:
+    Resilient to port-binding misconfigurations (e.g., user removing 127.0.0.1
+    from docker-compose ports, which shifts the browser origin to a LAN IP).
+
+    Security (CTO-Consensus standards):
     - Eliminates DNS rebinding risks by using a static, explicit whitelist.
     - Sanitizes all environment-derived strings using urllib.parse.
     - Prevents arbitrary port and protocol injections.
     """
+    # Read the configured dashboard port — resilient to .env / compose overrides
+    dashboard_port = os.getenv("DASHBOARD_PORT", "3000")
+
     origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
+        f"http://localhost:{dashboard_port}",
+        f"http://127.0.0.1:{dashboard_port}",
+        # Fallback: when user binds to 0.0.0.0 and accesses via that literal address
+        f"http://0.0.0.0:{dashboard_port}",
     ]
-    
+
+    # Ensure default port 3000 is always whitelisted even if DASHBOARD_PORT is overridden
+    if dashboard_port != "3000":
+        origins.extend([
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ])
+
     # 1. Sanitize and append settings.FRONTEND_URL
     if settings.FRONTEND_URL:
         try:
@@ -64,27 +79,30 @@ def build_cors_origins() -> List[str]:
     # 2. Sanitize and trust the host machine's configured Tailscale/PC IP for local development
     if settings.SWARM_PC_IP:
         pc_ip = settings.SWARM_PC_IP.strip('"\'')
-        if pc_ip not in ("localhost", "127.0.0.1"):
-            # Clean and validate PC IP
+        # Skip Docker service names — they are internal-only and never valid browser origins
+        _docker_service_names = {"localhost", "127.0.0.1", "ollama_server", "fastmcp_server", "chromadb"}
+        if pc_ip not in _docker_service_names:
             try:
-                # If a port is present in FRONTEND_URL, reuse it; otherwise default to 3000
-                frontend_port = 3000
+                # If a port is present in FRONTEND_URL, reuse it; otherwise use dashboard_port
+                frontend_port = int(dashboard_port)
                 if settings.FRONTEND_URL:
                     parsed_fe = urlparse(settings.FRONTEND_URL)
                     if parsed_fe.port:
                         frontend_port = parsed_fe.port
-                
+
                 # Strip potential path or protocol injections from pc_ip
                 clean_ip = pc_ip.split("/")[-1].split(":")[0].strip("[]")
-                
-                # Trust and construct explicit entries
+
+                # Trust and construct explicit entries for LAN / Tailscale access
                 origins.append(f"http://{clean_ip}:{frontend_port}")
                 origins.append(f"https://{clean_ip}:{frontend_port}")
             except Exception as e:
                 logging.error(f"CORS Init: Invalid SWARM_PC_IP: {e}")
 
-    # Dedup and return
-    return list(set(origins))
+    # Dedup, log for debugging, and return
+    unique_origins = list(set(origins))
+    logging.info(f"CORS Whitelist ({len(unique_origins)} origins): {unique_origins}")
+    return unique_origins
 
 # Allow Dashboard to connect securely (CTO Standard CORS Whitelisting)
 # NOTE: Using wildcard for local Docker dev. Tighten for production.
@@ -1205,7 +1223,7 @@ def execute_cli_command(command: str) -> str:
         if str(scripts_dir) not in sys.path:
             sys.path.insert(0, str(scripts_dir))
             
-        from terminal_chat import is_yolo_safe
+        from core.tools.audit.yolo_sandbox import is_yolo_safe
     except Exception as e:
         return f"❌ Internal Error: Failed to load CLI security engine: {e}"
         
@@ -1266,7 +1284,7 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
         if str(scripts_dir) not in sys.path:
             sys.path.insert(0, str(scripts_dir))
             
-        from terminal_chat import build_system_prompt
+        from core.tools.infrastructure.ai_gateway import build_system_prompt
         system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
         
         # Re-fetch session to include the newly appended message
@@ -1400,7 +1418,7 @@ async def chat_with_kenbun(req: ChatRequest):
             if str(scripts_dir) not in sys.path:
                 sys.path.insert(0, str(scripts_dir))
                 
-            from terminal_chat import build_system_prompt
+            from core.tools.infrastructure.ai_gateway import build_system_prompt
             system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
             
             response_text = await run_in_threadpool(

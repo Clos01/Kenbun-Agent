@@ -8,7 +8,7 @@
 
 **Author:** lewis &lt;sudolewis@gmail.com&gt;
 **License:** MIT
-**中文文档:** [README.zh-CN.md](README.zh-CN.md)
+**Chinese Documentation:** [README.zh-CN.md](README.zh-CN.md)
 
 ![html-ppt — cover with live previews](docs/readme/hero.gif)
 
@@ -18,7 +18,7 @@
 
 Press `S` on any deck to pop open a dedicated presenter window with four
 draggable, resizable **magnetic cards**: current slide, next slide preview,
-speaker script (逐字稿), and timer. Two windows stay in sync via
+speaker script, and timer. Two windows stay in sync via
 `BroadcastChannel`.
 
 ![Presenter mode with 4 magnetic cards](docs/readme/presenter-mode.png)
@@ -53,9 +53,9 @@ npx skills add https://github.com/lewislulu/html-ppt-skill
 That registers the skill with your agent runtime. After install, any agent
 that supports AgentSkills can author presentations by asking things like:
 
-> "做一份 8 页的技术分享 slides，用 cyberpunk 主题"
+> "Make an 8-page tech sharing slide deck, use the cyberpunk theme"
 > "turn this outline into a pitch deck"
-> "做一个小红书图文，9 张，白底柔和风"
+> "Make a Xiaohongshu post, 9 images, white background soft style"
 
 ## What's in the box
 
@@ -94,14 +94,14 @@ isolated iframe so theme ≠ theme is visually guaranteed).
 Eight extracted from real-world decks, seven generic scenario scaffolds:
 
 **Extracted looks**
-- `xhs-white-editorial` — 小红书白底杂志风
-- `graphify-dark-graph` — 暗底 + 力导向知识图谱
-- `knowledge-arch-blueprint` — 蓝图 / 架构图风
-- `hermes-cyber-terminal` — 终端 cyberpunk
-- `obsidian-claude-gradient` — 紫色渐变卡
-- `testing-safety-alert` — 红 / 琥珀警示风
-- `xhs-pastel-card` — 柔和马卡龙图文
-- `dir-key-nav-minimal` — 方向键极简
+- `xhs-white-editorial` — Xiaohongshu white background magazine style
+- `graphify-dark-graph` — Dark background + force-directed knowledge graph
+- `knowledge-arch-blueprint` — Blueprint / architecture diagram style
+- `hermes-cyber-terminal` — Terminal cyberpunk
+- `obsidian-claude-gradient` — Purple gradient card
+- `testing-safety-alert` — Red / amber alert style
+- `xhs-pastel-card` — Soft pastel Macaron image-text
+- `dir-key-nav-minimal` — Direction key minimalist
 
 **Scenario decks**
 - `pitch-deck`, `product-launch`, `tech-sharing`, `weekly-report`,
