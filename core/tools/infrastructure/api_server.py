@@ -135,10 +135,52 @@ def build_cors_origins() -> List[str]:
     logging.info(f"CORS Whitelist ({len(unique_origins)} origins): {unique_origins}")
     return unique_origins
 
+class PrivateNetworkCORSMiddleware(CORSMiddleware):
+    """
+    FastAPI CORSMiddleware subclass that dynamically permits all incoming origins
+    originating from private LAN subnets, loopbacks, Tailscale subnetworks, or mDNS .local nodes.
+    This resolves CORS issues when running inside Docker where the container cannot
+    discover the host machine's physical network IP address at startup.
+    """
+    def is_allowed_origin(self, origin: str) -> bool:
+        if super().is_allowed_origin(origin):
+            return True
+
+        try:
+            from urllib.parse import urlparse
+            import ipaddress
+            parsed = urlparse(origin)
+            hostname = parsed.hostname
+            if not hostname:
+                return False
+
+            if hostname == "localhost" or hostname == "127.0.0.1":
+                return True
+
+            if hostname.endswith(".local"):
+                return True
+
+            try:
+                ip = ipaddress.ip_address(hostname)
+                if ip.is_private:
+                    return True
+                # Tailscale subnet range: 100.64.0.0/10 (100.64.0.0 to 100.127.255.255)
+                ip_int = int(ip)
+                ts_start = int(ipaddress.ip_address("100.64.0.0"))
+                ts_end = int(ipaddress.ip_address("100.128.0.0")) - 1
+                if ts_start <= ip_int <= ts_end:
+                    return True
+            except ValueError:
+                pass
+        except Exception:
+            pass
+
+        return False
+
 # Allow Dashboard to connect securely (CTO Standard CORS Whitelisting)
 # NOTE: Using wildcard for local Docker dev. Tighten for production.
 app.add_middleware(
-    CORSMiddleware,
+    PrivateNetworkCORSMiddleware,
     allow_origins=build_cors_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
