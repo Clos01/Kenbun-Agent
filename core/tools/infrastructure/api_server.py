@@ -99,6 +99,37 @@ def build_cors_origins() -> List[str]:
             except Exception as e:
                 logging.error(f"CORS Init: Invalid SWARM_PC_IP: {e}")
 
+    # 3. Dynamic Local LAN IP Discovery to allow same-network cross-origin access
+    try:
+        import socket
+        # Get primary LAN IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("10.255.255.255", 1))
+            ip = s.getsockname()[0]
+            if ip and ip != "127.0.0.1":
+                origins.append(f"http://{ip}:{dashboard_port}")
+                origins.append(f"https://{ip}:{dashboard_port}")
+                if dashboard_port != "3000":
+                    origins.append(f"http://{ip}:3000")
+                    origins.append(f"https://{ip}:3000")
+        except Exception:
+            pass
+        finally:
+            s.close()
+            
+        # Add host IP resolutions
+        hostname = socket.gethostname()
+        for ip in socket.gethostbyname_ex(hostname)[2]:
+            if ip and ip != "127.0.0.1" and not ip.startswith("169.254"):
+                origins.append(f"http://{ip}:{dashboard_port}")
+                origins.append(f"https://{ip}:{dashboard_port}")
+                if dashboard_port != "3000":
+                    origins.append(f"http://{ip}:3000")
+                    origins.append(f"https://{ip}:3000")
+    except Exception as e:
+        logging.error(f"CORS Init: Dynamic LAN IP discovery failed: {e}")
+
     # Dedup, log for debugging, and return
     unique_origins = list(set(origins))
     logging.info(f"CORS Whitelist ({len(unique_origins)} origins): {unique_origins}")
