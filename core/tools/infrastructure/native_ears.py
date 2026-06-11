@@ -7,7 +7,7 @@ import logging
 
 # Import centralized settings
 from core.tools.infrastructure.config import settings
-from core.tools.infrastructure.orchestrator import swarm
+from core.tools.infrastructure.orchestrator import assembly
 from core.tools.audit.supervisor_agent import run_supervisor_audit
 
 # Native macOS Imports
@@ -169,30 +169,30 @@ class NativeKenbunEars:
             self.pending_objective = None
         else:
             self.current_state = "AWAITING_CONFIRMATION"
-            self.say("Supervisor has approved the intent. Should I initiate the swarm?")
+            self.say("Supervisor has approved the intent. Should I initiate the assembly?")
 
     async def process_confirmation(self, transcript):
         text = transcript.strip().lower()
         if any(confirm in text for confirm in ["yes", "proceed", "do it", "sure", "ok"]):
-            self.say("Swarm initiating.")
-            # Run swarm in background thread so ears stay alive
-            asyncio.create_task(self.execute_swarm_task(self.pending_objective))
+            self.say("Assembly initiating.")
+            # Run assembly in background thread so ears stay alive
+            asyncio.create_task(self.execute_assembly_task(self.pending_objective))
         else:
             self.say("Cancelled. Standing by.")
             self.current_state = "IDLE"
         
         self.pending_objective = None
 
-    async def execute_swarm_task(self, command):
+    async def execute_assembly_task(self, command):
         self.current_state = "EXECUTING"
         try:
-            # Swarm is a long-running async task
+            # Assembly is a long-running async task
             # Since orchestrator uses asyncio.run internally, we wrap it
             import asyncio
-            await asyncio.to_thread(swarm, command)
-            self.say("Swarm task completed. Report is on your dashboard.")
+            await asyncio.to_thread(assembly, command)
+            self.say("Assembly task completed. Report is on your dashboard.")
         except Exception as e:
-            self.say(f"Swarm error: {str(e)[:40]}")
+            self.say(f"Assembly error: {str(e)[:40]}")
         finally:
             self.current_state = "IDLE"
 

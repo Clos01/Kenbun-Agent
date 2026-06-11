@@ -53,8 +53,8 @@ To solve the "Blob" problem, memory is now structured:
 
 ### 3. Signal Resilience (System 4 + 6)
 - **Problem**: Mobile hotspots cause high-latency hangs during remote DB lookups.
-- **Solution**: Implemented a **2-second socket reachability check** in `strategy_manager.py`. If the remote PC is unreachable, the system auto-triggers "Local Fallback Mode" in milliseconds, ensuring the swarm never stalls while the user is mobile.
-- **Feedback Loop**: System 6 provides immediate "Swarm Initiated" audio/text feedback before long-running tasks, keeping the user informed in real-time.
+- **Solution**: Implemented a **2-second socket reachability check** in `strategy_manager.py`. If the remote PC is unreachable, the system auto-triggers "Local Fallback Mode" in milliseconds, ensuring the assembly never stalls while the user is mobile.
+- **Feedback Loop**: System 6 provides immediate "Assembly Initiated" audio/text feedback before long-running tasks, keeping the user informed in real-time.
 
 ### 4. Loop Safety (Circuit Breaker)
 - Implement a `max_retries` and `min_confidence` threshold. If the Bayesian Governor's confidence drops below 20%, it must halt and ask the user for clarification rather than consuming tokens in a loop.

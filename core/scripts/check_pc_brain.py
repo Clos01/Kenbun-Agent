@@ -31,9 +31,9 @@ except ImportError:
 from core.tools.infrastructure.config import settings
 
 # Read from Sovereign Settings
-PC_IP = settings.SWARM_PC_IP
+PC_IP = settings.ASSEMBLY_PC_IP
 PORT = settings.workers.p330_ollama_port
-MODEL = settings.SWARM_MODEL
+MODEL = settings.ASSEMBLY_MODEL
 
 BASE = f"http://{PC_IP}:{PORT}"
 SEP = "─" * 64
@@ -208,7 +208,7 @@ def main() -> int:
   In your Sovereign Settings (core/tools/infrastructure/config.py), verify:
       PC_IP_ADDRESS={PC_IP}
       P330_OLLAMA_PORT={PORT}
-      SWARM_MODEL={target}
+      ASSEMBLY_MODEL={target}
 """)
     return 0
 

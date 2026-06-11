@@ -8,7 +8,7 @@ export const getProjectedCoords = (x: number, y: number) => ({
   y: (y - MAP_OFFSET) * MAP_MULTIPLIER
 });
 
-// 🎨 Swarm Theme Color Palettes (Static allocations to eliminate GC overhead in draw loop)
+// 🎨 Assembly Theme Color Palettes (Static allocations to eliminate GC overhead in draw loop)
 export const ROOM_COLORS_DARK: Record<string, string> = {
   "Central_Logic": "#F43F5E", // Vibrant Rose
   "Vault": "#2DD4BF",         // Cyan

@@ -1,6 +1,6 @@
 # Contributing to Kenbun
 
-First of all, thank you for your interest in contributing to Kenbun! We are building a high-performance, local-first agentic swarm designed for sovereign, low-latency intelligence.
+First of all, thank you for your interest in contributing to Kenbun! We are building a high-performance, local-first agentic assembly designed for sovereign, low-latency intelligence.
 
 To keep the repository stable, secure, and clean, we maintain a set of contribution guidelines that all developers must adhere to.
 

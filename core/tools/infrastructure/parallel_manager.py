@@ -4,7 +4,7 @@ import time
 
 class ParallelManager:
     """
-    Manages Swarm Slots and Throttling for concurrent task execution.
+    Manages Assembly Slots and Throttling for concurrent task execution.
     """
     def __init__(self, max_slots: int = 4):
         self.semaphore = asyncio.Semaphore(max_slots)
@@ -12,11 +12,11 @@ class ParallelManager:
 
     async def run_task(self, task_func: Callable, *args, **kwargs):
         """
-        Runs a task within a controlled swarm slot.
+        Runs a task within a controlled assembly slot.
         """
         async with self.semaphore:
             self.active_tasks += 1
-            print(f"🛰️ SWARM SLOT ACQUIRED. Active: {self.active_tasks}")
+            print(f"🛰️ ASSEMBLY SLOT ACQUIRED. Active: {self.active_tasks}")
             try:
                 start_time = time.time()
                 result = await task_func(*args, **kwargs)

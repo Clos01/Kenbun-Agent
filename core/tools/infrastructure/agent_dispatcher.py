@@ -80,7 +80,7 @@ def get_timeout_multiplier() -> float:
     except Exception:
         pass
     
-    return settings.SWARM_TIMEOUT_MULTIPLIER
+    return settings.ASSEMBLY_TIMEOUT_MULTIPLIER
 
 async def run_pipeline(
     workflow: str,

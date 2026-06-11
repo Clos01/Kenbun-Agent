@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.infrastructure.orchestrator import orchestrate
+from core.tools.infrastructure.orchestrator import orchestrate
 
 def spawn_agent(agent_id: int):
     print(f"[{agent_id}] Spawning Agent...")
@@ -33,11 +33,11 @@ def spawn_agent(agent_id: int):
 import concurrent.futures
 
 def main():
-    print("🚀 Launching 10-Agent Orchestrator Swarm Test...")
+    print("🚀 Launching 10-Agent Orchestrator Assembly Test...")
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(spawn_agent, i) for i in range(1, 11)]
         concurrent.futures.wait(futures)
-    print("🏁 Swarm Test Complete!")
+    print("🏁 Assembly Test Complete!")
 
 if __name__ == "__main__":
     main()

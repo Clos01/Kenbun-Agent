@@ -1,5 +1,5 @@
 """
-AgentToolInterface (Adapter Pattern) for Kenbun Swarm Agents.
+AgentToolInterface (Adapter Pattern) for Kenbun Assembly Agents.
 Enforces type safety with Pydantic, jailing, and strict separation of concerns.
 """
 
@@ -43,7 +43,7 @@ class HeritageSecurityException(PermissionError):
 
 class AgentToolInterface:
     """
-    Decoupled adapter representing standard allowed capabilities of a Swarm Agent.
+    Decoupled adapter representing standard allowed capabilities of a Assembly Agent.
     Implements path jailing and parameter validation before passing actions to core systems.
     """
     def __init__(self, workspace: Path = settings.PROJECT_ROOT):

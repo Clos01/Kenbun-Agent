@@ -8,7 +8,7 @@ UI_ELEMENTS = ["button", "header", "sidebar", "footer", "modal", "hero section",
 UI_STYLING = ["background color", "padding", "margin", "z-index", "hover effect", "tailwind classes", "mobile responsiveness", "glassy backdrop", "typography"]
 SEC_TARGETS = ["authentication middleware", "JWT verification", "API keys", "secrets", "session logic", "CSRF protection", "encryption layer", "password hashing"]
 DB_TARGETS = ["supabase schema", "SQL index", "transactions table", "postgres database", "RLS policies", "pgvector extension", "migration script"]
-CORE_TARGETS = ["orchestrator.py", "parallel_manager.py", "topology_manager.py", "bayesian_governor", "api_server", "swarm pipeline"]
+CORE_TARGETS = ["orchestrator.py", "parallel_manager.py", "topology_manager.py", "bayesian_governor", "api_server", "assembly pipeline"]
 
 def generate_5k_dataset():
     dataset = []

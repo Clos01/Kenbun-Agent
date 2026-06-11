@@ -1,6 +1,6 @@
 # Kenbun-Agent MCP Integration Guide
 
-Kenbun-Agent operates as a native Model Context Protocol (MCP) server. This allows state-of-the-art AI developer IDEs and desktop assistants to connect directly to your Sovereign Swarm's System 3 (ChromaDB) and System 5 (AST Harvester) tools. 
+Kenbun-Agent operates as a native Model Context Protocol (MCP) server. This allows state-of-the-art AI developer IDEs and desktop assistants to connect directly to your Sovereign Assembly's System 3 (ChromaDB) and System 5 (AST Harvester) tools. 
 
 Instead of blowing up expensive context windows by dragging your entire codebase into your IDE, you can let your IDE query the Kenbun MCP server, which will retrieve precisely the shadowed AST topology you need.
 
@@ -15,7 +15,7 @@ Antigravity natively supports connecting to local or remote Dockerized MCP serve
 3. Add a new **MCP SSE Server**:
    * **Name**: `kenbun-agent`
    * **Endpoint URL**: `http://localhost:8001/sse`
-4. The Antigravity Swarm will immediately inherit Kenbun's custom tools (e.g., AST semantic search, vulnerability audits).
+4. The Antigravity Assembly will immediately inherit Kenbun's custom tools (e.g., AST semantic search, vulnerability audits).
 
 ---
 
@@ -44,7 +44,7 @@ Claude Desktop relies on standard IO (`stdio`) communication for MCPs. Because K
 
 2. Add the Kenbun integration node:
 
-#### Option A: Dockerized Stdio MCP (For Docker Swarm users)
+#### Option A: Dockerized Stdio MCP (For Docker Assembly users)
 ```json
 {
   "mcpServers": {

@@ -67,7 +67,7 @@ services:
       - kenbun_net
 
 
-  # 4. Portable FastMCP Swarm Server
+  # 4. Portable FastMCP Assembly Server
   fastmcp_server:
     build:
       context: .
@@ -87,7 +87,7 @@ services:
       - PROJECT_ROOT=/app
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
-      - SWARM_PC_IP=ollama_server
+      - ASSEMBLY_PC_IP=ollama_server
       - PRIMARY_LLM_URL=http://ollama_server:11434/v1
       - OLLAMA_URL=http://ollama_server:11434/api/generate
       - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}

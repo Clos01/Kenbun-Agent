@@ -27,7 +27,7 @@ sequenceDiagram
 
 ## 💻 2. Logic Flow: Code Example
 
-Here is a simplified look at the **`orchestrate`** logic that powers the swarm:
+Here is a simplified look at the **`orchestrate`** logic that powers the assembly:
 
 ```python
 async def orchestrate_task(user_prompt):

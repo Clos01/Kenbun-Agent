@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug, crash, or unexpected behavior inside the Kenbun swarm.
+about: Report a bug, crash, or unexpected behavior inside the Kenbun assembly.
 title: 'bug: [Short Description]'
 labels: bug
 assignees: ''

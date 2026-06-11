@@ -83,8 +83,8 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   intelligence_engine: {
     system: "System 5/4 (Reflection)",
-    role: "Swarm Analyst & Optimizer",
-    desc: "Synthesizes system execution logs, token burn, and success benchmarks to suggest autonomous weight adjustments and structural tuning for future swarm runs."
+    role: "Assembly Analyst & Optimizer",
+    desc: "Synthesizes system execution logs, token burn, and success benchmarks to suggest autonomous weight adjustments and structural tuning for future assembly runs."
   },
   scan_repo: {
     system: "System 1 (Execution)",
@@ -113,7 +113,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   get_brain_health: {
     system: "System 5 (Reflection)",
-    role: "Swarm Health Auditor",
+    role: "Assembly Health Auditor",
     desc: "Queries CPU benchmarks, socket statuses, and local ensemble model voting statistics to assess orchestrator sanity and general database health."
   },
   audit_package_safety: {
@@ -133,7 +133,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   consult_supervisor: {
     system: "System 2 (Reasoning & Ethics)",
-    role: "Executive Swarm Council Gatekeeper",
+    role: "Executive Assembly Council Gatekeeper",
     desc: "Coordinates local LLM voting pools (Gemma/Llama) and cloud-grounded models to review security metrics and code commits before final approval."
   },
   audit_guardrail: {
@@ -183,7 +183,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   orchestrate: {
     system: "System 4 (Strategy)",
-    role: "Swarm Pipeline Conductor",
+    role: "Assembly Pipeline Conductor",
     desc: "Directs background tasks, connectivity heartbeats, circuit breakers, and parallel speculative reasoning runs across active workers."
   },
   save_to_hivemind: {

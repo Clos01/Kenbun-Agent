@@ -64,21 +64,21 @@ def get_timeout_multiplier() -> float:
     except (urllib.error.URLError, Exception):
         pass
     
-    return settings.SWARM_TIMEOUT_MULTIPLIER
+    return settings.ASSEMBLY_TIMEOUT_MULTIPLIER
 
 # Re-evaluate multiplier at runtime based on model
 # Removed static DYNAMIC_MULTIPLIER
 
-async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> str:
+async def spawn_assembly(objective: str, tools: dict, project_path: str = "") -> str:
 
 
     """
-    High-level swarm engine.
+    High-level assembly engine.
     1. Queen decomposes objective into tasks.
     2. Bayesian Governor assigns workers.
     3. Workers execute and report back.
     """
-    print(f"🐝 Swarm Objective: {objective}")
+    print(f"🐝 Assembly Objective: {objective}")
     
     # --- 0. PROJECT MANDATES ---
     mandates = ""
@@ -104,7 +104,7 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
         "As the Kenbun Queen, decompose this objective into a JSON list of atomic tasks. "
         "Strictly follow the PROJECT MANDATES if provided. "
         "Each task must have: 'id', 'label', 'worker_type' (coder, auditor, designer), and 'task_description'. "
-        "OPTIMIZATION: Group parallelizable tasks (research, audits, scans) together at the start or between blocking steps to maximize swarm efficiency. "
+        "OPTIMIZATION: Group parallelizable tasks (research, audits, scans) together at the start or between blocking steps to maximize assembly efficiency. "
         "Format as valid JSON: [{{'id': '...', 'label': '...', 'worker_type': '...', 'task_description': '...'}}]"
     )
     
@@ -116,11 +116,11 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
         # Simple extraction of JSON from markdown if needed
         json_str = extract_json_array(raw_decomposition)
         if not json_str:
-            return f"❌ Swarm decomposition format error. No JSON array found in raw output: {raw_decomposition}"
+            return f"❌ Assembly decomposition format error. No JSON array found in raw output: {raw_decomposition}"
         
         tasks = json.loads(json_str)
         if not isinstance(tasks, list):
-            raise ValueError(f"Swarm decomposition error. Parsed JSON is not a list: {raw_decomposition}")
+            raise ValueError(f"Assembly decomposition error. Parsed JSON is not a list: {raw_decomposition}")
             
         # Initialize tasks with pending status for the Flowchart
         for i, t in enumerate(tasks):
@@ -138,10 +138,10 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
                 t["task_description"] = f"{t['task_description']}\n\n{mars_guidance}"
         
     except (json.JSONDecodeError, ValueError, Exception) as e:
-        return f"❌ Swarm decomposition failed: {e}"
+        return f"❌ Assembly decomposition failed: {e}"
 
     report = [
-        f"# 🐝 Swarm Objective: {objective}",
+        f"# 🐝 Assembly Objective: {objective}",
         f"**Tasks identified:** {len(tasks)}",
         ""
     ]
@@ -217,11 +217,11 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
             task_meta["status"] = "completed"
             report.append(task_result)
 
-    summary = f"Swarm completed {len(tasks)} tasks."
-    send_notification("Kenbun Swarm", summary)
+    summary = f"Assembly completed {len(tasks)} tasks."
+    send_notification("Kenbun Assembly", summary)
     
     # Trigger background sync to remote PC
-    print("📡 Swarm complete. Triggering intelligence sync...")
+    print("📡 Assembly complete. Triggering intelligence sync...")
     run_sync()
     
     return "\n\n".join(report)
@@ -344,7 +344,7 @@ async def run_pipeline(
 
         # --- COST CHECK (System 4) ---
         if not token_governor.can_spend(0.001):  # Minimal check
-            report.append("\n⛔ **Budget Exceeded.** TokenGovernor has halted the swarm.")
+            report.append("\n⛔ **Budget Exceeded.** TokenGovernor has halted the assembly.")
             break
             
         # --- CIRCUIT BREAKER (System 2 Fallback) ---
@@ -440,8 +440,8 @@ async def run_pipeline(
             report.append("")
 
         except asyncio.TimeoutError:
-            duration = TOOL_TIMEOUT * settings.SWARM_TIMEOUT_MULTIPLIER
-            error_msg = f"⏱️ `{step_id}` TIMED OUT after {duration}s. Swarm watchdog intervened."
+            duration = TOOL_TIMEOUT * settings.ASSEMBLY_TIMEOUT_MULTIPLIER
+            error_msg = f"⏱️ `{step_id}` TIMED OUT after {duration}s. Assembly watchdog intervened."
             report.append(error_msg)
             print(f"   {error_msg}")
             consecutive_failures += 1
@@ -522,7 +522,7 @@ async def run_pipeline(
 
     # --- AUTOMATIC REFLECTION (System 5) ---
     if workflow in ["bug_fix", "research_implement"] and "reflect_and_distill" in tools:
-        print("🧠 System 5: Triggering post-swarm reflection...")
+        print("🧠 System 5: Triggering post-assembly reflection...")
         logs = "\n".join(report)
         reflection_data = tools["reflect_and_distill"](task, logs)
         
@@ -532,10 +532,10 @@ async def run_pipeline(
             
             # Apply Bayesian Tuning
             tuning_payload = reflection_data.get("tuning_payload", [])
-            if tuning_payload and "tune_swarm" in tools:
-                print(f"⚖️ Tuning Swarm: Applying {len(tuning_payload)} updates...")
+            if tuning_payload and "tune_assembly" in tools:
+                print(f"⚖️ Tuning Assembly: Applying {len(tuning_payload)} updates...")
                 for tune in tuning_payload:
-                    tools["tune_swarm"](tune["tool_id"], tune["success"], tune["category"])
+                    tools["tune_assembly"](tune["tool_id"], tune["success"], tune["category"])
                 
                 # --- NEW: AUTONOMIC CORRECTOR INJECTION ---
                 print("🛠️ Autonomic Corrector: Queueing tuning payload for background processing...")

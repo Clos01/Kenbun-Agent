@@ -80,7 +80,7 @@ def harvest_gemini_plans():
 
 def ship_to_pc(lessons):
     """Ships distilled lessons to the PC brain for nightly baking."""
-    PC_IP = settings.SWARM_PC_IP
+    PC_IP = settings.ASSEMBLY_PC_IP
     print(f"🛰️ Shipping {len(lessons)} lessons to the Neural Hub ({PC_IP})...")
     with open(INCOMING_LESSONS, "a") as f:
         for lesson in lessons:

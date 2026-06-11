@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "kenbun-agent"
 version = "2.1.0"
-description = "Hardware-agnostic standalone containerized Kenbun Agentic Swarm"
+description = "Hardware-agnostic standalone containerized Kenbun Agentic Assembly"
 readme = "KENBUN.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "Sovereign Swarm Architects", email = "dev@sovereignswarm.org" }
+    { name = "Sovereign Assembly Architects", email = "dev@sovereignassembly.org" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

@@ -166,7 +166,7 @@ export default function Settings() {
     { id: "cloud", title: "Cloud Intelligence", icon: Key, description: "Manage LLM router keys and secure credentials.", chapter: 1 },
     { id: "infrastructure", title: "Core Infrastructure", icon: Server, description: "Calibrate Ollama endpoint and local persistence paths.", chapter: 2 },
     { id: "network", title: "Network & Ports", icon: Network, description: "Configure internal API gateway bindings.", chapter: 3 },
-    { id: "economics", title: "Swarm Economics", icon: DollarSign, description: "Set daily budget telemetry and token limiters.", chapter: 4 },
+    { id: "economics", title: "Assembly Economics", icon: DollarSign, description: "Set daily budget telemetry and token limiters.", chapter: 4 },
   ];
 
   return (
@@ -410,12 +410,12 @@ export default function Settings() {
                   </form>
                 )}
 
-                {/* CH.4 Swarm Economics */}
+                {/* CH.4 Assembly Economics */}
                 {activeSection === 3 && (
                   <form onSubmit={handleSave} className="space-y-6 pt-4">
                     <div className="space-y-2">
                       <span className="text-[8px] font-mono text-[var(--tertiary)] border border-[var(--tertiary)]/30 px-2 py-0.5 font-bold uppercase rounded bg-[var(--tertiary)]/10">Telemetry Limiters</span>
-                      <h3 className="text-xl font-serif font-black text-[var(--foreground)]">Swarm Economics</h3>
+                      <h3 className="text-xl font-serif font-black text-[var(--foreground)]">Assembly Economics</h3>
                     </div>
 
                     <div className="border border-[var(--border)] p-4 bg-[var(--background)]/40 rounded space-y-4">

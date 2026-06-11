@@ -1,5 +1,5 @@
 """
-Traceability Manifest Logger for Kenbun Swarm Agents.
+Traceability Manifest Logger for Kenbun Assembly Agents.
 Enforces the Heritage Design System's "deterministic auditability" mandate
 by generating a SHA-256 cryptographic lineage ledger.
 """

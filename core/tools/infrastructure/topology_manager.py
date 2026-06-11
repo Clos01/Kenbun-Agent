@@ -10,12 +10,12 @@ import collections
 # Standard SRE logging configuration
 logger = logging.getLogger(__name__)
 
-# Global state for real-time swarm activity (strictly bounded to prevent memory leaks)
-swarm_events: collections.deque = collections.deque(maxlen=500)
+# Global state for real-time assembly activity (strictly bounded to prevent memory leaks)
+assembly_events: collections.deque = collections.deque(maxlen=500)
 
-def log_swarm_event(event_type: str, data: Dict[str, Any]):
+def log_assembly_event(event_type: str, data: Dict[str, Any]):
     """
-    Logs a swarm event for the real-time topology stream.
+    Logs a assembly event for the real-time topology stream.
     Also persists DECISION-type events to ChromaDB for historical auditing.
     """
     event = {
@@ -23,7 +23,7 @@ def log_swarm_event(event_type: str, data: Dict[str, Any]):
         "type": event_type,
         "data": data
     }
-    swarm_events.append(event)
+    assembly_events.append(event)
     
     # Persist to Hivemind (ChromaDB) if it's a major decision
     if event_type == "DECISION":
@@ -60,5 +60,5 @@ def log_swarm_event(event_type: str, data: Dict[str, Any]):
 
     # Bounded sliding window pruning is handled automatically by deque maxlen
 
-def get_swarm_events():
-    return list(swarm_events)
+def get_assembly_events():
+    return list(assembly_events)

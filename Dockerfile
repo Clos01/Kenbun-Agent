@@ -34,5 +34,5 @@ ENV PYTHONPATH=/app
 RUN useradd -m appuser && chown -R appuser /app
 USER appuser
 
-# Run the Swarm Mission Control API server
+# Run the Assembly Mission Control API server
 CMD ["python", "-m", "core.tools.infrastructure.api_server"]

@@ -1,5 +1,5 @@
 """
-Workflow management and lifecycle hooks for Kenbun Swarm Agents.
+Workflow management and lifecycle hooks for Kenbun Assembly Agents.
 Enforces lock-step progression of the Kenbun Workflow via the AGY SDK.
 """
 
@@ -22,7 +22,7 @@ class WorkflowPhase(str, Enum):
 
 class SovereignVerificationHook:
     """
-    Sovereign lifecycle hooks container for AGY Swarm Agents.
+    Sovereign lifecycle hooks container for AGY Assembly Agents.
     Maintains workflow integrity, linting checks, and HITL authorization states.
     """
     def __init__(self, check_lint_fn: Callable[[], tuple[bool, str]]):
@@ -32,13 +32,13 @@ class SovereignVerificationHook:
 
     def set_phase(self, new_phase: WorkflowPhase):
         """Transition workflow phase with log outputs."""
-        print(f"🔄 Swarm Agent Phase Transition: {self.phase.value} ➔ {new_phase.value}")
+        print(f"🔄 Assembly Agent Phase Transition: {self.phase.value} ➔ {new_phase.value}")
         self.phase = new_phase
 
     async def pre_turn_handler(self, data: str) -> types.HookResult:
         """Runs before a conversation turn starts to verify state gates."""
         if self.phase == WorkflowPhase.AWAITING_APPROVAL and not self.user_approval_granted:
-            print("⚠️ Swarm Execution Halted: Awaiting manual review of implementation_plan.md.")
+            print("⚠️ Assembly Execution Halted: Awaiting manual review of implementation_plan.md.")
             return types.HookResult(allow=False, error_message="User approval required. Please approve the plan first.")
         return types.HookResult(allow=True)
 

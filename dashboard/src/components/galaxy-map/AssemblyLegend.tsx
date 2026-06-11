@@ -1,10 +1,10 @@
 import React from 'react';
 
-interface SwarmLegendProps {
+interface AssemblyLegendProps {
   isDragging: boolean;
 }
 
-export default function SwarmLegend({ isDragging }: SwarmLegendProps) {
+export default function AssemblyLegend({ isDragging }: AssemblyLegendProps) {
   return (
     <div 
       onMouseDown={(e) => e.stopPropagation()}

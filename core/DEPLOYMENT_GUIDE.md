@@ -1,6 +1,6 @@
-# 🛰️ Kenbun: Deployment & Swarm Management Guide
+# 🛰️ Kenbun: Deployment & Assembly Management Guide
 
-This guide outlines the infrastructure and workflows for the **Kenbun Engine**, a high-fidelity, autonomous agentic swarm.
+This guide outlines the infrastructure and workflows for the **Kenbun Engine**, a high-fidelity, autonomous agentic assembly.
 
 ## 🏗️ Core Architecture
 - **Sensory Layer (System 6)**: Telegram Voice/Text Bridge via Gemini 3.
@@ -31,7 +31,7 @@ CHROMA_PORT=8000
 The sensory layer runs as a background daemon:
 ```bash
 # Start the voice listener
-python3 tools/infrastructure/swarm_voice.py > /tmp/swarm_voice.log 2>&1 &
+python3 tools/infrastructure/assembly_voice.py > /tmp/assembly_voice.log 2>&1 &
 ```
 
 ### 4. Hardware Resonance (System 4)
@@ -42,20 +42,20 @@ The engine automatically detects if you are on a restricted network (Mobile Hots
 
 ---
 
-## 🛠️ Swarm Management
+## 🛠️ Assembly Management
 
 ### Monitoring the Brain
-To see what the swarm is thinking in real-time:
+To see what the assembly is thinking in real-time:
 ```bash
-tail -f /tmp/swarm_voice.log
+tail -f /tmp/assembly_voice.log
 ```
 
 ### Resetting the Hivemind
 If the logic becomes skewed or the imports hang:
 ```bash
-pkill -9 -f swarm_voice.py
+pkill -9 -f assembly_voice.py
 # Verify zero-error state
-python3 tools/infrastructure/swarm_voice.py
+python3 tools/infrastructure/assembly_voice.py
 ```
 
 ---

@@ -65,11 +65,11 @@ def sovereign_tool(
     requires_env: Optional[List[str]] = None
 ):
     """
-    Decorator to designate a function as an active sovereign tool in the Swarm.
+    Decorator to designate a function as an active sovereign tool in the Assembly.
     
     Args:
         name: Optional override for the tool ID (defaults to function name).
-        category: Operational swarm module (e.g. 'Strategy', 'Sensory', 'Memory').
+        category: Operational assembly module (e.g. 'Strategy', 'Sensory', 'Memory').
         requires_env: Optional list of environment variable names required for enablement.
     """
     def decorator(func: Callable) -> Callable:

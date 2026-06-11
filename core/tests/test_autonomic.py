@@ -32,14 +32,14 @@ def test_autonomic_monitoring(tmp_path):
         assert event["status"] == "triggered"
 
 def test_recent_recovery_throttle(tmp_path):
-    """Verify that the corrector prevents rapid re-spawning of swarms for the same error."""
+    """Verify that the corrector prevents rapid re-spawning of assemblies for the same error."""
     mock_path = str(tmp_path / "Mock")
     error = "500 Error"
     
     corrector.recovery_path = tmp_path / "throttle_events.jsonl"
     
     # Trigger first event
-    corrector.spawn_recovery_swarm(mock_path, error)
+    corrector.spawn_recovery_assembly(mock_path, error)
     
     # Try to trigger again immediately
     throttle = corrector._is_recent_recovery(mock_path, error)

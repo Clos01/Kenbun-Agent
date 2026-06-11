@@ -21,7 +21,7 @@ Where does this feature fit within Kenbun's architectural layers?
 *   [ ] **System 2 (Analytical / Rigid):** Audits, compliance, linter-autofix logic.
 *   [ ] **System 3 (Memory / Hivemind):** Vector storage, ChromaDB, local caching.
 *   [ ] **System 4 (Empathetic / Voice):** Interface dynamics, speech pipelines.
-*   [ ] **System 5 (Executive / Swarm):** Orchestrator, multi-agent coordination.
+*   [ ] **System 5 (Executive / Assembly):** Orchestrator, multi-agent coordination.
 *   [ ] **System 6 (Speculative / Foresight):** Planning, multi-turn predictions.
 
 ## ⚖️ Scalability & Resource Cost

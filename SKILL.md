@@ -1,13 +1,13 @@
 ---
 name: kenbun-agent
-description: Standalone containerized Kenbun Agentic Swarm and FastMCP Server
+description: Standalone containerized Kenbun Agentic Assembly and FastMCP Server
 ---
 
-# 🏛️ Kenbun-Agent Swarm: AI Agent Operational Guide
+# 🏛️ Kenbun-Agent Assembly: AI Agent Operational Guide
 
 Welcome, Agent. You have been loaded into a **Kenbun-Agent Workspace**. 
 
-This workspace is a standalone, decoupled, containerized environment that unifies a **FastMCP Python Swarm Server**, a **ChromaDB Vector Database**, a **Next.js Telemetry Dashboard**, and a **Jailed Sandbox Execution Container** under a secure local-first architecture.
+This workspace is a standalone, decoupled, containerized environment that unifies a **FastMCP Python Assembly Server**, a **ChromaDB Vector Database**, a **Next.js Telemetry Dashboard**, and a **Jailed Sandbox Execution Container** under a secure local-first architecture.
 
 This document serves as your **Master Skill Blueprint**. Read this fully to understand how to interact with the database, compile/run code in the sandbox jail, and execute autonomous tasks with maximum efficiency.
 
@@ -55,7 +55,7 @@ You have access to a namespaced ChromaDB vector memory. All embeddings must foll
 
 *   **`kenbun.code`:** Syntactically chunked codebase nodes.
 *   **`kenbun.concepts`:** Permanent architectural decisions, system rules, and design tokens.
-*   **`kenbun.history`:** Swarm logs and historical post-mortems.
+*   **`kenbun.history`:** Assembly logs and historical post-mortems.
 
 ### Retrieval Scoping Rule:
 Always query and insert using a deterministically generated `project_id` (via SHA-256 root hashing) inside your filters:

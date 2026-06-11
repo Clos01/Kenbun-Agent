@@ -1,10 +1,10 @@
 # Generated Glossary
 
 ## `core/agents/`
-*   **`adapter.py`**: AgentToolInterface (Adapter Pattern) for Kenbun Swarm Agents.
+*   **`adapter.py`**: AgentToolInterface (Adapter Pattern) for Kenbun Assembly Agents.
 *   **`mock_sdk.py`**: Mock implementation of google.kenbun for development and testing environment compatibility.
-*   **`trace.py`**: Traceability Manifest Logger for Kenbun Swarm Agents.
-*   **`workflow.py`**: Workflow management and lifecycle hooks for Kenbun Swarm Agents.
+*   **`trace.py`**: Traceability Manifest Logger for Kenbun Assembly Agents.
+*   **`workflow.py`**: Workflow management and lifecycle hooks for Kenbun Assembly Agents.
 
 ## `core/benchmarks/`
 *   **`AUTONOMOUS_LEARNING.py`**: Undocumented module.
@@ -26,7 +26,7 @@
 *   **`import_diagnostic.py`**: Undocumented module.
 
 ## `core/scratch/`
-*   **`swarm_test.py`**: Undocumented module.
+*   **`assembly_test.py`**: Undocumented module.
 *   **`test_models_direct.py`**: Undocumented module.
 *   **`test_supervisor_demo.py`**: Undocumented module.
 *   **`test_sve_breach.py`**: Undocumented module.
@@ -36,7 +36,7 @@
 *   **`sync_hivemind.py`**: Undocumented module.
 
 ## `core/services/`
-*   **`swarm_daemon.py`**: Undocumented module.
+*   **`assembly_daemon.py`**: Undocumented module.
 
 ## `core/tests/`
 *   **`bayesian_hme_test.py`**: Undocumented module.
@@ -50,7 +50,7 @@
 *   **`hme_failure_audit.py`**: Undocumented module.
 *   **`integrity_test.py`**: Undocumented module.
 *   **`mars_test.py`**: Undocumented module.
-*   **`master_swarm_test.py`**: Undocumented module.
+*   **`master_assembly_test.py`**: Undocumented module.
 *   **`security_penetration_test.py`**: Undocumented module.
 *   **`test_autonomic.py`**: Undocumented module.
 *   **`test_autopilot.py`**: Undocumented module.
@@ -74,7 +74,7 @@
 ## `core/tools/`
 *   **`harvester.py`**: Undocumented module.
 *   **`registry.py`**: Undocumented module.
-*   **`swarm_trigger.py`**: Undocumented module.
+*   **`assembly_trigger.py`**: Undocumented module.
 
 ## `core/tools/audit/`
 *   **`adversarial_court.py`**: System 2a: Adversarial LLM Auditing Court.
@@ -141,7 +141,7 @@
 *   **`server.py`**: Undocumented module.
 *   **`sovereign_decorators.py`**: Undocumented module.
 *   **`sovereign_verifier.py`**: Undocumented module.
-*   **`swarm_voice.py`**: Undocumented module.
+*   **`assembly_voice.py`**: Undocumented module.
 *   **`tech_registry.py`**: Undocumented module.
 *   **`topology_manager.py`**: Undocumented module.
 

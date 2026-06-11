@@ -18,7 +18,7 @@ You don't need to touch database tables or configuration files to add new capabi
 Once installed, use the global `kenbun` command for instant operations without navigating to the project directory:
 * **`kenbun chat`** — Instantly boot the Cognitive Agent Shell (Termchat).
 * **`kenbun mcp`** — Automatically register Kenbun's tools with IDEs like Claude Desktop or Cursor via the Model Context Protocol.
-* **`kenbun start` / `kenbun stop`** — Spin up or tear down the Docker Swarm Compose microservices in the background.
+* **`kenbun start` / `kenbun stop`** — Spin up or tear down the Docker Assembly Compose microservices in the background.
 
 ## ⌨️ 4. Tactile Navigation for SSH
 If you are deploying Kenbun on a headless server or VM over SSH, network latency might break arrow key navigation in the interactive wizard.
@@ -26,7 +26,7 @@ If you are deploying Kenbun on a headless server or VM over SSH, network latency
 
 ## 🧹 5. Instant Stack Cleanup
 Running out of disk space from large LLM Docker images or persistent volumes? 
-* Open the `kenbun` wizard and select **Option 6: `🧹 Clean/Reset Swarm Stack`**. 
+* Open the `kenbun` wizard and select **Option 6: `🧹 Clean/Reset Assembly Stack`**. 
 * You can choose a **Light Clean** (keeps base images) or a **Deep Purge** (recovers maximum host storage by destroying all cached LLM layers).
 
 ## 🎨 6. UI/UX Design Grounding

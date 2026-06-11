@@ -11,8 +11,8 @@
 | `gemini-2.5-pro` | Paid | Stable | $1.25 / $5.00 |
 | `gemini-2.0-flash` | - | Deprecated | $0.10 / $0.40 (Shutting Down) |
 
-## 🚀 Transition Strategy: "The Free-First Swarm"
-To minimize operational overhead, the Kenbun Swarm has been transitioned to **Gemini 2.0 Flash (Experimental)** as the primary cloud reasoning layer for System 2 audits.
+## 🚀 Transition Strategy: "The Free-First Assembly"
+To minimize operational overhead, the Kenbun Assembly has been transitioned to **Gemini 2.0 Flash (Experimental)** as the primary cloud reasoning layer for System 2 audits.
 
 ### Benefits
 - **Zero Cost**: Allows for unlimited high-fidelity code reviews and research.

@@ -16,7 +16,7 @@ def find_free_port(start_port: int) -> int:
         port += 1
     return port
 
-def launch_docker_swarm():
+def launch_docker_assembly():
     try:
         from scripts.bootstrap import should_enable_color, log_status, bootstrap_core
     except ImportError:
@@ -33,7 +33,7 @@ def launch_docker_swarm():
     if not use_color:
         c_m = c_c = c_y = c_r = ""
 
-    print(f"\n{c_m}🐳 LAUNCHING LOCALIZED SWARM STACK{c_r}")
+    print(f"\n{c_m}🐳 LAUNCHING LOCALIZED ASSEMBLY STACK{c_r}")
     print(f"{c_c}Executing Docker Compose local container startup...{c_r}\n")
     
     # Calculate project root from scripts/bootstrap.py relative path, since we know this is called from there typically.
@@ -147,7 +147,7 @@ def launch_docker_swarm():
         return
 
     if return_code == 0:
-        print(f"\n{c_c}🎉 Kenbun Swarm started successfully!{c_r}")
+        print(f"\n{c_c}🎉 Kenbun Assembly started successfully!{c_r}")
         env_file = project_root / ".env"
         chroma_port = "8000"
         api_port = "8001"
@@ -214,7 +214,7 @@ def launch_docker_swarm():
                 new_api = find_free_port(8011) if api_conflict else current_api
                 new_dashboard = find_free_port(3010) if dashboard_conflict else current_dashboard
                 
-                print(f"Remapping host ports: Chroma ➔ {new_chroma}, API Swarm ➔ {new_api}, Dashboard ➔ {new_dashboard}")
+                print(f"Remapping host ports: Chroma ➔ {new_chroma}, API Assembly ➔ {new_api}, Dashboard ➔ {new_dashboard}")
                 
                 if env_file.exists():
                     try:
@@ -234,7 +234,7 @@ def launch_docker_swarm():
                         print(f"❌ Failed to rewrite ports atomically in .env: {e}")
                         return
                 
-                launch_docker_swarm()
+                launch_docker_assembly()
                 return
         
         print(f"\n{c_y}❌ Docker Compose failed with return code {return_code}{c_r}")
@@ -256,7 +256,7 @@ def clean_docker_stack():
     if not use_color:
         c_m = c_c = c_y = c_r = c_g = ""
         
-    print(f"\n{c_m}🧹 CLEAN / RESET SWARM DOCKER STACK{c_r}")
+    print(f"\n{c_m}🧹 CLEAN / RESET ASSEMBLY DOCKER STACK{c_r}")
     print(f"{c_g}──────────────────────────────────────────────────{c_r}")
     
     script_dir = Path(__file__).resolve().parent
@@ -282,7 +282,7 @@ def clean_docker_stack():
         print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
         return
         
-    print(f"\n{c_y}🟡 Stopping Docker Swarm Stack containers...{c_r}")
+    print(f"\n{c_y}🟡 Stopping Docker Assembly Stack containers...{c_r}")
     
     # Run compose down
     down_args = ["docker", "compose", "down", "--volumes", "--remove-orphans"]
@@ -302,8 +302,8 @@ def clean_docker_stack():
             subprocess.run(["docker", "builder", "prune", "-f"], cwd=project_root)
             subprocess.run(["docker", "image", "prune", "-f"], cwd=project_root)
             
-        print(f"\n{c_c}✓ Docker Swarm Stack cleaned successfully!{c_r}")
-        print(f"  You can now start a fresh build using the Swarm Stack option in the menu.")
+        print(f"\n{c_c}✓ Docker Assembly Stack cleaned successfully!{c_r}")
+        print(f"  You can now start a fresh build using the Assembly Stack option in the menu.")
         
         # Guide on file permissions (highly helpful for fresh reinstalls)
         print(f"\n{c_y}┌───────────────── 🌸 HOST FILE OWNERSHIP WARNING ────────────────┐")

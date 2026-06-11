@@ -217,7 +217,7 @@ export default function HivemindMemory() {
                   type="text" 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Ask the Swarm (e.g. 'token rate limit implementation' or 'ethical guardrail rules')..."
+                  placeholder="Ask the Assembly (e.g. 'token rate limit implementation' or 'ethical guardrail rules')..."
                   className="w-full pl-12 pr-4 py-4 border border-primary/5 rounded-sm bg-card/40 font-sans text-sm focus:outline-none focus:border-tertiary focus:bg-card hover:border-primary/20 transition-all text-primary placeholder-primary/20"
                 />
               </div>

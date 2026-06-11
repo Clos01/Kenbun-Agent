@@ -414,7 +414,7 @@ post_installation_diagnostics() {
     echo -e "       ➔ Step 2: Configure AI Provider (Local Ollama vs Cloud Reasoning)"
     echo -e "       ➔ Step 3: Secure API keys (stored owner-only)"
     echo -e "       ➔ Step 4: Audit RAM/CPU and download local models (gemma-4)"
-    echo -e "       ➔ Step 5: Compile & spin up the Docker Swarm Stack"
+    echo -e "       ➔ Step 5: Compile & spin up the Docker Assembly Stack"
     echo -e "       ➔ Step 6: Register FastMCP endpoints in Claude Desktop & Cursor"
     echo -e "       ➔ Step 7: Showcase Telemetry Port guidelines"
     echo -e "       ➔ Step 8 & 9: Launch the self-healing Cognitive Termchat Shell!"

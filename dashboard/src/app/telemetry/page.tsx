@@ -70,7 +70,7 @@ const ModelCognitiveEnsemble = ({ lmStudioOnline }: { lmStudioOnline: boolean })
     {
       name: "Gemini 3.5 Pro",
       version: "gemini-3.5-pro",
-      role: "Swarm Orchestrator & Planner",
+      role: "Assembly Orchestrator & Planner",
       endpoint: "https://api.google.com/gemini/v3.5",
       latency: "1.4s",
       cost: "$1.25 / $5.00 per 1M tkn",
@@ -201,10 +201,10 @@ interface NodeConfig {
 const FLOWCHART_NODES: NodeConfig[] = [
   {
     id: "orchestrator",
-    title: "Swarm Orchestration",
+    title: "Assembly Orchestration",
     icon: <Cpu className="w-4 h-4" />,
     color: "border-tertiary/30 bg-tertiary/10 text-tertiary",
-    desc: "Swarm Command Lead (Gemini)",
+    desc: "Assembly Command Lead (Gemini)",
     glowColor: "rgba(184, 66, 46, 0.12)"
   },
   {
@@ -436,7 +436,7 @@ const CognitiveFlowchart = ({ logs, activeCategory }: { logs: LogRecord[], activ
 
       {/* SVG Connecting Wires */}
       <svg className="absolute inset-0 w-full h-full pointer-events-none z-0 hidden md:block">
-        {/* Curving Bezier curves connecting Swarm Orchestrator to flanking nodes */}
+        {/* Curving Bezier curves connecting Assembly Orchestrator to flanking nodes */}
         {FLOWCHART_NODES.filter(n => n.id !== "orchestrator").map((node) => {
           const start = coords["orchestrator"];
           const end = coords[node.id];
@@ -885,7 +885,7 @@ export default function IntelStream() {
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-4 px-4 py-2 border border-border bg-background/40 artisan-shadow rounded-sm">
-              <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest">Swarm Pulse</span>
+              <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest">Assembly Pulse</span>
               <span className={`text-xs font-mono font-bold flex items-center gap-2 ${error ? 'text-red-500' : 'text-gold'}`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
                 {error ? 'DISCONNECTED' : 'STABLE'}
@@ -1188,7 +1188,7 @@ export default function IntelStream() {
           <section className="space-y-6">
             <div className="flex items-center justify-between border-b-2 border-border pb-3">
               <span className="ind-header opacity-100 flex items-center gap-3">
-                <Terminal className="w-4 h-4 text-gold" /> Swarm Logic Ledger Stream
+                <Terminal className="w-4 h-4 text-gold" /> Assembly Logic Ledger Stream
               </span>
             </div>
             

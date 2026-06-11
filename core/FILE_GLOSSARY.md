@@ -4,20 +4,20 @@ This document provides a 1:1 functional description of every Python file in the 
 
 ---
 
-## 🛡️ `core/agents/` (Swarm Agent Adapters)
-*   **`adapter.py`**: AgentToolInterface (Adapter Pattern) for Kenbun Swarm Agents.
+## 🛡️ `core/agents/` (Assembly Agent Adapters)
+*   **`adapter.py`**: AgentToolInterface (Adapter Pattern) for Kenbun Assembly Agents.
 *   **`mock_sdk.py`**: Mock implementation of google.kenbun for development and testing environment compatibility.
-*   **`trace.py`**: Traceability Manifest Logger for Kenbun Swarm Agents.
-*   **`workflow.py`**: Workflow management and lifecycle hooks for Kenbun Swarm Agents.
+*   **`trace.py`**: Traceability Manifest Logger for Kenbun Assembly Agents.
+*   **`workflow.py`**: Workflow management and lifecycle hooks for Kenbun Assembly Agents.
 
 ## 📊 `core/benchmarks/` (Performance & Testing)
 *   **`AUTONOMOUS_LEARNING.py`**: Automation script for testing self-learning behaviors.
-*   **`CHAOS_TEST.py`**: Orchestrates failure injection testing across the swarm.
+*   **`CHAOS_TEST.py`**: Orchestrates failure injection testing across the assembly.
 *   **`GENERATE_150_CASES.py`**: Data generator for creating 150 unique edge-case test scenarios.
 *   **`HALLUCINATION_TEST.py`**: Validation suite to measure and prevent LLM hallucinations.
 *   **`benchmark_protocol.py`**: Defines the standard protocols for executing performance benchmarks.
 *   **`chaos_orchestrator.py`**: Coordinates multi-node chaos testing to ensure system resilience.
-*   **`daily_report.py`**: Generates daily analytics and health reports for the swarm.
+*   **`daily_report.py`**: Generates daily analytics and health reports for the assembly.
 *   **`nightly_eval.py`**: Scheduled evaluator to run full system diagnostics overnight.
 
 ## 🧠 `core/dev/self_evolution/` (Self-Awareness)
@@ -30,7 +30,7 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`import_diagnostic.py`**: Verifies that all core modules can be imported cleanly without circular dependencies.
 
 ## 🧪 `core/scratch/` (Experimental Scripts)
-*   **`swarm_test.py`**: Experimental script for testing multi-agent swarm behaviors.
+*   **`assembly_test.py`**: Experimental script for testing multi-agent assembly behaviors.
 *   **`test_models_direct.py`**: Script for testing LLM API connections directly bypassing the orchestrator.
 *   **`test_supervisor_demo.py`**: Demonstration script of the System 2 Supervisor agent.
 *   **`test_sve_breach.py`**: Experimental script testing Sovereign Environment breach responses.
@@ -40,7 +40,7 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`sync_hivemind.py`**: Utility to force synchronization of the local ChromaDB Hivemind with remote nodes.
 
 ## 🔌 `core/services/` (Background Daemons)
-*   **`swarm_daemon.py`**: Background service daemon that keeps the swarm actively monitoring the workspace.
+*   **`assembly_daemon.py`**: Background service daemon that keeps the assembly actively monitoring the workspace.
 
 ## 🧪 `core/tests/` (Sovereign Verification Suite)
 *   **`bayesian_hme_test.py`**: Unit tests for the Bayesian Hierarchical Mixture of Experts router.
@@ -54,7 +54,7 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`hme_failure_audit.py`**: Audits the failure recovery mechanisms of the HME router.
 *   **`integrity_test.py`**: Broad integrity tests for database and file states.
 *   **`mars_test.py`**: Unit tests for the MARS auditor logic.
-*   **`master_swarm_test.py`**: End-to-end integration test of the full Swarm capability.
+*   **`master_assembly_test.py`**: End-to-end integration test of the full Assembly capability.
 *   **`security_penetration_test.py`**: Automated security vulnerability scanning tests.
 *   **`test_autonomic.py`**: Validates the autonomic self-healing subroutines.
 *   **`test_autopilot.py`**: Validates dynamic VRAM/RAM hardware sensing profiles on macOS and Linux.
@@ -78,7 +78,7 @@ This document provides a 1:1 functional description of every Python file in the 
 ## 🛠️ `core/tools/` (Root Tool Utils)
 *   **`harvester.py`**: Root utility for gathering logs for System 5 Reflection.
 *   **`registry.py`**: Root registry mapping MCP tools to internal python functions.
-*   **`swarm_trigger.py`**: Event hook that triggers the swarm based on external inputs.
+*   **`assembly_trigger.py`**: Event hook that triggers the assembly based on external inputs.
 
 ## 🛡️ `core/tools/audit/` (System 2 & 2c)
 *   **`adversarial_court.py`**: System 2a: Adversarial LLM Auditing Court for rigorous code reviews.
@@ -140,12 +140,12 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`monitor.py`**: Real-time telemetry monitoring of system health.
 *   **`native_ears.py`**: macOS background service for always-on voice command ingestion.
 *   **`orchestrator.py`**: The Orchestrator — Meta-tool that chains tools into intelligent workflows.
-*   **`parallel_manager.py`**: Manages parallel asynchronous task execution across the Swarm.
+*   **`parallel_manager.py`**: Manages parallel asynchronous task execution across the Assembly.
 *   **`queue_manager.py`**: Manages the Redis/In-memory task queues.
 *   **`server.py`**: The primary MCP Server entry point.
 *   **`sovereign_decorators.py`**: Python decorators enforcing system-level security constraints.
 *   **`sovereign_verifier.py`**: Verifies that executed code conforms to Sovereign isolation boundaries.
-*   **`swarm_voice.py`**: Telegram bot integration for remote voice commands.
+*   **`assembly_voice.py`**: Telegram bot integration for remote voice commands.
 *   **`tech_registry.py`**: Central registry of allowed technologies and documentation URIs.
 *   **`topology_manager.py`**: Maintains the active topological map of connected nodes.
 

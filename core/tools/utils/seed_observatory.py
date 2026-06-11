@@ -396,4 +396,4 @@ if __name__ == "__main__":
     seed_chromadb_reasoning()
     seed_chromadb_code()
     seed_chromadb_intelligence()
-    print("🎉 Neural Observatory successfully seeded! Open http://localhost:3000/observatory to watch the live swarm stats!")
+    print("🎉 Neural Observatory successfully seeded! Open http://localhost:3000/observatory to watch the live assembly stats!")

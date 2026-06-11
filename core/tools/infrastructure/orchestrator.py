@@ -43,7 +43,7 @@ TELEMETRY_PATH = settings.BRAIN_HEALTH_DIR / "live_telemetry.json"
 
 def log_to_dashboard(message: str):
     """Sends a message to the UI dashboard by writing to live_telemetry.json."""
-    print(f"🖥️ [SWARM] {message}")
+    print(f"🖥️ [ASSEMBLY] {message}")
     try:
         data = {"timestamp": time.time(), "message": message, "type": "log"}
         with open(TELEMETRY_PATH, "a") as f:
@@ -74,7 +74,7 @@ async def check_connectivity(ip: str) -> bool:
         return False
 
 def save_topology(tasks_ref: list, data: dict):
-    """Updates the real-time swarm topology for the frontend."""
+    """Updates the real-time assembly topology for the frontend."""
     if tasks_ref is None:
         tasks_ref = []
     
@@ -164,7 +164,7 @@ def extract_json_array(text: str) -> str:
     return None
 
 
-from core.tools.infrastructure.routers.router_logic import spawn_swarm, run_pipeline
+from core.tools.infrastructure.routers.router_logic import spawn_assembly, run_pipeline
 # ============================================================
 # STATE MACHINE ENGINE
 # ============================================================
@@ -183,7 +183,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     from core.tools.utils.error_memory import remember_fix, recall_fix
     from core.tools.utils.backtracker import save_checkpoint, restore_checkpoint
     from core.tools.execution.sandbox_runner import run_code_safely as run_code_safely
-    from core.tools.utils.bayesian import tune_swarm
+    from core.tools.utils.bayesian import tune_assembly
     from core.tools.audit.consult_architect import consult_brain
     from core.tools.audit.discovery_agent import generate_discovery_form
     from core.tools.audit.linter_autofix import autofix_linter
@@ -202,7 +202,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         "reflect_and_distill": _reflect_and_distill,
         "guardrail_audit": run_guardrail_audit,
         "maze_verification": backward_verify,
-        "tune_swarm": tune_swarm,
+        "tune_assembly": tune_assembly,
         "consult_hivemind": consult_brain,
         "generate_discovery_form": generate_discovery_form,
         "autofix_linter": autofix_linter
@@ -219,10 +219,10 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         tech_key=tech_key
     ))
 
-def swarm(objective: str, project_path: str = "."):
+def assembly(objective: str, project_path: str = "."):
     """
-    Synchronous entry point for triggering a full autonomous swarm.
-    Usage: swarm("Build a new landing page for the burger shop")
+    Synchronous entry point for triggering a full autonomous assembly.
+    Usage: assembly("Build a new landing page for the burger shop")
     """
     import asyncio
     from core.tools.audit.gemini_reviewer import gemini_code_review, gemini_research
@@ -231,7 +231,7 @@ def swarm(objective: str, project_path: str = "."):
     from core.tools.utils.error_memory import remember_fix, recall_fix
     from core.tools.utils.backtracker import save_checkpoint, restore_checkpoint
     from core.tools.execution.sandbox_runner import run_code_safely
-    from core.tools.utils.bayesian import tune_swarm
+    from core.tools.utils.bayesian import tune_assembly
     from core.tools.audit.guardrail_agent import run_guardrail_audit
     from core.tools.utils.maze_protocol import backward_verify
     from core.tools.audit.linter_autofix import autofix_linter
@@ -249,11 +249,11 @@ def swarm(objective: str, project_path: str = "."):
         "reflect_and_distill": _reflect_and_distill,
         "guardrail_audit": run_guardrail_audit,
         "maze_verification": backward_verify,
-        "tune_swarm": tune_swarm,
+        "tune_assembly": tune_assembly,
         "autofix_linter": autofix_linter
     }
 
-    return asyncio.run(spawn_swarm(objective, tools, project_path))
+    return asyncio.run(spawn_assembly(objective, tools, project_path))
 
 if __name__ == "__main__":
     # Example usage

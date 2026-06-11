@@ -18,7 +18,7 @@ interface MetricExplainer {
 const METRIC_EXPLAINERS: Record<string, MetricExplainer> = {
   tool: {
     title: "Tool Identifier",
-    definition: "The unique namespace of the active neural capability node in the Kenbun swarm.",
+    definition: "The unique namespace of the active neural capability node in the Kenbun assembly.",
     behavior: "Each tool corresponds to an autonomous background daemon, safety linter, vector database synchronizer, or cognitive strategy router.",
     impact: "Allocates precise boundaries so that agents can route tasks efficiently without overloading the context window."
   },
@@ -48,7 +48,7 @@ const METRIC_EXPLAINERS: Record<string, MetricExplainer> = {
   },
   mom_delta: {
     title: "Model-over-Model (MoM) Delta",
-    definition: "Long-term performance variance comparing the current swarm capability baseline with previous checkpoints.",
+    definition: "Long-term performance variance comparing the current assembly capability baseline with previous checkpoints.",
     behavior: "Compares current multi-agent trial benchmarks against the historical baseline recorded in the core telemetry database.",
     impact: "Indicates the macro-evolution of the system. Positive values verify that the newly indexed code topology is actively improving cognitive performance."
   }

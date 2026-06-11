@@ -96,7 +96,7 @@ _tail_thread = threading.Thread(target=_tail_mcp_debug_log, daemon=True)
 _tail_thread.start()
 
 
-PC_IP = settings.SWARM_PC_IP
+PC_IP = settings.ASSEMBLY_PC_IP
 CHROMA_PORT = settings.CHROMA_PORT
 LM_STUDIO_PORT = settings.LM_STUDIO_PORT
 LM_STUDIO_MODEL = settings.LM_STUDIO_MODEL

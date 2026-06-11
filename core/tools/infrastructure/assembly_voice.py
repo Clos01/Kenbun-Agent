@@ -64,14 +64,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # 4. Immediate Acknowledgement
         clean_transcription = transcription.replace("**", "").replace("#", "")
-        await update.message.reply_text(f"🎙️ **Voice Received**\n\n**Objective:** {clean_transcription[:100]}...\n\n*Swarm is initiating. Please wait for the final report.*")
+        await update.message.reply_text(f"🎙️ **Voice Received**\n\n**Objective:** {clean_transcription[:100]}...\n\n*Assembly is initiating. Please wait for the final report.*")
         
         # Audio feedback for the car
         import subprocess
-        subprocess.Popen(["say", f"Swarm initiated for: {clean_transcription[:50]}"])
+        subprocess.Popen(["say", f"Assembly initiated for: {clean_transcription[:50]}"])
         
         # 5. Trigger Orchestrator
-        send_notification("Swarm Triggered", f"Objective: {transcription[:100]}...")
+        send_notification("Assembly Triggered", f"Objective: {transcription[:100]}...")
         
         # Run orchestrate in a thread to not block the bot
         loop = asyncio.get_event_loop()
@@ -127,7 +127,7 @@ async def main():
     """Main entry point for System 6."""
     import sys
     import signal
-    logging.info("📍 Starting Swarm Voice script...")
+    logging.info("📍 Starting Assembly Voice script...")
     
     # 1. Build Application
     logging.info("📍 Building Telegram Application...")

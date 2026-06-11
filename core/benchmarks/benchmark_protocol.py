@@ -22,7 +22,7 @@ TASKS = [
     ("Design a premium landing page for Lucas Tacos", "UI_COMPONENT_BUILD"),
     ("Audit the sensitive environment variables", "SECURITY_HARDENING_PATH"),
     ("Sync the local memory with the remote Obsidian vault", "MEMORY_OPTIMIZATION"),
-    ("Benchmark the swarm's latency under load", "STRATEGY_REFINE")
+    ("Benchmark the assembly's latency under load", "STRATEGY_REFINE")
 ]
 
 async def run_benchmark():

@@ -1,20 +1,20 @@
 import asyncio
-from core.tools.infrastructure.orchestrator import spawn_swarm
+from core.tools.infrastructure.orchestrator import spawn_assembly
 from core.tools.audit.gemini_reviewer import gemini_code_review, gemini_research
 from core.tools.audit.supervisor_agent import run_supervisor_audit
 from core.tools.memory.repo_mapper import scan_repo
 from core.tools.utils.error_memory import remember_fix, recall_fix
 from core.tools.utils.backtracker import save_checkpoint, restore_checkpoint
 from core.tools.execution.sandbox_runner import run_code_safely
-from core.tools.utils.bayesian import tune_swarm
+from core.tools.utils.bayesian import tune_assembly
 from core.tools.audit.consult_architect import consult_brain
 from core.tools.utils.maze_protocol import backward_verify
 from core.tools.audit.guardrail_agent import run_guardrail_audit
 from core.tools.audit.linter_autofix import autofix_linter
 
-async def test_swarm_performance():
+async def test_assembly_performance():
     """
-    Triggers a swarm objective to verify:
+    Triggers a assembly objective to verify:
     1. Parallel Task Decomposition.
     2. Hivemind Recall integration.
     3. Concurrency Slot Management.
@@ -32,20 +32,20 @@ async def test_swarm_performance():
         "save_checkpoint": save_checkpoint,
         "restore_checkpoint": restore_checkpoint,
         "run_code_safely": run_code_safely,
-        "tune_swarm": tune_swarm,
+        "tune_assembly": tune_assembly,
         "consult_hivemind": consult_brain,
         "maze_verification": backward_verify,
         "guardrail_audit": run_guardrail_audit,
         "autofix_linter": autofix_linter
     }
 
-    print("🏁 Starting Master Swarm Performance Test...")
-    report = await spawn_swarm(objective, tools, project_path=".")
+    print("🏁 Starting Master Assembly Performance Test...")
+    report = await spawn_assembly(objective, tools, project_path=".")
     
     print("\n" + "="*50)
-    print("📋 SWARM REPORT PREVIEW:")
+    print("📋 ASSEMBLY REPORT PREVIEW:")
     print(report[:1000] + "...")
     print("="*50)
 
 if __name__ == "__main__":
-    asyncio.run(test_swarm_performance())
+    asyncio.run(test_assembly_performance())

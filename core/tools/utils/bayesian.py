@@ -15,7 +15,7 @@ def save_weights(weights):
     with open(WEIGHTS_FILE, "w") as f:
         json.dump(weights, f, indent=4)
 
-def tune_swarm(tool_id: str, success: bool, category: str = "global"):
+def tune_assembly(tool_id: str, success: bool, category: str = "global"):
     """
     Updates the Bayesian weights for a specific tool.
     Uses Beta distribution logic: Alpha (successes) and Beta (failures).
@@ -69,5 +69,5 @@ def get_best_tool(category: str, candidate_tools: list):
 
 if __name__ == "__main__":
     # Test tuning
-    print(tune_swarm("consult_supervisor", True, "security"))
+    print(tune_assembly("consult_supervisor", True, "security"))
     print(f"Confidence: {get_confidence('consult_supervisor', 'security'):.2f}")

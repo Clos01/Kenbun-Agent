@@ -16,7 +16,7 @@ import {
 import ControlHub from './galaxy-map/ControlHub';
 import InspectorPanel from './galaxy-map/InspectorPanel';
 import HoverPanel from './galaxy-map/HoverPanel';
-import SwarmLegend from './galaxy-map/SwarmLegend';
+import AssemblyLegend from './galaxy-map/AssemblyLegend';
 
 export default function GalaxyMap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -701,7 +701,7 @@ export default function GalaxyMap() {
           <span className="font-heading text-[var(--foreground)] font-bold uppercase tracking-[0.3em] text-xs">Neural Network Topology</span>
         </div>
         <div className="text-[9px] font-mono opacity-40 uppercase tracking-widest">
-          {isFullscreen ? "Full Spectrum Focus" : "Swarm Node Cluster View"} • {data.length} Signals
+          {isFullscreen ? "Full Spectrum Focus" : "Assembly Node Cluster View"} • {data.length} Signals
         </div>
       </div>
 
@@ -753,8 +753,8 @@ export default function GalaxyMap() {
         </div>
       </div>
 
-      {/* Color Coding Swarm Guide */}
-      <SwarmLegend isDragging={isDragging} />
+      {/* Color Coding Assembly Guide */}
+      <AssemblyLegend isDragging={isDragging} />
     </div>
   );
 

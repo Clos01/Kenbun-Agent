@@ -1,6 +1,6 @@
 # 🏛️ Sovereign Home-Lab: Proxmox VE & Portainer Deployment Guide
 
-This guide provides the exact architectural procedures to convert physical server hardware into an autonomous, headless virtualization node. While we leverage the **Lenovo ThinkStation P330 SFF** as a concrete home-lab reference architecture, these steps apply identically to **any physical workstation** (Dell OptiPlex, HP EliteDesk, custom rigs) or cloud VPS. We will deploy **Proxmox VE** as our Type-1 Hypervisor, provision a highly optimized **Ubuntu Server VM**, bootstrap it with **Portainer CE**, and run the **Kenbun-Agent** container swarm.
+This guide provides the exact architectural procedures to convert physical server hardware into an autonomous, headless virtualization node. While we leverage the **Lenovo ThinkStation P330 SFF** as a concrete home-lab reference architecture, these steps apply identically to **any physical workstation** (Dell OptiPlex, HP EliteDesk, custom rigs) or cloud VPS. We will deploy **Proxmox VE** as our Type-1 Hypervisor, provision a highly optimized **Ubuntu Server VM**, bootstrap it with **Portainer CE**, and run the **Kenbun-Agent** container assembly.
 
 ---
 

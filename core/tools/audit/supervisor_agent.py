@@ -24,7 +24,7 @@ except ImportError:
 
 from core.tools.infrastructure.config import settings
 from core.tools.design.guardrail import DesignGuardrail
-from core.tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.topology_manager import log_assembly_event
 
 def _call_local_senior(system_prompt: str, user_message: str):
     """Call the hardware-agnostic LLM gateway."""
@@ -413,7 +413,7 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
                 "critique": f"Design Compliance Failure: {style_res['reason']}",
                 "tier": "System 2c: Design Guardrail"
             }
-            log_swarm_event("DECISION", {
+            log_assembly_event("DECISION", {
                 "tool": "supervisor_agent", 
                 "confidence": 1.0, 
                 "result": "REJECTED", 
@@ -436,7 +436,7 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
                     "confidence": res_court["confidence"],
                     "tier": "System 2a: Adversarial LLM Court"
                 }
-                log_swarm_event("DECISION", {
+                log_assembly_event("DECISION", {
                     "tool": "supervisor_agent", 
                     "confidence": res_court["confidence"], 
                     "result": res_court["verdict"], 
@@ -450,7 +450,7 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     # Tier 1: Local Ensemble
     res = await _tier_1_local(user_proposal, code_snippet)
     if isinstance(res, dict):
-        log_swarm_event("DECISION", {
+        log_assembly_event("DECISION", {
             "tool": "supervisor_agent", 
             "confidence": res.get("confidence", 0.5), 
             "result": res.get("status", "UNKNOWN"), 
@@ -466,7 +466,7 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     # Tier 2: Cloud Escalation
     res = await _tier_2_cloud(user_proposal, code_snippet, memory_context, tech_key, local_verdict)
     if res:
-        log_swarm_event("DECISION", {
+        log_assembly_event("DECISION", {
             "tool": "supervisor_agent", 
             "confidence": 0.9, 
             "result": res.get("status", "UNKNOWN"), 
@@ -477,7 +477,7 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
 
     # Tier 3: Local Senior Fallback
     res = await _tier_3_fallback(user_proposal, code_snippet, memory_context)
-    log_swarm_event("DECISION", {
+    log_assembly_event("DECISION", {
         "tool": "supervisor_agent", 
         "confidence": 0.5, 
         "result": res.get("status", "UNKNOWN") if isinstance(res, dict) else "UNKNOWN", 

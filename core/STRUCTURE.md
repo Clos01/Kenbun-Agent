@@ -7,12 +7,12 @@ The system is segmented into two primary domains to ensure infinite scalability 
 ## 📂 Project Hierarchy
 
 * **kenbun/core/**: The "Brain" and "Engine" of the system.
-  * **agents/**: Swarm agent adapters and traceability.
+  * **agents/**: Assembly agent adapters and traceability.
   * **benchmarks/**: Performance and reliability testing scripts.
   * **dev/self_evolution/**: Self-awareness and State-of-the-Union audits.
   * **hivemind_memory/**: Semantic long-term persistence.
   * **scripts/**: Diagnostics and brain-sync utilities.
-  * **services/**: Background daemons running the swarm.
+  * **services/**: Background daemons running the assembly.
   * **tests/**: Sovereign verification and unit testing.
   * **tools/**: All MCP tools, strategy logic, and the API server.
   * **training_data/**: Export and LoRA fine-tuning pipelines.
@@ -72,21 +72,21 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`shell_sentinel.py`**: Securely executes terminal commands, intercepting dangerous patterns.
 
 ### 📡 System 6: Sensory Layer (`tools/infrastructure/`)
-*   **`swarm_voice.py`**: Telegram voice-note listener with Gemini 3 transcription.
+*   **`assembly_voice.py`**: Telegram voice-note listener with Gemini 3 transcription.
 *   **`native_ears.py`**: [ASYNC] macOS native always-listening sensory layer with ensemble gating.
 *   **`design_bridge.py`**: ACP-to-MCP Bridge for orchestrating external design CLIs.
 
 ### 🔌 Infrastructure Layer (`tools/infrastructure/`)
 *   **`orchestrator.py`**: The main state-machine engine orchestrating complex logic.
 *   **`server.py`**: The MCP server that exposes tools to IDEs.
-*   **`agents.py`**: Definitions for Agent Personas (Architect, Security, Swarm).
+*   **`agents.py`**: Definitions for Agent Personas (Architect, Security, Assembly).
 *   **`tech_registry.py`**: Central registry of allowed technologies and documentation URIs.
 *   **`api_server.py`**: FastAPI wrapper with real-time SSE topology streaming.
 *   **`pipelines/`**: Contains execution sequences (`bug_fix.py`, `code_review.py`, `research.py`).
 *   **`routers/`**: FastAPI routers mapping API endpoints (`chat_router.py`, `topology_router.py`).
 
 ### 🤖 Agents & Interfaces (`agents/` & `tools/cli/`)
-*   **`agents/adapter.py`**: Agent tool interfaces for the Swarm.
+*   **`agents/adapter.py`**: Agent tool interfaces for the Assembly.
 *   **`tools/cli/engine.py`**: Termchat and Reflex Shell REPL for local users.
 
 ### 🛠️ Shared Utilities (`tools/utils/`)
@@ -103,7 +103,7 @@ The system is segmented into two primary domains to ensure infinite scalability 
 ### 🩺 Sovereign Testing & Benchmarks (`tests/` & `benchmarks/`)
 *   **`tests/test_autopilot.py`**: Automated tests for hardware-sensing profiles.
 *   **`tests/test_ralph_loop.py`**: Autonomic rollback and self-healing tests.
-*   **`tests/master_swarm_test.py`**: End-to-end integration tests of the swarm.
+*   **`tests/master_assembly_test.py`**: End-to-end integration tests of the assembly.
 *   **`benchmarks/benchmark_protocol.py`**: Performance verification suite.
 *   **`benchmarks/chaos_orchestrator.py`**: Stress-test script for failure injection.
 
@@ -135,15 +135,15 @@ The system is segmented into two primary domains to ensure infinite scalability 
 - **`core/SYSTEM_MAP.md`**: The Spatial Root and "Memory Palace" of the system.
 - **`core/FILE_GLOSSARY.md`**: Exhaustive 1:1 functional descriptions of all Python modules.
 - **`core/NEURAL_HIERARCHY.md`**: Deep-dive into the six-system agentic architecture.
-- **`core/DEPLOYMENT_GUIDE.md`**: Setup manual for local-first swarm execution.
+- **`core/DEPLOYMENT_GUIDE.md`**: Setup manual for local-first assembly execution.
 - **`core/POST_MORTEM.md`**: Historical log of software bugs and architectural resolutions.
 
 ### 🛠️ Service Layer (`core/services/` & `core/tools/autonomic/`)
-- **`services/swarm_daemon.py`**: Background service executing the Autonomic Heartbeat.
+- **`services/assembly_daemon.py`**: Background service executing the Autonomic Heartbeat.
 - **`tools/autonomic/autonomic_corrector.py`**: Closed-loop self-healing engine with circuit breakers.
 
 ### 🖥️ UI & Observability
-*   **`dashboard/`**: Next.js 16 dashboard for real-time swarm visualization.
+*   **`dashboard/`**: Next.js 16 dashboard for real-time assembly visualization.
 *   **`dashboard/src/components/DiscoveryForm.tsx`**: Strategic brief capture for UI tasks.
 *   **`tools/scratch/`**: Temporary scripts and testing experiments.
 

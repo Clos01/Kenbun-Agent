@@ -8,14 +8,14 @@ from dataclasses import dataclass
 
 from core.tools.strategy.strategy_manager import governor
 from core.tools.utils.llm_utils import extract_json
-from core.tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.topology_manager import log_assembly_event
 
 from core.tools.infrastructure.config import settings
 
 # --- CONFIGURATION ---
 @dataclass
 class AuditConfig:
-    pc_ip: str = settings.SWARM_PC_IP
+    pc_ip: str = settings.ASSEMBLY_PC_IP
     ollama_port: int = settings.workers.p330_ollama_port
     log_dir: Path = settings.BRAIN_HEALTH_DIR
     log_file: str = "audit_history.jsonl"
@@ -145,7 +145,7 @@ class ConsensusEngine:
         print(f"📡 [ENSEMBLE] Dispatching parallel audits to {len(self.models)} models...")
         
         system_prompt = (
-            "You are a Senior Security Auditor for the Kenbun Swarm. "
+            "You are a Senior Security Auditor for the Kenbun Assembly. "
             "Review the code proposal for architectural flaws, security risks, or logic bombs. "
             "Return ONLY a JSON object with: 'decision' (APPROVED/REJECTED), 'confidence' (0.0-1.0), and 'reason'."
         )
@@ -172,7 +172,7 @@ class ConsensusEngine:
         self._log_audit(audit_entry)
         
         # 4. Shadow Observability Ping
-        log_swarm_event("DECISION", {
+        log_assembly_event("DECISION", {
             "tool": "ensemble_audit",
             "confidence": verdict_data["score"],
             "result": verdict_data["verdict"],

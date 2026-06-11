@@ -23,7 +23,7 @@ from core.tools.infrastructure.config import settings
 project_root = settings.PROJECT_ROOT
 
 from core.tools.strategy.strategy_manager import governor
-from core.tools.infrastructure.topology_manager import get_swarm_events
+from core.tools.infrastructure.topology_manager import get_assembly_events
 from core.tools.infrastructure.orchestrator import orchestrate
 from core.tools.strategy.intelligence_engine import intelligence_engine
 from core.tools.audit.guardrail_agent import guardrail_agent
@@ -77,8 +77,8 @@ def build_cors_origins() -> List[str]:
             logging.error(f"CORS Init: Invalid FRONTEND_URL: {e}")
 
     # 2. Sanitize and trust the host machine's configured Tailscale/PC IP for local development
-    if settings.SWARM_PC_IP:
-        pc_ip = settings.SWARM_PC_IP.strip('"\'')
+    if settings.ASSEMBLY_PC_IP:
+        pc_ip = settings.ASSEMBLY_PC_IP.strip('"\'')
         # Skip Docker service names — they are internal-only and never valid browser origins
         _docker_service_names = {"localhost", "127.0.0.1", "ollama_server", "fastmcp_server", "chromadb"}
         if pc_ip not in _docker_service_names:
@@ -97,7 +97,7 @@ def build_cors_origins() -> List[str]:
                 origins.append(f"http://{clean_ip}:{frontend_port}")
                 origins.append(f"https://{clean_ip}:{frontend_port}")
             except Exception as e:
-                logging.error(f"CORS Init: Invalid SWARM_PC_IP: {e}")
+                logging.error(f"CORS Init: Invalid ASSEMBLY_PC_IP: {e}")
 
     # 3. Dynamic Local LAN IP Discovery to allow same-network cross-origin access
     try:
@@ -194,15 +194,15 @@ app.add_middleware(
 
 # Shared File Paths
 LOG_FILE = project_root / "brain_health" / "live_telemetry.json"
-TASKS_FILE = project_root / "brain_health" / "swarm_tasks.json"
+TASKS_FILE = project_root / "brain_health" / "assembly_tasks.json"
 BENCHMARKS_FILE = project_root / "brain_health" / "BENCHMARKS.json"
 
 # Projects to scan for AG_TASKS.md
 def get_projects_to_watch():
     return workspace_manager.get_projects()
 
-# In-memory queue for swarm events
-swarm_events = []
+# In-memory queue for assembly events
+assembly_events = []
 
 _cached_config_token = None
 
@@ -567,12 +567,12 @@ async def update_config(req: ConfigUpdateRequest, request: Request):
 @app.get("/api/v1/topology/stream")
 async def stream_topology():
     """
-    Streams live swarm topology and task events to the Dashboard.
+    Streams live assembly topology and task events to the Dashboard.
     """
     async def event_generator():
         last_idx = 0
         while True:
-            events = get_swarm_events()
+            events = get_assembly_events()
             if len(events) > last_idx:
                 for i in range(last_idx, len(events)):
                     yield f"data: {json.dumps(events[i])}\n\n"
@@ -585,7 +585,7 @@ async def stream_topology():
 @app.get("/api/v1/logs/stream")
 async def stream_logs():
     """
-    Streams live swarm daemon and orchestrator logs to the Dashboard in real-time.
+    Streams live assembly daemon and orchestrator logs to the Dashboard in real-time.
     """
     async def log_generator():
         last_size = 0
@@ -823,7 +823,7 @@ async def get_intelligence_history():
                             f"[{tool_name.upper()} — AUDIT FAILED]\n\n"
                             f"The audit agent attempted '{logic_doc}' but the local model was unreachable "
                             f"(Legion PC offline or LM Studio not running on port 2065). "
-                            f"No critique was generated. Ensure the Swarm is running and retry the audit."
+                            f"No critique was generated. Ensure the Assembly is running and retry the audit."
                         )
                     elif result_status.upper() == "REVIEW_NEEDED":
                         stored_output = (
@@ -896,13 +896,13 @@ def check_local_supervisor() -> dict:
     import urllib.request
     
     # We test multiple endpoints sequentially (with short timeouts) to find an active supervisor:
-    # 1. Configured Supervisor (settings.SWARM_PC_IP : settings.LM_STUDIO_PORT)
+    # 1. Configured Supervisor (settings.ASSEMBLY_PC_IP : settings.LM_STUDIO_PORT)
     # 2. Local Fallback (127.0.0.1 : 1234)
     # 3. Docker Host Fallback (host.docker.internal : 1234)
     
     targets = [
         {
-            "host": settings.SWARM_PC_IP,
+            "host": settings.ASSEMBLY_PC_IP,
             "port": settings.LM_STUDIO_PORT,
             "node": "Node.LM-1",
             "fallback_model": settings.LM_STUDIO_MODEL
@@ -1147,7 +1147,7 @@ async def get_stats():
                 ]
             } for t in governor.get_all_stats()
         ],
-        "swarm_status": "Active",
+        "assembly_status": "Active",
         "tasks": tasks,
         "pulse": pulse,
         "logs": logs if logs else [
@@ -1178,7 +1178,7 @@ async def get_stats():
 
 @app.get("/logs")
 async def get_logs():
-    """Returns the last 50 lines of the swarm voice log."""
+    """Returns the last 50 lines of the assembly voice log."""
     try:
         import collections
         if LOG_FILE.exists():
@@ -1723,9 +1723,9 @@ async def api_update_env_key(payload: SecretUpdateEnvRequest):
         return JSONResponse(status_code=500, content={"error": "Failed to update environment file."})
 
 
-@app.post("/swarm/trigger")
-async def trigger_swarm(payload: dict):
-    """Initiates a swarm task from the dashboard."""
+@app.post("/assembly/trigger")
+async def trigger_assembly(payload: dict):
+    """Initiates a assembly task from the dashboard."""
     objective = payload.get("objective")
     if not objective:
         return {"status": "error", "message": "No objective provided"}
@@ -1733,7 +1733,7 @@ async def trigger_swarm(payload: dict):
     # --- INJECTION GUARDRAIL ---
     is_safe, risk_message = guardrail_agent.scan_objective(objective)
     if not is_safe:
-        logging.warning(f"BLOCKED_SWARM_TRIGGER: {risk_message} | Objective: {objective}")
+        logging.warning(f"BLOCKED_ASSEMBLY_TRIGGER: {risk_message} | Objective: {objective}")
         return {
             "status": "blocked", 
             "message": "Security Violation: Potential Prompt Injection detected.",
@@ -1746,7 +1746,7 @@ async def trigger_swarm(payload: dict):
     
     return {"status": "initiated", "objective": objective}
 
-@app.post("/swarm/sovereignty/sync")
+@app.post("/assembly/sovereignty/sync")
 async def trigger_sovereignty_sync():
     """Triggers the SovereigntyEngine to analyze regressions and apply gravity shifts."""
     result = corrector.analyze_regressions()
@@ -1781,7 +1781,7 @@ async def run_security_audit():
 
     return results
 
-@app.get("/swarm/sovereignty/status")
+@app.get("/assembly/sovereignty/status")
 async def sovereignty_status():
     """Returns the current state of autonomous self-healing."""
     log_file = project_root / "brain_health" / "SOVEREIGNTY_LOG.md"
@@ -1833,7 +1833,7 @@ async def p330_status():
 @app.get("/kanban")
 async def get_kanban_tasks():
     """
-    Returns a structured list of tasks from both AG_TASKS.md and swarm_tasks.json.
+    Returns a structured list of tasks from both AG_TASKS.md and assembly_tasks.json.
     Prioritizes real mission telemetry for financial accuracy.
     """
     tasks = []
@@ -1881,7 +1881,7 @@ async def get_kanban_tasks():
 
                 # Logic Flow: Estimate cost based on model and average prompt length
                 rates = token_governor.pricing.get(model, token_governor.pricing["gemini-3-flash-preview"])
-                est_tokens = 2000 # Average swarm loop
+                est_tokens = 2000 # Average assembly loop
                 est_cost = (est_tokens * rates["input"]) + (est_tokens * rates["output"])
                 
                 # Intelligence Probability (System 6 logic)

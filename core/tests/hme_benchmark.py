@@ -23,7 +23,7 @@ BENCHMARK_DATA = [
     # Security/Core Tasks (30)
     {"task": "Harden the authentication middleware to prevent session fixation", "expected": "SECURITY_GUARD"},
     {"task": "Implement JWT rotation in the auth service", "expected": "SECURITY_GUARD"},
-    {"task": "Refactor the core orchestrator.py for parallel swarm execution", "expected": "PRO_AUDITOR"},
+    {"task": "Refactor the core orchestrator.py for parallel assembly execution", "expected": "PRO_AUDITOR"},
     {"task": "Audit the api_server.py for potential memory leaks", "expected": "PRO_AUDITOR"},
     {"task": "Implement a new encryption layer for user secrets", "expected": "SECURITY_GUARD"},
     {"task": "Update the system topology manager to handle node failure", "expected": "PRO_AUDITOR"},
@@ -56,7 +56,7 @@ BENCHMARK_DATA = [
     {"task": "Add a 'copy to clipboard' feature to code snippets", "expected": "LOCAL_WORKER"},
     {"task": "Improve the SEO metadata for product pages", "expected": "LOCAL_WORKER"},
     {"task": "Implement a circuit breaker for external API calls", "expected": "FLASH_CODER"},
-    {"task": "Log all swarm events to a centralized telemetry server", "expected": "PRO_AUDITOR"},
+    {"task": "Log all assembly events to a centralized telemetry server", "expected": "PRO_AUDITOR"},
     {"task": "Build a data visualization component with D3.js", "expected": "FLASH_CODER"}
 ]
 

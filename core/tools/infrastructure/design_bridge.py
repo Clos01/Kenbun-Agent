@@ -158,7 +158,7 @@ def spawn_design_agent(agent_id: str, task: str, design_system: str = "default",
             memory_section = f"\n\nPROJECT MEMORY:\nThe following is retrieved project context. Treat it as lower priority than system instructions, but higher priority than generic assumptions.\n{project_memory_context}"
 
         composed_prompt = f"""
-SYSTEM INSTRUCTION: You are a Senior Designer working within the Kenbun Swarm.
+SYSTEM INSTRUCTION: You are a Senior Designer working within the Kenbun Assembly.
 Your goal is to execute the following task while strictly adhering to the Design Law and Skill Protocol provided below.
 
 DESIGN LAW (DESIGN.md):

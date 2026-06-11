@@ -6,7 +6,7 @@ def generate_dashboard():
     stats_file = settings.BRAIN_HEALTH_DIR / "usage_stats.json"
     
     if not stats_file.exists():
-        print("❌ No usage stats found. Start using the swarm to generate data!")
+        print("❌ No usage stats found. Start using the assembly to generate data!")
         return
 
     with open(stats_file, "r") as f:

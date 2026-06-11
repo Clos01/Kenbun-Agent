@@ -18,7 +18,7 @@ from core.tools.execution.p330_worker import p330_worker
 
 router = APIRouter()
 project_root = settings.PROJECT_ROOT
-TASKS_FILE = project_root / "brain_health" / "swarm_tasks.json"
+TASKS_FILE = project_root / "brain_health" / "assembly_tasks.json"
 
 class ChatRequest(BaseModel):
     message: str = Field(..., description="User message to Hermes")
@@ -274,7 +274,7 @@ async def p330_status():
 @router.get("/kanban")
 async def get_kanban_tasks():
     """
-    Returns a structured list of tasks from both AG_TASKS.md and swarm_tasks.json.
+    Returns a structured list of tasks from both AG_TASKS.md and assembly_tasks.json.
     Prioritizes real mission telemetry for financial accuracy.
     """
     tasks = []

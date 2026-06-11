@@ -3,7 +3,7 @@ from core.tools.utils.path_utils import get_project_root
 """
 🏛️ Kenbun-Agent Interactive Setup Wizard & Bootstrapper (Sakura Edition)
 Dynamically resolves port conflicts, configures absolute paths, provides interactive
-API key input with local AES-256 encryption at rest, and manages Docker swarm stack startups.
+API key input with local AES-256 encryption at rest, and manages Docker assembly stack startups.
 """
 
 import os
@@ -142,7 +142,7 @@ def print_sakura_banner():
     border_color = g if use_color else ""
     reset_color = r if use_color else ""
 
-    row1_content = f"{s}🌸 SAKURA JAPANESE AI AGENTIC SWARM{reset_color}"
+    row1_content = f"{s}🌸 SAKURA JAPANESE AI AGENTIC ASSEMBLY{reset_color}"
     row2_content = f"{p}⚡ System 1-6 Cognitive Engine Loaded Safely{reset_color}"
 
     vlen1 = visual_len(row1_content)
@@ -226,7 +226,7 @@ def bootstrap_core(silent=False):
             api_port = 8001
             if is_port_in_use(8001):
                 api_port = find_free_port(8011)
-                log_status(2, "Port 8001 is occupied. Remapping Swarm API", f"Selected free port {api_port}", status="PORT")
+                log_status(2, "Port 8001 is occupied. Remapping Assembly API", f"Selected free port {api_port}", status="PORT")
 
             dashboard_port = 3000
             if is_port_in_use(3000):
@@ -1706,12 +1706,12 @@ def configure_local_models():
     except Exception as e:
         print(f"❌ {c_y}Failed to write configuration: {e}{c_r}\n")
 
-def launch_docker_swarm():
+def launch_docker_assembly():
     import sys
     from pathlib import Path
     core_path = str(Path(__file__).resolve().parent.parent / "core")
     if core_path not in sys.path: pass
-    from core.tools.infrastructure.docker_manager import launch_docker_swarm as _launch
+    from core.tools.infrastructure.docker_manager import launch_docker_assembly as _launch
     _launch()
 
 def clean_docker_stack():
@@ -1749,7 +1749,7 @@ def showcase_dashboard():
     print("The Kenbun Next.js Telemetry Frontend exposes real-time diagnostics:")
     print(" ➔ Bayesian Governor convergence graphs (MAB tool weights)")
     print(" ➔ Dynamic LLM pricing counters & budget token governance")
-    print(" ➔ Swarm active tool performance trackers & system sensor logs")
+    print(" ➔ Assembly active tool performance trackers & system sensor logs")
     print("\n Access Instructions:")
     print("   1. Spin up the docker containers using option 4.")
     print(f"   2. Open your web browser and navigate to: http://localhost:{dashboard_port}")
@@ -1958,7 +1958,7 @@ def run_quick_setup():
         print(f"  ➔ PRIMARY_LLM_MODEL: {final_model}")
         if tg_token:
             print(f"  ➔ Telegram Bot:      Configured")
-        print("\nReady to launch Swarm Stack! select menu Option 4 next.")
+        print("\nReady to launch Assembly Stack! select menu Option 4 next.")
     except Exception as e:
         if 'temp_path' in locals() and os.path.exists(temp_path):
             os.remove(temp_path)
@@ -2007,8 +2007,8 @@ def run_interactive_wizard():
         "⚡ Quick Setup (Configure Provider, Model, & Messaging bot)",
         "🔑 Configure API Keys & Local AI Engines (Interactive)",
         "🐳 Configure Local AI Models & Docker Pull List",
-        "🐳 Start Swarm Stack (Docker Compose up)",
-        "🧹 Clean/Reset Swarm Stack (Stop & delete Docker containers/images)",
+        "🐳 Start Assembly Stack (Docker Compose up)",
+        "🧹 Clean/Reset Assembly Stack (Stop & delete Docker containers/images)",
         "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
         "📊 Showcase Telemetry Dashboard (Access guidelines)",
         "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)",
@@ -2020,7 +2020,7 @@ def run_interactive_wizard():
         "⚡ Quick Setup (Configure Provider, Model, & Messaging bot)",
         "🔑 Configure API Keys & Local AI Engines (Interactive)",
         "🐳 Configure Local AI Models & Docker Pull List",
-        "🐳 Start Swarm Stack (Docker Compose up)",
+        "🐳 Start Assembly Stack (Docker Compose up)",
         "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
         "📊 Showcase Telemetry Dashboard (Access guidelines)",
         "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)"
@@ -2054,7 +2054,7 @@ def run_interactive_wizard():
             ("Quick Setup (Provider & Credentials)", run_quick_setup),
             ("Configure API Keys Status", configure_api_keys),
             ("Configure Local Models & Hardware Profile", configure_local_models),
-            ("Start Docker Swarm Stack", launch_docker_swarm),
+            ("Start Docker Assembly Stack", launch_docker_assembly),
             ("Register MCP in Claude & Cursor", lambda: (auto_register_claude_desktop_mcp(), auto_register_cursor_mcp())),
             ("Showcase Telemetry Dashboard", showcase_dashboard),
             ("Start Cognitive Shell (Termchat)", None)  # special handling for termchat launch
@@ -2097,7 +2097,7 @@ def run_interactive_wizard():
                 # Last step: Launch termchat in-place!
                 launch_termchat(project_root)
                 
-        print(f"\n{c_m}🎉 Guided setup completed successfully! Welcome to Kenbun Swarm!{c_r}\n")
+        print(f"\n{c_m}🎉 Guided setup completed successfully! Welcome to Kenbun Assembly!{c_r}\n")
         # guided setup terminates, continue to standard loop if they don't exit Termchat
         first_time = False
 
@@ -2123,7 +2123,7 @@ def run_interactive_wizard():
             configure_local_models()
             current_selection = 4
         elif selection == 4:
-            launch_docker_swarm()
+            launch_docker_assembly()
             current_selection = 5
         elif selection == 5:
             clean_docker_stack()
@@ -2160,11 +2160,11 @@ def main():
                 project_root = get_project_root()
                 launch_termchat(project_root)
             elif cmd in ("start", "up"):
-                launch_docker_swarm()
+                launch_docker_assembly()
             elif cmd in ("stop", "down"):
                 # Execute docker compose down
                 project_root = get_project_root()
-                print(f"\n{c_m}🐳 Stopping Swarm Stack...{c_r}")
+                print(f"\n{c_m}🐳 Stopping Assembly Stack...{c_r}")
                 import subprocess
                 try:
                     subprocess.run(["docker", "compose", "down"], cwd=str(project_root))
@@ -2198,7 +2198,7 @@ def main():
                 import inspect
                 try:
                     import core.tools.infrastructure.server as server
-                    print(f"\n{c_m}🔮 KENBUN SWARM - DYNAMIC MCP TOOLS{c_r}")
+                    print(f"\n{c_m}🔮 KENBUN ASSEMBLY - DYNAMIC MCP TOOLS{c_r}")
                     print("──────────────────────────────────────────────────")
                     for name, obj in inspect.getmembers(server):
                         if inspect.isfunction(obj) and obj.__module__ == server.__name__ and not name.startswith("_"):

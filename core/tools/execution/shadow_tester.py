@@ -11,7 +11,7 @@ from core.tools.utils.notifications import send_notification
 
 class ShadowTesterHandler(FileSystemEventHandler):
     """
-    Handles file system events and triggers the Kenbun Swarm.
+    Handles file system events and triggers the Kenbun Assembly.
     """
     def __init__(self, project_path):
         self.project_path = project_path
@@ -37,17 +37,17 @@ class ShadowTesterHandler(FileSystemEventHandler):
         
         self.last_trigger[str(file_path)] = now
         
-        msg = f"Detected change in {file_path.name}. Spawning swarm..."
+        msg = f"Detected change in {file_path.name}. Spawning assembly..."
         print(f"🕵️ Shadow Tester: {msg}")
         send_notification("Kenbun Shadow Tester", msg)
         
-        self.trigger_swarm(file_path)
+        self.trigger_assembly(file_path)
 
-    def trigger_swarm(self, file_path):
+    def trigger_assembly(self, file_path):
         # This is a placeholder for the actual trigger logic
         # In a real scenario, this would call a FastAPI endpoint or a background task queue
         task = f"Analyze the changes in {file_path.name} and suggest/write unit tests."
-        print(f"🚀 Swarm Task: {task}")
+        print(f"🚀 Assembly Task: {task}")
         # Note: run_pipeline needs the 'tools' dict which is usually managed by the FastMCP server.
         # We will implement a 'background_queue' in server.py later.
 

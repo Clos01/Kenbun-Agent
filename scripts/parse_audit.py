@@ -9,8 +9,8 @@ with open(audit_json) as f:
 
 out_path = os.path.join(project_root, "brain_health", "audit_results.md")
 with open(out_path, "w") as f:
-    f.write("# Swarm Audit Results\n\n")
-    f.write("> [!WARNING]\n> **High Positives**\n> The Swarm detected potential issues in 226 files. LLMs tend to be overly verbose when auditing code, meaning many of these are likely false positives, style suggestions, or minor un-optimized logic rather than critical crashes.\n\n")
+    f.write("# Assembly Audit Results\n\n")
+    f.write("> [!WARNING]\n> **High Positives**\n> The Assembly detected potential issues in 226 files. LLMs tend to be overly verbose when auditing code, meaning many of these are likely false positives, style suggestions, or minor un-optimized logic rather than critical crashes.\n\n")
     
     for item in data[:50]: # Show top 50
         name = item["file"].split("/")[-1]

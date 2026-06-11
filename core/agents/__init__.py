@@ -1,5 +1,5 @@
 """
-Kenbun Swarm Agents (System 2 & 5)
+Kenbun Assembly Agents (System 2 & 5)
 Sovereign, autonomous cognitive agents powered by the Google Kenbun (AGY) SDK.
 Enforces strict sandboxing, HITL gates, and SHA-256 lineage manifests.
 """

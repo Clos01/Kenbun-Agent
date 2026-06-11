@@ -55,7 +55,7 @@ from core.orchestrator import *
 |---|---|
 | `tools/orchestrator.py` ↔ `tools/core/orchestrator.py` | Top-level file is a `sys.path` shim doing `from core.orchestrator import *`. Risk of double-import. |
 | `tools/server.py` ↔ `tools/core/server.py` | Top-level is a `subprocess.run` re-launcher. Confusing. |
-| `tools/memory/error_memory.py` ↔ `tools/utils/error_memory.py` | The `memory/` version is a 9-line `print()` stub; the `utils/` version is the real 153-line ChromaDB-backed implementation. `production_swarm.py` imports the real one, but the stub will silently shadow it depending on import path. |
+| `tools/memory/error_memory.py` ↔ `tools/utils/error_memory.py` | The `memory/` version is a 9-line `print()` stub; the `utils/` version is the real 153-line ChromaDB-backed implementation. `production_assembly.py` imports the real one, but the stub will silently shadow it depending on import path. |
 | `tools/skills/hatch-pet/scripts/*` ↔ `external/open-design/skills/hatch-pet/scripts/*` | `diff -rq` shows 13 byte-identical files duplicated — 2× maintenance cost. |
 | `tools/observatory/` ↔ `neural_observatory/` ↔ `tools/dashboard/` (WIP per docs) | Three potential UI homes; `STRUCTURE.md` mentions all three. |
 
@@ -71,7 +71,7 @@ from core.orchestrator import *
 
 | File | LOC | Smell |
 |---|---|---|
-| `tools/core/orchestrator.py` | **987** | 14 imports, contains pipeline builders for bug-fix/code-review/research/shadow-test/design-ui, agent spawning, context building, language detection, async swarm, sync swarm wrapper. |
+| `tools/core/orchestrator.py` | **987** | 14 imports, contains pipeline builders for bug-fix/code-review/research/shadow-test/design-ui, agent spawning, context building, language detection, async assembly, sync assembly wrapper. |
 | `tools/core/server.py` | **756** | Single module exposes ~30 MCP tools — every new capability lands here. |
 | `tools/audit/gemini_reviewer.py` | 374 | Mixes Gemini client init, DDG search, code review, plain research, and audio transcription. |
 | `brain_health/STRATEGY_BENCHMARK.py` | **50,063** | This is almost certainly a generated benchmark dump committed by mistake. **Should not be in source control.** |
@@ -91,7 +91,7 @@ tools/core/report_intelligence.py:8  → "/Users/dev/Dev/Kenbun/core/..."
 tools/core/minimal.py:8              → "/Users/dev/Dev/Kenbun/core/..."
 tools/memory/chroma_db_connect.py:21 → "/Users/dev/Dev/Projects/_TEMPLATE_PROJECT" (env override exists ✅)
 tools/utils/harvester.py:53          → "/Users/dev/.gemini/kenbun/brain"
-tools/scratch/swarm_test.py:7        → "/Users/dev/Dev/Projects/Food/ElToroLoco"
+tools/scratch/assembly_test.py:7        → "/Users/dev/Dev/Projects/Food/ElToroLoco"
 ```
 
 The project already has `tools/utils/path_utils.get_project_root()` — use it everywhere. For external paths, read from `.env` (you already do this for some).
@@ -120,8 +120,8 @@ There is no `tests/` directory and no `pytest.ini`/`pyproject.toml` test config.
 | `artifacts/brain/<uuid>/scratch/verify_bridge.py` | Stale runtime artifact under source tree. Should be in a gitignored runtime dir. |
 | `.gitignore` line `/Users/dev/Dev/Kenbun/core/nano .env` | Looks like an accidentally-committed shell command. Remove. |
 | Root has 9 markdown docs | Consider consolidating into `docs/`: `DESIGN.md`, `STRUCTURE.md`, `SYSTEM_MAP.md`, `NEURAL_HIERARCHY.md`, `FILE_GLOSSARY.md`, `OPERATIONS_MANUAL.md`, `DEPLOYMENT_GUIDE.md`, `VOIP_SETUP.md`, `POST_MORTEM.md`. Keep only `README.md` at root. |
-| Root has 3 entrypoint scripts (`production_swarm.py`, `swarm_daemon.py`, `export_to_obsidian.py`) | Move to `scripts/` or `bin/`, expose as console-scripts in `pyproject.toml`. |
-| `tools/scratch/`, top-level `scratch/`, `tools/swarm_report_auth.md` | Mixing scratch/test/prod inside `tools/`. |
+| Root has 3 entrypoint scripts (`production_assembly.py`, `assembly_daemon.py`, `export_to_obsidian.py`) | Move to `scripts/` or `bin/`, expose as console-scripts in `pyproject.toml`. |
+| `tools/scratch/`, top-level `scratch/`, `tools/assembly_report_auth.md` | Mixing scratch/test/prod inside `tools/`. |
 | 14 bare `except:` clauses in `tools/` | Catches `SystemExit`/`KeyboardInterrupt` — should be `except Exception:` minimum. |
 
 ---

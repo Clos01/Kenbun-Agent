@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from core.tools.infrastructure.config import settings
-from core.tools.infrastructure.topology_manager import get_swarm_events
+from core.tools.infrastructure.topology_manager import get_assembly_events
 from core.tools.audit.guardrail_agent import guardrail_agent
 from core.tools.memory.chroma_db_connect import get_project_collection
 
@@ -20,12 +20,12 @@ LOG_FILE = settings.PROJECT_ROOT / "brain_health" / "live_telemetry.json"
 @router.get("/api/v1/topology/stream")
 async def stream_topology():
     """
-    Streams live swarm topology and task events to the Dashboard.
+    Streams live assembly topology and task events to the Dashboard.
     """
     async def event_generator():
         last_idx = 0
         while True:
-            events = get_swarm_events()
+            events = get_assembly_events()
             if len(events) > last_idx:
                 for i in range(last_idx, len(events)):
                     yield f"data: {json.dumps(events[i])}\n\n"
@@ -38,7 +38,7 @@ async def stream_topology():
 @router.get("/api/v1/logs/stream")
 async def stream_logs():
     """
-    Streams live swarm daemon and orchestrator logs to the Dashboard in real-time.
+    Streams live assembly daemon and orchestrator logs to the Dashboard in real-time.
     """
     async def log_generator():
         last_size = 0

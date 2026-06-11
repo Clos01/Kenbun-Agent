@@ -1,8 +1,8 @@
 import asyncio
-from core.tools.infrastructure.orchestrator import spawn_swarm
+from core.tools.infrastructure.orchestrator import spawn_assembly
 
 async def main():
-    print("🚀 Triggering Swarm Objective for Mission Control...")
+    print("🚀 Triggering Assembly Objective for Mission Control...")
     objective = "Analyze the current security of the Kenbun/core codebase and recommend one hardening step."
     
     # Mock tools for the demo
@@ -19,7 +19,7 @@ async def main():
     }
     
     # This will trigger the Queen to decompose the task and execute
-    await spawn_swarm(objective, tools=mock_tools)
+    await spawn_assembly(objective, tools=mock_tools)
 
 if __name__ == "__main__":
     asyncio.run(main())

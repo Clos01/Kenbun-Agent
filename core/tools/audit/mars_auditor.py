@@ -1,6 +1,6 @@
 import re
 from typing import Dict, Tuple
-from core.tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.topology_manager import log_assembly_event
 
 class MARSAuditor:
     """
@@ -125,7 +125,7 @@ class MARSAuditor:
 
         if breaches:
             msg = " | ".join(breaches)
-            log_swarm_event("DECISION", {
+            log_assembly_event("DECISION", {
                 "tool": "mars_auditor",
                 "confidence": 0.9,
                 "result": "REJECTED",
@@ -135,7 +135,7 @@ class MARSAuditor:
             return False, msg
         
         msg = "On-Curve: No non-linear boundary breaches detected."
-        log_swarm_event("DECISION", {
+        log_assembly_event("DECISION", {
             "tool": "mars_auditor",
             "confidence": 0.5,
             "result": "APPROVED",

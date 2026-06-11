@@ -13,7 +13,7 @@ function Print-Banner {
     Write-Host "┌─────────────────────────────────────────────────────────┐" -ForegroundColor Magenta
     Write-Host "│             🌸 Kenbun-Agent Installer                    │" -ForegroundColor Magenta
     Write-Host "├─────────────────────────────────────────────────────────┤" -ForegroundColor Magenta
-    Write-Host "│  Sovereign Japanese Agentic Swarm (Systems 1-6)         │" -ForegroundColor Magenta
+    Write-Host "│  Sovereign Japanese Agentic Assembly (Systems 1-6)         │" -ForegroundColor Magenta
     Write-Host "└─────────────────────────────────────────────────────────┘" -ForegroundColor Magenta
 }
 
@@ -80,7 +80,7 @@ function Audit-Dependencies {
         $dockerVer = docker --version
         Log-Success "Docker Engine is active ($dockerVer)"
     } else {
-        Log-Warn "Docker is not detected. (Docker Compose Swarm stack requires Docker Desktop to run)."
+        Log-Warn "Docker is not detected. (Docker Compose Assembly stack requires Docker Desktop to run)."
         Log-Warn "  ➔ Install Docker Desktop for Windows: https://docs.docker.com/desktop/install/windows-install/"
     }
 }

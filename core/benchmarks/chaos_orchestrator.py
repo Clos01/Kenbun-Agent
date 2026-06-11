@@ -45,9 +45,9 @@ async def run_chaos_test():
             project_path=str(PROJECT_ROOT)
         )
         if "Budget Exceeded" in res:
-            print("  ✅ SUCCESS: TokenGovernor halted the swarm correctly.")
+            print("  ✅ SUCCESS: TokenGovernor halted the assembly correctly.")
         else:
-            print(f"  ❌ FAILURE: Swarm should have been halted. Result: {res[:200]}...")
+            print(f"  ❌ FAILURE: Assembly should have been halted. Result: {res[:200]}...")
     except Exception as e:
         print(f"  ❌ ERROR: Budget test crashed: {e}")
 
@@ -56,14 +56,14 @@ async def run_chaos_test():
     # 2. TEST REMOTE CONNECTION FAILURE (CHAOS)
     print("\n[CHAOS 2] Testing Remote PC Connection Failure...")
     
-    old_ip = settings.SWARM_PC_IP
+    old_ip = settings.ASSEMBLY_PC_IP
     old_port = settings.CHROMA_PORT
     
     # Poison the settings singleton
-    settings.SWARM_PC_IP = "10.255.255.1" 
+    settings.ASSEMBLY_PC_IP = "10.255.255.1" 
     settings.CHROMA_PORT = 9999
     
-    print(f"  - Poisoned SWARM_PC_IP in Sovereign Settings: {settings.SWARM_PC_IP}")
+    print(f"  - Poisoned ASSEMBLY_PC_IP in Sovereign Settings: {settings.ASSEMBLY_PC_IP}")
     print("  - Executing task requiring System 3 (Memory)...")
     
     start_time = time.time()
@@ -87,7 +87,7 @@ async def run_chaos_test():
         print(f"  ❌ FAILURE: Pipeline crashed during connection failure: {e}")
 
     # Restore settings
-    settings.SWARM_PC_IP = old_ip
+    settings.ASSEMBLY_PC_IP = old_ip
     settings.CHROMA_PORT = old_port
     
     # 3. TEST INTELLIGENCE ROUTING (BAYESIAN SELECTION)

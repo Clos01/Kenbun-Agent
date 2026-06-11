@@ -3,7 +3,7 @@ import chromadb
 
 from core.tools.infrastructure.config import settings
 
-PC_IP = settings.SWARM_PC_IP
+PC_IP = settings.ASSEMBLY_PC_IP
 CHROMA_PORT = settings.CHROMA_PORT
 LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
 

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from core.tools.infrastructure.config import settings
 from core.tools.utils.llm_utils import extract_json
-from core.tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.topology_manager import log_assembly_event
 
 class AdversarialCourt:
     def __init__(self):
@@ -195,8 +195,8 @@ class AdversarialCourt:
         }
         self._log_court(court_entry)
 
-        # Notify Swarm topology manager
-        log_swarm_event("DECISION", {
+        # Notify Assembly topology manager
+        log_assembly_event("DECISION", {
             "tool": "adversarial_court",
             "confidence": confidence,
             "result": verdict,

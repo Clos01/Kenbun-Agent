@@ -399,7 +399,7 @@ def transcribe_audio(audio_path: str, prompt: str = "Transcribe this audio and e
             model=GEMINI_MODEL,
             config=types.GenerateContentConfig(
                 temperature=0.1,
-                system_instruction="You are a Sensory Interpreter for the Kenbun Swarm. Transcribe the audio and convert it into a clear Swarm Objective."
+                system_instruction="You are a Sensory Interpreter for the Kenbun Assembly. Transcribe the audio and convert it into a clear Assembly Objective."
             ),
             contents=[
                 types.Part.from_bytes(data=audio_bytes, mime_type="audio/wav"),

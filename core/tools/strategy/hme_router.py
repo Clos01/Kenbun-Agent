@@ -22,7 +22,7 @@ class HMERouter:
         
         db_words = ["schema", "index", "table", "database", "rls", "pgvector", "migration", "query", "cache", "partition", "sync", "backup", "replication", "sql", "db", "supabase", "prisma", "mig", "postgres", "crud", "replica", "store", "data", "structure", "embedding", "vector", "structures"]
         
-        infra_words = ["orchestrator", "parallel", "topology", "bayesian", "server", "pipeline", "autonomic", "governor", "sentinel", "monitor", "daemon", "core", "api", "infrastructure", "swarm", "workflow", "system", "sys", "node", "env", "ci", "cd", "devops", "corrector", "recovery", "logic", "scale", "optimize"]
+        infra_words = ["orchestrator", "parallel", "topology", "bayesian", "server", "pipeline", "autonomic", "governor", "sentinel", "monitor", "daemon", "core", "api", "infrastructure", "assembly", "workflow", "system", "sys", "node", "env", "ci", "cd", "devops", "corrector", "recovery", "logic", "scale", "optimize"]
 
         # Compile strict boundary regexes
         self.ui_p = re.compile(r"\b(" + "|".join(re.escape(w) for w in ui_words) + r")\b")

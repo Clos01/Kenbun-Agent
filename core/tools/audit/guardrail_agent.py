@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 from typing import Tuple, Union
 from core.tools.utils.telemetry import log_tool_performance
-from core.tools.infrastructure.topology_manager import log_swarm_event
+from core.tools.infrastructure.topology_manager import log_assembly_event
 
 from core.tools.infrastructure.config import settings
 
@@ -50,7 +50,7 @@ class GuardrailAgent:
         ]
 
     def scan_objective(self, objective: str) -> Tuple[bool, str]:
-        """Scans a swarm objective for prompt injection patterns."""
+        """Scans a assembly objective for prompt injection patterns."""
         obj_lower = objective.lower()
         for pattern in self.injection_patterns:
             if re.search(pattern, obj_lower):
@@ -116,7 +116,7 @@ class GuardrailAgent:
                 "critique": f"DETERMINISTIC REJECTION: Forbidden patterns detected ({', '.join(found_crit)}).",
                 "improvement_instruction": "Remove unauthorized system/file access."
             }
-            log_swarm_event("DECISION", {
+            log_assembly_event("DECISION", {
                 "tool": "guardrail_agent",
                 "confidence": 1.0,
                 "result": "REJECTED",
@@ -144,7 +144,7 @@ class GuardrailAgent:
                 if json_match:
                     audit_result = json.loads(json_match.group(0))
                     log_tool_performance("guardrail_audit", True, time.time() - start_time)
-                    log_swarm_event("DECISION", {
+                    log_assembly_event("DECISION", {
                         "tool": "guardrail_agent",
                         "confidence": 0.8,
                         "result": audit_result.get("status", "unknown").upper(),
@@ -156,7 +156,7 @@ class GuardrailAgent:
             log_tool_performance("guardrail_audit", False, time.time() - start_time)
             
         fallback_result = {"status": "approved", "risk_level": "unknown", "critique": "Audit fallback to safe status."}
-        log_swarm_event("DECISION", {
+        log_assembly_event("DECISION", {
             "tool": "guardrail_agent",
             "confidence": 0.1,
             "result": "APPROVED",

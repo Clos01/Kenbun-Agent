@@ -47,8 +47,8 @@ async def test_ensemble_safe_code():
 
 if __name__ == "__main__":
     from core.tools.infrastructure.config import settings
-    if not settings.SWARM_PC_IP:
-        settings.SWARM_PC_IP = "127.0.0.1"
+    if not settings.ASSEMBLY_PC_IP:
+        settings.ASSEMBLY_PC_IP = "127.0.0.1"
         
     asyncio.run(test_ensemble_logic_bomb())
     asyncio.run(test_ensemble_safe_code())

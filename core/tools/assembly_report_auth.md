@@ -1,4 +1,4 @@
-# 🐝 Swarm Objective: Implement a secure JWT authentication flow for ElToroLoco and ensure the UI follows our Neo-Brutalist design.
+# 🐝 Assembly Objective: Implement a secure JWT authentication flow for ElToroLoco and ensure the UI follows our Neo-Brutalist design.
 
 **Tasks identified:** 6
 

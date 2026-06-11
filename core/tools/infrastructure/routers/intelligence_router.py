@@ -108,7 +108,7 @@ async def get_intelligence_history():
                             f"[{tool_name.upper()} — AUDIT FAILED]\n\n"
                             f"The audit agent attempted '{logic_doc}' but the local model was unreachable "
                             f"(Legion PC offline or LM Studio not running on port 2065). "
-                            f"No critique was generated. Ensure the Swarm is running and retry the audit."
+                            f"No critique was generated. Ensure the Assembly is running and retry the audit."
                         )
                     elif result_status.upper() == "REVIEW_NEEDED":
                         stored_output = (

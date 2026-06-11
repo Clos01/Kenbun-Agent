@@ -44,4 +44,4 @@ This supports three standard execution modes:
 
 ## 🚨 Reporting Vulnerabilities
 
-If you discover a security issue or vulnerability in Kenbun-Agent, please do not open a public issue. Instead, report it privately to the security team at **security@sovereignswarm.org**.
+If you discover a security issue or vulnerability in Kenbun-Agent, please do not open a public issue. Instead, report it privately to the security team at **security@sovereignassembly.org**.

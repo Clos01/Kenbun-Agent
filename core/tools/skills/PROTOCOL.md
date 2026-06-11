@@ -1,6 +1,6 @@
 # Kenbun Skill Protocol (PROTOCOL.md)
 
-This protocol defines how **Skills** are authored and registered within the Kenbun ecosystem. A Skill is a self-contained intelligence module that teaches the Swarm how to produce a specific artifact (e.g., a SaaS landing page, a technical report, or a 3D shader).
+This protocol defines how **Skills** are authored and registered within the Kenbun ecosystem. A Skill is a self-contained intelligence module that teaches the Assembly how to produce a specific artifact (e.g., a SaaS landing page, a technical report, or a 3D shader).
 
 ## 1. Directory Structure
 Every skill must live in `tools/skills/<skill-name>/` and contain:

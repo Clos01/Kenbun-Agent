@@ -96,7 +96,7 @@ export default function EntryTerminal() {
           </div>
           <div className="bg-card/60 backdrop-blur-sm border border-primary/5 p-5 text-left space-y-1 rounded-sm shadow-sm">
             <div className="flex items-center gap-2 text-[10px] text-primary/40 uppercase font-black tracking-widest">
-              <Zap className="w-3 h-3" /> Swarm Latency
+              <Zap className="w-3 h-3" /> Assembly Latency
             </div>
             <div className="text-sm font-bold text-primary">12.4ms (Bayesian)</div>
           </div>
@@ -106,7 +106,7 @@ export default function EntryTerminal() {
           <button 
             onClick={handleLaunch}
             className="flex-1 py-5 bg-primary hover:bg-primary/95 text-white font-black uppercase tracking-[0.3em] text-xs transition-all duration-300 rounded-sm shadow-lg shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer"
-            aria-label="Animate Swarm Launch and Enter"
+            aria-label="Animate Assembly Launch and Enter"
           >
             Animate Launch
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />

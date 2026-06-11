@@ -20,7 +20,7 @@ router = APIRouter()
 project_root = settings.PROJECT_ROOT
 
 LOG_FILE = project_root / "brain_health" / "live_telemetry.json"
-TASKS_FILE = project_root / "brain_health" / "swarm_tasks.json"
+TASKS_FILE = project_root / "brain_health" / "assembly_tasks.json"
 BENCHMARKS_FILE = project_root / "brain_health" / "benchmarks.json"
 
 _last_supervisor_check_time = 0.0
@@ -38,7 +38,7 @@ def check_local_supervisor() -> dict:
     
     targets = [
         {
-            "host": settings.SWARM_PC_IP,
+            "host": settings.ASSEMBLY_PC_IP,
             "port": settings.LM_STUDIO_PORT,
             "node": "Node.LM-1",
             "fallback_model": settings.LM_STUDIO_MODEL
@@ -333,7 +333,7 @@ async def get_stats():
                 ]
             } for t in governor.get_all_stats()
         ],
-        "swarm_status": "Active",
+        "assembly_status": "Active",
         "tasks": tasks,
         "pulse": pulse,
         "logs": logs if logs else [
@@ -408,8 +408,8 @@ async def run_security_audit():
 
     return results
 
-@router.get("/swarm/sovereignty/status")
-async def swarm_sovereignty_status():
+@router.get("/assembly/sovereignty/status")
+async def assembly_sovereignty_status():
     log_file = project_root / "brain_health" / "SOVEREIGNTY_LOG.md"
     recent_shifts = []
     if log_file.exists():

@@ -1739,51 +1739,123 @@ def main():
                             continue
                             
                         elif cmd == "/tools":
-                            tools = get_harvested_tools()
+                            builtin_tools = [
+                                {"name": "scan_repo", "module": "core.tools.memory.repo_mapper", "purpose": "Scans files and builds workspace maps."},
+                                {"name": "review_code_with_gemini", "module": "core.tools.audit.gemini_reviewer", "purpose": "Deep Cloud AI code review with validation."},
+                                {"name": "research_with_gemini", "module": "core.tools.audit.gemini_reviewer", "purpose": "Broad-context technical and pricing research."},
+                                {"name": "consult_supervisor", "module": "core.tools.audit.supervisor_agent", "purpose": "Run System 2 architecture and compliance checks."},
+                                {"name": "remember_fix", "module": "core.tools.utils.error_memory", "purpose": "Save post-mortems and resolved bugs to ChromaDB."},
+                                {"name": "recall_fix", "module": "core.tools.utils.error_memory", "purpose": "Search local fallback or Hivemind database for historical fixes."},
+                                {"name": "save_checkpoint", "module": "core.tools.utils.backtracker", "purpose": "Saves git/file state before running experimental edits."},
+                                {"name": "restore_checkpoint", "module": "core.tools.utils.backtracker", "purpose": "Restores files to a saved checkpoint if validation fails."},
+                                {"name": "run_code_safely", "module": "core.tools.execution.sandbox_runner", "purpose": "Safe sandboxed execution of terminal commands."},
+                                {"name": "reflect_and_distill", "module": "core.tools.audit.reflection_agent", "purpose": "Reflects on step performance and creates post-mortems."},
+                                {"name": "guardrail_audit", "module": "core.tools.audit.guardrail_agent", "purpose": "Dynamic check for prompt injection and token limits."},
+                                {"name": "maze_verification", "module": "core.tools.utils.maze_protocol", "purpose": "Verifies system properties and backtracks if regression is found."},
+                                {"name": "tune_assembly", "module": "core.tools.utils.bayesian", "purpose": "Tunes agent weights based on historical success rates."},
+                                {"name": "consult_hivemind", "module": "core.tools.audit.consult_architect", "purpose": "Consults the knowledge base for architectural patterns."},
+                                {"name": "generate_discovery_form", "module": "core.tools.audit.discovery_agent", "purpose": "Creates form schema for user/UI requirement gathering."},
+                                {"name": "autofix_linter", "module": "core.tools.audit.linter_autofix", "purpose": "Autonomic linter fixing of syntax/formatting errors."},
+                            ]
+                            
                             if len(cmd_parts) < 2:
-                                if not tools:
-                                    print(f"\n{C_D}  No harvested sovereign tools active.{C_R}\n")
-                                else:
-                                    by_cat = {}
-                                    for t_name, entry in tools.items():
-                                        cat = entry.category
-                                        if cat not in by_cat:
-                                            by_cat[cat] = []
-                                        by_cat[cat].append(entry)
-                                    
-                                    tool_lines = []
-                                    for cat, entries in sorted(by_cat.items()):
-                                        tool_lines.append(f"{C_Y}Category: {cat}{C_R}")
-                                        for entry in sorted(entries, key=lambda x: x.name):
-                                            desc_line = entry.description.splitlines()[0][:60] if entry.description else "No description."
-                                            tool_lines.append(f"  • {C_G}{entry.name:<25}{C_R}{C_D}➟ {desc_line}{C_R}")
-                                        tool_lines.append("")
-                                    if tool_lines and tool_lines[-1] == "":
-                                        tool_lines.pop()
-                                    
-                                    draw_box(tool_lines, title=f"🌸 HARVESTED SOVEREIGN TOOLS ({len(tools)})", border_color=C_P, text_color=C_W)
-                                    print(f"\n  Use {C_C}/tools <tool_name>{C_R} for details or {C_C}/run <tool_name> arg=val{C_R} to execute.\n")
+                                tool_lines = []
+                                tool_lines.append(f"{C_Y}{'Tool Name':<25}  {'Python Module Reference':<36}  {'Purpose':<50}{C_R}")
+                                tool_lines.append(f"{C_D}" + "─" * 115 + f"{C_R}")
+                                
+                                for t in builtin_tools:
+                                    tool_lines.append(
+                                        f"{C_G}{t['name']:<25}{C_R}  "
+                                        f"{C_W}{t['module']:<36}{C_R}  "
+                                        f"{C_D}{t['purpose']}{C_R}"
+                                    )
+                                
+                                harvested = get_harvested_tools()
+                                if harvested:
+                                    tool_lines.append("")
+                                    tool_lines.append(f"{C_Y}Harvested Sovereign Tools:{C_R}")
+                                    tool_lines.append(f"{C_D}" + "─" * 115 + f"{C_R}")
+                                    for t_name, entry in sorted(harvested.items()):
+                                        desc = entry.description.splitlines()[0][:50] if entry.description else "No description."
+                                        module_ref = getattr(entry.handler, "__module__", "dynamic")
+                                        tool_lines.append(
+                                            f"{C_G}{entry.name:<25}{C_R}  "
+                                            f"{C_W}{module_ref:<36}{C_R}  "
+                                            f"{C_D}{desc}{C_R}"
+                                        )
+                                
+                                draw_box(tool_lines, title="🌸 ACTIVE ASSEMBLY TOOLS & ORCHESTRATORS", border_color=C_P, text_color=C_W)
+                                print(f"\n  Use {C_C}/tools <tool_name>{C_R} for details or {C_C}/run <tool_name> arg=val{C_R} to execute.\n")
                             else:
                                 target_tool = cmd_parts[1].strip()
-                                entry = tools.get(target_tool)
-                                if not entry:
-                                    print(f"\n{C_Y}❌ Tool '{target_tool}' not found.{C_R}\n")
-                                else:
-                                    import inspect
-                                    sig = inspect.signature(entry.handler)
+                                b_tool = next((t for t in builtin_tools if t["name"] == target_tool), None)
+                                
+                                if b_tool:
+                                    handler = None
+                                    try:
+                                        import importlib
+                                        mod_name = b_tool["module"]
+                                        func_name = b_tool["name"]
+                                        if func_name == "consult_supervisor":
+                                            func_name = "run_supervisor_audit"
+                                        elif func_name == "review_code_with_gemini":
+                                            func_name = "gemini_code_review"
+                                        elif func_name == "research_with_gemini":
+                                            func_name = "gemini_research"
+                                        elif func_name == "reflect_and_distill":
+                                            func_name = "_reflect_and_distill"
+                                        elif func_name == "guardrail_audit":
+                                            func_name = "run_guardrail_audit"
+                                        elif func_name == "maze_verification":
+                                            func_name = "backward_verify"
+                                        elif func_name == "consult_hivemind":
+                                            func_name = "consult_brain"
+                                            
+                                        mod = importlib.import_module(mod_name)
+                                        handler = getattr(mod, func_name)
+                                    except Exception:
+                                        pass
+                                    
+                                    sig_str = "(...)"
+                                    if handler:
+                                        import inspect
+                                        try:
+                                            sig = inspect.signature(handler)
+                                            sig_str = f"{b_tool['name']}{sig}"
+                                        except Exception:
+                                            pass
+                                            
                                     details = [
-                                        f"{C_Y}Name:{C_R}        {C_G}{entry.name}{C_R}",
-                                        f"{C_Y}Category:{C_R}    {entry.category}",
-                                        f"{C_Y}Signature:{C_R}   {entry.name}{sig}",
-                                        f"{C_Y}Async:{C_R}       {entry.is_async}",
-                                        f"{C_Y}Required Env:{C_R} {', '.join(entry.requires_env) if entry.requires_env else 'None'}",
+                                        f"{C_Y}Name:{C_R}        {C_G}{b_tool['name']}{C_R}",
+                                        f"{C_Y}Module:{C_R}      {b_tool['module']}",
+                                        f"{C_Y}Signature:{C_R}   {sig_str}",
                                         "---",
-                                        f"{C_Y}Description:{C_R}"
+                                        f"{C_Y}Purpose:{C_R}",
+                                        f"  {b_tool['purpose']}"
                                     ]
-                                    for line in entry.description.splitlines():
-                                        details.append(f"  {line}")
-                                    draw_box(details, title=f"🌸 TOOL: {entry.name.upper()}", border_color=C_G, text_color=C_W)
+                                    draw_box(details, title=f"🌸 TOOL: {b_tool['name'].upper()}", border_color=C_G, text_color=C_W)
                                     print()
+                                else:
+                                    harvested = get_harvested_tools()
+                                    entry = harvested.get(target_tool)
+                                    if not entry:
+                                        print(f"\n{C_Y}❌ Tool '{target_tool}' not found.{C_R}\n")
+                                    else:
+                                        import inspect
+                                        sig = inspect.signature(entry.handler)
+                                        details = [
+                                            f"{C_Y}Name:{C_R}        {C_G}{entry.name}{C_R}",
+                                            f"{C_Y}Category:{C_R}    {entry.category}",
+                                            f"{C_Y}Signature:{C_R}   {entry.name}{sig}",
+                                            f"{C_Y}Async:{C_R}       {entry.is_async}",
+                                            f"{C_Y}Required Env:{C_R} {', '.join(entry.requires_env) if entry.requires_env else 'None'}",
+                                            "---",
+                                            f"{C_Y}Description:{C_R}"
+                                        ]
+                                        for line in entry.description.splitlines():
+                                            details.append(f"  {line}")
+                                        draw_box(details, title=f"🌸 TOOL: {entry.name.upper()}", border_color=C_G, text_color=C_W)
+                                        print()
                             continue
 
                         elif cmd == "/skills":

@@ -3,7 +3,7 @@ from core.tools.infrastructure.config import settings
 
 # --- CONFIGURATION ---
 PROJECT_ROOT = settings.PROJECT_ROOT
-PC_IP = settings.SWARM_PC_IP
+PC_IP = settings.ASSEMBLY_PC_IP
 PC_USER = settings.deployment.pc_user
 REMOTE_PATH = settings.deployment.pc_remote_path
 SSH_KEY_PATH = settings.deployment.ssh_key_path

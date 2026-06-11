@@ -5,9 +5,9 @@ import concurrent.futures
 from pathlib import Path
 
 # Add core to path so tools imports work
-sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tools.infrastructure.orchestrator import orchestrate
+from core.tools.infrastructure.orchestrator import orchestrate
 
 def find_code_files(base_dir: Path) -> list:
     extensions = {".py", ".ts", ".tsx", ".js", ".jsx"}
@@ -69,7 +69,7 @@ def main():
     for d in target_dirs:
         code_files.extend(find_code_files(d))
         
-    print(f"🚀 Launching swarm of {len(code_files)} agents (bounded to 15 concurrent threads)...")
+    print(f"🚀 Launching assembly of {len(code_files)} agents (bounded to 15 concurrent threads)...")
     
     results = []
     issues_found = 0
@@ -93,7 +93,7 @@ def main():
     with open(out_path, "w") as f:
         json.dump(results, f, indent=2)
         
-    print(f"🏁 Swarm completed. {issues_found} files with potential issues. Results written to {out_path}")
+    print(f"🏁 Assembly completed. {issues_found} files with potential issues. Results written to {out_path}")
 
 if __name__ == "__main__":
     main()

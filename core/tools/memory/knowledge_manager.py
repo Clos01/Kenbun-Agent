@@ -2,10 +2,10 @@ import uuid
 import json
 from core.tools.infrastructure.config import settings
 
-HIVEMIND_HOST = settings.SWARM_PC_IP
+HIVEMIND_HOST = settings.ASSEMBLY_PC_IP
 HIVEMIND_PORT = settings.CHROMA_PORT
 
-HIVEMIND_HOST = settings.SWARM_PC_IP
+HIVEMIND_HOST = settings.ASSEMBLY_PC_IP
 HIVEMIND_PORT = settings.CHROMA_PORT
 
 from core.tools.memory.chroma_db_connect import get_project_collection, upsert_embedding, query_embeddings

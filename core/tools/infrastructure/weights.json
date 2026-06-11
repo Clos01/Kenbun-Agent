@@ -118,7 +118,7 @@
             "alpha": 1.0,
             "beta": 1.0
         },
-        "tune_swarm": {
+        "tune_assembly": {
             "alpha": 1.0,
             "beta": 1.0
         },

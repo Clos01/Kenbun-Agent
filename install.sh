@@ -37,7 +37,7 @@ print_banner() {
     echo "┌─────────────────────────────────────────────────────────┐"
     echo "│             🌸 Kenbun-Agent Installer                    │"
     echo "├─────────────────────────────────────────────────────────┤"
-    echo "│  Sovereign Japanese Agentic Swarm (Systems 1-6)         │"
+    echo "│  Sovereign Japanese Agentic Assembly (Systems 1-6)         │"
     echo "└─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
 }
@@ -267,7 +267,7 @@ audit_dependencies() {
                 ;;
         esac
     else
-        log_warn "Docker is not detected. (Docker Compose Swarm stack requires Docker Engine to run)."
+        log_warn "Docker is not detected. (Docker Compose Assembly stack requires Docker Engine to run)."
         if [ "$OS" = "linux" ]; then
             if [ "$IS_APT_BASED" -eq 1 ]; then
                 log_warn "  ➔ Linux (Self-Healing Install): Run ${BOLD}curl -fsSL https://get.docker.com | sh && sudo systemctl enable --now docker && sudo usermod -aG docker \$USER && newgrp docker${NC}"
@@ -283,7 +283,7 @@ audit_dependencies() {
     elif command -v docker-compose >/dev/null 2>&1; then
         log_success "Docker-Compose (legacy CLI) is active ($(docker-compose --version | head -n 1))"
     else
-        log_warn "Docker Compose is missing. You may not be able to spin up local docker swarm containers."
+        log_warn "Docker Compose is missing. You may not be able to spin up local docker assembly containers."
     fi
 }
 
@@ -367,7 +367,7 @@ provision_venv() {
     fi
     
     venv/bin/pip install cryptography requests requests-mock pytest pydantic pydantic-settings || exit_with_error "$ERR_005_PIP_FAILED" \
-        "Failed to install mandatory swarm library dependencies." \
+        "Failed to install mandatory assembly library dependencies." \
         "Ensure standard compiler tools and headers are available for cryptography compilation."
     
     log_success "Python environment provisioned successfully."

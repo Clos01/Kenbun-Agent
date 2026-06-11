@@ -50,7 +50,7 @@ graph TD
 ### 1. The Sensory Hall (The Entrance)
 *   **Logic Anchor**: `tools/core/native_ears.py`
 *   **Spatial Context**: This is where signals first hit the "vine". It’s loud, messy, and requires "Gating" (System 4) to clean.
-*   **Trigger**: "The 5-Blade Fan" — A reminder of the 5 systems that must all be "spinning" for the swarm to be air-worthy.
+*   **Trigger**: "The 5-Blade Fan" — A reminder of the 5 systems that must all be "spinning" for the assembly to be air-worthy.
 
 ### 2. The Execution Studio (The Atelier)
 *   **Logic Anchor**: `tools/execution/sandbox_runner.py`

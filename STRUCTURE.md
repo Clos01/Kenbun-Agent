@@ -32,7 +32,7 @@ Kenbun is organized into a nested hierarchy of reasoning, from immediate reflexe
 - **Goal**: Maintaining the Heritage aesthetic and architectural integrity.
 
 ### 🌌 System 6: The Autonomic (Self-Healing & SVE)
-- **Component**: `swarm_daemon.py` / `sve_pulse.py` (System 5.1)
+- **Component**: `assembly_daemon.py` / `sve_pulse.py` (System 5.1)
 - **Function**: Monitors the system for regressions, technical debt, and logical hallucinations. The **Sovereign Verification Engine (SVE)** enforces AST structural laws and logical provenance project-wide.
 - **Goal**: Infinite system stability and total architectural grounding.
 

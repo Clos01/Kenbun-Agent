@@ -25,10 +25,10 @@ If you don't have all three, you're flying blind. Period.
 Pick **5 measurable axes** and grade every release on all 5. Suggested for an AI coding assistant:
 
 1. **Routing accuracy** — % of tasks the `DecisionRouter` sends to the right pipeline. You already log to `routing_history.jsonl` and `routing_failures.jsonl`. → just need a script to compute the ratio.
-2. **Bug-fix success rate** — % of bug-fix swarms where the sandbox test passes after the fix. Already partially tracked in `usage_stats.json` per-tool.
+2. **Bug-fix success rate** — % of bug-fix assemblies where the sandbox test passes after the fix. Already partially tracked in `usage_stats.json` per-tool.
 3. **Hallucination rate** — % of `consult_supervisor` answers that fail backward verification (`maze_protocol.py`). You have `HALLUCINATION_TEST.py` — turn its output into a number.
 4. **Latency budget** — median seconds per orchestrate(); fail-budget if > X. Already in `telemetry.py:log_tool_performance`.
-5. **Cost discipline** — $ per swarm vs. budget. Already in `token_governor.py` + `usage_stats.json`.
+5. **Cost discipline** — $ per assembly vs. budget. Already in `token_governor.py` + `usage_stats.json`.
 
 Each axis becomes a column in `BENCHMARKS.json`, scored every night.
 
@@ -105,7 +105,7 @@ You have `tools/observatory/` (Next.js). Three charts will tell you everything:
 
 1. **Time series of all 5 axes** (lines on one graph, last 30 days). Are they trending up?
 2. **Top 5 failing test cases** from the golden set. These are your debugging targets for the week.
-3. **Cost per successful swarm** (`total_cost / successful_swarms`). This should *fall* over time as caching/recall improves.
+3. **Cost per successful assembly** (`total_cost / successful_assemblies`). This should *fall* over time as caching/recall improves.
 
 If you can't tell from a glance whether the system is improving, the dashboard is wrong. Iterate until it's a glance-able answer.
 
@@ -126,13 +126,13 @@ Routing accuracy:       81% (▲ +3% vs yesterday)
 Bug-fix success:        67% (▼ -2%)
 Hallucination rate:      9% (▲ better, was 12%)
 Median orchestrate():  14.2s (flat)
-Cost per swarm:        $0.034 (▼ better, was $0.041)
+Cost per assembly:        $0.034 (▼ better, was $0.041)
 
 🆕 New regression: pipeline `code_review` started failing on Python 3.11 type-hint cases.
 🏆 Win: error-recall hit rate up to 41% — the Hivemind is paying off.
 ```
 
-Pipe it to a Telegram message via your existing `swarm_voice.py` infrastructure → you get a daily verdict on your phone.
+Pipe it to a Telegram message via your existing `assembly_voice.py` infrastructure → you get a daily verdict on your phone.
 
 ---
 

@@ -1,7 +1,7 @@
 <div align="center">
   
 # 🌸 Kenbun-Agent
-**Cognitive Sovereignty & Self-Healing AI Swarm**
+**Cognitive Sovereignty & Self-Healing AI Assembly**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -77,7 +77,7 @@ Once the installer has registered `kenbun` in your PATH, you can use these fast 
 | :--- | :--- | :--- |
 | **`kenbun`** | Interactive Wizard Menu | Launches the full Sakura interactive onboarding wizard. |
 | **`kenbun chat`** | Cognitive Agent Shell (Termchat) | Starts the self-healing interactive terminal chat copilot directly. |
-| **`kenbun start`** | Start Stack | Spins up the Docker Swarm Compose microservices in the background. |
+| **`kenbun start`** | Start Stack | Spins up the Docker Assembly Compose microservices in the background. |
 | **`kenbun stop`** | Stop Stack | Stops and shuts down the Docker Compose containers. |
 | **`kenbun setup`** | API Keys Setup | Opens the interactive API credentials configuration manager. |
 | **`kenbun mcp`** | Register MCP | Registers Kenbun's tools inside Claude Desktop and Cursor automatically. |
@@ -116,7 +116,7 @@ Initialize the environment configuration file, telemetry metrics, and local SQLi
 kenbun
 ```
 
-### 3️⃣ Step 3: Boot up the Swarm & The Portable UI
+### 3️⃣ Step 3: Boot up the Assembly & The Portable UI
 Spin up the unified microservices stack:
 ```bash
 docker compose up -d --build
@@ -131,8 +131,8 @@ docker compose up -d --build
 > **How to verify your GPU is working:** Once running, Docker may still report high RAM usage (e.g. in Dozzle or `top`). This is normal as Docker maps the model into shared system memory. To verify true hardware acceleration, run `watch -n 1 nvidia-smi` in your terminal and look for VRAM consumption and GPU utilization spikes when chatting with local models.
 
 > [!IMPORTANT]
-> **AI Orchestration vs. Docker Swarm Clarification:**
-> Kenbun-Agent is described as an agentic swarm because it orchestrates multiple specialized, collaborative AI worker personas. However, at the system infrastructure layer, the local stack runs entirely on **standard Docker Compose** (`docker compose`). It does **NOT** require initializing a Docker Swarm cluster (`docker swarm init`). This keeps local development zero-friction and lightweight!
+> **AI Orchestration vs. Docker Assembly Clarification:**
+> Kenbun-Agent is described as an agentic assembly because it orchestrates multiple specialized, collaborative AI worker personas. However, at the system infrastructure layer, the local stack runs entirely on **standard Docker Compose** (`docker compose`). It does **NOT** require initializing a Docker Assembly cluster (`docker assembly init`). This keeps local development zero-friction and lightweight!
 
 **🎉 Access the Dashboard!**
 Open your browser and navigate to the local dashboard interface:
@@ -148,7 +148,7 @@ If you are deploying Kenbun-Agent on dedicated virtualization hardware (such as 
    ```bash
    sudo bash scripts/ubuntu_vm_bootstrap.sh
    ```
-3. Deploy the container swarm stack directly using the Portainer Web UI or comfortably via the command line utilizing the interactive wizard wrapper command:
+3. Deploy the container assembly stack directly using the Portainer Web UI or comfortably via the command line utilizing the interactive wizard wrapper command:
    ```bash
    kenbun
    ```
@@ -160,11 +160,11 @@ Whenever you open the Next.js Dashboard or boot up the Cognitive Shell (`kenbun 
 1.  **Smart Cloud Gateway Audits**: If your primary LLM is a cloud provider (e.g., Google Gemini, OpenAI, Anthropic, DeepSeek, or Azure), the probe detects the domain name and performs a fast, non-blocking TCP socket verification on port `443` to ensure internet and endpoint reachability. This bypasses the Ollama-specific API tags query (`GET /api/tags`), preventing timeout delays, socket hangs, or false-offline reporting!
 2.  **Local Ollama Reachability**: If configured for offline execution, the probe queries the local Ollama backend tags to ensure the primary model is active.
 3.  **Docker CLI & Daemon Health Audit**: Verifies socket write permissions (`/var/run/docker.sock`) and alerts you with secure, non-leaking diagnostic summaries if access is blocked.
-4.  **Decoupled Vector Database Connection**: Connects to the host/port defined by `CHROMA_HOST` and `CHROMA_PORT` in your `.env` (defaulting to `localhost:8000`), allowing you to point your agent swarm to a dedicated remote or shared ChromaDB instance!
+4.  **Decoupled Vector Database Connection**: Connects to the host/port defined by `CHROMA_HOST` and `CHROMA_PORT` in your `.env` (defaulting to `localhost:8000`), allowing you to point your agent assembly to a dedicated remote or shared ChromaDB instance!
 
-### 🧹 Swarm Stack Cleanup & Reset Wizard
+### 🧹 Assembly Stack Cleanup & Reset Wizard
 
-The setup wizard (`kenbun` or `python3 scripts/bootstrap.py`) provides an automated stack cleaning tool under Option 6: **`🧹 Clean/Reset Swarm Stack`**. This handles deep Docker house-cleaning when you need to free disk space or trigger a completely fresh container environment:
+The setup wizard (`kenbun` or `python3 scripts/bootstrap.py`) provides an automated stack cleaning tool under Option 6: **`🧹 Clean/Reset Assembly Stack`**. This handles deep Docker house-cleaning when you need to free disk space or trigger a completely fresh container environment:
 
 *   **Light Clean (Option 1)**: Stops the compose stack and deletes local containers, volumes, and local build images. This is **fast** and leaves standard pulled base images untouched.
 *   **Deep Purge (Option 2)**: Completely prunes the stack. It deletes all containers, volumes, and large cached Docker base images (e.g. Ollama, ChromaDB, Next.js). Then, it runs `docker builder prune -f` and `docker image prune -f` to recover maximum host storage.
@@ -323,7 +323,7 @@ To support standard developers and enterprise operations engineers alike, we cat
 *   **Symptom:** Creating a new stack via Portainer's **Web editor** by pasting `docker-compose.yml` fails with: `Service fastmcp_server Building failed to solve: failed to read dockerfile: open Dockerfile: no such file or directory`.
 *   **Cause:** Pasting compose configurations in a raw web editor does not provide Portainer with the local source directory files (like `Dockerfile` or python dependencies).
 *   **Resolutions:**
-    *   **Method 1 (Fast CLI):** Run `kenbun` in your server terminal and select **Option 5 (Start Swarm Stack)**. This compiles and launches the containers directly where the files exist.
+    *   **Method 1 (Fast CLI):** Run `kenbun` in your server terminal and select **Option 5 (Start Assembly Stack)**. This compiles and launches the containers directly where the files exist.
     *   **Method 2 (Portainer Repository):** In Portainer, change the build method from **`Web editor`** to **`Repository`**. Specify `https://github.com/Clos01/Kenbun-Agent.git` as the URL and `refs/heads/main` as the branch, load your `.env` variables below, and click Deploy.
 
 ---

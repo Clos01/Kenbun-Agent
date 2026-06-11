@@ -15,8 +15,8 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Neural Observatory | Kenbun Swarm",
-  description: "Real-time visibility into System 4 Bayesian Intelligence and Swarm Learning cycles.",
+  title: "Neural Observatory | Kenbun Assembly",
+  description: "Real-time visibility into System 4 Bayesian Intelligence and Assembly Learning cycles.",
 };
 
 export default function RootLayout({

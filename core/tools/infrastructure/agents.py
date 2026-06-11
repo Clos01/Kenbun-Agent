@@ -3,7 +3,7 @@ from typing import List
 
 class AgentPersona(BaseModel):
     """
-    Definition of an AI Agent Persona for the Kenbun Swarm.
+    Definition of an AI Agent Persona for the Kenbun Assembly.
     """
     id: str
     name: str
@@ -19,13 +19,13 @@ PERSONAS = {
     "queen": AgentPersona(
         id="queen",
         name="The Queen",
-        description="The Swarm Orchestrator. Decomposes tasks and assigns workers.",
+        description="The Assembly Orchestrator. Decomposes tasks and assigns workers.",
         system_prompt=(
-            "You are the Kenbun Queen. Your goal is to manage a swarm of specialized agents. "
+            "You are the Kenbun Queen. Your goal is to manage a assembly of specialized agents. "
             "When given an objective, break it down into atomic tasks and assign them to the most "
             "capable worker persona. Maintain the global state and resolve conflicts between agents."
         ),
-        allowed_tools=["spawn_swarm", "orchestrate", "memory_search"],
+        allowed_tools=["spawn_assembly", "orchestrate", "memory_search"],
         model_preference="gemini-3.1-pro-preview", # Queen needs high reasoning
     ),
     "coder": AgentPersona(

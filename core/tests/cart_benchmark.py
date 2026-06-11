@@ -6,7 +6,7 @@ BENCHMARK_DATA = [
     {"task": "Fix the background color of the login button to be blue", "expected": "LOCAL_WORKER"},
     {"task": "Update the supabase schema to include a new profile field for users", "expected": "PRO_AUDITOR"},
     {"task": "Harden the authentication middleware to prevent session fixation", "expected": "SECURITY_GUARD"},
-    {"task": "Refactor the core orchestrator.py to support parallel swarm execution", "expected": "SECURITY_GUARD"},
+    {"task": "Refactor the core orchestrator.py to support parallel assembly execution", "expected": "SECURITY_GUARD"},
     {"task": "Create a new React component for the gallery preview with framer-motion", "expected": "LOCAL_WORKER"},
     {"task": "Add a new SQL index to the transactions table to speed up lookups", "expected": "PRO_AUDITOR"},
     {"task": "Implement JWT rotation in the auth service", "expected": "SECURITY_GUARD"},

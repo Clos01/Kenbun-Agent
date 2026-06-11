@@ -51,7 +51,7 @@ interface WorkerDetails {
 
 const WORKER_DETAILS: Record<string, WorkerDetails> = {
   "LM Studio": {
-    hardware: "Local CPU/GPU Swarm (Apple Silicon M-series/RTX Core)",
+    hardware: "Local CPU/GPU Assembly (Apple Silicon M-series/RTX Core)",
     activeModel: "Qwen2.5-Coder-7B-Instruct / Hermes-3-Llama3.1-8B (Q4_K_M)",
     responsibilities: [
       "System 2 Supervisor audits and semantic validation",
@@ -842,9 +842,9 @@ export default function FleetCommand() {
                       </div>
                     </div>
 
-                    {/* Swarm Responsibilities */}
+                    {/* Assembly Responsibilities */}
                     <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-md space-y-2">
-                      <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Swarm Responsibilities</span>
+                      <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Assembly Responsibilities</span>
                       <ul className="list-disc pl-4 space-y-1.5 opacity-80 leading-relaxed font-sans text-xs">
                         {details.responsibilities.map((resp, idx) => (
                           <li key={idx}>{resp}</li>

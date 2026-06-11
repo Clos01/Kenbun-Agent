@@ -12,7 +12,7 @@ from core.tools.audit.adversarial_court import AdversarialCourt
 
 async def main():
     code = """
-def check_and_start_docker_swarm(project_root: Path):
+def check_and_start_docker_assembly(project_root: Path):
     import subprocess, shutil, time
     docker_bin = shutil.which("docker")
     if not docker_bin: return
@@ -22,7 +22,7 @@ def check_and_start_docker_swarm(project_root: Path):
     except Exception: return
     subprocess.run([docker_bin, "compose", "up", "-d"], cwd=str(project_root), check=True)
 """
-    proposal = "I have refactored the codebase to use uv tool install, added check_and_start_docker_swarm hook, and silenced chroma telemetry. Are there security issues?"
+    proposal = "I have refactored the codebase to use uv tool install, added check_and_start_docker_assembly hook, and silenced chroma telemetry. Are there security issues?"
 
     court = AdversarialCourt()
     try:

@@ -15,7 +15,7 @@ from core.tools.infrastructure.config import settings
 
 class IOLock:
     """
-    Atomic File-System Lock to prevent concurrent write collisions in Parallel Swarms.
+    Atomic File-System Lock to prevent concurrent write collisions in Parallel Assemblies.
     """
     def __init__(self, atomic_file_system_locks_directory_path: str = None):
         if atomic_file_system_locks_directory_path is None:

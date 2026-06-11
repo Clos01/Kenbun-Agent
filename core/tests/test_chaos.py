@@ -41,10 +41,10 @@ def test_circuit_breaker_logic(tmp_path):
     corrector.recovery_path = tmp_path / "chaos_recovery.jsonl"
     project = str(tmp_path / "Chaos")
     
-    # Trigger 3 swarms
+    # Trigger 3 assemblies
     for i in range(3):
-        corrector.spawn_recovery_swarm(project, f"Error {i}")
+        corrector.spawn_recovery_assembly(project, f"Error {i}")
         
-    # 4th swarm should be blocked
+    # 4th assembly should be blocked
     is_broken = corrector._is_circuit_broken(project)
     assert is_broken is True

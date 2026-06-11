@@ -44,7 +44,7 @@ class IntelligenceEngine:
                                     suggestions.append({
                                         "priority": "HIGH",
                                         "type": "RE-TRAIN",
-                                        "message": f"Swarm audit rejection rate is high ({rejected_count}/{total_count}). I recommend re-indexing project code to optimize reasoning."
+                                        "message": f"Assembly audit rejection rate is high ({rejected_count}/{total_count}). I recommend re-indexing project code to optimize reasoning."
                                     })
             except Exception as e:
                 logging.error(f"IntelligenceEngine Benchmark Error: {e}", exc_info=True)
