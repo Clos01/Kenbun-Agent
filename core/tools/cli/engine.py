@@ -102,7 +102,7 @@ from core.tools.infrastructure.ai_gateway import (
     build_system_prompt
 )
 from core.tools.cli.edge_router import process_edge_routing
-from core.tools.utils.bayesian import tune_swarm
+from core.tools.utils.bayesian import tune_assembly
 
 # Thread lock to guarantee safe parallel writes
 _backup_lock = threading.Lock()
@@ -2248,7 +2248,7 @@ def main():
                                     time.sleep(backoff)
                                 else:
                                     if actual_url == "http://localhost:11434/v1":
-                                        tune_swarm(actual_model, success=False, category="local_routing")
+                                        tune_assembly(actual_model, success=False, category="local_routing")
                                     raise e
                 except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as primary_err:
                     # Catch primary connection failure, and trigger fallback gateway
@@ -2472,7 +2472,7 @@ def main():
                                     full_reply += chunk
                                 except Exception as e:
                                     if actual_url == "http://localhost:11434/v1":
-                                        tune_swarm(actual_model, success=False, category="local_routing")
+                                        tune_assembly(actual_model, success=False, category="local_routing")
                                     print(f"\n{C_RED}STREAM PARSE ERROR:{C_R} {repr(e)} on chunk: {data_str[:50]}...", flush=True)
                                     log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
                             else:
@@ -2489,7 +2489,7 @@ def main():
                 
                 # Auto-tune bayesian router if edge routing succeeded
                 if actual_url == "http://localhost:11434/v1" and not is_gemini_route:
-                    tune_swarm(actual_model, success=True, category="local_routing")
+                    tune_assembly(actual_model, success=True, category="local_routing")
                 
                 # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
                 execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
