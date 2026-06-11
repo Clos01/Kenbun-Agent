@@ -2,19 +2,11 @@ import os
 from cryptography.fernet import Fernet
 
 # Path to the master key (hidden and protected)
-from core.tools.infrastructure.config import settings
-KEY_FILE = settings.PROJECT_ROOT / ".kenbun_master.key"
+from core.tools.utils.path_utils import get_project_root
+KEY_FILE = get_project_root() / ".kenbun_master.key"
 
 def _ensure_key():
     """Generates a key if it doesn't exist."""
-    # Automated migration from old key file if present
-    OLD_KEY_FILE = settings.PROJECT_ROOT / ".kenbun_master.key"
-    if OLD_KEY_FILE.exists() and not KEY_FILE.exists():
-        import shutil
-        try:
-            shutil.copy2(OLD_KEY_FILE, KEY_FILE)
-        except Exception:
-            pass
 
     if not KEY_FILE.exists():
         key = Fernet.generate_key()

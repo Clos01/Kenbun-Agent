@@ -109,6 +109,17 @@ class KenbunSettings(BaseSettings):
     def assemble_brain_health_dir(cls, v, info):
         return get_project_root() / "brain_health"
 
+    @field_validator("PRIMARY_LLM_URL", "PRIMARY_LLM_MODEL", "FALLBACK_LLM_URL", "FALLBACK_LLM_MODEL", mode="before")
+    @classmethod
+    def decrypt_encrypted_fields(cls, v):
+        if isinstance(v, str) and v.startswith("enc:"):
+            from core.tools.utils.secret_manager import decrypt_value
+            try:
+                return decrypt_value(v)
+            except Exception:
+                return v
+        return v
+
     @property
     def INTELLIGENCE_DB_PATH(self) -> Path:
         return self.BRAIN_HEALTH_DIR / "kenbun_intelligence.db"

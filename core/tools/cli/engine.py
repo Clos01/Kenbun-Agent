@@ -1299,6 +1299,10 @@ def main():
     llm_url = env.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
     llm_model = env.get("PRIMARY_LLM_MODEL", "gemma4:12b")
     
+    from core.tools.utils.secret_manager import decrypt_value
+    llm_url = decrypt_value(llm_url)
+    llm_model = decrypt_value(llm_model)
+    
     # Resolve initial brain health dir per v2.8.0 specification
     cwd = Path.cwd().resolve()
     
