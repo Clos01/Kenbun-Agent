@@ -210,7 +210,8 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
             "--- HERITAGE DESIGN SYSTEM MANDATE ---\n"
             "You must adhere to the Heritage Design System. Do not use 'neon' colors.\n"
             "--- END MANDATE ---\n"
-            "Do NOT use markdown execute or spawn blocks. Just answer the user's question directly."
+            "You MUST perform your reasoning inside a <think> ... </think> block before executing any commands.\n" +
+            execute_block + spawn_block
         )
     elif tier == "standard":
         return base + execute_block + spawn_block + memory_block
