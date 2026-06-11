@@ -210,7 +210,12 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
             "--- HERITAGE DESIGN SYSTEM MANDATE ---\n"
             "You must adhere to the Heritage Design System. Do not use 'neon' colors.\n"
             "--- END MANDATE ---\n"
-            "You must execute tools by outputting raw execute blocks immediately. Do NOT explain your reasoning.\n" +
+            "You must execute tools by outputting raw execute blocks immediately. Do NOT explain your reasoning.\n"
+            "EXAMPLES:\n"
+            "User: List files in /opt\n"
+            "Assistant: ```execute\nls /opt\n```\n"
+            "User: Use orchestrate to locate kenbun\n"
+            "Assistant: ```execute\nkenbun orchestrate\n```\n" +
             execute_block + spawn_block
         )
     elif tier == "standard":
