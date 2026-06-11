@@ -46,10 +46,10 @@ class ModelSettings(BaseModel):
     lm_studio_draft_model: str = "google/gemma-4-e4b"
     use_speculative_decoding: bool = True
     speculative_lookahead: int = Field(default=5, ge=1, le=20)
-    gemini_model: str = "gemini-3-flash-preview"
-    gemini_pro_model: str = "gemini-3.1-pro-preview"
-    gemini_3_5_flash_model: str = "gemini-3.5-flash"
-    gemini_3_1_lite_model: str = "gemini-3.1-flash-lite"
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_pro_model: str = "gemini-1.5-pro"
+    gemini_3_5_flash_model: str = "gemini-1.5-flash"
+    gemini_3_1_lite_model: str = "gemini-1.5-flash-8b"
     deepseek_model: str = "deepseek-chat"
     lm_studio_connect_timeout: float = 3.0
     lm_studio_read_timeout: float = 60.0
@@ -174,8 +174,8 @@ class KenbunSettings(BaseSettings):
     LM_STUDIO_DRAFT_MODEL: str = "qwen2.5-coder-1.5b-instruct"
     USE_SPECULATIVE_DECODING: bool = True
     SPECULATIVE_LOOKAHEAD: int = Field(default=5, ge=1, le=20)
-    GEMINI_MODEL: str = "gemini-3-flash-preview"
-    GEMINI_PRO_MODEL: str = "gemini-3.1-pro-preview"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_PRO_MODEL: str = "gemini-1.5-pro"
     GEMINI_API_KEY: Optional[SecretStr] = None
     GOOGLE_CLIENT_ID: Optional[SecretStr] = None
     GOOGLE_CLIENT_SECRET: Optional[SecretStr] = None

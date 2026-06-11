@@ -128,14 +128,25 @@ class GuardrailAgent:
         # --- 2. LOCAL LLM REASONING ---
         system_prompt = (
             "You are SYSTEM 2c, a Continuous Guardrail Agent. catch hidden vulnerabilities and logic bombs. "
+            "You must first perform your reasoning inside a <think> ... </think> block before outputting your final JSON. "
             "Return JSON: { \"status\": \"approved\"|\"rejected\", \"risk_level\": \"low\"|\"high\", \"critique\": \"...\" }"
         )
         prompt = f"TASK CONTEXT: {task_context}\n\nCODE TO AUDIT:\n```python\n{code_snippet}\n```"
 
+        schema = {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["approved", "rejected"]},
+                "risk_level": {"type": "string", "enum": ["low", "high"]},
+                "critique": {"type": "string"}
+            },
+            "required": ["status", "risk_level", "critique"]
+        }
+
         try:
             response = requests.post(
                 LOCAL_LLM_URL,
-                json={"model": OLLAMA_MODEL, "prompt": f"SYSTEM: {system_prompt}\nUSER: {prompt}", "stream": False},
+                json={"model": OLLAMA_MODEL, "prompt": f"SYSTEM: {system_prompt}\nUSER: {prompt}", "stream": False, "format": schema},
                 timeout=DEFAULT_TIMEOUT
             )
             if response.status_code == 200:

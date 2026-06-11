@@ -219,26 +219,26 @@ class DecisionRouter:
     def record_model_feedback(self, model: str, task: str, success: bool, latency: float, cost: float):
         model_key = model
         valid_arms = [
-            "gemini-3.5-flash",
-            "gemini-3.1-pro-preview",
-            "gemini-3-flash-preview",
-            "gemini-3.1-flash-lite",
-            "gemini-3.1-flash-lite-preview",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-2.5-flash",
+            "gemini-1.5-flash-8b",
+            "gemini-2.0-flash-exp",
             "local"
         ]
         # Normalise common model names to our active arm keys
         if model_key not in valid_arms:
-            if "3.5" in model_key and "flash" in model_key.lower():
-                model_key = "gemini-3.5-flash"
-            elif "lite" in model_key.lower():
-                if "preview" in model_key.lower():
-                    model_key = "gemini-3.1-flash-lite-preview"
+            if "3.5" in model_key or "1.5" in model_key and "flash" in model_key.lower() and "8b" not in model_key.lower():
+                model_key = "gemini-1.5-flash"
+            elif "lite" in model_key.lower() or "8b" in model_key.lower():
+                if "preview" in model_key.lower() or "exp" in model_key.lower():
+                    model_key = "gemini-2.0-flash-exp"
                 else:
-                    model_key = "gemini-3.1-flash-lite"
+                    model_key = "gemini-1.5-flash-8b"
             elif "pro" in model_key.lower():
-                model_key = "gemini-3.1-pro-preview"
+                model_key = "gemini-1.5-pro"
             elif "flash" in model_key.lower():
-                model_key = "gemini-3-flash-preview"
+                model_key = "gemini-2.5-flash"
             else:
                 model_key = "local"
 

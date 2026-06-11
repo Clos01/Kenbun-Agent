@@ -188,7 +188,8 @@ def _make_openai_compatible_call(
     system_prompt: str,
     user_message: str,
     temperature: float = 0.1,
-    max_tokens: int = 4000
+    max_tokens: int = 4000,
+    response_format_schema: dict = None
 ) -> Optional[str]:
     # Resolve dynamic Google URL/Model rewrites
     base_url, model_name = resolve_google_endpoint_and_model(
@@ -304,6 +305,16 @@ def _make_openai_compatible_call(
         "max_tokens": max_tokens
     }
     
+    if response_format_schema:
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "fsm_tool_schema",
+                "strict": True,
+                "schema": response_format_schema
+            }
+        }
+    
     response = requests.post(url, json=payload, headers=headers, timeout=60.0)
     response.raise_for_status()
     res_json = response.json()
@@ -321,7 +332,7 @@ def _make_openai_compatible_call(
         
     return content
 
-def call_llm_gateway(system_prompt: str, user_message: str, temperature: float = 0.1, max_tokens: int = 4000) -> str:
+def call_llm_gateway(system_prompt: str, user_message: str, temperature: float = 0.1, max_tokens: int = 4000, response_format_schema: dict = None, allow_decoupled: bool = True) -> str:
     """
     Standardized, hardware-agnostic LLM router.
     Routes queries to PRIMARY_LLM_URL and falls back to FALLBACK_LLM_URL upon failure.
@@ -352,6 +363,17 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     if fallback_url and fallback_url.endswith("/"):
         fallback_url = fallback_url[:-1]
         
+    from core.tools.infrastructure.ai_gateway import detect_model_tier
+    if allow_decoupled and response_format_schema and detect_model_tier(primary_model, primary_url) == "nano":
+        logging.info("🧠 Auto-routing to Decoupled Planner-Executor for Nano model.")
+        return execute_decoupled_reasoning_and_extraction(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            response_format_schema=response_format_schema,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
     # Try Primary
     logging.info(f"🔮 LLM_ROUTER: Attempting Primary Endpoint: {primary_url} ({primary_model})")
     
@@ -364,7 +386,7 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
 
     try:
         content = _make_openai_compatible_call(
-            primary_url, primary_model, system_prompt, user_message, temperature, max_tokens
+            primary_url, primary_model, system_prompt, user_message, temperature, max_tokens, response_format_schema
         )
         if content:
             return content
@@ -389,7 +411,7 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
 
         try:
             content = _make_openai_compatible_call(
-                fallback_url, fallback_model, system_prompt, user_message, temperature, max_tokens
+                fallback_url, fallback_model, system_prompt, user_message, temperature, max_tokens, response_format_schema
             )
             if content:
                 return content
@@ -398,3 +420,49 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
             logging.error(error_msg)
             raise RuntimeError(error_msg)
 
+def execute_decoupled_reasoning_and_extraction(
+    system_prompt: str,
+    user_message: str,
+    response_format_schema: dict,
+    temperature: float = 0.1,
+    max_tokens: int = 4000
+) -> str:
+    """
+    Two-Pass Decoupled Planner-Executor Pipeline.
+    Pass 1: Reasoning. The model is asked to think freely without formatting constraints.
+    Pass 2: Extraction. The raw text from Pass 1 is fed back under strict FSM schema constraints.
+    """
+    logging.info("🧠 Executing Decoupled Planner-Executor (Pass 1: Reasoning)")
+    
+    # Pass 1: Reasoning
+    reasoning_sys_prompt = system_prompt + "\n\nDo NOT format your answer as JSON. Simply think out loud step-by-step about what tools to call and what arguments are needed."
+    
+    reasoning_text = call_llm_gateway(
+        system_prompt=reasoning_sys_prompt,
+        user_message=user_message,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        response_format_schema=None,
+        allow_decoupled=False
+    )
+    
+    logging.info("🧠 Executing Decoupled Planner-Executor (Pass 2: Extraction)")
+    
+    # Pass 2: Extraction
+    extraction_sys_prompt = (
+        "You are a strict data extractor. "
+        "Extract the required parameters from the user's text into the exact JSON format requested. "
+        "Do not explain. Do not reason. Only output the JSON."
+    )
+    extraction_user_message = f"TEXT TO EXTRACT FROM:\n{reasoning_text}"
+    
+    final_json_string = call_llm_gateway(
+        system_prompt=extraction_sys_prompt,
+        user_message=extraction_user_message,
+        temperature=0.0,
+        max_tokens=max_tokens,
+        response_format_schema=response_format_schema,
+        allow_decoupled=False
+    )
+    
+    return final_json_string
