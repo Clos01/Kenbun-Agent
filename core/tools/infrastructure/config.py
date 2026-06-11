@@ -114,7 +114,7 @@ class KenbunSettings(BaseSettings):
         return self.BRAIN_HEALTH_DIR / "kenbun_intelligence.db"
 
     # --- HYBRID NEURAL BRIDGE ---
-    SWARM_PC_IP: str = Field(default="localhost", validation_alias="PC_IP_ADDRESS")
+    ASSEMBLY_PC_IP: str = Field(default="localhost", validation_alias="PC_IP_ADDRESS")
     LOCAL_IP: str = Field(default="127.0.0.1")
 
     # --- SIP SENTINEL ---
@@ -157,7 +157,7 @@ class KenbunSettings(BaseSettings):
         )
 
     # --- MODELS & AI ---
-    SWARM_MODEL: str = "qwen2.5-coder-14b-instruct"
+    ASSEMBLY_MODEL: str = "qwen2.5-coder-14b-instruct"
     LM_STUDIO_PORT: int = 2065
     LM_STUDIO_MODEL: str = "local-model"
     LM_STUDIO_DRAFT_MODEL: str = "qwen2.5-coder-1.5b-instruct"
@@ -201,7 +201,7 @@ class KenbunSettings(BaseSettings):
     @property
     def models(self) -> ModelSettings:
         return ModelSettings(
-            default_local_model=self.SWARM_MODEL,
+            default_local_model=self.ASSEMBLY_MODEL,
             lm_studio_port=self.LM_STUDIO_PORT,
             lm_studio_model=self.LM_STUDIO_MODEL,
             lm_studio_draft_model=self.LM_STUDIO_DRAFT_MODEL,
@@ -274,8 +274,8 @@ class KenbunSettings(BaseSettings):
 
     # --- WATCHDOG & TELEMETRY ---
     BASE_TIMEOUT: int = 60
-    SWARM_TIMEOUT_MULTIPLIER: float = 1.0
-    SWARM_CLOUD_FAILOVER: bool = True
+    ASSEMBLY_TIMEOUT_MULTIPLIER: float = 1.0
+    ASSEMBLY_CLOUD_FAILOVER: bool = True
     TELEMETRY_ENABLED: bool = True
     NOTIFICATIONS_ENABLED: bool = True
     API_PORT: int = Field(default=8001)
@@ -324,13 +324,13 @@ settings = get_settings()
 
 PROJECT_ROOT = settings.PROJECT_ROOT
 BRAIN_HEALTH_DIR = settings.BRAIN_HEALTH_DIR
-SWARM_PC_IP = settings.SWARM_PC_IP
+ASSEMBLY_PC_IP = settings.ASSEMBLY_PC_IP
 LM_STUDIO_PORT = settings.LM_STUDIO_PORT
 CHROMA_PORT = settings.CHROMA_PORT
 DEFAULT_LOCAL_MODEL = settings.models.default_local_model
 BASE_TIMEOUT = settings.BASE_TIMEOUT
-TIMEOUT_MULTIPLIER = settings.SWARM_TIMEOUT_MULTIPLIER
-ENABLE_CLOUD_FAILOVER = settings.SWARM_CLOUD_FAILOVER
+TIMEOUT_MULTIPLIER = settings.ASSEMBLY_TIMEOUT_MULTIPLIER
+ENABLE_CLOUD_FAILOVER = settings.ASSEMBLY_CLOUD_FAILOVER
 LOCAL_IP = settings.LOCAL_IP
 
 # Backward compatibility alias
