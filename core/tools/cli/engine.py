@@ -29,9 +29,15 @@ try:
     from prompt_toolkit import PromptSession
     from prompt_toolkit.formatted_text import ANSI
     from prompt_toolkit.patch_stdout import patch_stdout
+    from prompt_toolkit.history import FileHistory
+    from prompt_toolkit.auto_suggest import AutoSuggestFromHistory
+    from prompt_toolkit.completion import WordCompleter
 except ImportError:
     PromptSession = None
     ANSI = None
+    FileHistory = None
+    AutoSuggestFromHistory = None
+    WordCompleter = None
     from contextlib import nullcontext
     patch_stdout = nullcontext
 
@@ -264,6 +270,24 @@ def prune_dialog_history(history, max_turns=20, max_chars=32000):
             break
             
     return history
+
+def commit_turn(history, llm_url, llm_model):
+    """Prune the dialog window and persist the crash-recovery backup in one step."""
+    history = prune_dialog_history(history)
+    save_session_backup(history, Path.cwd(), llm_url, llm_model)
+    return history
+
+def collect_tool_call(tc, execute_blocks, spawn_blocks):
+    """Route one native LLM tool call into the pending shell/agent action queues."""
+    try:
+        args = json.loads(tc["function"]["arguments"])
+        name = tc["function"]["name"]
+        if name == "execute_shell":
+            execute_blocks.append(args["command"])
+        elif name == "spawn_agent":
+            spawn_blocks.append(args["task_description"])
+    except (KeyError, TypeError, ValueError):
+        pass
 
 def save_session_backup(history, cwd, llm_url, llm_model):
     """
@@ -1501,7 +1525,28 @@ def main():
     # Initialize robust PromptSession for history and multiline
     pt_session = None
     if PromptSession is not None:
-        pt_session = PromptSession()
+        SLASH_COMMANDS = [
+            "/help", "/exit", "/reset", "/system", "/skin", "/spawn", "/agents",
+            "/kill", "/recall", "/remember", "/search", "/tools", "/skills",
+            "/stats", "/run", "/yolo",
+        ]
+
+        def _bottom_toolbar():
+            yolo = " · ⚡ YOLO" if YOLO_MODE else ""
+            return f" 🌸 {llm_model} · {model_tier}{yolo} · /help for commands"
+
+        try:
+            history_file = active_brain_health_dir / ".kenbun_input_history"
+            pt_session = PromptSession(
+                history=FileHistory(str(history_file)),
+                auto_suggest=AutoSuggestFromHistory(),
+                completer=WordCompleter(SLASH_COMMANDS, ignore_case=True, sentence=True),
+                complete_while_typing=True,
+                bottom_toolbar=_bottom_toolbar,
+            )
+        except Exception:
+            # Any failure (e.g. unwritable history file) falls back to a bare session
+            pt_session = PromptSession()
         install_shift_enter_alias()
 
     # ── Layer 5: Intent-First Boot ─────────────────────────────────────────────
@@ -2093,8 +2138,7 @@ def main():
                     final_input = scrub_secrets(final_input)
                     if final_input.strip():
                         history.append({"role": "user", "content": final_input})
-                        history = prune_dialog_history(history)
-                        save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                        history = commit_turn(history, llm_url, llm_model)
 
                 from core.tools.utils.llm_router import call_llm_gateway
                 
@@ -2147,68 +2191,42 @@ def main():
                                     live.update(Markdown(full_reply))
                                 elif chunk["type"] == "tool_calls":
                                     for tc in chunk["tool_calls"]:
-                                        if tc["function"]["name"] == "execute_shell":
-                                            try:
-                                                import json
-                                                args = json.loads(tc["function"]["arguments"])
-                                                execute_blocks.append(args["command"])
-                                            except: pass
-                                        elif tc["function"]["name"] == "spawn_agent":
-                                            try:
-                                                import json
-                                                args = json.loads(tc["function"]["arguments"])
-                                                spawn_blocks.append(args["task_description"])
-                                            except: pass
+                                        collect_tool_call(tc, execute_blocks, spawn_blocks)
                     else:
                         cols = get_columns()
                         wrapper = StreamingRenderer(cols - 4)
                         wrapper.current_line_len = 9
-                        
+
                         print(f"\n{C_D}────────────────────────────────────────────────────────────────────────{C_R}")
                         print(f"{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
-                        
+
                         for chunk in generator:
                             if chunk["type"] == "content":
                                 wrapper.write(chunk["content"])
                                 full_reply += chunk["content"]
                             elif chunk["type"] == "tool_calls":
                                 for tc in chunk["tool_calls"]:
-                                    if tc["function"]["name"] == "execute_shell":
-                                        try:
-                                            import json
-                                            args = json.loads(tc["function"]["arguments"])
-                                            execute_blocks.append(args["command"])
-                                        except: pass
-                                    elif tc["function"]["name"] == "spawn_agent":
-                                        try:
-                                            import json
-                                            args = json.loads(tc["function"]["arguments"])
-                                            spawn_blocks.append(args["task_description"])
-                                        except: pass
+                                    collect_tool_call(tc, execute_blocks, spawn_blocks)
                         wrapper.flush()
                     print("\n")
                     
                     # Register response
                     history.append({"role": "assistant", "content": scrub_secrets(full_reply)})
-                    history = prune_dialog_history(history)
-                    save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                    history = commit_turn(history, llm_url, llm_model)
                     
                 except Exception as e:
                     log_event(f"Engine routing failed: {e}")
                     raise e
                     
-                import re
                 # We also want to support legacy markdown parsing just in case
                 legacy_exec = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
                 if legacy_exec:
                     execute_blocks.extend(legacy_exec)
-                    
+
                 legacy_spawn = re.findall(r"```spawn\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
                 if legacy_spawn:
                     spawn_blocks.extend(legacy_spawn)
 
-                # Check for spawn blocks
-                spawn_blocks = re.findall(r"```spawn\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
                 if spawn_blocks and spawn_agent:
                     for sb in spawn_blocks:
                         sc = sb.strip()
@@ -2312,8 +2330,7 @@ def main():
                                 )
                             feedback = f"[SYSTEM OUT (YOLO, cmd: '{scrub_secrets(cmd)}', exit: {code})]\n{out}"
                             history.append({"role": "user", "content": scrub_secrets(feedback)})
-                            history = prune_dialog_history(history)
-                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            history = commit_turn(history, llm_url, llm_model)
                             auto_trigger = True
                     else:
                         # ── Normal safe mode ────────────────────────────────────────
@@ -2368,15 +2385,13 @@ def main():
                                 )
                             feedback = f"[SYSTEM OUT (Command: '{scrub_secrets(cmd)}', Exit Code: {code})]\n{out}"
                             history.append({"role": "user", "content": scrub_secrets(feedback)})
-                            history = prune_dialog_history(history)
-                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            history = commit_turn(history, llm_url, llm_model)
                             auto_trigger = True
                         else:
                             print(f"\n{C_D}  Command skipped.{C_R}\n")
                             feedback = f"[SYSTEM NOTICE: User skipped command: '{scrub_secrets(cmd)}']"
                             history.append({"role": "user", "content": scrub_secrets(feedback)})
-                            history = prune_dialog_history(history)
-                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
+                            history = commit_turn(history, llm_url, llm_model)
                             
             except requests.exceptions.HTTPError as http_err:
                 response_obj = http_err.response

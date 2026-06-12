@@ -94,7 +94,13 @@ class UIRenderer:
         if RICH_AVAILABLE:
             self._console = Console(highlight=False, markup=True)
             self._status_context = self._console.status
-            self._live_context = lambda: Live(console=self._console, refresh_per_second=15)
+            # vertical_overflow="visible" keeps responses taller than the
+            # terminal from being cropped mid-stream by Live's viewport.
+            self._live_context = lambda: Live(
+                console=self._console,
+                refresh_per_second=15,
+                vertical_overflow="visible",
+            )
         else:
             self._console = NullConsole()
             self._status_context = self._console.status
