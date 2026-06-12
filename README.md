@@ -141,6 +141,9 @@ Open your browser and navigate to the local dashboard interface:
 > [!NOTE]
 > **VM or Cloud Deployments:** If hosting Kenbun-Agent on a cloud VM or local VM instance (VirtualBox, Proxmox, VMware, Hyper-V), default NAT adapters and firewalls will block traffic. You must transition your VM network adapter to **Bridged Mode** and open UFW ports (3000, 8000, 8001, 8888). Refer to the comprehensive **[VM & Firewall Networking Guide](docs/VM_NETWORKING.md)** for step-by-step instructions.
 
+> [!TIP]
+> **Server / LAN access in one command:** To make a server-hosted Kenbun reachable from other devices on your network, run `./scripts/setup_lan.sh`. It detects your LAN IP, sets `BIND_IP=0.0.0.0` in `.env`, checks for Docker bridge subnet conflicts with your LAN (the classic "Docker changed my IP and the server dropped offline" failure — Kenbun's network is now pinned to `KENBUN_SUBNET` to prevent it), and restarts the stack. Use `./scripts/setup_lan.sh --doctor` for diagnostics only.
+
 #### 🏛️ Method 3: Proxmox VE & Portainer Home-Lab Node (Headless)
 If you are deploying Kenbun-Agent on dedicated virtualization hardware (such as a headless home-lab server VM) to run as an autonomous, remote resource managed via a graphical browser console:
 1. Refer to our step-by-step **[Proxmox VE & Portainer Deployment Guide](docs/PROXMOX_PORTAINER_DEPLOYMENT.md)** for BIOS, VM setup, and bridged routing parameters.

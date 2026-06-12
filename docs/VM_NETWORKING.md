@@ -187,21 +187,61 @@ sudo netstat -tulpn | grep -E "3000|8000|8001|8888"
 *   ✅ **Global Binding (`0.0.0.0:3000` or `*:8001`):** The service is listening on all network interfaces, making it accessible from your host machine over the bridged IP.
 
 ### 2. Resolving Bindings in Docker Compose
-Kenbun-Agent uses Docker port mappings which automatically bind to all interfaces (`0.0.0.0`) by default:
-```yaml
-ports:
-  - "3000:3000"  # This binds 0.0.0.0:3000 -> 3000
-```
-However, if you have customized your `docker-compose.yml` to specify loopback limits, ensure you haven't prefixed the ports with `127.0.0.1`:
-```yaml
-# ❌ Avoid this if you want LAN-wide access:
-ports:
-  - "127.0.0.1:3000:3000"
+Kenbun-Agent's `docker-compose.yml` binds every port to `${BIND_IP:-127.0.0.1}` — loopback-only by default for safety. **Do not edit the YAML.** To expose the stack on the LAN, set the variable in `.env`:
 
-# ✅ Do this instead:
-ports:
-  - "3000:3000"
+```bash
+# .env
+BIND_IP=0.0.0.0
 ```
+
+then restart: `docker compose down && docker compose up -d`.
+
+Or simply run the automated setup, which detects your LAN IP, updates `.env`, checks for subnet conflicts, and restarts the stack:
+
+```bash
+./scripts/setup_lan.sh           # interactive
+./scripts/setup_lan.sh --doctor  # diagnose only, change nothing
+```
+
+The FastMCP API's CORS layer (`PrivateNetworkCORSMiddleware`) automatically trusts origins from private LAN ranges, Tailscale (`100.64.0.0/10`), and `.local` mDNS hosts, and the dashboard auto-detects the API host from the browser URL — so no further configuration is needed after changing `BIND_IP`.
+
+---
+
+## 🚧 Docker Bridge Subnet Conflicts ("Docker changed my IP / the server dropped off the network")
+
+A common server failure mode: Docker auto-assigns each bridge network a subnet from its default pools (`172.17.0.0/16` … `192.168.0.0/20`). If a chosen range **overlaps your physical LAN or corporate VPN**, the kernel routes LAN traffic into the Docker bridge instead of the real network — the server suddenly can't reach (or be reached by) the LAN, SSH sessions die, and it "fixes itself" only after pruning Docker networks or restarting the daemon. Because the auto-assigned subnet can change across restarts, the failure appears random.
+
+### How Kenbun prevents it
+`kenbun_net` is **pinned** to a fixed subnet (`KENBUN_SUBNET`, default `172.28.77.0/24`) in `docker-compose.yml`, so Docker can never silently move it onto a conflicting range. The same subnet is used on every host, every restart.
+
+### Diagnosing a conflict
+```bash
+# 1. What subnet is your LAN on?
+ip route | grep default
+ip -4 addr show
+
+# 2. What subnets has Docker claimed?
+docker network ls -q | xargs docker network inspect --format '{{.Name}}: {{range .IPAM.Config}}{{.Subnet}}{{end}}'
+
+# Or let Kenbun check for you:
+./scripts/setup_lan.sh --doctor
+```
+If any Docker subnet matches your LAN range, that's the conflict.
+
+### Fixing a conflict
+1. **Kenbun's network:** set a non-overlapping range in `.env` (e.g. `KENBUN_SUBNET=10.213.77.0/24`), then recreate — a subnet change only applies on full recreation:
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+2. **All other Docker networks** (server-wide fix): pin the daemon's default pool in `/etc/docker/daemon.json`:
+   ```json
+   {
+     "default-address-pools": [
+       { "base": "172.28.0.0/16", "size": 24 }
+     ]
+   }
+   ```
+   then `sudo systemctl restart docker`. Pick a `base` that does not overlap your LAN or VPN.
 
 ---
 

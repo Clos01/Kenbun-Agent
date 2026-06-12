@@ -34,6 +34,18 @@ services:
     dns:
       - 8.8.8.8
       - 8.8.4.4
+    environment:
+      # Local-model efficiency & anti-hallucination tuning.
+      # A short context window silently truncates the system prompt, which is
+      # the #1 cause of small local models "forgetting" instructions and
+      # hallucinating syntax. Flash attention + quantized KV cache free the
+      # VRAM needed to afford the larger window on low-end GPUs.
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
+      - OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV_CACHE_TYPE:-q8_0}
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-8192}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
     restart: always
     networks:
       - kenbun_net
@@ -143,8 +155,19 @@ volumes:
 # NETWORK: Explicit bridge for deterministic inter-container DNS.
 # All services share this network. Even if the host subnet changes,
 # service-name DNS (e.g., http://fastmcp_server:8001) always resolves.
+#
+# The subnet is PINNED so Docker never auto-picks a range that collides
+# with the server's LAN/VPN (a collision hijacks the host's routes and
+# knocks the whole server off the network until Docker is recreated).
+# If 172.28.77.0/24 overlaps your LAN or VPN, override KENBUN_SUBNET in
+# .env, then run:  docker compose down && docker compose up -d
+# (an existing network's subnet can only change on full recreation).
 # ─────────────────────────────────────────────────────────────────────
 networks:
   kenbun_net:
     driver: bridge
     name: kenbun_net
+    ipam:
+      driver: default
+      config:
+        - subnet: ${KENBUN_SUBNET:-172.28.77.0/24}
