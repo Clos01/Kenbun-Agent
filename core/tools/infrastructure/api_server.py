@@ -342,6 +342,11 @@ def _encrypt_setting(key: str, val: str) -> str:
 class ConfigUpdateRequest(BaseModel):
     settings: Dict[str, str]
 
+@app.get("/health")
+async def health():
+    """Liveness probe for Docker healthchecks and load balancers. No side effects."""
+    return {"status": "ok"}
+
 @app.get("/api/v1/active-model")
 async def get_active_model():
     """Returns ONLY the currently active Primary LLM model name for secure frontend display."""

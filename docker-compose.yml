@@ -17,7 +17,10 @@ services:
     environment:
       - CHROMA_DB_IMPL=sqlite
       - PERSIST_DIRECTORY=/chroma_data
-    restart: always
+    # NOTE: no healthcheck — modern chroma images are distroless (no shell,
+    # no curl), so any exec-based probe would mark the container unhealthy
+    # forever. fastmcp_server retries its Chroma connection internally.
+    restart: unless-stopped
     networks:
       - kenbun_net
 
@@ -46,7 +49,14 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
       - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
-    restart: always
+    healthcheck:
+      # 'ollama ps' exercises the local API socket — fails until serving
+      test: ["CMD", "ollama", "ps"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
     networks:
       - kenbun_net
 
@@ -55,7 +65,8 @@ services:
     image: ollama/ollama:latest
     container_name: portable_ollama_init
     depends_on:
-      - ollama_server
+      ollama_server:
+        condition: service_healthy
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -64,7 +75,6 @@ services:
       - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-gemma2:2b deepseek-r1:1.5b}
     entrypoint: >
       /bin/sh -c "
-      sleep 5;
       if [ \"$$OLLAMA_PULL_MODELS\" != \"none\" ]; then
         for model in $$OLLAMA_PULL_MODELS; do
           echo \"📡 [OLLAMA_INIT] Fetching local model: $$model\";
@@ -104,8 +114,16 @@ services:
       - OLLAMA_URL=http://ollama_server:11434/api/generate
       - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
     depends_on:
-      - chromadb
-    restart: always
+      # service_started only: chromadb has no healthcheck (distroless image)
+      chromadb:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
     networks:
       - kenbun_net
 
@@ -127,8 +145,17 @@ services:
       - NODE_OPTIONS=--dns-result-order=ipv4first
     command: sh -c "npm install -g pnpm && if [ ! -d /app/node_modules ] || [ ! -f /app/node_modules/.pnpm-lock.yaml ] || [ /app/package.json -nt /app/node_modules/.pnpm-lock.yaml ]; then pnpm install && cp /app/pnpm-lock.yaml /app/node_modules/.pnpm-lock.yaml; fi && pnpm dev"
     depends_on:
-      - fastmcp_server
-    restart: always
+      fastmcp_server:
+        condition: service_healthy
+    healthcheck:
+      # node:20 ships global fetch; any HTTP response (even 404) means alive
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(()=>process.exit(0),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # First boot runs a full pnpm install — give it plenty of headroom
+      start_period: 300s
+    restart: unless-stopped
     networks:
       - kenbun_net
 
@@ -140,7 +167,14 @@ services:
       - "${BIND_IP:-127.0.0.1}:${DOZZLE_PORT:-8888}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: always
+    healthcheck:
+      # Dozzle ships a built-in healthcheck subcommand
+      test: ["CMD", "/dozzle", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
     networks:
       - kenbun_net
 
