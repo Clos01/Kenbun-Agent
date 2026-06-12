@@ -4,6 +4,11 @@ def build_research_pipeline(tools):
     """
     Pipeline: research → scan → checkpoint → sandbox test → supervisor
     Use case: "Research and implement JWT auth"
+
+    Steps 1-3 (research, scan_repo, recall_fix) share parallel_group="discovery"
+    so they run concurrently — wall-clock = slowest of the three, not their sum.
+    Each step carries a step_timeout that overrides the global TOOL_TIMEOUT so
+    the pipeline stays well within the MCP client's 60-120s connection timeout.
     """
     return [
         {
@@ -15,6 +20,8 @@ def build_research_pipeline(tools):
                 "tech_key": s.get("tech_key", ""),
             },
             "output_key": "research_result",
+            "parallel_group": "discovery",
+            "step_timeout": 25,  # Gemini research capped at 25s; times out gracefully
         },
         {
             "id": "scan_repo",
@@ -23,6 +30,8 @@ def build_research_pipeline(tools):
             "input": lambda s: {"project_path": s["project_path"]},
             "skip_if": lambda s: not s.get("project_path"),
             "output_key": "repo_map",
+            "parallel_group": "discovery",
+            "step_timeout": 20,
         },
         {
             "id": "recall_fix",
@@ -30,14 +39,17 @@ def build_research_pipeline(tools):
             "tool": tools["recall_fix"],
             "input": lambda s: {"error_message": s["task"]},
             "output_key": "past_fixes",
+            "parallel_group": "discovery",
+            "step_timeout": 15,
         },
         {
             "id": "save_checkpoint",
-            "label": "🔄 Saving checkpoint",
+            "label": "🔄 Saving checkpoint before changes",
             "tool": tools["save_checkpoint"],
             "input": lambda s: {"file_path": s["file_path"], "label": "pre_implement"},
             "skip_if": lambda s: not s.get("file_path"),
             "output_key": "checkpoint_result",
+            "step_timeout": 10,
         },
         {
             "id": "guardrail_audit",
@@ -48,6 +60,7 @@ def build_research_pipeline(tools):
                 "task_context": s["task"]
             },
             "output_key": "guardrail_result",
+            "step_timeout": 15,
         },
         {
             "id": "supervisor_review",
@@ -56,8 +69,10 @@ def build_research_pipeline(tools):
             "input": lambda s: {
                 "user_proposal": s["task"],
                 "code_snippet": s.get("code_snippet", ""),
+                # iterative_mode=False (default) keeps Ralph-Loop off for MCP calls
             },
             "output_key": "supervisor_result",
+            # No step_timeout here — supervisor_agent.py already enforces 90s max internally
         },
         {
             "id": "maze_verification",
@@ -70,6 +85,7 @@ def build_research_pipeline(tools):
             "skip_if": lambda s: not s.get("file_path"),
             "output_key": "maze_result",
             "on_failure": "backtrack",
+            "step_timeout": 20,
         },
         {
             "id": "reflect",
@@ -80,5 +96,6 @@ def build_research_pipeline(tools):
                 "tool_logs": s.get("full_log", ""),
             },
             "output_key": "reflection_result",
+            "step_timeout": 15,
         }
     ]

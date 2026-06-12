@@ -336,82 +336,163 @@ async def run_pipeline(
     step_count = 0
     consecutive_failures = 0
 
-    for step in steps:
-        step_count += 1
+    async def _execute_single_step(step, state, report, step_num):
+        """Run one pipeline step, respecting its step_timeout override if set."""
+        step_id = step["id"]
+        label   = step["label"]
+
+        try:
+            tool_input = step["input"](state)
+        except Exception as e:
+            report.append(f"⚠️ Input prep failed for `{step_id}`: {e}")
+            return False
+
+        try:
+            confidence = governor.get_tool_confidence(step_id)
+            report.append(f"### Step {step_num}: {label}")
+            report.append(f"> 🧠 **System 4 Confidence:** {confidence:.2%}")
+            brain_source = await _get_active_brain()
+            log_to_dashboard(f"{brain_source} | TOOL START: {step_id}")
+
+            # step_timeout overrides the global calibrated timeout for this step
+            if "step_timeout" in step:
+                effective_timeout = step["step_timeout"]
+            else:
+                effective_timeout = TOOL_TIMEOUT * get_timeout_multiplier()
+
+            start_time = time.time()
+            if asyncio.iscoroutinefunction(step["tool"]):
+                result = await asyncio.wait_for(step["tool"](**tool_input), timeout=effective_timeout)
+            else:
+                import concurrent.futures
+                loop = asyncio.get_running_loop()
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                def _run_tool():
+                    return step["tool"](**tool_input)
+                future = loop.run_in_executor(executor, _run_tool)
+                try:
+                    result = await asyncio.wait_for(future, timeout=effective_timeout)
+                finally:
+                    executor.shutdown(wait=False, cancel_futures=True)
+            duration = time.time() - start_time
+
+            log_to_dashboard(f"OUTPUT <- {str(result)[:100]}...")
+            save_topology(tasks_ref, {"active_system": "execution", "tool": step_id, "status": "success"})
+            governor.update_intelligence(step_id, workflow, success=True)
+            log_tool_performance(step_id, success=True, duration=duration)
+
+            output_key = step.get("output_key")
+            if output_key:
+                state[output_key] = result
+            safe_result = str(result) if result is not None else "None"
+            state["full_log"] = _prune_log(state.get("full_log", "") + f"\n[STEP {step_num}] {label}\nRESULT: {safe_result[:1000]}...\n", 8000)
+            report.append(f"```\n{safe_result[:800]}\n```")
+            report.append("")
+            return True
+
+        except asyncio.TimeoutError:
+            report.append(f"⏱️ `{step_id}` TIMED OUT. Assembly watchdog intervened.")
+            print(f"   ⏱️ {step_id} timed out.")
+            governor.update_intelligence(step_id, workflow, success=False)
+            return False
+        except Exception as e:
+            report.append(f"❌ `{step_id}` failed: {e}")
+            print(f"   ❌ {step_id}: {e}")
+            governor.update_intelligence(step_id, workflow, success=False)
+            return False
+
+    # Group consecutive steps that share a parallel_group and run them concurrently.
+    # Steps without parallel_group run sequentially as before.
+    import itertools
+    grouped_steps = []
+    for group_key, group_iter in itertools.groupby(steps, key=lambda s: s.get("parallel_group")):
+        group = list(group_iter)
+        if group_key is not None and len(group) > 1:
+            grouped_steps.append(("parallel", group))
+        else:
+            for s in group:
+                grouped_steps.append(("serial", s))
+
+    for kind, payload in grouped_steps:
         if step_count > MAX_STEPS:
             report.append(f"\n⚠️ Safety limit reached ({MAX_STEPS} steps). Stopping.")
             break
-
-        # --- COST CHECK (System 4) ---
-        if not token_governor.can_spend(0.001):  # Minimal check
+        if not token_governor.can_spend(0.001):
             report.append("\n⛔ **Budget Exceeded.** TokenGovernor has halted the assembly.")
             break
-            
-        # --- CIRCUIT BREAKER (System 2 Fallback) ---
         if consecutive_failures >= 3:
-            report.append("\n⛔ **Circuit Breaker Tripped.** 3 consecutive tool failures detected. Halting pipeline. **Recommendation:** Run `consult_supervisor` to diagnose the underlying logic flaw.")
-            print(f"   ⛔ Circuit Breaker tripped. Halting pipeline.")
+            report.append("\n⛔ **Circuit Breaker Tripped.** 3 consecutive tool failures. Recommend: run `consult_supervisor`.")
+            print("   ⛔ Circuit Breaker tripped.")
             break
 
-        step_id = step["id"]
-        label = step["label"]
+        if kind == "parallel":
+            # Run all steps in this group concurrently; wall-clock = slowest, not sum
+            par_steps = [s for s in payload if not (s.get("skip_if") and s["skip_if"](state))]
+            skipped   = [s for s in payload if s.get("skip_if") and s["skip_if"](state)]
+            for s in skipped:
+                report.append(f"⏭️ Skipped: {s['label']} (Logic condition met)")
+            if par_steps:
+                step_count += 1
+                group_key = par_steps[0].get("parallel_group", "parallel")
+                print(f"🔀 [{step_count}] Parallel group '{group_key}': {[s['id'] for s in par_steps]}")
+                report.append(f"### Step {step_count}: ⚡ Parallel — {group_key}")
+                coros = [_execute_single_step(s, state, report, step_count) for s in par_steps]
+                results_par = await asyncio.gather(*coros, return_exceptions=True)
+                failed_par = sum(1 for r in results_par if r is not True)
+                consecutive_failures = consecutive_failures + failed_par if failed_par else 0
+            continue  # skip the serial block below
 
-        # --- DYNAMIC EVALUATION (System 5: Reasoning) ---
+        # ── Serial step ──────────────────────────────────────────────────────
+        step = payload
+        step_count += 1
+
+        step_id = step["id"]
+        label   = step["label"]
+
         skip_fn = step.get("skip_if")
         if skip_fn and skip_fn(state):
             report.append(f"⏭️ Skipped: {label} (Logic condition met)")
             log_to_dashboard(f"STEP SKIPPED: {label}")
             continue
 
-        # Optional: Ask Gemini if we actually need this step (Agentic Pruning)
         if step.get("optional") and state.get("research_result"):
-             # Logic to prune redundant steps if research was enough
-             pass
+            pass  # agentic pruning placeholder
 
-        # --- PREPARE INPUT ---
         try:
-            input_fn = step["input"]
-            tool_input = input_fn(state)
+            tool_input = step["input"](state)
         except Exception as e:
             report.append(f"⚠️ Input prep failed for `{step_id}`: {e}")
             continue
 
-        # --- EXECUTE TOOL ---
         print(f"🔧 [{step_count}] {label}")
         try:
-            # --- STRATEGY LAYER (System 4) ---
             confidence = governor.get_tool_confidence(step_id)
             save_topology(tasks_ref, {"active_system": "governor", "tool": step_id, "status": "strategizing"})
             report.append(f"### Step {step_count}: {label}")
             report.append(f"> 🧠 **System 4 Confidence:** {confidence:.2%}")
 
-            # --- TELEMETRY ---
             brain_source = await _get_active_brain()
             log_to_dashboard(f"{brain_source} | TOOL START: {step_id}")
             log_to_dashboard(f"INPUT -> {str(tool_input)[:100]}...")
 
-            # Dynamic calibration per-step
-            current_multiplier = get_timeout_multiplier()
-            effective_timeout = TOOL_TIMEOUT * current_multiplier
+            if "step_timeout" in step:
+                effective_timeout = step["step_timeout"]
+            else:
+                effective_timeout = TOOL_TIMEOUT * get_timeout_multiplier()
+
             start_time = time.time()
             if asyncio.iscoroutinefunction(step["tool"]):
                 result = await asyncio.wait_for(step["tool"](**tool_input), timeout=effective_timeout)
             else:
-                # Wrap synchronous tools in an isolated ThreadPoolExecutor to prevent global thread exhaustion DoS
                 import concurrent.futures
                 loop = asyncio.get_running_loop()
                 executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-                
-                # We use a wrapper function because run_in_executor expects a zero-argument callable if kwargs are passed
                 def _run_tool():
                     return step["tool"](**tool_input)
-                    
                 future = loop.run_in_executor(executor, _run_tool)
                 try:
                     result = await asyncio.wait_for(future, timeout=effective_timeout)
                 finally:
-                    # Shutdown isolated pool immediately without blocking the event loop.
-                    # Active zombie threads will eventually die, but won't exhaust asyncio's default pool.
                     executor.shutdown(wait=False, cancel_futures=True)
             duration = time.time() - start_time
 
