@@ -19,8 +19,15 @@ fi
 echo -e "\033[38;5;38m→\033[0m Detecting NVIDIA GPU..."
 if ! lspci | grep -i nvidia &> /dev/null; then
     echo -e "\033[38;5;226m⚠\033[0m No NVIDIA GPU detected on the PCI bus."
-    echo -e "   If you believe this is an error, ensure your drivers are installed."
-    echo -e "   Continuing anyway..."
+    if [ "${1:-}" = "--force" ]; then
+        echo -e "   --force given: continuing anyway."
+    else
+        echo -e "\033[38;5;218m✗ Aborting.\033[0m This script writes docker-compose.override.yml, which makes"
+        echo -e "   the whole stack require the NVIDIA runtime — on a GPU-less host that breaks"
+        echo -e "   'docker compose up' with: could not select device driver \"nvidia\"."
+        echo -e "   If your GPU is present but undetected (fix drivers first), re-run with: sudo $0 --force"
+        exit 1
+    fi
 else
     echo -e "\033[38;5;224m✓\033[0m NVIDIA GPU detected."
 fi

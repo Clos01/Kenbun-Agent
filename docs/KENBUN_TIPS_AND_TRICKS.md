@@ -44,6 +44,13 @@ If you are running on an Ubuntu/Linux machine with an NVIDIA GPU:
   `docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --build`
 * Verify it's working by monitoring `watch -n 1 nvidia-smi`.
 
+> [!WARNING]
+> **`could not select device driver "nvidia"` on `docker compose up`?** A leftover
+> `docker-compose.override.yml` (written by `setup_nvidia_gpu.sh`) is forcing the GPU
+> runtime on a machine that doesn't have it. Delete that file and start the stack again.
+> The file is host-specific, gitignored, and safe to remove — GPU hosts can regenerate
+> it by re-running the setup script.
+
 ## 🌐 9. Decoupled Vector Database
 Kenbun uses ChromaDB for AST Code Indexing. You can share one massive ChromaDB instance across multiple local developers or agents:
 * Edit your `.env` and change `CHROMA_HOST` and `CHROMA_PORT` to point to your remote ChromaDB server instead of `localhost`.
