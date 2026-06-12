@@ -57,7 +57,7 @@ echo -e "\033[38;5;38m→\033[0m Restarting Docker daemon..."
 sudo systemctl restart docker
 
 echo -e "\033[38;5;38m→\033[0m Configuring Docker Compose to pass GPU to Ollama..."
-cat <<EOF > docker-compose.override.yml
+cat <<EOF > docker-compose.gpu.yml
 services:
   ollama_server:
     deploy:
@@ -69,10 +69,10 @@ services:
               capabilities: [gpu]
 EOF
 
-echo -e "\033[38;5;38m→\033[0m Restarting Kenbun-Agent container stack (if running)..."
+echo -e "\033[38;5;38m→\033[0m Restarting Kenbun-Agent container stack with GPU support (if running)..."
 if [ -f "docker-compose.yml" ]; then
     docker compose down || true
-    docker compose up -d
+    docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 else
     echo -e "\033[38;5;226m⚠\033[0m docker-compose.yml not found in current directory. Please restart Kenbun manually if it is currently running."
 fi

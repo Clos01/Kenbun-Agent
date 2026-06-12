@@ -17,9 +17,13 @@ services:
     environment:
       - CHROMA_DB_IMPL=sqlite
       - PERSIST_DIRECTORY=/chroma_data
-    # NOTE: no healthcheck — modern chroma images are distroless (no shell,
-    # no curl), so any exec-based probe would mark the container unhealthy
-    # forever. fastmcp_server retries its Chroma connection internally.
+    healthcheck:
+      # TCP probe on port 8000 — works on distroless images without shell/curl
+      test: ["CMD-SHELL", "nc -z localhost 8000 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
     networks:
       - kenbun_net
@@ -114,9 +118,10 @@ services:
       - OLLAMA_URL=http://ollama_server:11434/api/generate
       - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
     depends_on:
-      # service_started only: chromadb has no healthcheck (distroless image)
       chromadb:
-        condition: service_started
+        condition: service_healthy
+      ollama_server:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
       interval: 15s
