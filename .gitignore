@@ -105,3 +105,4 @@ temp/
 core/external/
 
 docker-compose.override.yml
+kenbun_agent.egg-info/
