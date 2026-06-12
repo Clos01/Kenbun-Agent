@@ -228,6 +228,12 @@ def run_benchmark():
         print("⏭️  SKIP: local LLM gateway unreachable (is the Ollama container running?).")
         return 0
 
+    # Pin the fallback to the primary endpoint for the duration of the run.
+    # Otherwise a primary hiccup silently routes to the cloud fallback and we
+    # score a DIFFERENT model than the one named in the report.
+    settings.FALLBACK_LLM_URL = llm_url
+    settings.FALLBACK_LLM_MODEL = llm_model
+
     system_prompt = build_system_prompt(tier, llm_model)
     results = []
     for case in CASES:
@@ -245,17 +251,24 @@ def run_benchmark():
             score = score_response(content, tool_calls, case)
             error = None
         except Exception as e:
+            # Infrastructure failure — tracked as error_rate, NEVER counted
+            # as a hallucination (that would punish the model for the network)
             content, tool_calls = "", []
-            score = {"violations": [{"type": "gateway_error", "detail": str(e)[:200]}], "tool_compliant": False}
+            score = {"violations": [], "tool_compliant": False}
             error = str(e)[:200]
 
         elapsed = time.time() - start
-        clean = not score["violations"]
-        icon = "✅" if clean else "❌"
-        compliance = "·" if score["tool_compliant"] else "⚠ tool-miss"
-        print(f"{icon} [{case['category']:<19}] {case['id']:<20} {elapsed:5.1f}s {compliance}")
+        if error:
+            icon, note = "🔌", "gateway-error"
+        elif score["violations"]:
+            icon, note = "❌", "hallucinated"
+        else:
+            icon, note = "✅", "·" if score["tool_compliant"] else "⚠ tool-miss"
+        print(f"{icon} [{case['category']:<19}] {case['id']:<20} {elapsed:5.1f}s {note}")
         for v in score["violations"]:
             print(f"     ↳ {v['type']}: {v['detail']}")
+        if error:
+            print(f"     ↳ {error[:120]}")
 
         results.append({
             "id": case["id"],
@@ -266,14 +279,22 @@ def run_benchmark():
             "error": error,
         })
 
-    hallucinated = [r for r in results if r["violations"]]
-    compliant = [r for r in results if r["tool_compliant"]]
-    hallucination_rate = len(hallucinated) / len(results)
-    compliance_rate = len(compliant) / len(results)
+    completed = [r for r in results if not r["error"]]
+    errored = [r for r in results if r["error"]]
+    hallucinated = [r for r in completed if r["violations"]]
+    compliant = [r for r in completed if r["tool_compliant"]]
+    hallucination_rate = len(hallucinated) / len(completed) if completed else None
+    compliance_rate = len(compliant) / len(completed) if completed else None
+    error_rate = len(errored) / len(results)
 
     print("-" * 60)
-    print(f"📊 Hallucination rate: {hallucination_rate:.0%}  ({len(hallucinated)}/{len(results)} cases)")
-    print(f"📊 Tool compliance:    {compliance_rate:.0%}  ({len(compliant)}/{len(results)} cases)")
+    if completed:
+        print(f"📊 Hallucination rate: {hallucination_rate:.0%}  ({len(hallucinated)}/{len(completed)} completed cases)")
+        print(f"📊 Tool compliance:    {compliance_rate:.0%}  ({len(compliant)}/{len(completed)} completed cases)")
+    else:
+        print("📊 No cases completed — gateway errors only. Rates not meaningful.")
+    if errored:
+        print(f"🔌 Gateway errors:     {error_rate:.0%}  ({len(errored)}/{len(results)} cases — infrastructure, not model)")
 
     # Persist using the BENCHMARKS.json append convention (benchmark_protocol.py)
     benchmark_file = settings.PROJECT_ROOT / "brain_health" / "BENCHMARKS.json"
@@ -290,8 +311,10 @@ def run_benchmark():
         "model": llm_model,
         "tier": tier,
         "prompt_set_version": PROMPT_SET_VERSION,
-        "hallucination_rate": round(hallucination_rate, 3),
-        "tool_compliance_rate": round(compliance_rate, 3),
+        "hallucination_rate": round(hallucination_rate, 3) if hallucination_rate is not None else None,
+        "tool_compliance_rate": round(compliance_rate, 3) if compliance_rate is not None else None,
+        "error_rate": round(error_rate, 3),
+        "completed_cases": len(completed),
         "details": results,
     })
     benchmark_file.parent.mkdir(parents=True, exist_ok=True)
