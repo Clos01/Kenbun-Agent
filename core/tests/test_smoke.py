@@ -2,50 +2,50 @@
 Layer 1 — Smoke tests. Guarantees the core engine imports cleanly.
 This file would have caught the import drift fixed in 2026-05-04 audit.
 Run on every commit: `pytest -m smoke`
+
+Modules are auto-discovered by walking the core package, so new files are
+covered automatically — a hand-curated list is exactly what let the
+orchestrator ↔ router_logic circular import slip through (fixed 2026-06-12).
 """
 import importlib
+import pkgutil
 import pytest
 
-CRITICAL_MODULES = [
-    # Core engine
-    "core.tools.infrastructure.orchestrator",
-    "core.tools.infrastructure.server",
-    "core.tools.infrastructure.api_server",
-    "core.tools.infrastructure.agents",
-    "core.tools.infrastructure.config",
-    "core.tools.infrastructure.design_bridge",
-    # Memory layer
-    "core.tools.memory.knowledge_manager",
-    "core.tools.memory.code_indexer",
-    "core.tools.memory.chroma_db_connect",
-    "core.tools.memory.repo_mapper",
-    # Audit layer
-    "core.tools.audit.gemini_reviewer",
-    "core.tools.audit.supervisor_agent",
-    "core.tools.audit.guardrail_agent",
-    "core.tools.audit.reflection_agent",
-    "core.tools.audit.discovery_agent",
-    # Strategy layer
-    "core.tools.strategy.decision_logic",
-    "core.tools.strategy.token_governor",
-    "core.tools.strategy.strategy_manager",
-    # Execution
-    "core.tools.execution.sandbox_runner",
-    # Utils
-    "core.tools.utils.error_memory",
-    "core.tools.utils.backtracker",
-    "core.tools.utils.maze_protocol",
-    "core.tools.utils.path_utils",
-    "core.tools.utils.telemetry",
-    "core.tools.utils.bayesian",
-]
+import core
+
+# Modules that must never be imported by the test runner itself.
+EXCLUDED_PREFIXES = (
+    "core.tests",                                  # the tests themselves
+    "core.tools.infrastructure.native_ears",       # calls sys.exit() on import when macOS Speech libs are absent
+)
+
+# Optional third-party dependencies: a ModuleNotFoundError for exactly these
+# distributions is an acceptable skip (extra features), anything else fails.
+OPTIONAL_THIRD_PARTY = {
+    "watchdog",   # core.tools.execution.shadow_tester
+    "telegram",   # core.tools.infrastructure.assembly_voice
+    "pypdf",      # core.tools.memory.pdf_ingestor
+}
+
+
+def _discover_modules():
+    return sorted(
+        m.name
+        for m in pkgutil.walk_packages(core.__path__, prefix="core.")
+        if not m.name.startswith(EXCLUDED_PREFIXES)
+    )
 
 
 @pytest.mark.smoke
-@pytest.mark.parametrize("module_name", CRITICAL_MODULES)
+@pytest.mark.parametrize("module_name", _discover_modules())
 def test_module_imports(module_name):
-    """Every critical module must import without raising."""
-    importlib.import_module(module_name)
+    """Every module under core/ must import without raising."""
+    try:
+        importlib.import_module(module_name)
+    except ModuleNotFoundError as e:
+        if e.name in OPTIONAL_THIRD_PARTY:
+            pytest.skip(f"optional dependency '{e.name}' not installed")
+        raise
 
 
 @pytest.mark.smoke
