@@ -65,6 +65,17 @@ try:
 except Exception:
     _ui = None
 
+# 🌸 Hermes-parity slash-command registry (drives dispatch, /help, completion)
+from core.tools.cli.commands import dispatch, ShellContext, command_names
+
+# Appended to every tier's system prompt (also re-applied on session restore)
+AST_TOOL_NOTE = (
+    "You have access to Kenbun's harvested agent tools. To call a tool, use the /run command in the chat (e.g. /run search_hivemind_concepts query=\"test\") or invoke them natively via the tool dispatcher — do NOT wrap tool calls as 'kenbun <toolname>' shell commands, as this spawns a recursive subprocess and will always time out. For system operations, use standard shell commands (e.g. docker, git, ls) directly in execute blocks. "
+    "If the user asks you to create a new project directory (e.g. `mkdir my-new-project`), once created, your terminal chat client will automatically "
+    "detect the folder birth, prompt the user for approval, and seamlessly MIGRATE and ATTACH all your active chat memories, SQLite databases, "
+    "and logs straight inside the new project's local 'brain_health' directory!"
+)
+
 # ANSI escape sequence to restore standard terminal input modes and clear raw state
 TERMINAL_RESET_SEQUENCE = (
     "\x1b[?1006l"  # disable SGR mouse
@@ -1452,14 +1463,7 @@ def main():
 
     log_event("🌸 Termchat Session Started. Model: {}, URL: {}, Tier: {}".format(llm_model, llm_url, model_tier))
 
-    system_prompt = build_system_prompt(model_tier, llm_model)
-    # Append AST tool runner note for all tiers
-    system_prompt += (
-        "You have access to Kenbun's harvested agent tools. To call a tool, use the /run command in the chat (e.g. /run search_hivemind_concepts query=\"test\") or invoke them natively via the tool dispatcher — do NOT wrap tool calls as 'kenbun <toolname>' shell commands, as this spawns a recursive subprocess and will always time out. For system operations, use standard shell commands (e.g. docker, git, ls) directly in execute blocks. "
-        "If the user asks you to create a new project directory (e.g. `mkdir my-new-project`), once created, your terminal chat client will automatically "
-        "detect the folder birth, prompt the user for approval, and seamlessly MIGRATE and ATTACH all your active chat memories, SQLite databases, "
-        "and logs straight inside the new project's local 'brain_health' directory!"
-    )
+    system_prompt = build_system_prompt(model_tier, llm_model) + AST_TOOL_NOTE
 
     history = [
         {"role": "system", "content": system_prompt}
@@ -1508,7 +1512,17 @@ def main():
                         llm_url = backup_data["llm_url"]
                     if "llm_model" in backup_data:
                         llm_model = backup_data["llm_model"]
-                        
+
+                    # Re-anchor the system prompt: the restored history carries the
+                    # PREVIOUS session's prompt, which may target a different model
+                    # tier (nano vs standard) than what is configured now.
+                    model_tier = detect_model_tier(llm_model, llm_url)
+                    system_prompt = build_system_prompt(model_tier, llm_model) + AST_TOOL_NOTE
+                    if history and history[0].get("role") == "system":
+                        history[0] = {"role": "system", "content": system_prompt}
+                    else:
+                        history.insert(0, {"role": "system", "content": system_prompt})
+
                     print(f"{C_G}✓ Session state and dialogue history successfully restored!{C_R}\n")
                 else:
                     try:
@@ -1519,17 +1533,17 @@ def main():
             print(f"\n{C_Y}⚠️ Failed to load or restore session backup: {e}{C_R}\n")
 
 
-    username = os.environ.get("USER", "amontano")
+    import getpass
+    try:
+        username = os.environ.get("USER") or getpass.getuser()
+    except Exception:
+        username = "user"
     auto_trigger = False
 
     # Initialize robust PromptSession for history and multiline
     pt_session = None
     if PromptSession is not None:
-        SLASH_COMMANDS = [
-            "/help", "/exit", "/reset", "/system", "/skin", "/spawn", "/agents",
-            "/kill", "/recall", "/remember", "/search", "/tools", "/skills",
-            "/stats", "/run", "/yolo",
-        ]
+        SLASH_COMMANDS = command_names()  # single source of truth: the registry
 
         def _bottom_toolbar():
             yolo = " · ⚡ YOLO" if YOLO_MODE else ""
@@ -1634,458 +1648,18 @@ def main():
                     if not user_input:
                         continue
                     
-                    # Handle Slash Commands
+                    # Handle Slash Commands via the Hermes-parity registry
+                    # (core/tools/cli/commands.py — also feeds /help + completion)
                     if user_input.startswith("/"):
-                        cmd_parts = user_input.split(" ", 1)
-                        cmd = cmd_parts[0].lower()
-                        
-                        if cmd in ("/help", "/?"):
-                            log_event("❓ Displayed commands directory via /help")
-                            help_lines = [
-                                f"  {C_BOLD}{C_C}/help{C_R}{C_G} (/?){C_D}           ➟ Show this guide{C_R}",
-                                f"  {C_BOLD}{C_C}/exit{C_R}{C_D}              ➟ Gracefully close session{C_R}",
-                                f"  {C_BOLD}{C_C}/reset{C_R}{C_D}             ➟ Clear dialogue history{C_R}",
-                                f"  {C_BOLD}{C_C}/system{C_R}{C_D}            ➟ Show environment config{C_R}",
-                                f"  {C_BOLD}{C_C}/skin [name]{C_R}{C_D}       ➟ Change CLI skin theme{C_R}",
-                                f"  {C_BOLD}{C_C}/spawn <cmd>{C_R}{C_D}       ➟ Run command in background agent{C_R}",
-                                f"  {C_BOLD}{C_C}/agents{C_R}{C_D}            ➟ List all running background agents{C_R}",
-                                f"  {C_BOLD}{C_C}/kill <id>{C_R}{C_D}         ➟ Kill a background agent{C_R}",
-                                f"  {C_BOLD}{C_C}/recall <query>{C_R}{C_D}    ➟ Search Hivemind memories{C_R}",
-                                f"  {C_BOLD}{C_C}/remember t=c{C_R}{C_D}      ➟ Save a note to Hivemind{C_R}",
-                                f"  {C_BOLD}{C_C}/search <topic>{C_R}{C_D}    ➟ Search UI/UX design database{C_R}",
-                                f"  {C_BOLD}{C_C}/tools [name]{C_R}{C_D}     ➟ List or inspect harvested sovereign tools{C_R}",
-                                f"  {C_BOLD}{C_C}/skills [name]{C_R}{C_D}    ➟ List or inspect design & template skills{C_R}",
-                                f"  {C_BOLD}{C_C}/stats{C_R}{C_D}             ➟ Dump Bayesian & Hivemind governance metrics{C_R}",
-                                f"  {C_BOLD}{C_C}/run <tool> [args]{C_R}{C_D}  ➟ Live REPL execution of a harvested tool{C_R}",
-                                f"  {C_BOLD}{C_RED}/yolo{C_R}{C_D}              ➟ Toggle YOLO mode (auto-approve commands){C_R}",
-                            ]
-                            yolo_status = f"{C_RED}⚡ YOLO MODE: ON  — Commands execute automatically!{C_R}" if YOLO_MODE else f"{C_D}  YOLO MODE: off — Commands need your approval{C_R}"
-                            print()
-                            draw_box(help_lines + ["", yolo_status], title=f"🌸 {C_Y}KENBUN COMMANDS", border_color=C_P, text_color=C_W)
-                            print()
-                            continue
-                            
-                        elif cmd == "/exit":
-                            print(f"\n{C_P}🌸 Sayonara! Terminating agent session...{C_R}\n")
-                            log_event("🌸 Termchat Session Terminated cleanly via /exit")
-                            # Save clean exit session reflection post-mortem in ChromaDB
-                            save_clean_exit_reflection(history)
-                            if active_brain_health_dir:
-                                backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
-                                if backup_path.exists():
-                                    try:
-                                        backup_path.unlink()
-                                    except Exception:
-                                        pass
+                        action = dispatch(user_input, ShellContext(
+                            history=history,
+                            llm_url=llm_url,
+                            llm_model=llm_model,
+                            pt_session=pt_session,
+                        ))
+                        if action == "exit":
                             break
-                            
-                        elif cmd == "/reset":
-                            log_event("🧹 Dialogue history purged via /reset")
-                            history = [history[0]]
-                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
-                            print(f"\n{C_Y}🧹 Dialogue history purged.{C_R}\n")
-                            continue
-                            
-                        elif cmd == "/system":
-                            log_event("⚙️ Dumped environment parameters via /system")
-                            # Fetch fresh config from loaded env
-                            fresh_env = load_env_vars()
-                            cols = get_columns()
-                            print(f"\n{C_G}🏛  Active Configuration Check:{C_R}")
-                            for k, v in fresh_env.items():
-                                if "KEY" in k or "SECRET" in k or "TOKEN" in k:
-                                    v = "******** (Masked Securely)"
-                                else:
-                                    v = scrub_secrets(v)
-                                prefix = f"  • {C_C}{k:<24}{C_R}= "
-                                pref_len = visible_len(prefix)
-                                wrapped_val = clean_wrap_text(v, cols - pref_len - 2)
-                                wrapped_lines = wrapped_val.splitlines()
-                                if wrapped_lines:
-                                    print(f"{prefix}{wrapped_lines[0]}")
-                                    for wl in wrapped_lines[1:]:
-                                        print(f"{' ' * pref_len}{wl}")
-                                else:
-                                    print(f"{prefix}")
-                            print()
-                            continue
-                            
-                        elif cmd == "/search":
-                            if len(cmd_parts) < 2:
-                                print(f"\n{C_Y}⚠️ Usage: /search <design topic / style / palette>{C_R}\n")
-                                continue
-                            query = cmd_parts[1]
-                            log_event(f"🔍 Direct UI-UX Pro Max search query: {query}")
-                            print(f"\n{C_G}🔍 Searching UI-UX Pro Max database for: '{query}'...{C_R}")
-                            res = get_design_suggestions(query)
-                            if res:
-                                cols = get_columns()
-                                wrapped_res = clean_wrap_text(res, cols - 2)
-                                print(f"\n{C_W}{wrapped_res}{C_R}\n")
-                            else:
-                                print(f"\n{C_Y}❌ No matches or search scripts found.{C_R}\n")
-                            continue
-                            
-                        elif cmd == "/remember":
-                            if len(cmd_parts) < 2 or "=" not in cmd_parts[1]:
-                                print(f"\n{C_Y}⚠️ Usage: /remember <title> = <content>{C_R}\n")
-                                continue
-                            parts = cmd_parts[1].split("=", 1)
-                            title = parts[0].strip()
-                            content = parts[1].strip()
-                            if not title or not content:
-                                print(f"\n{C_Y}⚠️ Usage: /remember <title> = <content>{C_R}\n")
-                                continue
-                            log_event(f"🧠 Saving memory rule: '{title}'")
-                            print(f"\n{C_G}🧠 Saving memory to Hivemind: '{title}'...{C_R}")
-                            res = save_concept_to_hivemind(title, content, tags="user-memories", category="concepts")
-                            print(f"\n{C_W}{res}{C_R}\n")
-                            continue
-                            
-                        elif cmd == "/recall":
-                            if len(cmd_parts) < 2:
-                                print(f"\n{C_Y}⚠️ Usage: /recall <query>{C_R}\n")
-                                continue
-                            query = cmd_parts[1].strip()
-                            print(f"\n{C_G}🔍 Searching Hivemind semantically for: '{query}'...{C_R}")
-                            res = search_hivemind(query, category="concepts")
-                            try:
-                                results = json.loads(res)
-                            except Exception:
-                                results = []
-                            
-                            # Check if the results is a list (valid JSON results) or dict with 'error' or a string error
-                            if isinstance(results, dict) and "error" in results:
-                                draw_box([f"❌ {results['error']}"], title="🌸 HIVE RECALL ERROR", border_color=C_P, text_color=C_W)
-                            elif not results or not isinstance(results, list):
-                                if isinstance(res, str) and res.startswith("ERROR"):
-                                    draw_box([f"❌ {res}"], title="🌸 HIVE RECALL ERROR", border_color=C_P, text_color=C_W)
-                                else:
-                                    draw_box(["No matching memories found in the Hivemind."], title="🌸 HIVE RECALL (0 Results)", border_color=C_P, text_color=C_W)
-                            elif len(results) == 1 and "error" in results[0]:
-                                draw_box([f"❌ {results[0]['error']}"], title="🌸 HIVE RECALL ERROR", border_color=C_P, text_color=C_W)
-                            else:
-                                box_lines = []
-                                for idx, item in enumerate(results, 1):
-                                    title_str = item.get("title", "Untitled")
-                                    content_str = item.get("content", "")
-                                    tags_str = item.get("tags", "")
-                                    c_id = item.get("id", "N/A")
-                                    
-                                    box_lines.append(f"{C_Y}[{idx}] {title_str} (ID: {c_id}){C_R}")
-                                    if tags_str:
-                                        box_lines.append(f"{C_D}Tags: {tags_str}{C_R}")
-                                    
-                                    # Strip and append lines
-                                    for line in content_str.splitlines():
-                                        box_lines.append(f"  {line}")
-                                    
-                                    if idx < len(results):
-                                        box_lines.append("---")
-                                        
-                                draw_box(box_lines, title=f"🌸 HIVE RECALL Results ({len(results)})", border_color=C_P, text_color=C_G)
-                            print()
-                            continue
-                            
-                        elif cmd == "/tools":
-                            builtin_tools = [
-                                {"name": "scan_repo", "module": "core.tools.memory.repo_mapper", "purpose": "Scans files and builds workspace maps."},
-                                {"name": "review_code_with_gemini", "module": "core.tools.audit.gemini_reviewer", "purpose": "Deep Cloud AI code review with validation."},
-                                {"name": "research_with_gemini", "module": "core.tools.audit.gemini_reviewer", "purpose": "Broad-context technical and pricing research."},
-                                {"name": "consult_supervisor", "module": "core.tools.audit.supervisor_agent", "purpose": "Run System 2 architecture and compliance checks."},
-                                {"name": "remember_fix", "module": "core.tools.utils.error_memory", "purpose": "Save post-mortems and resolved bugs to ChromaDB."},
-                                {"name": "recall_fix", "module": "core.tools.utils.error_memory", "purpose": "Search local fallback or Hivemind database for historical fixes."},
-                                {"name": "save_checkpoint", "module": "core.tools.utils.backtracker", "purpose": "Saves git/file state before running experimental edits."},
-                                {"name": "restore_checkpoint", "module": "core.tools.utils.backtracker", "purpose": "Restores files to a saved checkpoint if validation fails."},
-                                {"name": "run_code_safely", "module": "core.tools.execution.sandbox_runner", "purpose": "Safe sandboxed execution of terminal commands."},
-                                {"name": "reflect_and_distill", "module": "core.tools.audit.reflection_agent", "purpose": "Reflects on step performance and creates post-mortems."},
-                                {"name": "guardrail_audit", "module": "core.tools.audit.guardrail_agent", "purpose": "Dynamic check for prompt injection and token limits."},
-                                {"name": "maze_verification", "module": "core.tools.utils.maze_protocol", "purpose": "Verifies system properties and backtracks if regression is found."},
-                                {"name": "tune_assembly", "module": "core.tools.utils.bayesian", "purpose": "Tunes agent weights based on historical success rates."},
-                                {"name": "consult_hivemind", "module": "core.tools.audit.consult_architect", "purpose": "Consults the knowledge base for architectural patterns."},
-                                {"name": "generate_discovery_form", "module": "core.tools.audit.discovery_agent", "purpose": "Creates form schema for user/UI requirement gathering."},
-                                {"name": "autofix_linter", "module": "core.tools.audit.linter_autofix", "purpose": "Autonomic linter fixing of syntax/formatting errors."},
-                            ]
-                            
-                            if len(cmd_parts) < 2:
-                                tool_lines = []
-                                tool_lines.append(f"{C_Y}{'Tool Name':<25}  {'Python Module Reference':<36}  {'Purpose':<50}{C_R}")
-                                tool_lines.append(f"{C_D}" + "─" * 115 + f"{C_R}")
-                                
-                                for t in builtin_tools:
-                                    tool_lines.append(
-                                        f"{C_G}{t['name']:<25}{C_R}  "
-                                        f"{C_W}{t['module']:<36}{C_R}  "
-                                        f"{C_D}{t['purpose']}{C_R}"
-                                    )
-                                
-                                harvested = get_harvested_tools()
-                                if harvested:
-                                    tool_lines.append("")
-                                    tool_lines.append(f"{C_Y}Harvested Sovereign Tools:{C_R}")
-                                    tool_lines.append(f"{C_D}" + "─" * 115 + f"{C_R}")
-                                    for t_name, entry in sorted(harvested.items()):
-                                        desc = entry.description.splitlines()[0][:50] if entry.description else "No description."
-                                        module_ref = getattr(entry.handler, "__module__", "dynamic")
-                                        tool_lines.append(
-                                            f"{C_G}{entry.name:<25}{C_R}  "
-                                            f"{C_W}{module_ref:<36}{C_R}  "
-                                            f"{C_D}{desc}{C_R}"
-                                        )
-                                
-                                draw_box(tool_lines, title="🌸 ACTIVE ASSEMBLY TOOLS & ORCHESTRATORS", border_color=C_P, text_color=C_W)
-                                print(f"\n  Use {C_C}/tools <tool_name>{C_R} for details or {C_C}/run <tool_name> arg=val{C_R} to execute.\n")
-                            else:
-                                target_tool = cmd_parts[1].strip()
-                                b_tool = next((t for t in builtin_tools if t["name"] == target_tool), None)
-                                
-                                if b_tool:
-                                    handler = None
-                                    try:
-                                        import importlib
-                                        mod_name = b_tool["module"]
-                                        func_name = b_tool["name"]
-                                        if func_name == "consult_supervisor":
-                                            func_name = "run_supervisor_audit"
-                                        elif func_name == "review_code_with_gemini":
-                                            func_name = "gemini_code_review"
-                                        elif func_name == "research_with_gemini":
-                                            func_name = "gemini_research"
-                                        elif func_name == "reflect_and_distill":
-                                            func_name = "_reflect_and_distill"
-                                        elif func_name == "guardrail_audit":
-                                            func_name = "run_guardrail_audit"
-                                        elif func_name == "maze_verification":
-                                            func_name = "backward_verify"
-                                        elif func_name == "consult_hivemind":
-                                            func_name = "consult_brain"
-                                            
-                                        mod = importlib.import_module(mod_name)
-                                        handler = getattr(mod, func_name)
-                                    except Exception:
-                                        pass
-                                    
-                                    sig_str = "(...)"
-                                    if handler:
-                                        import inspect
-                                        try:
-                                            sig = inspect.signature(handler)
-                                            sig_str = f"{b_tool['name']}{sig}"
-                                        except Exception:
-                                            pass
-                                            
-                                    details = [
-                                        f"{C_Y}Name:{C_R}        {C_G}{b_tool['name']}{C_R}",
-                                        f"{C_Y}Module:{C_R}      {b_tool['module']}",
-                                        f"{C_Y}Signature:{C_R}   {sig_str}",
-                                        "---",
-                                        f"{C_Y}Purpose:{C_R}",
-                                        f"  {b_tool['purpose']}"
-                                    ]
-                                    draw_box(details, title=f"🌸 TOOL: {b_tool['name'].upper()}", border_color=C_G, text_color=C_W)
-                                    print()
-                                else:
-                                    harvested = get_harvested_tools()
-                                    entry = harvested.get(target_tool)
-                                    if not entry:
-                                        print(f"\n{C_Y}❌ Tool '{target_tool}' not found.{C_R}\n")
-                                    else:
-                                        import inspect
-                                        sig = inspect.signature(entry.handler)
-                                        details = [
-                                            f"{C_Y}Name:{C_R}        {C_G}{entry.name}{C_R}",
-                                            f"{C_Y}Category:{C_R}    {entry.category}",
-                                            f"{C_Y}Signature:{C_R}   {entry.name}{sig}",
-                                            f"{C_Y}Async:{C_R}       {entry.is_async}",
-                                            f"{C_Y}Required Env:{C_R} {', '.join(entry.requires_env) if entry.requires_env else 'None'}",
-                                            "---",
-                                            f"{C_Y}Description:{C_R}"
-                                        ]
-                                        for line in entry.description.splitlines():
-                                            details.append(f"  {line}")
-                                        draw_box(details, title=f"🌸 TOOL: {entry.name.upper()}", border_color=C_G, text_color=C_W)
-                                        print()
-                            continue
-
-                        elif cmd == "/skills":
-                            skills = get_harvested_skills()
-                            if len(cmd_parts) < 2:
-                                if not skills:
-                                    print(f"\n{C_D}  No harvested template skills active.{C_R}\n")
-                                else:
-                                    skill_lines = []
-                                    for s_name, s_data in sorted(skills.items()):
-                                        desc_line = s_data["description"].splitlines()[0][:60]
-                                        skill_lines.append(f"  • {C_G}{s_name:<25}{C_R}{C_D}➟ {desc_line}{C_R}")
-                                    draw_box(skill_lines, title=f"🌸 ACTIVE DESIGN SKILLS ({len(skills)})", border_color=C_P, text_color=C_W)
-                                    print(f"\n  Use {C_C}/skills <skill_name>{C_R} to inspect the full design workflow.\n")
-                            else:
-                                target_skill = cmd_parts[1].strip()
-                                s_data = skills.get(target_skill)
-                                if not s_data:
-                                    print(f"\n{C_Y}❌ Skill '{target_skill}' not found.{C_R}\n")
-                                else:
-                                    details = [
-                                        f"{C_Y}Name:{C_R}        {C_G}{s_data['name']}{C_R}",
-                                        f"{C_Y}Path:{C_R}        {s_data['path']}",
-                                        f"{C_Y}Triggers:{C_R}    {', '.join(s_data['triggers']) if s_data['triggers'] else 'None'}",
-                                        "---",
-                                        f"{C_Y}SKILL BLUEPRINT & INSTRUCTIONS:{C_R}"
-                                    ]
-                                    for line in s_data["content"].splitlines():
-                                        details.append(f"  {line}")
-                                    draw_box(details, title=f"🌸 SKILL: {s_data['name'].upper()}", border_color=C_G, text_color=C_W)
-                                    print()
-                            continue
-
-                        elif cmd == "/stats":
-                            try:
-                                from core.tools.utils.bayesian import get_confidence
-                                print(f"\n{C_G}📊 SYSTEM 3 GOVERNANCE & BAYESIAN METRICS{C_R}")
-                                stats = [
-                                    f"  {C_C}Tool Executions{C_R}",
-                                    f"  • consult_supervisor (Security): {get_confidence('consult_supervisor', 'security'):.2f}%",
-                                    f"  • review_code_with_gemini: {get_confidence('review_code_with_gemini', 'code_review'):.2f}%",
-                                    f"  • research_official_docs: {get_confidence('research_official_docs', 'research'):.2f}%",
-                                    f"  • scan_repo (Codebase): {get_confidence('scan_repo', 'codebase'):.2f}%"
-                                ]
-                                draw_box(stats, title="🌸 METRICS", border_color=C_P, text_color=C_W)
-                                print()
-                            except Exception as e:
-                                print(f"\n{C_Y}⚠️ Unable to fetch Bayesian metrics: {e}{C_R}\n")
-                            continue
-
-
-                        elif cmd == "/run":
-                            if len(cmd_parts) < 2:
-                                print(f"\n{C_Y}⚠️ Usage: /run <tool_name> [param1=val1 param2=val2 ...]{C_R}\n")
-                                continue
-                            run_parts = cmd_parts[1].strip().split(" ", 1)
-                            tool_name = run_parts[0]
-                            tools = get_harvested_tools()
-                            entry = tools.get(tool_name)
-                            if not entry:
-                                print(f"\n{C_Y}❌ Tool '{tool_name}' not found.{C_R}\n")
-                                continue
-                                
-                            kwargs = {}
-                            args = []
-                            if len(run_parts) > 1:
-                                param_str = run_parts[1].strip()
-                                for token in re.findall(r'[^\s"]+|"[^"]*"', param_str):
-                                    if "=" in token:
-                                        k, v = token.split("=", 1)
-                                        v = v.strip('"')
-                                        kwargs[k] = v
-                                    else:
-                                        args.append(token.strip('"'))
-                            
-                            missing_envs = [ev for ev in entry.requires_env if not os.environ.get(ev)]
-                            if missing_envs:
-                                print(f"\n{C_RED}❌ Missing required environment variables: {', '.join(missing_envs)}{C_R}\n")
-                                continue
-                                
-                            print(f"\n{C_G}🚀 Executing tool '{tool_name}' with args={args} kwargs={kwargs}...{C_R}")
-                            log_event(f"🚀 Manual REPL run of tool '{tool_name}': args={args}, kwargs={kwargs}")
-                            
-                            try:
-                                if entry.is_async:
-                                    import asyncio
-                                    try:
-                                        loop = asyncio.get_event_loop()
-                                        if loop.is_running():
-                                            future = asyncio.run_coroutine_threadsafe(entry.handler(*args, **kwargs), loop)
-                                            result = future.result()
-                                        else:
-                                            result = loop.run_until_complete(entry.handler(*args, **kwargs))
-                                    except RuntimeError:
-                                        result = asyncio.run(entry.handler(*args, **kwargs))
-                                else:
-                                    result = entry.handler(*args, **kwargs)
-                                    
-                                print(f"\n{C_G}✓ Result:{C_R}")
-                                if isinstance(result, (dict, list)):
-                                    print(json.dumps(result, indent=2))
-                                else:
-                                    print(result)
-                                print()
-                            except Exception as e:
-                                print(f"\n{C_RED}❌ Tool execution failed: {e}{C_R}\n")
-                            continue
-                            
-                        else:
-                            # /spawn, /agents, /kill, /yolo commands
-                            if cmd == "/yolo":
-                                YOLO_MODE = not YOLO_MODE
-                                if YOLO_MODE:
-                                    draw_box([
-                                        f"{C_RED}{C_BOLD}⚡ YOLO MODE ACTIVATED ⚡{C_R}",
-                                        "",
-                                        "Commands proposed by Kenbun will execute automatically.",
-                                        "Nuclear commands (rm -rf /, mkfs, dd, fork bombs)",
-                                        "are ALWAYS blocked regardless of this setting.",
-                                        "",
-                                        f"Type {C_C}/yolo{C_RED} again to return to safe mode.",
-                                    ], title=f"{C_RED}⚡ YOLO MODE ON", border_color=C_RED, text_color=C_Y)
-                                else:
-                                    print(f"\n{C_G}✓ YOLO mode OFF. Manual approval restored.{C_R}\n")
-                                continue
-
-                            elif cmd == "/skin":
-                                if not _ui:
-                                    print(f"\n{C_Y}⚠️ Skin system is only available when Rich is installed.{C_R}\n")
-                                else:
-                                    args_str = cmd_parts[1].strip() if len(cmd_parts) > 1 else ""
-                                    if args_str:
-                                        msg = _ui.switch_skin(args_str)
-                                        print(f"\n{msg}\n")
-                                    else:
-                                        table_str = _ui.list_skins_table()
-                                        draw_box(table_str.split("\n"), title="🎨 active skin", border_color=C_P, text_color=C_W)
-                                        print()
-                                continue
-
-                            elif cmd == "/spawn":
-                                if spawn_agent and len(cmd_parts) > 1:
-                                    task_cmd = cmd_parts[1].strip()
-                                    task_name = task_cmd[:40]
-                                    aid = spawn_agent(task_name, task_cmd)
-                                    print(f"\n{C_G}🟡 Agent spawned:{C_R} [{aid}] {task_name}")
-                                    print(f"  Use {C_C}/agents{C_R} to check status.\n")
-                                elif spawn_agent is None:
-                                    print(f"\n{C_Y}⚠️ Sub-agent bus not available.{C_R}\n")
-                                else:
-                                    print(f"\n{C_Y}Usage: /spawn <shell command>{C_R}\n")
-                                continue
-
-                            elif cmd in ("/agents", "/tasks"):
-                                if list_agents:
-                                    agents = list_agents()
-                                    if not agents:
-                                        print(f"\n{C_D}  No active agents.{C_R}\n")
-                                    else:
-                                        agent_lines = []
-                                        for a in agents:
-                                            icon = {"RUNNING": "🟡", "DONE": "✅", "ERROR": "❌", "KILLED": "🛑"}.get(a["status"], "⚪")
-                                            agent_lines.append(f"  {icon} [{a['id']}] {a['task']}  ({a['status']})")
-                                            if a.get("error") and a["status"] in ("ERROR", "TIMEOUT"):
-                                                agent_lines.append(f"     Error: {a['error'][:80]}")
-                                        draw_box(agent_lines, title=f"🤖 {C_Y}ACTIVE AGENTS", border_color=C_G, text_color=C_W)
-                                        print()
-                                continue
-
-                            elif cmd == "/kill":
-                                if kill_agent and len(cmd_parts) > 1:
-                                    aid = cmd_parts[1].strip()
-                                    ok = kill_agent(aid)
-                                    print(f"\n{'🛑 Killed: ' if ok else '⚠️ Not found: '}{aid}\n")
-                                else:
-                                    print(f"\n{C_Y}Usage: /kill <agent-id>{C_R}\n")
-                                continue
-
-                            else:
-                                print(f"\n{C_Y}❌ Unknown command: {cmd}. Type {C_C}/help{C_Y} for available commands.{C_R}\n")
-                                continue
+                        continue
 
                     # ========================================================
                     # 🧠 INTENT-BASED DYNAMIC RAG & TELEMETRY PRE-FLIGHT
@@ -2502,12 +2076,16 @@ def main():
         sys.stdout.write(C_R)
         sys.stdout.flush()
         
-        # Cleanly delete active_session_backup.json on error crash to prevent corrupted bootloop
+        # Quarantine (don't delete) the session backup: prevents a corrupted-state
+        # bootloop while preserving the dialogue for manual recovery — deleting it
+        # destroyed the user's session exactly when crash recovery mattered most.
         if active_brain_health_dir:
             backup_path = Path(active_brain_health_dir) / "active_session_backup.json"
             if backup_path.exists():
                 try:
-                    backup_path.unlink()
+                    quarantine = backup_path.with_suffix(".json.crashed")
+                    backup_path.rename(quarantine)
+                    print(f"Session preserved at: {quarantine}")
                 except Exception:
                     pass
         sys.exit(1)
