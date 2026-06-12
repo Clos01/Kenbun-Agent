@@ -1575,21 +1575,91 @@ def main():
     intent_context = ""
     try:
         while True:
-            yolo_banner = f" {C_RED}{C_BOLD}(⚡ YOLO MODE ACTIVE){C_R}" if YOLO_MODE else ""
-            print(f"\n{C_P}Kenbun 🌸:{C_R} I'm online and ready. What are we working on today?{yolo_banner}")
-            print(f"  {C_C}[1]{C_R} Code   — Build or scaffold something new")
-            print(f"  {C_C}[2]{C_R} Debug  — Fix an error or diagnose an issue")
-            print(f"  {C_C}[3]{C_R} System — Manage this machine or containers")
-            print(f"  {C_C}[4]{C_R} Chat   — Just talk or explore ideas")
-            if YOLO_MODE:
-                print(f"  {C_C}[5]{C_R} {C_G}Disable YOLO Mode{C_R} (Restores manual confirmation)")
-            else:
-                print(f"  {C_C}[5]{C_R} {C_RED}Enable YOLO Mode{C_R}  — Auto-approve all shell commands (nuclear-safe)")
+            from prompt_toolkit.application import Application
+            from prompt_toolkit.key_binding import KeyBindings
+            from prompt_toolkit.layout.containers import Window
+            from prompt_toolkit.layout.controls import FormattedTextControl
+            from prompt_toolkit.layout.layout import Layout
             
-            prompt_label = "  Pick [1-5] or press Enter to skip: "
+            def run_interactive_menu():
+                options = [
+                    ("1", "Code   — Build or scaffold something new"),
+                    ("2", "Debug  — Fix an error or diagnose an issue"),
+                    ("3", "System — Manage this machine or containers"),
+                    ("4", "Chat   — Just talk or explore ideas"),
+                    ("5", f"{C_G}Disable YOLO Mode{C_R} (Restores manual confirmation)" if YOLO_MODE else f"{C_RED}Enable YOLO Mode{C_R}  — Auto-approve all shell commands (nuclear-safe)")
+                ]
+                selected_index = 0
+                kb = KeyBindings()
+
+                @kb.add("up")
+                @kb.add("w")
+                def _(event):
+                    nonlocal selected_index
+                    selected_index = max(0, selected_index - 1)
+
+                @kb.add("down")
+                @kb.add("s")
+                def _(event):
+                    nonlocal selected_index
+                    selected_index = min(len(options) - 1, selected_index + 1)
+
+                @kb.add("enter")
+                def _(event):
+                    event.app.exit(result=options[selected_index][0])
+
+                @kb.add("c-c")
+                @kb.add("c-d")
+                @kb.add("escape")
+                def _(event):
+                    event.app.exit(result="")
+
+                @kb.add("1")
+                def _(event): event.app.exit(result="1")
+                @kb.add("2")
+                def _(event): event.app.exit(result="2")
+                @kb.add("3")
+                def _(event): event.app.exit(result="3")
+                @kb.add("4")
+                def _(event): event.app.exit(result="4")
+                @kb.add("5")
+                def _(event): event.app.exit(result="5")
+
+                def get_text():
+                    yolo_banner = f" {C_RED}{C_BOLD}(⚡ YOLO MODE ACTIVE){C_R}" if YOLO_MODE else ""
+                    lines = [f"{C_P}Kenbun 🌸:{C_R} I'm online and ready. What are we working on today?{yolo_banner}"]
+                    for i, (key, text) in enumerate(options):
+                        if i == selected_index:
+                            lines.append(f"  {C_Y}❯{C_R} {C_C}[{key}]{C_R} {C_BOLD}{text}{C_R}")
+                        else:
+                            lines.append(f"    {C_C}[{key}]{C_R} {text}")
+                    lines.append(f"\n  {C_D}Use UP/DOWN arrows or W/S to navigate, or press [1-5]. Press Enter to select.{C_R}")
+                    return ANSI("\n".join(lines))
+
+                layout = Layout(Window(content=FormattedTextControl(text=get_text)))
+                # erase_when_done=True will clear the menu after selection so we can print a static confirmation
+                app = Application(layout=layout, key_bindings=kb, mouse_support=False, full_screen=False, erase_when_done=True)
+                try:
+                    res = app.run()
+                    return res if res else ""
+                except Exception:
+                    return ""
+
             if pt_session:
-                raw_intent = pt_session.prompt(ANSI(f"{C_P}{prompt_label}{C_R}")).strip()
+                print()  # Add some vertical spacing
+                raw_intent = run_interactive_menu()
             else:
+                yolo_banner = f" {C_RED}{C_BOLD}(⚡ YOLO MODE ACTIVE){C_R}" if YOLO_MODE else ""
+                print(f"\n{C_P}Kenbun 🌸:{C_R} I'm online and ready. What are we working on today?{yolo_banner}")
+                print(f"  {C_C}[1]{C_R} Code   — Build or scaffold something new")
+                print(f"  {C_C}[2]{C_R} Debug  — Fix an error or diagnose an issue")
+                print(f"  {C_C}[3]{C_R} System — Manage this machine or containers")
+                print(f"  {C_C}[4]{C_R} Chat   — Just talk or explore ideas")
+                if YOLO_MODE:
+                    print(f"  {C_C}[5]{C_R} {C_G}Disable YOLO Mode{C_R} (Restores manual confirmation)")
+                else:
+                    print(f"  {C_C}[5]{C_R} {C_RED}Enable YOLO Mode{C_R}  — Auto-approve all shell commands (nuclear-safe)")
+                prompt_label = "  Pick [1-5] or press Enter to skip: "
                 raw_intent = input(f"{C_P}{prompt_label}{C_R}").strip()
             
             if raw_intent == "5":
@@ -1745,7 +1815,7 @@ def main():
                 
                 try:
                     generator = call_llm_gateway(
-                        messages=active_history,
+                        messages=history,
                         temperature=0.7 if model_tier == "nano" else 0.2,
                         tools=cli_tools,
                         stream=True
