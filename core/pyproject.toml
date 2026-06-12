@@ -28,6 +28,7 @@ markers = [
     "integration: require DB / network / API keys",
     "slow: > 5s — run nightly only",
     "golden: golden-set benchmark evaluation",
+    "tool_rot: probes every MCP tool to catch silent breakage (test_tool_surface)",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
