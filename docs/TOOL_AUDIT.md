@@ -2,23 +2,26 @@
 
 **Date:** 2026-06-12 · **Method:** exercise every tool with a cheap smoke input, classify the response.
 
-## Top finding — the one bug behind a third of the rot
+## Top finding — kenbun's single-root architecture is a multi-project hazard
 
-There are **two parallel checkouts** of this repo on disk:
+There are two distinct kenbun installations on disk by design:
 
 ```
-/Users/carlosrivas/Dev/Kenbun         ← old checkout, the running MCP server is rooted here
-/Users/carlosrivas/Dev/kenbun-agent   ← the active working tree (everything we've been editing)
+/Users/carlosrivas/Dev/Kenbun         ← personal day-to-day install (MCP server rooted here)
+/Users/carlosrivas/Dev/kenbun-agent   ← the open-source release (this checkout)
 ```
 
-The kenbun MCP server you connected was started inside the *old* directory and has stayed there, so:
+The MCP server can only have ONE workspace root at a time, and it's locked to the personal install. Any time you collaborate on the open-source `kenbun-agent` from a session connected to the personal MCP server:
 
-- Every file-operating tool (`save_checkpoint`, `restore_checkpoint`, `autofix_linter`) rejects paths inside the working tree as "outside secure workspace" — they enforce the security boundary correctly; the boundary is just pointing at the wrong checkout.
-- `save_to_hivemind` / `recall_fix` / `search_hivemind_concepts` write to the *other* repo's ChromaDB. Today's session has been writing memories to a directory you don't see.
-- `orchestrate`'s earlier `KeyError: 'autofix_linter'` was the *old* checkout's stale registry — fixed in this tree, never reloaded by the MCP server.
-- The `Dev/Kenbun` vs `Dev/kenbun-agent` case-difference is also what makes macOS's case-insensitive filesystem show duplicate paths in some lookups.
+- File-operating tools (`save_checkpoint`, `restore_checkpoint`, `autofix_linter`) reject paths in this tree as "outside secure workspace" — the security guard is doing its job; the boundary just doesn't extend here.
+- `save_to_hivemind` / `recall_fix` / `search_hivemind_concepts` write to the **personal** ChromaDB, mixing project memories silently.
+- `orchestrate`'s earlier `KeyError: 'autofix_linter'` was running the personal install's stale registry — the fix shipped in this tree was invisible to the MCP server.
 
-**Fix:** kill the kenbun MCP process and restart it from `/Users/carlosrivas/Dev/kenbun-agent`. Then either delete `/Users/carlosrivas/Dev/Kenbun` or move it aside, so future MCP launches can't accidentally re-root there. Most "degraded" rows below will turn green after that single change.
+This isn't tool rot. It's a real product gap: **kenbun has no concept of "current project."** Either run a separate MCP server per project (heavy), or `settings.PROJECT_ROOT` needs to become dynamic — derived from the calling client's cwd or set per-call. Until then, the workflow is:
+
+1. For OSS work: run the OSS install's MCP server (`cd kenbun-agent && uv tool run kenbun-mcp`) and connect Claude to *that*, not the personal one.
+2. For personal work: connect to the personal MCP server.
+3. Never both at once — the hivemind cross-pollination is a feature for one user, a leak for a release.
 
 ---
 
@@ -26,7 +29,7 @@ The kenbun MCP server you connected was started inside the *old* directory and h
 
 ✅ **Works (15)** — orchestrate · scan_repo · search_codebase · think_about_tools · audit_guardrail · save_to_hivemind · recall_fix · prune_hivemind · search_hivemind_concepts · ingest_url_to_hivemind · delete_from_hivemind · review_code_with_gemini · research_with_gemini · ask_architect · ask_ui_expert · list_checkpoints
 
-⚠️ **Degraded — same-repo issue** (3) — `save_checkpoint`, `restore_checkpoint`, `autofix_linter`: reject every path in the active tree because of the stale-MCP-root above.
+⚠️ **Cross-project scope mismatch** (3) — `save_checkpoint`, `restore_checkpoint`, `autofix_linter`: reject paths here because they're outside the personal install's `PROJECT_ROOT`. Source code is fine; this is the single-root architecture issue above.
 
 ❌ **Real bugs** (4)
 
@@ -58,11 +61,11 @@ The Bayesian feedback loop being failure-blind is the *single* highest-leverage 
 
 ## What gets fixed next (sequence)
 
-1. **Restart the MCP server from the right cwd**, archive the duplicate checkout. Re-run Pass 1; expect 3 ⚠️ rows to flip ✅.
-2. **`reflect_on_task` return type fix** (one line). Re-run; another ❌ flips ✅.
-3. **Wire failure reporting into the Bayesian governor** — every tool call site that catches an exception needs to call `track_failure(tool_id)`. Without this the "intelligence" claim is decorative.
-4. **`get_brain_health` parser** — extend to read `type=hallucination_bench` rows so today's benchmark counts toward health.
-5. **`get_intelligence_stats` fallback** — read local SQLite when remote is down; the data exists, it's just behind a feature flag.
+1. **Per-project MCP scope** (architectural) — `settings.PROJECT_ROOT` becomes either dynamic (resolved per call from the connecting client's cwd) or there's an explicit `/switch-project` slash command. Without this, every user with more than one project runs into the same wall.
+2. **`get_intelligence_stats` local-DB fallback** — already pinned by the new regression test. The local SQLite is populated; the read path just ignores it.
+3. **`audit_package_safety`: ship pip support or stop advertising it** — also pinned by the regression test.
+4. **Wire failure reporting into the Bayesian governor** — every tool call site that catches an exception needs to call `track_failure(tool_id)`. Currently 0 failures logged across 45 tools, so the self-tuning intelligence has nothing to tune on.
+5. **`get_brain_health` parser** — extend to read `type=hallucination_bench` rows so today's benchmark counts toward health (verify via the MCP wrapper, not in-process; the in-process source is healthy).
 
 ---
 

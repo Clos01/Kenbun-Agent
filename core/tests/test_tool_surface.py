@@ -153,7 +153,14 @@ def test_run_code_safely_works_or_skips_cleanly():
 
 
 def test_autofix_linter_respects_real_workspace_root():
-    """Audit 2026-06-12: a stale MCP-server cwd makes this reject every path in the tree."""
+    """In-process check: source must honour settings.PROJECT_ROOT.
+
+    Note: when a user invokes this via the MCP wrapper from a session connected
+    to a *different* kenbun install (e.g. their personal install rooted in
+    /Users/.../Kenbun while editing kenbun-agent), the response will be
+    'outside the authorized project workspace' — that's correct cross-project
+    isolation, not a bug. Use a per-project MCP server.
+    """
     from core.tools.infrastructure.config import settings
     out = srv.autofix_linter(
         file_path=str(settings.PROJECT_ROOT / "test_ghost.py"),
@@ -161,19 +168,20 @@ def test_autofix_linter_respects_real_workspace_root():
     )
     if "outside the authorized project workspace" in out.lower():
         pytest.fail(
-            "autofix_linter rejects a path inside settings.PROJECT_ROOT — the MCP server is "
-            "likely running from a different checkout than the active tree. Restart the MCP "
-            "process from the working directory and rerun."
+            f"autofix_linter rejects a path inside settings.PROJECT_ROOT={settings.PROJECT_ROOT}. "
+            "The source contract is broken — the test process's own PROJECT_ROOT is being "
+            "rejected. (This is a real source bug, distinct from the cross-project MCP scope "
+            "issue documented in docs/TOOL_AUDIT.md.)"
         )
 
 
 def test_save_checkpoint_respects_real_workspace_root():
+    """Same in-process contract as autofix_linter — see that test's docstring."""
     from core.tools.infrastructure.config import settings
     out = srv.save_checkpoint(file_path=str(settings.PROJECT_ROOT / "test_ghost.py"), label="probe")
     if "outside secure workspace" in out.lower():
         pytest.fail(
-            "save_checkpoint rejects a path inside settings.PROJECT_ROOT — same MCP-server "
-            "cwd drift as autofix_linter."
+            f"save_checkpoint rejects a path inside settings.PROJECT_ROOT={settings.PROJECT_ROOT}. "
+            "Source contract broken in-process."
         )
-    # Clean up the probe checkpoint silently if it succeeded
     assert "checkpoint" in out.lower() or "saved" in out.lower(), out[:200]
