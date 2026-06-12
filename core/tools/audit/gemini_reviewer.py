@@ -96,15 +96,20 @@ def _call_gemini(
     start_time = time.time()
     for attempt in range(max_retries):
         try:
+            # Only pass optional fields when set — older google-genai SDKs
+            # reject unknown kwargs even when the value is None
+            config_kwargs = dict(
+                system_instruction=system_prompt,
+                temperature=temperature,
+                max_output_tokens=8192,
+            )
+            if thinking_config is not None:
+                config_kwargs["thinking_config"] = thinking_config
+            if tools:
+                config_kwargs["tools"] = tools
             response = client.models.generate_content(
                 model=model_to_use,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=temperature,
-                    max_output_tokens=8192,
-                    thinking_config=thinking_config,
-                    tools=tools if tools else None
-                ),
+                config=types.GenerateContentConfig(**config_kwargs),
                 contents=user_message,
             )
             duration = time.time() - start_time
