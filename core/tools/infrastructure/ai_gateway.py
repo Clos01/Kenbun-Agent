@@ -66,16 +66,33 @@ def check_and_heal_mismatch(llm_url, llm_model):
 def detect_model_tier(llm_model: str, llm_url: str) -> str:
     """
     Returns the capability tier of the active model:
-      'nano'     — ≤3B params (gemma-4:1b, deepseek-r1:1.5b, phi3:mini)
-      'standard' — 3B-14B (gemma4:12b, gemma3:9b, mistral:7b)
+      'nano'     — ≤3B params (gemma-4:1b, deepseek-r1:1.5b, qwen3:1.7b, phi3:mini)
+      'standard' — >3B local (gemma4:12b, gemma3:9b, mistral:7b)
       'cloud'    — Remote APIs (gpt-*, gemini-*, claude-*)
+
+    The parameter count is parsed numerically from the model tag ('1.7b',
+    '270m', '8b-instruct-q4_K_M') — fixed string patterns missed sizes like
+    :1.7b/:0.6b/:3b, which made those models skip the decoupled
+    planner-executor anti-hallucination pipeline.
     """
+    import re
+
     is_cloud = any(d in llm_url.lower() for d in ["openai.com", "anthropic.com", "googleapis.com", "deepseek.com"])
     if is_cloud:
         return "cloud"
-    nano_patterns = [":1b", ":1.5b", ":0.5b", ":2b", "phi3:mini", "tinyllama"]
-    if any(p in llm_model.lower() for p in nano_patterns):
+
+    model = llm_model.lower()
+    if any(p in model for p in ("phi3:mini", "tinyllama")):
         return "nano"
+
+    # Match '<number>b' (billions) or '<number>m' (millions) parameter sizes.
+    # Quant suffixes like 'q4_K_M' don't match: the unit must directly follow
+    # the digits and end at a word boundary.
+    sizes = re.findall(r"(\d+(?:\.\d+)?)([bm])\b", model)
+    if sizes:
+        params_b = max(float(value) * (1.0 if unit == "b" else 0.001) for value, unit in sizes)
+        if params_b <= 3:
+            return "nano"
     return "standard"
 
 def run_startup_probe(llm_url: str, llm_model: str, chroma_host: str = "localhost", chroma_port: str = "8000") -> dict:
