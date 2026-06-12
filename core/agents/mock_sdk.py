@@ -26,7 +26,7 @@ class QuestionHookResult:
 
 # Attempt real import first
 try:
-    pass
+    import google.kenbun  # type: ignore # noqa: F401
 except ModuleNotFoundError:
     # Build mock google.kenbun module hierarchy
     if "google" not in sys.modules:

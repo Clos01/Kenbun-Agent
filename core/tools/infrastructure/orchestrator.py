@@ -164,7 +164,15 @@ def extract_json_array(text: str) -> str:
     return None
 
 
-from core.tools.infrastructure.routers.router_logic import spawn_assembly, run_pipeline
+# NOTE: router_logic imports this module back (PIPELINES, helpers), so the
+# import must stay lazy — a top-level import deadlocks when this file runs
+# as __main__ (python -m core.tools.infrastructure.orchestrator).
+def __getattr__(name):
+    """PEP 562 re-export: keeps `from orchestrator import run_pipeline/spawn_assembly` working."""
+    if name in ("spawn_assembly", "run_pipeline"):
+        from core.tools.infrastructure.routers import router_logic
+        return getattr(router_logic, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 # ============================================================
 # STATE MACHINE ENGINE
 # ============================================================
@@ -177,6 +185,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
     """
     import asyncio
+    from core.tools.infrastructure.routers.router_logic import run_pipeline
     from core.tools.audit.gemini_reviewer import gemini_code_review, gemini_research
     from core.tools.audit.supervisor_agent import run_supervisor_audit
     from core.tools.memory.repo_mapper import scan_repo
@@ -225,6 +234,7 @@ def assembly(objective: str, project_path: str = "."):
     Usage: assembly("Build a new landing page for the burger shop")
     """
     import asyncio
+    from core.tools.infrastructure.routers.router_logic import spawn_assembly
     from core.tools.audit.gemini_reviewer import gemini_code_review, gemini_research
     from core.tools.audit.supervisor_agent import run_supervisor_audit
     from core.tools.memory.repo_mapper import scan_repo

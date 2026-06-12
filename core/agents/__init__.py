@@ -5,10 +5,11 @@ Enforces strict sandboxing, HITL gates, and SHA-256 lineage manifests.
 """
 
 # First, ensure google.kenbun imports are mocked if not present in the environment
+from core.agents import mock_sdk  # noqa: F401
 
-from agents.adapter import AgentToolInterface, HeritageSecurityException
-from agents.workflow import WorkflowPhase, SovereignVerificationHook, build_agent_policy
-from agents.trace import TraceabilityManifestLogger
+from core.agents.adapter import AgentToolInterface, HeritageSecurityException
+from core.agents.workflow import WorkflowPhase, SovereignVerificationHook, build_agent_policy
+from core.agents.trace import TraceabilityManifestLogger
 
 __all__ = [
     "AgentToolInterface",

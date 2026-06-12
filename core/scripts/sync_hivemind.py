@@ -1,6 +1,6 @@
 from pathlib import Path
 import re
-from hivemind_memory.hive_memory import hive_memory
+from core.hivemind_memory.hive_memory import hive_memory
 
 from core.tools.infrastructure.config import settings
 

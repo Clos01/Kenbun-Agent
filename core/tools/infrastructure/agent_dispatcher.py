@@ -9,7 +9,7 @@ from core.tools.audit.guardrail_agent import run_guardrail_audit
 from core.tools.autonomic.autonomic_corrector import corrector
 from core.tools.audit.mars_auditor import mars_auditor
 from core.tools.infrastructure.parallel_manager import parallel_manager
-from hivemind_memory.hive_memory import hive_memory
+from core.hivemind_memory.hive_memory import hive_memory
 from core.tools.utils.maze_protocol import backward_verify
 
 from core.tools.infrastructure.pipelines.bug_fix import build_bug_fix_pipeline

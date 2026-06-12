@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from core.tools.infrastructure.config import settings
 from core.tools.memory.chroma_db_connect import get_project_collection
 from core.tools.audit.guardrail_agent import guardrail_agent
-from core.tools.strategy.token_governor import token_governor, governor
+from core.tools.strategy.token_governor import token_governor
+from core.tools.strategy.strategy_manager import governor
 from core.tools.strategy.intelligence_engine import intelligence_engine
 
 router = APIRouter()
