@@ -2096,407 +2096,116 @@ def main():
                         history = prune_dialog_history(history)
                         save_session_backup(history, Path.cwd(), llm_url, llm_model)
 
-                # Prepare streaming request and execute with fallback logic
-                response = None
-                max_retries = 3
-                is_fallback = False
+                from core.tools.utils.llm_router import call_llm_gateway
+                
+                cli_tools = [
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "execute_shell",
+                            "description": "Execute a terminal bash command. Proposed code must be run on the host system to have an effect.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"command": {"type": "string"}},
+                                "required": ["command"]
+                            }
+                        }
+                    },
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "spawn_agent",
+                            "description": "Spawn a background AI agent to handle a sub-task autonomously.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"task_description": {"type": "string"}},
+                                "required": ["task_description"]
+                            }
+                        }
+                    }
+                ]
                 
                 try:
-                    # Primary request parameters
-                    actual_url = llm_url
-                    actual_model = llm_model
-                    
-                    # ========================================================
-                    # 🚀 EDGE AI ROUTER (Modular Override)
-                    # ========================================================
-                    active_history, actual_url, actual_model = process_edge_routing(
-                        user_input, history, actual_url, actual_model, llm_model, env
+                    generator = call_llm_gateway(
+                        messages=active_history,
+                        temperature=0.7 if model_tier == "nano" else 0.2,
+                        tools=cli_tools,
+                        stream=True
                     )
-                    is_gemini_route = "gemini" in actual_url.lower() or "googleapis" in actual_url.lower() or "generativelanguage" in actual_url.lower()
-                    headers = {"Content-Type": "application/json"}
                     
-                    if "GEMINI_API_KEY" in env and is_gemini_route:
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
-                        if "cloudaidoc-pa.googleapis.com" in actual_url.lower():
-                            actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-                            if actual_model == "code-assist":
-                                actual_model = "gemini-1.5-pro"
-                    elif ("cloudaidoc-pa.googleapis.com" in actual_url.lower() or "googleapis.com" in actual_url.lower()) and is_gemini_route:
-                        try:
-                            from google.auth.transport.requests import Request as AuthRequest
-                            scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-                            
-                            # Check if local credentials file exists
-                            proj_creds_path = Path(__file__).resolve().parent.parent / ".google_credentials.json"
-                            credentials = None
-                            project_id = None
-                            
-                            if proj_creds_path.exists():
-                                from google.oauth2.credentials import Credentials
-                                credentials = Credentials.from_authorized_user_file(str(proj_creds_path))
-                                credentials.refresh(AuthRequest())
-                                log_event("Successfully acquired Google OAuth access token via custom client credentials in termchat")
-                                # Read project ID from custom credentials JSON
-                                try:
-
-                                    with open(proj_creds_path, "r") as f:
-                                        creds_data = json.load(f)
-                                        project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
-                                except Exception:
-                                    pass
-                            else:
-                                import google.auth
-                                credentials, project_id = google.auth.default(scopes=scopes)
-                                credentials.refresh(AuthRequest())
-                                log_event("Successfully acquired Google OAuth access token via ADC in termchat")
-                                # Read quota_project_id from ADC credentials file if google.auth.default didn't return one
-                                if not project_id:
-                                    try:
-                                        adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
-                                        if adc_path.exists():
-
-                                            with open(adc_path, "r") as f:
-                                                adc_data = json.load(f)
-                                                project_id = adc_data.get("quota_project_id")
-                                                if project_id:
-                                                    log_event(f"Resolved quota_project_id from ADC file: {project_id}")
-                                    except Exception:
-                                        pass
-                                
-                            headers["Authorization"] = f"Bearer {credentials.token}"
-                            
-                            if "googleapis.com" in llm_url.lower():
-                                gcp_project = project_id or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT") or env.get("PROJECT_ID")
-                                gcp_location = env.get("VERTEX_AI_LOCATION") or env.get("GOOGLE_CLOUD_REGION") or env.get("LOCATION") or "us-central1"
-                                
-                                if gcp_project:
-                                    actual_url = f"https://{gcp_location}-aiplatform.googleapis.com/v1/projects/{gcp_project}/locations/{gcp_location}/endpoints/openapi"
-                                    if actual_model == "code-assist":
-                                        actual_model = "google/gemini-2.5-flash"
-                                    log_event(f"Rewriting cloudaidoc endpoint to Vertex AI: {actual_url} ({actual_model})")
-                                else:
-                                    # Use generativelanguage.googleapis.com with x-goog-user-project header for OAuth
-                                    actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-                                    if actual_model == "code-assist":
-                                        actual_model = "gemini-2.5-flash"
-                                    # CRITICAL: generativelanguage.googleapis.com requires x-goog-user-project for OAuth auth
-                                    # Try to find any project reference to set the header
-                                    fallback_project = env.get("GOOGLE_CLOUD_QUOTA_PROJECT") or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT")
-                                    if not fallback_project:
-                                        try:
-                                            adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
-                                            if adc_path.exists():
-
-                                                with open(adc_path, "r") as f:
-                                                    fallback_project = json.load(f).get("quota_project_id")
-                                        except Exception:
-                                            pass
-                                    if fallback_project:
-                                        headers["x-goog-user-project"] = fallback_project
-                                        log_event(f"Set x-goog-user-project={fallback_project} for generativelanguage.googleapis.com OAuth")
-                                    else:
-                                        log_event("WARNING: No quota project found for OAuth. API may return 500. Run: gcloud auth application-default set-quota-project YOUR_PROJECT")
-                                    log_event(f"Rewriting cloudaidoc to AI Studio OAuth: {actual_url} ({actual_model})")
-                        except Exception as oauth_err:
-                            log_event(f"Failed to acquire Google OAuth access token: {oauth_err}")
-                            print()
-                            draw_box([
-                                "Google Cloud CLI credentials not found or not consented!",
-                                "To use the Google OAuth provider, you must install the CLI and log in:",
-                                "",
-                                "  1. Install: sudo snap install google-cloud-cli --classic",
-                                "  2. Login:   gcloud auth application-default login",
-                                "     (Ensure you check the Google Cloud Platform consent checkbox)",
-                                "  - Or configure custom Client ID/Secret via bootstrap setup menu.",
-                            ], title="🚨 GOOGLE AUTHENTICATION REQUIRED", border_color=C_RED, text_color=C_Y)
-                            print()
-                    elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
-                    elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
-
-                    endpoint = f"{actual_url}/chat/completions"
-                    payload = {
-                        "model": actual_model,
-                        "messages": active_history,
-                        "temperature": 0.7 if model_tier == "nano" else 0.2,
-                        "stream": True
-                    }
+                    full_reply = ""
+                    execute_blocks = []
+                    spawn_blocks = []
                     
-                    if _ui:
+                    if _ui and _ui._console:
+                        from rich.markdown import Markdown
                         _ui.print_response_header(llm_model)
-                        with _ui.spinner("Thinking..."):
-                            for attempt in range(max_retries + 1):
-                                try:
-                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
-                                    break
-                                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                                    if attempt < max_retries:
-                                        backoff = 2 ** attempt
-                                        time.sleep(backoff)
-                                    else:
-                                        raise e
+                        with _ui.live_stream() as live:
+                            for chunk in generator:
+                                if chunk["type"] == "content":
+                                    full_reply += chunk["content"]
+                                    live.update(Markdown(full_reply))
+                                elif chunk["type"] == "tool_calls":
+                                    for tc in chunk["tool_calls"]:
+                                        if tc["function"]["name"] == "execute_shell":
+                                            try:
+                                                import json
+                                                args = json.loads(tc["function"]["arguments"])
+                                                execute_blocks.append(args["command"])
+                                            except: pass
+                                        elif tc["function"]["name"] == "spawn_agent":
+                                            try:
+                                                import json
+                                                args = json.loads(tc["function"]["arguments"])
+                                                spawn_blocks.append(args["task_description"])
+                                            except: pass
                     else:
-                        print(f"\n{C_D}────────────────────────────────────────────────────────────────────────{C_R}")
-                        print(f"{C_P}{C_BOLD}Kenbun ({actual_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
+                        cols = get_columns()
+                        wrapper = StreamingRenderer(cols - 4)
+                        wrapper.current_line_len = 9
                         
-                        # Retry loop with exponential backoff for primary LLM endpoint
-                        for attempt in range(max_retries + 1):
-                            try:
-                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
-                                break
-                            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as e:
-                                if attempt < max_retries:
-                                    backoff = 2 ** attempt
-                                    print(f"\n{C_Y}⚠️ Connection/Timeout on primary LLM: {e}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
-                                    time.sleep(backoff)
-                                else:
-                                    if actual_url == "http://localhost:11434/v1":
-                                        tune_assembly(actual_model, success=False, category="local_routing")
-                                    raise e
-                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as primary_err:
-                    # Catch primary connection failure, and trigger fallback gateway
-                    fallback_url = env.get("FALLBACK_LLM_URL", "").strip()
-                    fallback_model = env.get("FALLBACK_LLM_MODEL", "").strip()
-                    
-                    if not fallback_url or not fallback_model:
-                        # No fallback configured, re-raise the original error
-                        raise primary_err
-                    
-                    is_fallback = True
-                    print() # Advance line from "Kenbun 🌸:" prefix
-                    
-                    # Display warning card
-                    fallback_lines = [
-                        "Kenbun failed to connect to primary LLM after retries.",
-                        "",
-                        f"➔ Failed URL: {C_W}{llm_url}{C_Y}",
-                        f"➔ Error:      {C_W}{str(primary_err)}{C_Y}",
-                        "---",
-                        "Switching to FALLBACK GATEWAY automatically...",
-                        f"⚡ Fallback URL:   {C_G}{fallback_url}{C_Y}",
-                        f"📦 Fallback Model: {C_G}{fallback_model}{C_Y}"
-                    ]
-                    draw_box(fallback_lines, title="🚨 PRIMARY GATEWAY OFFLINE (FALLBACK DETECTED)", border_color=C_Y, text_color=C_Y)
-                    print()
-                    
-                    # Permanently transition to the fallback configuration for the duration of session
-                    llm_url = fallback_url
-                    llm_model = fallback_model
-                    model_tier = detect_model_tier(llm_model, llm_url)
-                    
-                    # Prepare headers and payload for fallback LLM
-                    actual_url = llm_url
-                    actual_model = llm_model
-                    is_gemini_route = "gemini" in llm_url.lower() or "googleapis" in llm_url.lower() or "generativelanguage" in llm_url.lower()
-                    headers = {"Content-Type": "application/json"}
-                    
-                    if "GEMINI_API_KEY" in env and is_gemini_route:
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['GEMINI_API_KEY'])}"
-                        if "cloudaidoc-pa.googleapis.com" in llm_url.lower():
-                            actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-                            if actual_model == "code-assist":
-                                actual_model = "gemini-1.5-pro"
-                    elif ("cloudaidoc-pa.googleapis.com" in llm_url.lower() or "googleapis.com" in llm_url.lower()) and is_gemini_route:
-                        try:
-                            from google.auth.transport.requests import Request as AuthRequest
-                            scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-                            
-                            # Check if local credentials file exists
-                            proj_creds_path = Path(__file__).resolve().parent.parent / ".google_credentials.json"
-                            credentials = None
-                            project_id = None
-                            
-                            if proj_creds_path.exists():
-                                from google.oauth2.credentials import Credentials
-                                credentials = Credentials.from_authorized_user_file(str(proj_creds_path))
-                                credentials.refresh(AuthRequest())
-                                log_event("Successfully acquired Google OAuth access token via custom client credentials in termchat")
-                                # Read project ID from custom credentials JSON
-                                try:
-
-                                    with open(proj_creds_path, "r") as f:
-                                        creds_data = json.load(f)
-                                        project_id = creds_data.get("project_id") or creds_data.get("quota_project_id")
-                                except Exception:
-                                    pass
-                            else:
-                                import google.auth
-                                credentials, project_id = google.auth.default(scopes=scopes)
-                                credentials.refresh(AuthRequest())
-                                log_event("Successfully acquired Google OAuth access token via ADC in termchat")
-                                if not project_id:
-                                    try:
-                                        adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
-                                        if adc_path.exists():
-
-                                            with open(adc_path, "r") as f:
-                                                adc_data = json.load(f)
-                                                project_id = adc_data.get("quota_project_id")
-                                    except Exception:
-                                        pass
-                                
-                            headers["Authorization"] = f"Bearer {credentials.token}"
-                            
-                            if "googleapis.com" in llm_url.lower():
-                                gcp_project = project_id or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT") or env.get("PROJECT_ID")
-                                gcp_location = env.get("VERTEX_AI_LOCATION") or env.get("GOOGLE_CLOUD_REGION") or env.get("LOCATION") or "us-central1"
-                                
-                                if gcp_project:
-                                    actual_url = f"https://{gcp_location}-aiplatform.googleapis.com/v1/projects/{gcp_project}/locations/{gcp_location}/endpoints/openapi"
-                                    if actual_model == "code-assist":
-                                        actual_model = "google/gemini-2.5-flash"
-                                    log_event(f"Rewriting cloudaidoc endpoint to Vertex AI: {actual_url} ({actual_model})")
-                                else:
-                                    actual_url = "https://generativelanguage.googleapis.com/v1beta/openai"
-                                    if actual_model == "code-assist":
-                                        actual_model = "gemini-2.5-flash"
-                                    fallback_project = env.get("GOOGLE_CLOUD_QUOTA_PROJECT") or env.get("GOOGLE_CLOUD_PROJECT") or env.get("GCP_PROJECT")
-                                    if not fallback_project:
+                        print(f"\n{C_D}────────────────────────────────────────────────────────────────────────{C_R}")
+                        print(f"{C_P}{C_BOLD}Kenbun ({llm_model}){C_R} {C_D}▸{C_R} ", end="", flush=True)
+                        
+                        for chunk in generator:
+                            if chunk["type"] == "content":
+                                wrapper.write(chunk["content"])
+                                full_reply += chunk["content"]
+                            elif chunk["type"] == "tool_calls":
+                                for tc in chunk["tool_calls"]:
+                                    if tc["function"]["name"] == "execute_shell":
                                         try:
-                                            adc_path = Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
-                                            if adc_path.exists():
-
-                                                with open(adc_path, "r") as f:
-                                                    fallback_project = json.load(f).get("quota_project_id")
-                                        except Exception:
-                                            pass
-                                    if fallback_project:
-                                        headers["x-goog-user-project"] = fallback_project
-                                    log_event(f"Rewriting cloudaidoc to AI Studio OAuth: {actual_url} ({actual_model})")
-                        except Exception as oauth_err:
-                            log_event(f"Failed to acquire Google OAuth access token: {oauth_err}")
-                            print()
-                            draw_box([
-                                "Google Cloud CLI credentials not found or not consented!",
-                                "To use the Google OAuth provider, you must install the CLI and log in:",
-                                "",
-                                "  1. Install: sudo snap install google-cloud-cli --classic",
-                                "  2. Login:   gcloud auth application-default login",
-                                "     (Ensure you check the Google Cloud Platform consent checkbox)",
-                                "  - Or configure custom Client ID/Secret via bootstrap setup menu.",
-                            ], title="🚨 GOOGLE AUTHENTICATION REQUIRED", border_color=C_RED, text_color=C_Y)
-                            print()
-                    elif "OPENAI_API_KEY" in env and "openai" in llm_url.lower():
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['OPENAI_API_KEY'])}"
-                    elif "DEEPSEEK_API_KEY" in env and "deepseek" in llm_url.lower():
-                        headers["Authorization"] = f"Bearer {decrypt_value(env['DEEPSEEK_API_KEY'])}"
-
-                    endpoint = f"{actual_url}/chat/completions"
-                    payload = {
-                        "model": actual_model,
-                        "messages": active_history,
-                        "temperature": 0.7 if model_tier == "nano" else 0.2,
-                        "stream": True
-                    }
+                                            import json
+                                            args = json.loads(tc["function"]["arguments"])
+                                            execute_blocks.append(args["command"])
+                                        except: pass
+                                    elif tc["function"]["name"] == "spawn_agent":
+                                        try:
+                                            import json
+                                            args = json.loads(tc["function"]["arguments"])
+                                            spawn_blocks.append(args["task_description"])
+                                        except: pass
+                        wrapper.flush()
+                    print("\n")
                     
-                    if _ui:
-                        _ui.print_response_header(llm_model)
-                        with _ui.spinner("Thinking (fallback)..."):
-                            for attempt in range(max_retries + 1):
-                                try:
-                                    response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
-                                    break
-                                except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
-                                    if attempt < max_retries:
-                                        backoff = 2 ** attempt
-                                        time.sleep(backoff)
-                                    else:
-                                        raise fallback_err
-                    else:
-                        print(f"\n{C_D}────────────────────────────────────────────────────────────────────────{C_R}")
-                        print(f"{C_P}{C_BOLD}Kenbun ({actual_model}){C_R} {C_D}(fallback ▸){C_R} ", end="", flush=True)
-                        
-                        # Retry loop with exponential backoff for fallback LLM endpoint
-                        for attempt in range(max_retries + 1):
-                            try:
-                                response = session.post(endpoint, json=payload, headers=headers, stream=True, timeout=120)
-                                break
-                            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout) as fallback_err:
-                                if attempt < max_retries:
-                                    backoff = 2 ** attempt
-                                    print(f"\n{C_Y}⚠️ Connection/Timeout on fallback LLM: {fallback_err}. Retrying in {backoff}s... (Attempt {attempt + 1}/{max_retries}){C_R}")
-                                    time.sleep(backoff)
-                                else:
-                                    raise fallback_err
-
-                response.raise_for_status()
-                
-                full_reply = ""
-                if _ui and _ui._console:
-                    from rich.markdown import Markdown
+                    # Register response
+                    history.append({"role": "assistant", "content": scrub_secrets(full_reply)})
+                    history = prune_dialog_history(history)
+                    save_session_backup(history, Path.cwd(), llm_url, llm_model)
                     
-                    def clean_markdown_stream(text: str) -> str:
-                        cleaned = re.sub(r"```(?:execute|bash|sh|spawn)\n.*?\n```", "", text, flags=re.DOTALL | re.IGNORECASE)
-                        cleaned = re.sub(r"```(?:execute|bash|sh|spawn)\n.*$", "", cleaned, flags=re.DOTALL | re.IGNORECASE)
-                        return cleaned
-
-                    with _ui.live_stream() as live:
-                        for line in response.iter_lines():
-                            if line:
-                                decoded = line.decode("utf-8").strip()
-                                if decoded.startswith("data: "):
-                                    data_str = decoded[6:]
-                                    if data_str == "[DONE]":
-                                        break
-                                    try:
-                                        data_json = json.loads(data_str)
-                                        choices = data_json.get("choices", [])
-                                        if not choices:
-                                            continue
-                                        chunk = choices[0].get("delta", {}).get("content") or ""
-                                        full_reply += chunk
-                                        cleaned = clean_markdown_stream(full_reply)
-                                        if live:
-                                            live.update(Markdown(cleaned))
-                                    except Exception as e:
-                                        log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
-                                else:
-                                    if decoded.startswith("{") or decoded.startswith("["):
-                                        log_event(f"API WARNING: {decoded}")
-                else:
-                    cols = get_columns()
-                    wrapper = StreamingRenderer(cols - 4)
-                    wrapper.current_line_len = 20 if is_fallback else 9
+                except Exception as e:
+                    log_event(f"Engine routing failed: {e}")
+                    raise e
                     
-                    for line in response.iter_lines():
-                        if line:
-                            decoded = line.decode("utf-8").strip()
-                            if decoded.startswith("data: "):
-                                data_str = decoded[6:]
-                                if data_str == "[DONE]":
-                                    break
-                                try:
-                                    data_json = json.loads(data_str)
-                                    choices = data_json.get("choices", [])
-                                    if not choices:
-                                        continue
-                                    chunk = choices[0].get("delta", {}).get("content") or ""
-                                    wrapper.write(chunk)
-                                    full_reply += chunk
-                                except Exception as e:
-                                    if actual_url == "http://localhost:11434/v1":
-                                        tune_assembly(actual_model, success=False, category="local_routing")
-                                    print(f"\n{C_RED}STREAM PARSE ERROR:{C_R} {repr(e)} on chunk: {data_str[:50]}...", flush=True)
-                                    log_event(f"STREAM PARSE ERROR: {repr(e)} on chunk: {data_str}")
-                            else:
-                                if decoded.startswith("{") or decoded.startswith("["):
-                                    print(f"\n{C_Y}API WARNING:{C_R} {decoded}", flush=True)
-                                    log_event(f"API WARNING: {decoded}")
-                    wrapper.flush()
-                print("\n")
-                
-                # Register response
-                history.append({"role": "assistant", "content": scrub_secrets(full_reply)})
-                history = prune_dialog_history(history)
-                save_session_backup(history, Path.cwd(), llm_url, llm_model)
-                
-                # Auto-tune bayesian router if edge routing succeeded
-                if actual_url == "http://localhost:11434/v1" and not is_gemini_route:
-                    tune_assembly(actual_model, success=True, category="local_routing")
-                
-                # Check for execute blocks: ```execute\n<command>\n```, ```bash\n<command>\n```, or ```sh\n<command>\n```
-                execute_blocks = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
+                import re
+                # We also want to support legacy markdown parsing just in case
+                legacy_exec = re.findall(r"```(?:execute|bash|sh)\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
+                if legacy_exec:
+                    execute_blocks.extend(legacy_exec)
+                    
+                legacy_spawn = re.findall(r"```spawn\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
+                if legacy_spawn:
+                    spawn_blocks.extend(legacy_spawn)
 
                 # Check for spawn blocks
                 spawn_blocks = re.findall(r"```spawn\n(.*?)\n```", full_reply, re.DOTALL | re.IGNORECASE)
