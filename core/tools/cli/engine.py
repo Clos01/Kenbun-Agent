@@ -1770,6 +1770,17 @@ def main():
                                 memory_blocks.append(f"Memory #{idx}: {m_title}\n{m_content}")
                             grounding_context.append(f"[MEMORIES & PAST LESSONS (Grounding from Hivemind)]:\n" + "\n---\n".join(memory_blocks))
 
+                    # C2. Always-on project-scoped memory auto-recall.
+                    # Unlike block C (global Hivemind, keyword-gated) this fires
+                    # every turn so the agent surfaces relevant workspace memory
+                    # without the user phrasing a trigger word. Flag, relevance
+                    # (distance), trivial-input and length-cap filtering all live
+                    # inside auto_recall_context — it returns "" when not useful.
+                    from core.tools.memory.project_memory import auto_recall_context
+                    proj_mem = auto_recall_context(user_input, str(Path.cwd()))
+                    if proj_mem:
+                        grounding_context.append(f"[PROJECT MEMORY (auto-recalled — relevant to your current workspace)]:\n{proj_mem}")
+
                     # Compile final grounded input
                     final_input = user_input
                     if grounding_context:

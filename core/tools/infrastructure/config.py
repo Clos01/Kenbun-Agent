@@ -209,6 +209,18 @@ class KenbunSettings(BaseSettings):
     SPECULATIVE_SERVER_MODEL: Optional[str] = None
     SPECULATIVE_LATENCY_THRESHOLD_SEC: Optional[float] = None
 
+    # --- AUTO-RECALL (automatic project-memory injection) ---
+    # Master switch: "0" reverts the CLI to keyword-gated recall and disables
+    # dashboard injection — instant rollback with no code change.
+    KENBUN_AUTO_RECALL: bool = Field(default=True, validation_alias="KENBUN_AUTO_RECALL")
+    # Hard cap on injected memory text (chars). A dedicated RAG budget, kept
+    # decoupled from OLLAMA_CONTEXT_LENGTH because the dashboard path uses a
+    # cloud model and injected memory is only a fraction of the full prompt.
+    MEMORY_RECALL_MAX_CHARS: int = Field(default=4000, validation_alias="MEMORY_RECALL_MAX_CHARS")
+    # Chroma vector-distance ceiling; memories farther than this are dropped as
+    # irrelevant so trivial turns don't get polluted with unrelated context.
+    MEMORY_RECALL_DISTANCE_THRESHOLD: float = Field(default=0.75, validation_alias="MEMORY_RECALL_DISTANCE_THRESHOLD")
+
     @property
     def models(self) -> ModelSettings:
         return ModelSettings(

@@ -3,23 +3,35 @@ from core.tools.utils import chat_history_manager
 
 @pytest.fixture(autouse=True)
 def clean_sessions_file():
-    """Fixture to backup any existing chat sessions and ensure a clean test state."""
-    sessions_file = chat_history_manager.get_sessions_file_path()
-    backup_file = sessions_file.with_suffix(".json.bak")
-    
-    # Backup existing data
-    if sessions_file.exists():
-        if backup_file.exists():
-            backup_file.unlink()
-        sessions_file.rename(backup_file)
-        
+    """Backup any real chat DB and start each test from an empty store.
+
+    The store is now WAL-mode SQLite, so the -wal/-shm sidecars must be cleared
+    too — leaving an orphaned -wal next to a fresh DB would resurrect old rows
+    and break test isolation.
+    """
+    db = chat_history_manager.get_sessions_file_path()
+    backup = db.with_suffix(".db.bak")
+    sidecars = [db.with_name(db.name + "-wal"), db.with_name(db.name + "-shm")]
+
+    # Start clean: drop sidecars, back up any existing DB.
+    for sc in sidecars:
+        if sc.exists():
+            sc.unlink()
+    if db.exists():
+        if backup.exists():
+            backup.unlink()
+        db.rename(backup)
+
     yield
-    
-    # Restore original data
-    if sessions_file.exists():
-        sessions_file.unlink()
-    if backup_file.exists():
-        backup_file.rename(sessions_file)
+
+    # Restore the user's real data.
+    for sc in sidecars:
+        if sc.exists():
+            sc.unlink()
+    if db.exists():
+        db.unlink()
+    if backup.exists():
+        backup.rename(db)
 
 def test_create_and_list_sessions():
     """Verifies creating a session registers it inside list_sessions."""

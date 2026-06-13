@@ -1247,6 +1247,10 @@ class CreateSessionRequest(BaseModel):
 
 class ChatSessionMessageRequest(BaseModel):
     message: str = Field(..., description="The user message to send")
+    project_path: Optional[str] = Field(
+        default=None,
+        description="Workspace to scope memory auto-recall to. Defaults to the server's PROJECT_ROOT.",
+    )
 
 
 # --- Chat History & Multi-Session Endpoints ---
@@ -1374,8 +1378,17 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
             if msg["id"] == "initial" or msg["id"] == user_msg["id"]:
                 continue
             history_context += f"\n- {msg['sender'].upper()}: {msg['content']}"
-            
-        full_user_message = f"CONVERSATIONAL HISTORY:{history_context}\n\nLATEST USER DIRECTIVE: {req.message}"
+
+        # Auto-recall: surface relevant project memory without an explicit user
+        # call. Flag/relevance/trivial/length filtering all live in the helper,
+        # which degrades to "" on any Chroma failure. PROJECT_ROOT is correct
+        # here because the containerized backend is bound to one workspace.
+        from core.tools.memory.project_memory import auto_recall_context
+        project_path = req.project_path or str(settings.PROJECT_ROOT)
+        memory_context = await run_in_threadpool(auto_recall_context, req.message, project_path)
+        memory_block = f"\n\n[PROJECT MEMORY (auto-recalled)]:\n{memory_context}" if memory_context else ""
+
+        full_user_message = f"CONVERSATIONAL HISTORY:{history_context}{memory_block}\n\nLATEST USER DIRECTIVE: {req.message}"
         
         try:
             # 5. Call LLM (with auto-execution loop for System 1-6 tools)
