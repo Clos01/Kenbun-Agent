@@ -76,7 +76,7 @@ class SystemDigester:
             
         logging.info("💾 [DIGESTER] Persisting distilled rules to ChromaDB/Knowledge Base.")
         try:
-            from tools.memory.chroma_db_connect import get_project_collection
+            from tools.memory.honcho_connect import get_project_collection
             collection = get_project_collection("digested_rules")
             if collection:
                 timestamp = datetime.now(timezone.utc).isoformat()

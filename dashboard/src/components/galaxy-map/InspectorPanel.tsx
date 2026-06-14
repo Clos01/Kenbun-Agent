@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Focus, X, FileText } from 'lucide-react';
 import { StarNode } from './types';
 import { ROOM_COLORS_MAP_DARK, ROOM_COLORS_MAP_LIGHT } from './constants';
+import { TOOL_EQUATIONS } from '@/lib/equations';
 
 interface InspectorPanelProps {
   selectedNode: StarNode;
@@ -20,6 +21,9 @@ export default function InspectorPanel({
   isDark
 }: InspectorPanelProps) {
   const roomColorsMap = isDark ? ROOM_COLORS_MAP_DARK : ROOM_COLORS_MAP_LIGHT;
+  
+  const toolName = selectedNode.file.split('/').pop()?.replace('.py', '') || '';
+  const equationObj = TOOL_EQUATIONS[toolName];
 
   return (
     <motion.div 
@@ -78,6 +82,25 @@ export default function InspectorPanel({
           {selectedNode.snippet || "Empty signal payload."}
         </div>
       </div>
+
+      {/* Mathematical Model */}
+      {equationObj && (
+        <div className="space-y-2">
+          <span className="text-[8px] font-mono font-bold uppercase tracking-widest opacity-30 text-[var(--foreground)]">Mathematical Model</span>
+          <div className="p-4 border bg-[var(--background)] border-[var(--border-muted)] rounded-sm">
+            <pre className="text-[10px] font-mono text-[var(--foreground)] font-semibold leading-relaxed whitespace-pre-wrap">{equationObj.math}</pre>
+            <details className="group mt-3">
+              <summary className="text-[9px] font-bold uppercase tracking-wider text-[var(--foreground)] opacity-60 cursor-pointer select-none list-none flex items-center gap-1.5 hover:opacity-100 transition-opacity">
+                <span>Explain Formula</span>
+                <span className="text-[7px] transition-transform duration-200 group-open:rotate-180">▼</span>
+              </summary>
+              <div className="mt-2 pt-2 border-t border-[var(--border-muted)]/50">
+                <p className="text-[9px] font-mono text-[var(--foreground)] opacity-70 mt-1">{equationObj.desc}</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="pt-2 flex items-center justify-between">

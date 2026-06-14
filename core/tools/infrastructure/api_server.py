@@ -12,7 +12,7 @@ import re
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
+from fastapi import FastAPI, BackgroundTasks, HTTPException, Request, Depends
 from pydantic import BaseModel
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,7 +32,7 @@ from tools.execution.p330_worker import p330_worker
 from tools.utils.workspace_manager import workspace_manager
 from tools.strategy.token_governor import token_governor
 from tools.autonomic.autonomic_corrector import corrector
-from tools.memory.chroma_db_connect import get_project_collection
+from tools.memory.honcho_connect import get_project_collection
 from tools.strategy.neural_classifier import neural_classifier
 
 app = FastAPI(title="Kenbun Mission Control API")
@@ -705,7 +705,7 @@ async def get_intelligence_history():
     Provides the audit trail for all major AI logic paths.
     """
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from tools.memory.honcho_connect import get_project_collection
         collection = get_project_collection("history")
         
         # Fetch recent decisions
@@ -993,7 +993,7 @@ async def get_stats():
                 print(f"⚠️ JSON task load error: {e}")
     
     # Inject Live Supervisor Log
-    supervisor_log = f"[FLASH_STEP] 🔮 LM_STUDIO_SUPERVISOR: Local Audit of Node.251649 Successful."
+    supervisor_log = "[FLASH_STEP] 🔮 LM_STUDIO_SUPERVISOR: Local Audit of Node.251649 Successful."
     
     # Calculate model breakdown for today
     today = datetime.now(timezone.utc).date().isoformat()
@@ -1161,7 +1161,7 @@ async def get_chat_sessions():
     from tools.utils import chat_history_manager
     return chat_history_manager.list_sessions()
 
-@app.post("/api/v1/chat/sessions")
+@app.post("/api/v1/chat/sessions", dependencies=[Depends(verify_authorization)])
 async def create_chat_session(req: Optional[CreateSessionRequest] = None):
     """Creates a new empty chat session."""
     from tools.utils import chat_history_manager
@@ -1177,7 +1177,7 @@ async def get_chat_session(session_id: str):
         return JSONResponse(status_code=404, content={"error": f"Session {session_id} not found"})
     return session
 
-@app.delete("/api/v1/chat/sessions/{session_id}")
+@app.delete("/api/v1/chat/sessions/{session_id}", dependencies=[Depends(verify_authorization)])
 async def delete_chat_session(session_id: str):
     """Deletes a chat session by ID."""
     from tools.utils import chat_history_manager
@@ -1191,7 +1191,6 @@ def execute_cli_command(command: str) -> str:
     Safely executes a whitelisted CLI command on the user's hardware.
     Protected by the absolute regex whitelist and YOLO filters of terminal_chat.py.
     """
-    import sys
     import subprocess
     from pathlib import Path
     from tools.infrastructure.config import settings
@@ -1201,9 +1200,6 @@ def execute_cli_command(command: str) -> str:
         scripts_dir = Path("/app/scripts")
         if not scripts_dir.exists():
             scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
-            
-        if str(scripts_dir) not in sys.path:
-            sys.path.insert(0, str(scripts_dir))
             
         from terminal_chat import is_yolo_safe
     except Exception as e:
@@ -1235,7 +1231,7 @@ def execute_cli_command(command: str) -> str:
         return f"❌ Error: Command execution failed: {e}"
 
 
-@app.post("/api/v1/chat/sessions/{session_id}/message")
+@app.post("/api/v1/chat/sessions/{session_id}/message", dependencies=[Depends(verify_authorization)])
 async def post_message_to_session(session_id: str, req: ChatSessionMessageRequest):
     """Sends a message within an existing chat session and queries the AI using history context."""
     from tools.utils import chat_history_manager
@@ -1256,16 +1252,12 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
         response_text = await run_in_threadpool(execute_cli_command, command)
     else:
         # 4. Compile full conversational context from history (using Terminal Chat's exact System 1-6 rules)
-        import sys
         from pathlib import Path
         from tools.infrastructure.config import settings
         
         scripts_dir = Path("/app/scripts")
         if not scripts_dir.exists():
             scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
-        if str(scripts_dir) not in sys.path:
-            sys.path.insert(0, str(scripts_dir))
-            
         from terminal_chat import build_system_prompt
         system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
         
@@ -1341,7 +1333,7 @@ async def get_system_diagnostics():
     """
     import os
     import requests
-    from tools.memory.chroma_db_connect import get_project_collection
+    from tools.memory.honcho_connect import get_project_collection
     
     status = {
         "mcp_backend": {"status": "online", "message": "FastMCP Server Active"},
@@ -1373,7 +1365,7 @@ async def get_system_diagnostics():
     return status
 
 
-@app.post("/api/v1/chat")
+@app.post("/api/v1/chat", dependencies=[Depends(verify_authorization)])
 async def chat_with_kenbun(req: ChatRequest):
     """
     Passes user messages into the orchestrator/intelligence engine.
@@ -1390,16 +1382,12 @@ async def chat_with_kenbun(req: ChatRequest):
             response_text = await run_in_threadpool(execute_cli_command, command)
         else:
             # 2. Functional Chat Pass-Through to the LLM
-            import sys
             from pathlib import Path
             from tools.infrastructure.config import settings
             
             scripts_dir = Path("/app/scripts")
             if not scripts_dir.exists():
                 scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
-            if str(scripts_dir) not in sys.path:
-                sys.path.insert(0, str(scripts_dir))
-                
             from terminal_chat import build_system_prompt
             system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
             
@@ -1446,7 +1434,7 @@ async def get_hivemind_concepts():
     Groups vectors by file/concept to match the frontend expectations.
     """
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from tools.memory.honcho_connect import get_project_collection
         collection = get_project_collection("code")
         
         results = await run_in_threadpool(
@@ -1552,7 +1540,7 @@ async def api_secrets_status():
         return JSONResponse(status_code=500, content={"error": "Failed to check secret status."})
 
 
-@app.post("/api/v1/secrets/encrypt")
+@app.post("/api/v1/secrets/encrypt", dependencies=[Depends(verify_authorization)])
 async def api_encrypt_secret(payload: SecretEncryptRequest):
     """
     Encrypts a plain text value using the master key.
@@ -1565,7 +1553,7 @@ async def api_encrypt_secret(payload: SecretEncryptRequest):
         return JSONResponse(status_code=500, content={"error": "Encryption failed."})
 
 
-@app.post("/api/v1/secrets/update_env")
+@app.post("/api/v1/secrets/update_env", dependencies=[Depends(verify_authorization)])
 async def api_update_env_key(payload: SecretUpdateEnvRequest):
     """
     Saves and automatically encrypts a dynamic secret key/value in the active .env using atomic writes.
@@ -1632,7 +1620,7 @@ async def api_update_env_key(payload: SecretUpdateEnvRequest):
         return JSONResponse(status_code=500, content={"error": "Failed to update environment file."})
 
 
-@app.post("/swarm/trigger")
+@app.post("/swarm/trigger", dependencies=[Depends(verify_authorization)])
 async def trigger_swarm(payload: dict):
     """Initiates a swarm task from the dashboard."""
     objective = payload.get("objective")
@@ -1655,7 +1643,115 @@ async def trigger_swarm(payload: dict):
     
     return {"status": "initiated", "objective": objective}
 
-@app.post("/swarm/sovereignty/sync")
+# Valid workflows (mirror orchestrator.py's dispatch table — includes light + heavy)
+ORCHESTRATE_WORKFLOWS = {"bug_fix", "code_review", "research_implement", "shadow_test", "design_ui"}
+
+# In-process job store for HTTP-initiated orchestrations. This intentionally mirrors
+# server.py's MCP-side store but is a SEPARATE instance: api_server (uvicorn) and the
+# MCP server (stdio) are different processes and cannot share memory. Each transport
+# polls only the jobs it started, so isolated stores are functionally complete.
+# Lock-guarded + capped; polled via GET /orchestrate/status/{job_id}.
+from collections import OrderedDict as _OrderedDict
+import threading as _threading
+import uuid as _uuid
+
+_HTTP_ORCHESTRATE_JOBS = _OrderedDict()
+_HTTP_ORCHESTRATE_JOBS_LOCK = _threading.Lock()
+_MAX_HTTP_ORCHESTRATE_JOBS = 50
+
+
+def _run_http_orchestrate_job(job_id, workflow, task, file_path, project_path, code_snippet, tech_key):
+    """Background worker: run the pipeline to completion and record the outcome."""
+    try:
+        result = orchestrate(workflow, task, file_path, project_path, code_snippet, tech_key)
+        with _HTTP_ORCHESTRATE_JOBS_LOCK:
+            if job_id in _HTTP_ORCHESTRATE_JOBS:
+                _HTTP_ORCHESTRATE_JOBS[job_id].update(status="completed", result=result)
+    except Exception as e:
+        logging.error(f"Orchestration job {job_id} failed: {e}", exc_info=True)
+        with _HTTP_ORCHESTRATE_JOBS_LOCK:
+            if job_id in _HTTP_ORCHESTRATE_JOBS:
+                _HTTP_ORCHESTRATE_JOBS[job_id].update(status="failed", error=str(e))
+
+
+@app.post("/orchestrate", dependencies=[Depends(verify_authorization)])
+async def run_orchestrate(payload: dict):
+    """Launch an orchestrator workflow from the dashboard Run button.
+
+    Body: {workflow, task, project_path?, file_path?, code_snippet?, tech_key?}
+    Always dispatches in the background and returns a job_id; poll
+    GET /orchestrate/status/{job_id} for status + the final report.
+    """
+    workflow = (payload.get("workflow") or "").strip()
+    task = (payload.get("task") or "").strip()
+
+    if workflow not in ORCHESTRATE_WORKFLOWS:
+        return {
+            "status": "error",
+            "message": f"Unknown workflow '{workflow}'. Valid: {sorted(ORCHESTRATE_WORKFLOWS)}",
+        }
+    if not task:
+        return {"status": "error", "message": "No task provided"}
+
+    # --- INJECTION GUARDRAIL --- (same gate as /swarm/trigger)
+    is_safe, risk_message = guardrail_agent.scan_objective(task)
+    if not is_safe:
+        logging.warning(f"BLOCKED_ORCHESTRATE: {risk_message} | Task: {task}")
+        return {
+            "status": "blocked",
+            "message": "Security Violation: Potential Prompt Injection detected.",
+            "details": risk_message,
+        }
+
+    # Register the job, then dispatch the pipeline on the executor.
+    job_id = _uuid.uuid4().hex[:12]
+    with _HTTP_ORCHESTRATE_JOBS_LOCK:
+        _HTTP_ORCHESTRATE_JOBS[job_id] = {
+            "status": "running",
+            "workflow": workflow,
+            "task": task,
+            "result": None,
+            "error": None,
+        }
+        while len(_HTTP_ORCHESTRATE_JOBS) > _MAX_HTTP_ORCHESTRATE_JOBS:
+            _HTTP_ORCHESTRATE_JOBS.popitem(last=False)
+
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(
+        None,
+        _run_http_orchestrate_job,
+        job_id,
+        workflow,
+        task,
+        payload.get("file_path", ""),
+        payload.get("project_path", ".") or ".",
+        payload.get("code_snippet", ""),
+        payload.get("tech_key", ""),
+    )
+
+    return {"status": "initiated", "job_id": job_id, "workflow": workflow, "task": task}
+
+
+@app.get("/orchestrate/status/{job_id}")
+async def orchestrate_status(job_id: str):
+    """Poll the status / result of an HTTP-initiated orchestration job."""
+    with _HTTP_ORCHESTRATE_JOBS_LOCK:
+        job = _HTTP_ORCHESTRATE_JOBS.get(job_id)
+        if job is None:
+            return JSONResponse(
+                status_code=404,
+                content={"status": "not_found", "job_id": job_id},
+            )
+        return {
+            "job_id": job_id,
+            "status": job["status"],
+            "workflow": job["workflow"],
+            "task": job["task"],
+            "result": job.get("result"),
+            "error": job.get("error"),
+        }
+
+@app.post("/swarm/sovereignty/sync", dependencies=[Depends(verify_authorization)])
 async def trigger_sovereignty_sync():
     """Triggers the SovereigntyEngine to analyze regressions and apply gravity shifts."""
     result = corrector.analyze_regressions()
@@ -1707,7 +1803,7 @@ async def sovereignty_status():
         "recent_log": [line.strip() for line in recent_shifts]
     }
 
-@app.post("/dispatch/claude")
+@app.post("/dispatch/claude", dependencies=[Depends(verify_authorization)])
 async def dispatch_to_claude(payload: dict):
     """
     Dispatches a deep coding task to the Claude Code CLI sub-agent.
@@ -1817,4 +1913,6 @@ async def get_kanban_tasks():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=settings.API_PORT)
+    # Bind host is configurable via API_HOST. Defaults to 0.0.0.0 for Docker
+    # container networking; set API_HOST=127.0.0.1 for native/loopback-only runs.
+    uvicorn.run(app, host=settings.API_HOST, port=settings.API_PORT)

@@ -14,17 +14,13 @@ def recall_memories(query, n_results=5):
     """Searches the PC's Vector DB for relevant code snippets."""
     print(f"🔍 Scanning Hivemind for: '{query}'...", file=sys.stderr)
     try:
-        from tools.memory.chroma_db_connect import query_embeddings
-        results = query_embeddings(query, n_results=n_results, category="concepts")
+        from tools.memory.honcho_connect import retrieve_memory
+        results = retrieve_memory(query, n_results=n_results, category="concepts")
         
         context_text = ""
-        if results['documents'] and len(results['documents'][0]) > 0:
-            documents = results['documents'][0]
-            metadatas = results['metadatas'][0]
-            
-            for i, doc in enumerate(documents):
-                source = metadatas[i].get('title', 'Unknown Concept')
-                context_text += f"\n\n--- CONCEPT: {source} ---\n{doc}\n"
+        if results:
+            for i, doc in enumerate(results):
+                context_text += f"\n\n--- CONCEPT {i+1} ---\n{doc}\n"
         
         return context_text
     except Exception as e:
@@ -63,7 +59,7 @@ def consult_brain(user_query):
     # We combine the User's Question + The Retrieved Code
     full_user_message = f"USER QUESTION:\n{user_query}\n\nCODE CONTEXT FROM MEMORY:\n{context}"
 
-    print(f"🧠 Transmitting to LLM Gateway...", file=sys.stderr)
+    print("🧠 Transmitting to LLM Gateway...", file=sys.stderr)
     
     # C. Send to Gateway
     try:

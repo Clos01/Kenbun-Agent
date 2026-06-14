@@ -97,28 +97,44 @@ def save_topology(tasks_ref: list, data: dict):
 # PIPELINE REGISTRY
 # ============================================================
 
-PIPELINES = {
-    "bug_fix": {
-        "builder": build_bug_fix_pipeline,
-        "description": "Fix a bug: scan → recall → checkpoint → analyze → test → remember",
-    },
-    "code_review": {
-        "builder": build_code_review_pipeline,
-        "description": "Review code: scan → Gemini review → docs → supervisor → consensus",
-    },
-    "research_implement": {
-        "builder": build_research_pipeline,
-        "description": "Research & build: Gemini research → scan → checkpoint → supervisor",
-    },
-    "shadow_test": {
-        "builder": build_shadow_test_pipeline,
-        "description": "Background testing: read → analyze → draft → supervisor → sandbox",
-    },
-    "design_ui": {
-        "builder": build_design_ui_pipeline,
-        "description": "Strategic UI Design: discovery → research → artifact generation → 5D audit",
-    },
-}
+from tools.registry import registry, PipelineEntry
+
+# ============================================================
+# PIPELINE REGISTRY INITIALIZATION
+# ============================================================
+
+registry.register_pipeline(PipelineEntry(
+    name="bug_fix",
+    builder=build_bug_fix_pipeline,
+    description="Fix a bug: scan → recall → checkpoint → analyze → test → remember",
+))
+registry.register_pipeline(PipelineEntry(
+    name="code_review",
+    builder=build_code_review_pipeline,
+    description="Review code: scan → Gemini review → docs → supervisor → consensus",
+))
+registry.register_pipeline(PipelineEntry(
+    name="research_implement",
+    builder=build_research_pipeline,
+    description="Research & build: Gemini research → scan → checkpoint → supervisor",
+))
+registry.register_pipeline(PipelineEntry(
+    name="shadow_test",
+    builder=build_shadow_test_pipeline,
+    description="Background testing: read → analyze → draft → supervisor → sandbox",
+))
+registry.register_pipeline(PipelineEntry(
+    name="design_ui",
+    builder=build_design_ui_pipeline,
+    description="Strategic UI Design: discovery → research → artifact generation → 5D audit",
+))
+
+# Workflows whose Gemini-heavy pipelines routinely exceed a synchronous client's
+# request timeout. The MCP tool (server.py) uses this set to decide which workflows
+# to dispatch in the background (with a pollable Job ID) vs. run inline; the HTTP
+# route (api_server.py) dispatches everything in the background. Defined here as the
+# single source of truth so the transport layers stay in sync.
+HEAVY_WORKFLOWS = {"design_ui", "research_implement", "code_review", "shadow_test"}
 
 
 # ============================================================
@@ -325,18 +341,22 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
 # ============================================================
 
 MAX_STEPS = 20  # Safety: prevent infinite loops
-TOOL_TIMEOUT = settings.BASE_TIMEOUT  # Safety: baseline timeout
+TOOL_TIMEOUT = settings.BASE_TIMEOUT  # Safety: baseline timeout per step
+
+# Steps that call external AI APIs get their own dedicated timeout
+# so their latency doesn't blow the shared watchdog for other steps
+GEMINI_STEPS = {"gemini_review", "gemini_research", "research_with_gemini", "research"}
 
 async def _get_active_brain() -> str:
     """Detects where the "Brain" is currently located based on active configuration."""
-    primary_url = settings.models.primary_llm_url
-    fallback_url = settings.models.fallback_llm_url
+    primary_url = settings.PRIMARY_LLM_URL
+    fallback_url = settings.FALLBACK_LLM_URL
     
     # Check primary
     try:
         url = f"{primary_url}/models"
         with urllib.request.urlopen(url, timeout=0.5):
-            return f"🧠 [PRIMARY-GATEWAY] ({settings.models.primary_llm_model})"
+            return f"🧠 [PRIMARY-GATEWAY] ({settings.PRIMARY_LLM_MODEL})"
     except (urllib.error.URLError, Exception):
         pass
         
@@ -344,7 +364,7 @@ async def _get_active_brain() -> str:
     try:
         url = f"{fallback_url}/models"
         with urllib.request.urlopen(url, timeout=0.5):
-            return f"🧠 [FALLBACK-GATEWAY] ({settings.models.fallback_llm_model})"
+            return f"🧠 [FALLBACK-GATEWAY] ({settings.FALLBACK_LLM_MODEL})"
     except (urllib.error.URLError, Exception):
         pass
         
@@ -352,7 +372,7 @@ async def _get_active_brain() -> str:
 
 def get_timeout_multiplier() -> float:
     """Detects the loaded model in the primary gateway and adjusts the timeout multiplier."""
-    primary_url = settings.models.primary_llm_url
+    primary_url = settings.PRIMARY_LLM_URL
     if primary_url.endswith("/"):
         primary_url = primary_url[:-1]
     base_url = f"{primary_url}/models"
@@ -403,8 +423,9 @@ async def run_pipeline(
     Returns:
         Formatted report of the entire pipeline execution.
     """
-    if workflow not in PIPELINES:
-        available = "\n".join(f"  • **{k}** — {v['description']}" for k, v in PIPELINES.items())
+    pipeline_def = registry.get_pipeline(workflow)
+    if not pipeline_def:
+        available = "\n".join(f"  • **{k}** — {v.description}" for k, v in registry.get_all_pipelines().items())
         return f"❌ Unknown workflow: `{workflow}`\n\nAvailable workflows:\n{available}"
 
     # --- INITIALIZE STATE ---
@@ -427,14 +448,13 @@ async def run_pipeline(
     }
 
     # --- BUILD PIPELINE ---
-    pipeline_def = PIPELINES[workflow]
-    steps = pipeline_def["builder"](tools)
+    steps = pipeline_def.builder(tools)
 
     # --- EXECUTE ---
     report = [
         f"# 🎯 Orchestrator: `{workflow}`",
         f"**Task:** {task}",
-        f"**Pipeline:** {pipeline_def['description']}",
+        f"**Pipeline:** {pipeline_def.description}",
         f"**Remaining Budget:** ${token_governor.get_remaining_budget():.4f}",
         "",
     ]
@@ -500,7 +520,7 @@ async def run_pipeline(
         # --- CIRCUIT BREAKER (System 2 Fallback) ---
         if consecutive_failures >= 3:
             report.append("\n⛔ **Circuit Breaker Tripped.** 3 consecutive tool failures detected. Halting pipeline. **Recommendation:** Run `consult_supervisor` to diagnose the underlying logic flaw.")
-            print(f"   ⛔ Circuit Breaker tripped. Halting pipeline.")
+            print("   ⛔ Circuit Breaker tripped. Halting pipeline.")
             break
 
         step_id = step["id"]
@@ -542,7 +562,11 @@ async def run_pipeline(
 
             # Dynamic calibration per-step
             current_multiplier = get_timeout_multiplier()
-            effective_timeout = TOOL_TIMEOUT * current_multiplier
+            # Gemini steps get their own dedicated budget; all others share the base
+            if step_id in GEMINI_STEPS:
+                effective_timeout = settings.GEMINI_STEP_TIMEOUT
+            else:
+                effective_timeout = TOOL_TIMEOUT * current_multiplier
             start_time = time.time()
             if asyncio.iscoroutinefunction(step["tool"]):
                 result = await asyncio.wait_for(step["tool"](**tool_input), timeout=effective_timeout)
@@ -738,6 +762,16 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     from tools.audit.discovery_agent import generate_discovery_form
     from tools.audit.linter_autofix import autofix_linter
 
+    def _local_view_file(AbsolutePath: str) -> str:
+        path = Path(AbsolutePath).resolve()
+        root = Path(project_path).resolve()
+        if not root.is_absolute():
+            root = Path(settings.PROJECT_ROOT).resolve()
+        if not path.is_relative_to(root):
+            raise PermissionError(f"Security Breach Blocked: Path '{path}' is outside project root '{root}'.")
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+
     # Map actual functions to the tool registry
     tools = {
         "scan_repo": scan_repo,
@@ -755,7 +789,8 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         "tune_swarm": tune_swarm,
         "consult_hivemind": consult_brain,
         "generate_discovery_form": generate_discovery_form,
-        "autofix_linter": autofix_linter
+        "autofix_linter": autofix_linter,
+        "view_file": _local_view_file,
     }
 
     # Run the async pipeline
@@ -785,6 +820,18 @@ def swarm(objective: str, project_path: str = "."):
     from tools.audit.guardrail_agent import run_guardrail_audit
     from tools.utils.maze_protocol import backward_verify
     from tools.audit.linter_autofix import autofix_linter
+    from tools.audit.consult_architect import consult_brain
+    from tools.audit.discovery_agent import generate_discovery_form
+
+    def _local_view_file(AbsolutePath: str) -> str:
+        path = Path(AbsolutePath).resolve()
+        root = Path(project_path).resolve()
+        if not root.is_absolute():
+            root = Path(settings.PROJECT_ROOT).resolve()
+        if not path.is_relative_to(root):
+            raise PermissionError(f"Security Breach Blocked: Path '{path}' is outside project root '{root}'.")
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
 
     tools = {
         "scan_repo": scan_repo,
@@ -800,7 +847,10 @@ def swarm(objective: str, project_path: str = "."):
         "guardrail_audit": run_guardrail_audit,
         "maze_verification": backward_verify,
         "tune_swarm": tune_swarm,
-        "autofix_linter": autofix_linter
+        "autofix_linter": autofix_linter,
+        "view_file": _local_view_file,
+        "consult_hivemind": consult_brain,
+        "generate_discovery_form": generate_discovery_form,
     }
 
     return asyncio.run(spawn_swarm(objective, tools, project_path))

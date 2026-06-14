@@ -4,9 +4,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from tools.infrastructure.config import settings
 
-ROOT = settings.PROJECT_ROOT
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
 @pytest.fixture(autouse=True)
 def mock_security_settings_for_testing():

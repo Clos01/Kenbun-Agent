@@ -38,7 +38,7 @@ def _extract_python_skeleton(file_path: Path) -> list:
         source = file_path.read_text(encoding="utf-8", errors="ignore")
         tree = ast.parse(source)
     except (SyntaxError, UnicodeDecodeError):
-        return [f"  ⚠️ (parse error)"]
+        return ["  ⚠️ (parse error)"]
 
     items = []
     for node in ast.iter_child_nodes(tree):
@@ -113,7 +113,7 @@ def _extract_js_skeleton(file_path: Path) -> list:
     try:
         source = file_path.read_text(encoding="utf-8", errors="ignore")
     except Exception:
-        return [f"  ⚠️ (read error)"]
+        return ["  ⚠️ (read error)"]
 
     items = []
     seen = set()
@@ -154,7 +154,7 @@ def scan_repo(
     Returns:
         A formatted skeleton map of the project structure.
     """
-    root = Path(project_path)
+    root = Path(project_path).expanduser().resolve()
     if not root.exists():
         return f"❌ Path not found: {project_path}"
     if not root.is_dir():
@@ -197,7 +197,7 @@ def scan_repo(
             except Exception:
                 line_count = "?"
 
-            output_lines.append(f"  📄 {filename} ({line_count} lines)")
+            output_lines.append(f"  📄 {filepath.resolve()} ({line_count} lines)")
             total_files += 1
 
             # Extract skeleton based on language

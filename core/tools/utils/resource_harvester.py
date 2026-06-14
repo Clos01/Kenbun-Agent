@@ -88,7 +88,7 @@ def ship_to_pc(lessons):
     print("✅ Lessons delivered to the Training Pool.")
 
 def harvest():
-    print(f"🚀 Starting Deep Kenbun Intelligence Harvest...")
+    print("🚀 Starting Deep Kenbun Intelligence Harvest...")
     dataset = []
     
     # 1. Harvest Post-Mortems

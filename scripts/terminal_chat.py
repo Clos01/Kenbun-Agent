@@ -37,7 +37,6 @@ try:
     from scripts.agent_bus import spawn_agent, list_agents, kill_agent, purge_agents, poll_status_lines
 except ImportError:
     try:
-        sys.path.insert(0, str(Path(__file__).parent))
         from agent_bus import spawn_agent, list_agents, kill_agent, purge_agents, poll_status_lines
     except ImportError:
         spawn_agent = list_agents = kill_agent = purge_agents = poll_status_lines = None
@@ -744,7 +743,7 @@ def explain_command(cmd):
     elif any(cmd_lower.startswith(x) for x in ["mkdir", "rm", "cp", "mv", "ls", "cat", "chmod", "pwd", "whoami"]):
         tool_name = "POSIX OS Filesystem Operations"
         why_needed = "Performs filesystem manipulation tasks such as creating, moving, reading, copying, or deleting files and folders."
-        pro_tip = f"💡 Pro-Tip: You can run this command directly in your shell: `ls -lh`"
+        pro_tip = "💡 Pro-Tip: You can run this command directly in your shell: `ls -lh`"
         
     # Explainer Fatigue Mitigation: Do not show giant explainer for basic POSIX read-only commands
     if cmd_lower.strip() in ["ls", "pwd", "whoami", "clear", "ls -l", "ls -la"]:
@@ -1022,7 +1021,6 @@ def update_env_value(key, new_value):
     encrypted_val = new_value
     try:
         # Resolve the tools module to load secret_manager
-        sys.path.insert(0, str(target_path.parent / "core"))
         from tools.utils.secret_manager import encrypt_value
         encrypted_val = "enc:" + encrypt_value(new_value)
     except Exception:
@@ -1441,7 +1439,7 @@ def run_startup_probe(llm_url: str, llm_model: str, chroma_host: str = "localhos
                     results["chromadb"] = (True, f"ACTIVE  •  {chroma_host}:{chroma_port}")
             except Exception:
                 with lock:
-                    results["chromadb"] = (False, f"Offline — start docker compose")
+                    results["chromadb"] = (False, "Offline — start docker compose")
 
     def probe_docker():
         try:
@@ -1691,9 +1689,7 @@ def save_concept_to_hivemind(title, content, tags, category="concepts"):
     """
     project_root = Path(__file__).resolve().parent.parent
     core_path = str(project_root / "core")
-    if core_path not in sys.path:
-        sys.path.insert(0, core_path)
-    
+
     try:
         from tools.memory.knowledge_manager import learn_concept
         res = learn_concept(title, content, tags, category)
@@ -1725,9 +1721,7 @@ def search_hivemind(query, category="concepts"):
     """
     project_root = Path(__file__).resolve().parent.parent
     core_path = str(project_root / "core")
-    if core_path not in sys.path:
-        sys.path.insert(0, core_path)
-    
+
     try:
         from tools.memory.knowledge_manager import list_concepts
         res = list_concepts(query, n_results=5, category=category)
@@ -1768,9 +1762,6 @@ def autonomic_reflection_save(task: str, error: str, solution: str, tags: str = 
             core_path = Path(__file__).resolve().parent.parent / "core"
             
         sys_path_str = str(core_path.resolve())
-        if sys_path_str not in sys.path:
-            sys.path.insert(0, sys_path_str)
-            
         from tools.memory.knowledge_manager import record_post_mortem
         res = record_post_mortem(task, error, solution, tags)
         print(f"\n{C_P}🧠 Hivemind Reflection Engine Saved Auto-Lesson: {C_G}{res}{C_R}\n")
@@ -1849,9 +1840,6 @@ def save_clean_exit_reflection(history):
             core_path = Path(__file__).resolve().parent.parent / "core"
             
         sys_path_str = str(core_path.resolve())
-        if sys_path_str not in sys.path:
-            sys.path.insert(0, sys_path_str)
-            
         from tools.memory.knowledge_manager import learn_concept
         
         content = (
@@ -2667,7 +2655,7 @@ def main():
                                 m_title = item.get("title", "Untitled")
                                 m_content = item.get("content", "")
                                 memory_blocks.append(f"Memory #{idx}: {m_title}\n{m_content}")
-                            grounding_context.append(f"[MEMORIES & PAST LESSONS (Grounding from Hivemind)]:\n" + "\n---\n".join(memory_blocks))
+                            grounding_context.append("[MEMORIES & PAST LESSONS (Grounding from Hivemind)]:\n" + "\n---\n".join(memory_blocks))
 
                     # Compile final grounded input
                     final_input = user_input
@@ -3030,8 +3018,8 @@ def main():
                 if response_obj and response_obj.status_code == 404:
                     print(f"{C_Y}💡 Kenbun Diagnostic Tip:{C_R}")
                     print(f"  Your PRIMARY_LLM_URL is set to: {C_W}{llm_url}{C_R}")
-                    print(f"  The server returned a 404 (Not Found) error for '/chat/completions'.")
-                    print(f"  This usually means the URL is incorrect or doesn't support the OpenAI-compatible chat API.")
+                    print("  The server returned a 404 (Not Found) error for '/chat/completions'.")
+                    print("  This usually means the URL is incorrect or doesn't support the OpenAI-compatible chat API.")
                     if "googleapis.com" in llm_url.lower() and "openai" not in llm_url.lower():
                         print(f"  ➔ {C_G}Tip: For Google AI Studio, ensure your URL ends with '/v1beta/openai'{C_R}")
                     print()

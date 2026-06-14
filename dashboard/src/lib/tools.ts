@@ -230,6 +230,51 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
     system: "System 5 (Reflection)",
     role: "Post-Task Review Sentinel",
     desc: "Conducts closed-loop analysis on completed task checklists to generate a sovereign post-mortem report and clean up dangling parameters."
+  },
+  guardrail_audit: {
+    system: "System 2c (Guardrail)",
+    role: "Fast Static Security Guard",
+    desc: "Performs instant deterministic audits to screen code changes for unsafe shell processes, hardcoded API keys, or directory traversal vulnerabilities."
+  },
+  reflect: {
+    system: "System 5 (Reflection)",
+    role: "Internal State Evaluator",
+    desc: "Evaluates intermediate agent traces to detect loops, hallucinations, or dead-ends, issuing corrective sub-goals if necessary."
+  },
+  gemini_review: {
+    system: "System 1/2 (Cloud Execution)",
+    role: "Cloud LLM Code Auditor",
+    desc: "A dedicated endpoint for passing structural codebase changes to Gemini for deep static analysis and architectural feedback."
+  },
+  get_design_tokens: {
+    system: "System 5 (Design Discovery)",
+    role: "Aesthetic Variables Retriever",
+    desc: "Extracts and parses raw CSS tokens, typography families, and color maps from the project's DESIGN.md or stylesheet."
+  },
+  remember_result: {
+    system: "System 3 (Memory)",
+    role: "Ephemeral Cache Syncer",
+    desc: "Records the deterministic outputs of costly operations into a fast-access short-term memory layer to prevent redundant re-computation."
+  },
+  research: {
+    system: "System 1 (Execution)",
+    role: "Semantic Web/Code Crawler",
+    desc: "Executes generalized searches across local file contexts and remote documentation to gather sufficient context for a given task."
+  },
+  supervisor_review: {
+    system: "System 2 (Reasoning & Ethics)",
+    role: "High-Level Executive Reviewer",
+    desc: "Runs multi-stage review passes over major architectural proposals to ensure alignment with scalability and global design rules."
+  },
+  supervisor_audit: {
+    system: "System 2 (Reasoning & Ethics)",
+    role: "Strict Boundary Gatekeeper",
+    desc: "Performs final strict validation checks on system commits and critical actions, terminating unsafe or unauthorized modifications."
+  },
+  read_file: {
+    system: "System 1 (Execution)",
+    role: "Direct Filesystem Reader",
+    desc: "Provides raw, deterministic read access to the local filesystem, chunking large files if they exceed context window constraints."
   }
 };
 

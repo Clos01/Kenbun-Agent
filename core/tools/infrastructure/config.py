@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 from pydantic import Field, SecretStr, field_validator, BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from tools.utils.path_utils import get_project_root
@@ -11,14 +11,14 @@ def discover_env_file() -> str:
     """Locates the .env file in expected locations."""
     root = get_project_root()
     locations = [
-        root / "core" / ".env",
         root / ".env",
+        root / "core" / ".env",
         Path.cwd() / ".env"
     ]
     for loc in locations:
         if loc.exists():
             return str(loc)
-    return str(root / "core" / ".env") # Fallback
+    return str(root / ".env") # Fallback
 
 # --- 1. NESTED MODELS (DATA OBJECTS) ---
 
@@ -40,9 +40,9 @@ class SupabaseSettings(BaseModel):
     db_url: Optional[SecretStr] = None
 
 class ModelSettings(BaseModel):
-    default_local_model: str = "google/gemma-4-26b-it"
+    default_local_model: str = "google/gemma-4-12b"
     lm_studio_port: int = 2065
-    lm_studio_model: str = "google/gemma-4-26b-it"
+    lm_studio_model: str = "google/gemma-4-12b"
     lm_studio_draft_model: str = "google/gemma-4-e4b"
     use_speculative_decoding: bool = True
     speculative_lookahead: int = Field(default=5, ge=1, le=20)
@@ -265,11 +265,16 @@ class KenbunSettings(BaseSettings):
         return security_settings_instance
 
     # --- WATCHDOG & TELEMETRY ---
-    BASE_TIMEOUT: int = 60
+    BASE_TIMEOUT: int = 120              # Per-step timeout budget (seconds)
+    GEMINI_STEP_TIMEOUT: int = 90        # Dedicated timeout for Gemini steps (seconds)
     SWARM_TIMEOUT_MULTIPLIER: float = 1.0
     SWARM_CLOUD_FAILOVER: bool = True
     TELEMETRY_ENABLED: bool = True
     NOTIFICATIONS_ENABLED: bool = True
+    # AI IDE context — set to "claude", "cursor", "vscode", "windsurf", or "local"
+    # Leave blank for auto-detection. Affects which pipeline steps run.
+    KENBUN_CALLER_IDE: str = ""
+    API_HOST: str = Field(default="0.0.0.0")
     API_PORT: int = Field(default=8001)
     MONITOR_PORT: int = Field(default=8002)
     DASHBOARD_PORT: int = Field(default=3000)

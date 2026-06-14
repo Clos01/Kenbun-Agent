@@ -28,7 +28,8 @@ class AdversarialCourt:
 
     async def _query_llm(self, system_prompt: str, user_prompt: str, role: str) -> str:
         """Helper to route and execute a chat request to the primary LLM provider."""
-        url = settings.PRIMARY_LLM_URL.rstrip('/')
+        primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
+        url = primary_url.rstrip('/')
         model = settings.PRIMARY_LLM_MODEL
 
         # Handle direct Ollama chat endpoint if applicable
@@ -156,7 +157,7 @@ class AdversarialCourt:
 
         # --- PRINT COURT TRANSCRIPT ---
         print(f"\n{PINK}{BOLD}┌─────────────────────────────────────────────────────────┐")
-        print(f"│              ⚖️  OFFICIAL COURT TRANSCRIPT               │")
+        print("│              ⚖️  OFFICIAL COURT TRANSCRIPT               │")
         print(f"├─────────────────────────────────────────────────────────┤{NC}")
         
         # Format and truncate Defendant brief

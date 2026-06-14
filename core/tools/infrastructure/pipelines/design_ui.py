@@ -72,7 +72,7 @@ def build_design_ui_pipeline(tools):
             "label": "⚖️ System 2: 5-Dimensional Design Audit",
             "tool": tools["consult_supervisor"],
             "input": lambda s: {
-                "user_proposal": f"Audit this design against: Philosophy, Hierarchy, Detail, Function, Innovation.",
+                "user_proposal": "Audit this design against: Philosophy, Hierarchy, Detail, Function, Innovation.",
                 "code_snippet": s.get("artifact_result", "")
             },
             "output_key": "audit_score",

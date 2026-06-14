@@ -3,8 +3,10 @@ import json
 import logging
 import urllib.request
 import urllib.error
-from typing import List, Optional
+import os
+from typing import List, Optional, Tuple
 from tools.infrastructure.config import settings
+from tools.utils.secret_manager import decrypt_value
 
 def _lmstudio_server_root(base_url: Optional[str]) -> Optional[str]:
     """Strip `/v1` suffix from a base URL to get the native API root."""
@@ -67,6 +69,29 @@ def probe_lmstudio_models(
             keys.append(key)
     return keys
 
+def probe_openai_models(base_url: str, api_key: Optional[str] = None, timeout: float = 3.0) -> Optional[List[str]]:
+    """Generic probe for OpenAI-compatible /v1/models endpoints."""
+    root = (base_url or "").strip().rstrip("/")
+    url = root + "/models" if root.endswith("/v1") else root + "/v1/models"
+    headers = {"User-Agent": "Kenbun-Agent/1.0"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode())
+            models = data.get("data", [])
+            if isinstance(models, list):
+                keys = []
+                for m in models:
+                    mid = str(m.get("id", "")).strip()
+                    if mid and "embed" not in mid.lower():
+                        keys.append(mid)
+                return keys
+    except Exception as e:
+        logging.debug(f"OpenAI /v1/models probe failed at {url}: {e}")
+    return None
+
 def ensure_lmstudio_model_loaded(
     model: str,
     base_url: Optional[str],
@@ -128,6 +153,58 @@ def ensure_lmstudio_model_loaded(
         return None
     return target_context_length
 
+def resolve_google_endpoint_and_model(
+    base_url: str,
+    model_name: str,
+    api_key_set: bool = False,
+    project_id: Optional[str] = None
+) -> Tuple[str, str]:
+    """
+    Dynamically rewrites legacy/placeholder Google Cloud Code Assist URL
+    and model name to production-ready Gemini endpoints.
+    """
+    if "cloudaidoc-pa.googleapis.com" not in base_url:
+        return base_url, model_name
+
+    # If API key is set, use Google AI Studio endpoint
+    if api_key_set:
+        rewritten_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+        rewritten_model = "gemini-1.5-pro" if model_name == "code-assist" else model_name
+        return rewritten_url, rewritten_model
+
+    # If no API key, use Vertex AI endpoint with OAuth
+    resolved_project = project_id or os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT") or os.environ.get("PROJECT_ID")
+    if not resolved_project:
+        # Check if project-specific credentials JSON exists in project root
+        from tools.utils.path_utils import get_project_root
+        proj_creds_path = get_project_root() / ".google_credentials.json"
+        if proj_creds_path.exists():
+            try:
+                import json
+                with open(proj_creds_path, "r") as f:
+                    creds_data = json.load(f)
+                    resolved_project = creds_data.get("project_id") or creds_data.get("quota_project_id")
+            except Exception:
+                pass
+
+    if not resolved_project:
+        try:
+            import google.auth
+            _, resolved_project = google.auth.default()
+        except Exception:
+            pass
+
+    if resolved_project:
+        location = os.environ.get("VERTEX_AI_LOCATION") or os.environ.get("GOOGLE_CLOUD_REGION") or "us-central1"
+        rewritten_url = f"https://{location}-aiplatform.googleapis.com/v1/projects/{resolved_project}/locations/{location}/endpoints/openapi"
+        rewritten_model = "google/gemini-1.5-pro-001" if model_name == "code-assist" else model_name
+        return rewritten_url, rewritten_model
+    else:
+        # Fallback to AI Studio
+        rewritten_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+        rewritten_model = "gemini-1.5-pro" if model_name == "code-assist" else model_name
+        return rewritten_url, rewritten_model
+
 def _make_openai_compatible_call(
     base_url: str,
     model_name: str,
@@ -136,6 +213,11 @@ def _make_openai_compatible_call(
     temperature: float = 0.1,
     max_tokens: int = 4000
 ) -> Optional[str]:
+    # Resolve dynamic Google URL/Model rewrites
+    base_url, model_name = resolve_google_endpoint_and_model(
+        base_url, model_name, api_key_set=bool(settings.GEMINI_API_KEY)
+    )
+
     # Formulate endpoint
     url = f"{base_url}/chat/completions"
     
@@ -145,42 +227,66 @@ def _make_openai_compatible_call(
     # Resolve Authorization dynamically
     api_key = None
     if "api.openai.com" in base_url and settings.OPENAI_API_KEY:
-        api_key = settings.OPENAI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.OPENAI_API_KEY.get_secret_value())
     elif "api.deepseek.com" in base_url and settings.DEEPSEEK_API_KEY:
-        api_key = settings.DEEPSEEK_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.DEEPSEEK_API_KEY.get_secret_value())
     elif "openrouter.ai" in base_url and hasattr(settings, "OPENROUTER_API_KEY") and settings.OPENROUTER_API_KEY:
-        api_key = settings.OPENROUTER_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.OPENROUTER_API_KEY.get_secret_value())
     elif "nous.mesolitica.com" in base_url and hasattr(settings, "NOUS_PORTAL_API_KEY") and settings.NOUS_PORTAL_API_KEY:
-        api_key = settings.NOUS_PORTAL_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.NOUS_PORTAL_API_KEY.get_secret_value())
     elif "nvidia" in base_url and hasattr(settings, "NVIDIA_API_KEY") and settings.NVIDIA_API_KEY:
-        api_key = settings.NVIDIA_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.NVIDIA_API_KEY.get_secret_value())
     elif "x.ai" in base_url and hasattr(settings, "XAI_API_KEY") and settings.XAI_API_KEY:
-        api_key = settings.XAI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.XAI_API_KEY.get_secret_value())
     elif "bigmodel.cn" in base_url and hasattr(settings, "ZHIPU_API_KEY") and settings.ZHIPU_API_KEY:
-        api_key = settings.ZHIPU_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.ZHIPU_API_KEY.get_secret_value())
     elif "api.kimi.com" in base_url and hasattr(settings, "KIMI_API_KEY") and settings.KIMI_API_KEY:
-        api_key = settings.KIMI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.KIMI_API_KEY.get_secret_value())
     elif "api.moonshot.cn" in base_url and hasattr(settings, "MOONSHOT_API_KEY") and settings.MOONSHOT_API_KEY:
-        api_key = settings.MOONSHOT_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.MOONSHOT_API_KEY.get_secret_value())
     elif "stepfun.com" in base_url and hasattr(settings, "STEPFUN_API_KEY") and settings.STEPFUN_API_KEY:
-        api_key = settings.STEPFUN_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.STEPFUN_API_KEY.get_secret_value())
     elif "dashscope" in base_url and hasattr(settings, "DASHSCOPE_API_KEY") and settings.DASHSCOPE_API_KEY:
-        api_key = settings.DASHSCOPE_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.DASHSCOPE_API_KEY.get_secret_value())
     elif "api.mimo.xiaomi.com" in base_url and hasattr(settings, "MIMO_API_KEY") and settings.MIMO_API_KEY:
-        api_key = settings.MIMO_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.MIMO_API_KEY.get_secret_value())
     elif "tokenhub.tencentmaas.com" in base_url and hasattr(settings, "TOKENHUB_API_KEY") and settings.TOKENHUB_API_KEY:
-        api_key = settings.TOKENHUB_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.TOKENHUB_API_KEY.get_secret_value())
     elif "api-inference.huggingface.co" in base_url and hasattr(settings, "HF_API_KEY") and settings.HF_API_KEY:
-        api_key = settings.HF_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.HF_API_KEY.get_secret_value())
     elif "generativelanguage.googleapis.com" in base_url and settings.GEMINI_API_KEY:
-        api_key = settings.GEMINI_API_KEY.get_secret_value()
+        api_key = decrypt_value(settings.GEMINI_API_KEY.get_secret_value())
+    elif "cloudaidoc-pa.googleapis.com" in base_url or "googleapis.com" in base_url:
+        if settings.GEMINI_API_KEY:
+            api_key = decrypt_value(settings.GEMINI_API_KEY.get_secret_value())
+        else:
+            try:
+                from google.auth.transport.requests import Request as AuthRequest
+                from tools.utils.path_utils import get_project_root
+                proj_creds_path = get_project_root() / ".google_credentials.json"
+                
+                if proj_creds_path.exists():
+                    from google.oauth2.credentials import Credentials
+                    credentials = Credentials.from_authorized_user_file(str(proj_creds_path))
+                    credentials.refresh(AuthRequest())
+                    api_key = credentials.token
+                    logging.info("Successfully acquired Google OAuth access token via custom client credentials")
+                else:
+                    import google.auth
+                    scopes = ["https://www.googleapis.com/auth/cloud-platform"]
+                    credentials, project_id = google.auth.default(scopes=scopes)
+                    credentials.refresh(AuthRequest())
+                    api_key = credentials.token
+                    logging.info("Successfully acquired Google OAuth access token via ADC")
+            except Exception as oauth_err:
+                logging.warning(f"Failed to acquire Google OAuth access token: {oauth_err}")
         
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
         
     if "api.anthropic.com" in base_url and settings.ANTHROPIC_API_KEY:
         # Handle Anthropic custom gateway mapping
-        headers["x-api-key"] = settings.ANTHROPIC_API_KEY.get_secret_value()
+        headers["x-api-key"] = decrypt_value(settings.ANTHROPIC_API_KEY.get_secret_value())
         headers["anthropic-version"] = "2023-06-01"
         
         # Map Anthropic request format
@@ -244,10 +350,27 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
     Routes queries to PRIMARY_LLM_URL and falls back to FALLBACK_LLM_URL upon failure.
     Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
     """
-    primary_url = settings.models.primary_llm_url
-    primary_model = settings.models.primary_llm_model
-    fallback_url = settings.models.fallback_llm_url
-    fallback_model = settings.models.fallback_llm_model
+    primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
+    primary_model = settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
+    fallback_url = settings.FALLBACK_LLM_URL or ""
+    fallback_model = settings.FALLBACK_LLM_MODEL or ""
+    
+    # Auto-resolve models from OpenAI-compatible local servers (LM Studio / Ollama)
+    def resolve_auto_model(url: str, model: str) -> str:
+        if not model or model.lower() == "auto":
+            try:
+                models = probe_openai_models(base_url=url, timeout=3.0)
+                if models:
+                    logging.info(f"✨ Auto-resolved model for {url}: {models[0]}")
+                    return models[0]
+            except Exception as e:
+                logging.warning(f"Auto-model resolution failed for {url}: {e}")
+            return "local-model"  # generic fallback
+        return model
+
+    primary_model = resolve_auto_model(primary_url, primary_model)
+    if fallback_url:
+        fallback_model = resolve_auto_model(fallback_url, fallback_model)
     
     # Dynamic Budget-Aware Swapping (System 4)
     try:
@@ -264,45 +387,46 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
     
     # Clean trailing slash in URLs
-    if primary_url.endswith("/"):
+    if primary_url and primary_url.endswith("/"):
         primary_url = primary_url[:-1]
-    if fallback_url.endswith("/"):
+    if fallback_url and fallback_url.endswith("/"):
         fallback_url = fallback_url[:-1]
         
-    # Try Primary
-    logging.info(f"🔮 LLM_ROUTER: Attempting Primary Endpoint: {primary_url} ({primary_model})")
-    
-    # Ensure LM Studio model is loaded if running on LM Studio
-    try:
-        if "127.0.0.1" in primary_url or "localhost" in primary_url or "2065" in primary_url:
-            ensure_lmstudio_model_loaded(primary_model, primary_url)
-    except Exception as e:
-        logging.debug(f"LM Studio pre-load failed or skipped for primary: {e}")
-
-    try:
-        content = _make_openai_compatible_call(
-            primary_url, primary_model, system_prompt, user_message, temperature, max_tokens
-        )
-        if content:
-            return content
-    except Exception as e:
-        logging.warning(f"⚠️ LLM_ROUTER: Primary call failed: {e}. Attempting Fallback: {fallback_url} ({fallback_model})")
-        
-        # Try Fallback
+    # Attempt an endpoint; treat empty/whitespace content as a failure so the
+    # caller falls back instead of silently returning None (e.g. a reasoning
+    # model that spends its whole token budget on `reasoning_content`).
+    def _try_endpoint(url: str, model: str, label: str) -> str:
+        if not url:
+            raise RuntimeError(f"{label} endpoint not configured")
         try:
-            if "127.0.0.1" in fallback_url or "localhost" in fallback_url or "2065" in fallback_url:
-                ensure_lmstudio_model_loaded(fallback_model, fallback_url)
+            if "127.0.0.1" in url or "localhost" in url or "2065" in url:
+                ensure_lmstudio_model_loaded(model, url)
         except Exception as pre_err:
-            logging.debug(f"LM Studio pre-load failed or skipped for fallback: {pre_err}")
+            logging.debug(f"LM Studio pre-load failed or skipped for {label.lower()}: {pre_err}")
+        content = _make_openai_compatible_call(
+            url, model, system_prompt, user_message, temperature, max_tokens
+        )
+        if not content or not str(content).strip():
+            raise RuntimeError(f"{label} endpoint returned empty content")
+        return content
 
+    # Try Primary, then Fallback. Either an exception OR empty content advances
+    # to the next endpoint; if both fail we raise (never silently return None).
+    logging.info(f"🔮 LLM_ROUTER: Attempting Primary Endpoint: {primary_url} ({primary_model})")
+    try:
+        return _try_endpoint(primary_url, primary_model, "Primary")
+    except Exception as primary_err:
+        logging.warning(
+            f"⚠️ LLM_ROUTER: Primary failed: {primary_err}. "
+            f"Attempting Fallback: {fallback_url} ({fallback_model})"
+        )
         try:
-            content = _make_openai_compatible_call(
-                fallback_url, fallback_model, system_prompt, user_message, temperature, max_tokens
-            )
-            if content:
-                return content
+            return _try_endpoint(fallback_url, fallback_model, "Fallback")
         except Exception as fallback_err:
-            error_msg = f"❌ LLM_ROUTER CRITICAL: Both primary and fallback endpoints failed. Fallback error: {fallback_err}"
+            error_msg = (
+                f"❌ LLM_ROUTER CRITICAL: Both primary and fallback endpoints failed. "
+                f"Primary error: {primary_err}. Fallback error: {fallback_err}"
+            )
             logging.error(error_msg)
             raise RuntimeError(error_msg)
 

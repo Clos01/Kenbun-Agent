@@ -1,7 +1,7 @@
 import hashlib
 import time
 from pathlib import Path
-from tools.memory.chroma_db_connect import get_project_collection, upsert_embedding, query_embeddings
+from tools.memory.honcho_connect import add_memory, retrieve_memory
 
 def get_project_id(project_path: str) -> str:
     """Generates a stable 16-character project_id hash from the resolved path."""
@@ -9,26 +9,16 @@ def get_project_id(project_path: str) -> str:
     return hashlib.sha256(resolved.encode()).hexdigest()[:16]
 
 def build_project_memory_context(query: str, project_path: str, limit: int = 8) -> str:
-    """Queries ChromaDB and builds a capped context of project memory filtered by project_id."""
-    project_id = get_project_id(project_path)
+    """Queries Honcho and builds a capped context of project memory."""
     try:
-        # Search in the "concepts" collection for relevant context
-        results = query_embeddings(
-            query_text=query,
-            n_results=limit,
-            category="concepts",
-            filter_project=project_id
-        )
+        results = retrieve_memory(query_text=query, n_results=limit, category="concepts")
         
-        docs = results.get("documents", [[]])[0]
-        metadatas = results.get("metadatas", [[]])[0]
-        
-        if not docs:
+        if not results:
             return ""
             
         context_parts = []
-        for doc, meta in zip(docs, metadatas):
-            context_parts.append(f"### {meta.get('title', 'Project Memory')}\n{doc}\n")
+        for doc in results:
+            context_parts.append(f"- {doc}\n")
             
         return "\n".join(context_parts)
     except Exception as e:
@@ -36,8 +26,7 @@ def build_project_memory_context(query: str, project_path: str, limit: int = 8) 
         return ""
 
 def ingest_project_rules(project_path: str) -> str:
-    """Ingests critical project rules files (HERMES.md, .cursorrules, etc.) into ChromaDB."""
-    project_id = get_project_id(project_path)
+    """Ingests critical project rules files into Honcho."""
     resolved_path = Path(project_path).resolve()
     
     files_to_ingest = [
@@ -45,7 +34,6 @@ def ingest_project_rules(project_path: str) -> str:
         "AGENTS.md", "KENBUN.md", "README.md"
     ]
     
-    collection = get_project_collection("concepts")
     count = 0
     
     for filename in files_to_ingest:
@@ -56,29 +44,12 @@ def ingest_project_rules(project_path: str) -> str:
                     content = f.read()
                 if not content.strip():
                     continue
-                    
-                stable_slug = filename.lower().replace(".", "_")
-                content_hash = hashlib.sha256(content.encode()).hexdigest()
-                memory_id = f"{project_id}:concepts:{stable_slug}:{content_hash[:12]}"
                 
-                meta = {
-                    "project_id": project_id,
-                    "project_path": str(resolved_path),
-                    "kind": "project_rule",
-                    "source": filename,
-                    "title": f"Project Rule: {filename}",
-                    "created_at": time.time(),
-                    "updated_at": time.time()
-                }
-                
-                upsert_embedding(
-                    id=memory_id,
-                    document=content,
-                    metadata=meta,
-                    collection_name=collection.name
-                )
+                # Send the document to Honcho as a message
+                formatted_message = f"DOCUMENT TITLE: Project Rule - {filename}\n\nCONTENT:\n{content}"
+                add_memory(content=formatted_message, category="concepts")
                 count += 1
             except Exception as e:
                 print(f"❌ Failed to ingest {filename}: {e}")
                 
-    return f"SUCCESS: Ingested {count} project rules files for project {project_id}."
+    return f"SUCCESS: Ingested {count} project rules files into Honcho."

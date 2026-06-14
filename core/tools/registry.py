@@ -2,45 +2,38 @@ import functools
 import inspect
 import threading
 from typing import Callable, Dict, Any, List, Optional
+from pydantic import BaseModel, Field, field_validator
 
-class ToolEntry:
+class ToolEntry(BaseModel):
     """Metadata representing a dynamically registered Kenbun sovereign tool."""
-    
-    __slots__ = ("name", "category", "description", "handler", "is_async", "requires_env")
-    
-    def __init__(
-        self, 
-        name: str, 
-        category: str, 
-        description: str, 
-        handler: Callable, 
-        is_async: bool, 
-        requires_env: Optional[List[str]] = None
-    ):
-        self.name = name
-        self.category = category
-        self.description = description
-        self.handler = handler
-        self.is_async = is_async
-        self.requires_env = requires_env or []
+    name: str
+    category: str = "General"
+    description: str
+    handler: Callable = Field(exclude=True)
+    is_async: bool
+    requires_env: List[str] = Field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "name": self.name,
-            "category": self.category,
-            "description": self.description,
-            "is_async": self.is_async,
-            "requires_env": self.requires_env
-        }
+    class Config:
+        arbitrary_types_allowed = True
+
+class PipelineEntry(BaseModel):
+    """Metadata representing a dynamic workflow pipeline."""
+    name: str
+    description: str
+    builder: Callable = Field(exclude=True)
+    
+    class Config:
+        arbitrary_types_allowed = True
 
 class SovereignRegistry:
-    """Thread-safe global registry for all dynamically discovered Kenbun tools."""
+    """Thread-safe global registry for all dynamically discovered Kenbun tools and pipelines."""
     
     def __init__(self):
         self._tools: Dict[str, ToolEntry] = {}
+        self._pipelines: Dict[str, PipelineEntry] = {}
         self._lock = threading.RLock()
 
-    def register(self, entry: ToolEntry):
+    def register_tool(self, entry: ToolEntry):
         with self._lock:
             self._tools[entry.name] = entry
 
@@ -52,9 +45,22 @@ class SovereignRegistry:
         with self._lock:
             return dict(self._tools)
 
+    def register_pipeline(self, entry: PipelineEntry):
+        with self._lock:
+            self._pipelines[entry.name] = entry
+
+    def get_pipeline(self, name: str) -> Optional[PipelineEntry]:
+        with self._lock:
+            return self._pipelines.get(name)
+
+    def get_all_pipelines(self) -> Dict[str, PipelineEntry]:
+        with self._lock:
+            return dict(self._pipelines)
+
     def clear(self):
         with self._lock:
             self._tools.clear()
+            self._pipelines.clear()
 
 # Thread-safe global registry instance
 registry = SovereignRegistry()
@@ -88,10 +94,10 @@ def sovereign_tool(
             description=description,
             handler=func,
             is_async=is_async,
-            requires_env=requires_env
+            requires_env=requires_env or []
         )
         
-        registry.register(entry)
+        registry.register_tool(entry)
         
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

@@ -21,17 +21,26 @@ def sync():
         return
 
     # Use SCP to push the directory to the PC
-    # Now using the specific Kenbun SSH key for password-less sync
+    # Now using the specific Kenbun SSH key for password-less sync.
+    # List-based args (no shell=True) to avoid shell injection via paths/IPs.
     try:
         print(f"🚀 Pushing training data to {PC_USER}@{PC_IP}...")
-        
-        # Ensure remote directory exists
-        mkdir_cmd = f"ssh -i {SSH_KEY_PATH} {PC_USER}@{PC_IP} 'mkdir -p {REMOTE_PATH}'"
-        subprocess.run(mkdir_cmd, shell=True, check=True)
-        
-        # Sync files
-        sync_cmd = f"scp -i {SSH_KEY_PATH} -r {LOCAL_DATA_DIR}/* {PC_USER}@{PC_IP}:{REMOTE_PATH}"
-        subprocess.run(sync_cmd, shell=True, check=True)
+
+        host = f"{PC_USER}@{PC_IP}"
+
+        # Ensure remote directory exists. Remaining args after the host are run
+        # as the remote command by ssh, so no shell quoting is needed locally.
+        mkdir_cmd = ["ssh", "-i", str(SSH_KEY_PATH), host, "mkdir", "-p", str(REMOTE_PATH)]
+        subprocess.run(mkdir_cmd, check=True)
+
+        # Expand the directory contents in Python rather than relying on a shell glob.
+        items = [str(p) for p in LOCAL_DATA_DIR.iterdir()]
+        if not items:
+            print(f"⚠️ Nothing to sync: {LOCAL_DATA_DIR} is empty.")
+            return
+
+        sync_cmd = ["scp", "-i", str(SSH_KEY_PATH), "-r", *items, f"{host}:{REMOTE_PATH}"]
+        subprocess.run(sync_cmd, check=True)
         
         print(f"✅ SUCCESS: Intelligence synced to {PC_USER}@{PC_IP}:{REMOTE_PATH}")
         print(f"👉 Next Step: Run training scripts on your PC in the {REMOTE_PATH} folder.")

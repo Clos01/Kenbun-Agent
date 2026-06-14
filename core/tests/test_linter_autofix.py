@@ -22,7 +22,7 @@ def test_resolve_paths_invalid_traversal():
 @pytest.mark.smoke
 def test_autofix_nonexistent():
     """Verify nonexistent file returns a clean error message."""
-    res = autofix_linter("non_existent_file_xyz.py")
+    res = autofix_linter(str(settings.PROJECT_ROOT / "non_existent_file_xyz.py"), str(settings.PROJECT_ROOT))
     assert "does not exist on disk" in res
 
 @pytest.mark.smoke

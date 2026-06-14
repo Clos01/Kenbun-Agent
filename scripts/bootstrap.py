@@ -804,7 +804,7 @@ def configure_api_keys():
 
         print(f"\n{c_m}🔑 CONFIGURE API KEYS & LOCAL AI ENGINES{c_r}")
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
-        print(f"Current Status:")
+        print("Current Status:")
         print(f" ➔ Active Provider:    {c_w}{active_provider_name}{c_r}")
         
         # Display clean decrypted values with secure visual tag
@@ -820,13 +820,16 @@ def configure_api_keys():
             
         print(f" ➔ Active Key Status:  {active_provider_key_status}")
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
-        print("1. ⚙️  Select Primary AI Provider & Model (Select from 20+ options)")
-        print("2. 🔌 Register MCP Server in Claude Desktop & Cursor (Auto)")
-        print("3. 🔙 Return to Main Menu")
-        print(f"{c_g}──────────────────────────────────────────────────{c_r}")
-        
-        opt = input(f"{c_c}Select option [1-3]: {c_r}").strip()
-        
+        config_options = [
+            "⚙️  Select Primary AI Provider & Model (Select from 20+ options)",
+            "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
+            "🔙 Return to Main Menu",
+        ]
+        sel = select_menu(config_options, "CONFIGURATION MENU")
+        if sel is None:
+            break
+        opt = str(sel + 1)
+
         if opt == "1":
             # Interactive arrow-navigable selector for all 20 providers!
             provider_names = [p["name"] for p in PROVIDERS_MAP]
@@ -849,10 +852,10 @@ def configure_api_keys():
                     is_existing = True
                     print(f"\n{c_c}An existing value for {p['env_key']} was detected.{c_r}")
                     print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
-                    api_key_val = getpass.getpass(f"Credential (Press Enter to keep existing): ").strip()
+                    api_key_val = getpass.getpass("Credential (Press Enter to keep existing): ").strip()
                 else:
                     print(f"\n{c_c}Paste your {p['env_key']} below (Input is masked / hidden as you paste/type):{c_r}")
-                    api_key_val = getpass.getpass(f"Credential: ").strip()
+                    api_key_val = getpass.getpass("Credential: ").strip()
 
                 if is_existing and not api_key_val:
                     skip_key_update = True
@@ -885,7 +888,7 @@ def configure_api_keys():
                     
                 probed = local_probe_models(final_url)
                 if probed:
-                    print(f"🟢 Connected successfully! Available models:")
+                    print("🟢 Connected successfully! Available models:")
                     model_sel = select_menu(probed, "Select active LM Studio Model:")
                     if model_sel is not None:
                         final_model = probed[model_sel]
@@ -903,14 +906,14 @@ def configure_api_keys():
             do_encrypt = False
             fernet = None
             if api_key_val and not skip_key_update:
-                enc_choice = input(f"\nEncrypt your credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
+                enc_choice = input("\nEncrypt your credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
                 do_encrypt = enc_choice not in ("n", "no")
                 
                 if do_encrypt:
                     try:
                         from cryptography.fernet import Fernet
                     except ImportError:
-                        print(f"\n⚠️ Cryptography library missing. Installing cryptography...")
+                        print("\n⚠️ Cryptography library missing. Installing cryptography...")
                         import subprocess
                         subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                         from cryptography.fernet import Fernet
@@ -967,8 +970,6 @@ def configure_api_keys():
             auto_register_cursor_mcp()
         elif opt == "3":
             break
-        else:
-            print(f"\n{c_y}⚠️ Invalid choice. Select 1 to 3.{c_r}")
 
 def detect_hardware():
     total_ram_gb = 8.0
@@ -1186,7 +1187,7 @@ def configure_local_models():
         if is_cloud_active:
             decrypted_model = decrypt_value_local(current_primary, project_root)
             print(f"  ➔ Primary Model: {c_c}{decrypted_model}{c_r} {c_g}[Keeping active Cloud Model]{c_r}")
-            print(f"  ℹ️  Local models configured for Docker background stack only.")
+            print("  ℹ️  Local models configured for Docker background stack only.")
         else:
             print(f"  ➔ Primary Model: {c_c}{primary_val if primary_val != 'none' else current_primary}{c_r}")
         print("  ➔ To pull changes, please rebuild docker containers via Option 5.\n")
@@ -1431,20 +1432,22 @@ def clean_docker_stack():
         print(f"\n{c_y}⚠️ Docker is not installed on this system.{c_r}\n")
         return
 
-    print("Choose cleanup intensity:")
-    print(f"  {c_c}[1]{c_r} Light Clean (Removes local build images & deletes volumes/containers - FAST)")
-    print(f"  {c_c}[2]{c_r} Deep Purge  (Deletes ALL stack containers, volumes, and large cached images - SLOW)")
-    print(f"  {c_c}[3]{c_r} Cancel")
-    
+    cleanup_options = [
+        "Light Clean (Removes local build images & deletes volumes/containers - FAST)",
+        "Deep Purge  (Deletes ALL stack containers, volumes, and large cached images - SLOW)",
+        "Cancel",
+    ]
     try:
-        choice = input(f"\n{c_m}Select Option [1-3]: {c_r}").strip()
+        sel = select_menu(cleanup_options, "Choose cleanup intensity:")
     except (KeyboardInterrupt, EOFError):
         print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
         return
-        
-    if choice == "3" or choice not in ("1", "2"):
+
+    if sel is None or sel == 2:
         print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
         return
+
+    choice = str(sel + 1)
         
     print(f"\n{c_y}🟡 Stopping Docker Swarm Stack containers...{c_r}")
     
@@ -1464,17 +1467,17 @@ def clean_docker_stack():
             subprocess.run(["docker", "image", "prune", "-f"], cwd=project_root)
             
         print(f"\n{c_c}✓ Docker Swarm Stack cleaned successfully!{c_r}")
-        print(f"  You can now start a fresh build using the Swarm Stack option in the menu.")
+        print("  You can now start a fresh build using the Swarm Stack option in the menu.")
         
         # Guide on file permissions (highly helpful for fresh reinstalls)
         print(f"\n{c_y}┌───────────────── 🌸 HOST FILE OWNERSHIP WARNING ────────────────┐")
-        print(f"│ On Linux systems, Docker mount environments compile pycache/     │")
-        print(f"│ assets using 'root' ownership on the host filesystem.           │")
-        print(f"│                                                                 │")
-        print(f"│ ➔ If you plan to completely remove this directory, standard     │")
-        print(f"│   'rm -rf' will fail with Permission Denied.                    │")
-        print(f"│                                                                 │")
-        print(f"│ ➔ To cleanly delete this entire folder from your server:        │")
+        print("│ On Linux systems, Docker mount environments compile pycache/     │")
+        print("│ assets using 'root' ownership on the host filesystem.           │")
+        print("│                                                                 │")
+        print("│ ➔ If you plan to completely remove this directory, standard     │")
+        print("│   'rm -rf' will fail with Permission Denied.                    │")
+        print("│                                                                 │")
+        print("│ ➔ To cleanly delete this entire folder from your server:        │")
         print(f"│   {c_c}sudo rm -rf {project_root}{c_y}                           │")
         print(f"└─────────────────────────────────────────────────────────────────┘{c_r}\n")
     except Exception as e:
@@ -1614,7 +1617,7 @@ def run_quick_setup():
             
         probe_res = quick_probe(final_url)
         if probe_res:
-            print(f"🟢 Connected successfully! Available models:")
+            print("🟢 Connected successfully! Available models:")
             model_sel = select_menu(probe_res, "Select active Model:")
             if model_sel is not None:
                 final_model = probe_res[model_sel]
@@ -1630,26 +1633,26 @@ def run_quick_setup():
 
     # Step 3: Messaging setup
     print(f"\n{c_w}[STEP 3] Configure Telegram Bot Messaging (Optional):{c_r}")
-    setup_tg = input(f"Configure Telegram Messaging Bot? [y/N]: ").strip().lower()
+    setup_tg = input("Configure Telegram Messaging Bot? [y/N]: ").strip().lower()
     
     tg_token = ""
     tg_chat_id = ""
     if setup_tg in ("y", "yes"):
-        tg_token = input(f"Enter Telegram Bot Token: ").strip()
-        tg_chat_id = input(f"Enter Telegram Chat ID:  ").strip()
+        tg_token = input("Enter Telegram Bot Token: ").strip()
+        tg_chat_id = input("Enter Telegram Chat ID:  ").strip()
 
     # Step 4: AES Encryption
     do_encrypt = False
     fernet = None
     if api_key_val and not skip_key_update:
-        enc_choice = input(f"\nEncrypt credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
+        enc_choice = input("\nEncrypt credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
         do_encrypt = enc_choice not in ("n", "no")
         
         if do_encrypt:
             try:
                 from cryptography.fernet import Fernet
             except ImportError:
-                print(f"\n⚠️ Cryptography library missing. Installing cryptography...")
+                print("\n⚠️ Cryptography library missing. Installing cryptography...")
                 import subprocess
                 subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 from cryptography.fernet import Fernet
@@ -1700,7 +1703,7 @@ def run_quick_setup():
         print(f"  ➔ PRIMARY_LLM_URL:   {final_url}")
         print(f"  ➔ PRIMARY_LLM_MODEL: {final_model}")
         if tg_token:
-            print(f"  ➔ Telegram Bot:      Configured")
+            print("  ➔ Telegram Bot:      Configured")
         print("\nReady to launch Swarm Stack! select menu Option 4 next.")
     except Exception as e:
         if 'temp_path' in locals() and os.path.exists(temp_path):
@@ -1925,7 +1928,7 @@ if __name__ == "__main__":
             showcase_dashboard()
         elif cmd in ("--help", "-h", "help"):
             print(f"\n{c_m}🌸 KENBUN-AGENT CLI TOOL SHORTCUTS{c_r}")
-            print(f"──────────────────────────────────────────────────")
+            print("──────────────────────────────────────────────────")
             print(f"  {c_c}kenbun chat{c_r}       ➔ Start the Cognitive Agent Shell (Termchat) directly!")
             print(f"  {c_c}kenbun start{c_r}      ➔ Spin up the Docker stack in background!")
             print(f"  {c_c}kenbun stop{c_r}       ➔ Spin down the Docker stack!")
@@ -1936,10 +1939,10 @@ if __name__ == "__main__":
             print(f"  {c_c}kenbun list-tools{c_r} ➔ List all dynamic MCP tools and their signatures!")
             print(f"  {c_c}kenbun <tool>{c_r}     ➔ Execute any MCP tool (e.g., kenbun orchestrate, kenbun recall)")
             print(f"  {c_c}kenbun{c_r}            ➔ Launch full interactive Sakura setup menu (1-9)")
-            print(f"──────────────────────────────────────────────────\n")
+            print("──────────────────────────────────────────────────\n")
         elif cmd == "list-tools":
-            import sys, inspect
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
+            import sys
+            import inspect
             try:
                 import tools.infrastructure.server as server
                 print(f"\n{c_m}🔮 KENBUN SWARM - DYNAMIC MCP TOOLS{c_r}")
@@ -1957,7 +1960,6 @@ if __name__ == "__main__":
         else:
             # Dynamic MCP tool dispatcher
             import sys
-            sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
             
             try:
                 import tools.infrastructure.server as server

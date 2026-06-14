@@ -83,7 +83,7 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
             
             # Verify AST is initially valid
             if not _verify_python_ast(target_file):
-                return f"❌ Aborted: Python file has active syntax errors and cannot be safely auto-fixed."
+                return "❌ Aborted: Python file has active syntax errors and cannot be safely auto-fixed."
             
             # Running Step 3.1: Autofake (strips unused variables and imports)
             res_autofake = subprocess.run(
@@ -114,9 +114,9 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
                 
             # AST Parity validation post-execution
             if not _verify_python_ast(target_file):
-                print(f"🚩 Post-fix AST mismatch! Reverting to pre-fix checkpoint...")
+                print("🚩 Post-fix AST mismatch! Reverting to pre-fix checkpoint...")
                 restore_checkpoint(str(target_file), label="pre_linter_autofix")
-                return f"❌ Reverted: Auto-fix formatting caused compilation/AST failures."
+                return "❌ Reverted: Auto-fix formatting caused compilation/AST failures."
 
         elif ext in (".js", ".jsx", ".ts", ".tsx", ".mjs"):
             print(f"🌐 Executing JavaScript/TypeScript pre-flight cleanups for '{target_file.name}'...")
@@ -134,7 +134,7 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
             # Verification: If eslint exited with a severe error (indicating syntax breakage)
             # eslint exit code >= 2 generally indicates crash or parser errors
             if res_eslint.returncode >= 2:
-                print(f"🚩 ESLint crash or parser failure detected! Reverting to pre-fix checkpoint...")
+                print("🚩 ESLint crash or parser failure detected! Reverting to pre-fix checkpoint...")
                 restore_checkpoint(str(target_file), label="pre_linter_autofix")
                 return f"❌ Reverted: ESLint run failed with code {res_eslint.returncode}. Critique:\n{res_eslint.stderr}"
 
@@ -143,10 +143,10 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
         clean_err = "\n".join([line for line in stderr_logs if line.strip()])
         
         report = [
-            f"## 🚀 Step 0: Pre-Flight Linter Auto-Fix Pass",
+            "## 🚀 Step 0: Pre-Flight Linter Auto-Fix Pass",
             f"**File:** `{target_file.name}`",
             f"**Workspace Bound:** `SAFE` (`{target_proj}`)",
-            f"**Execution:** `SUCCESS` (`shell=False` verified)",
+            "**Execution:** `SUCCESS` (`shell=False` verified)",
             ""
         ]
         

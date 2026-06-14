@@ -5,9 +5,12 @@ import time
 from datetime import datetime
 from functools import lru_cache
 
-from tools.infrastructure.config import settings
+import sys
+def print(*args, **kwargs):
+    kwargs['file'] = sys.stderr
+    __builtins__['print'](*args, **kwargs)
 
-# --- 1. CONFIGURATION ---
+from tools.infrastructure.config import settings
 PC_IP = settings.SWARM_PC_IP
 CHROMA_PORT = settings.CHROMA_PORT
 LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH

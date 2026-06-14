@@ -3,11 +3,11 @@
         "logic": {
             "linter_auto_fix": {
                 "alpha": 4.0,
-                "beta": 4.0
+                "beta": 5.0
             },
             "sandbox_execution": {
                 "alpha": 1.0,
-                "beta": 5.0
+                "beta": 6.0
             },
             "safe_file_checkpoint": {
                 "alpha": 1.0,
@@ -36,6 +36,42 @@
             "black_linter": {
                 "alpha": 1.0,
                 "beta": 3.0
+            },
+            "file_system_manager": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "memory_persistence": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "docker_sandbox": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "gemini_audit": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "save_lesson": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "orchestrate_lifecycle": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "persistence_sync_layer": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "LLM_ROUTER": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "SUPERVISOR_AGENT": {
+                "alpha": 1.0,
+                "beta": 3.0
             }
         },
         "research": {
@@ -50,17 +86,21 @@
             "memory_recall_engine": {
                 "alpha": 3.0,
                 "beta": 1.0
+            },
+            "repo_scanner": {
+                "alpha": 3.0,
+                "beta": 1.0
             }
         }
     },
     "global": {
         "linter_auto_fix": {
             "alpha": 4.0,
-            "beta": 3.0
+            "beta": 4.0
         },
         "sandbox_execution": {
             "alpha": 2.0,
-            "beta": 4.0
+            "beta": 5.0
         },
         "safe_file_checkpoint": {
             "alpha": 1.0,
@@ -97,7 +137,47 @@
         "black_linter": {
             "alpha": 1.0,
             "beta": 2.0
+        },
+        "file_system_manager": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "memory_persistence": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "docker_sandbox": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "repo_scanner": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "gemini_audit": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "save_lesson": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "orchestrate_lifecycle": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "persistence_sync_layer": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "LLM_ROUTER": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "SUPERVISOR_AGENT": {
+            "alpha": 1.0,
+            "beta": 2.0
         }
     },
-    "last_updated": 1780334526.507509
+    "last_updated": 1781323521.49543
 }

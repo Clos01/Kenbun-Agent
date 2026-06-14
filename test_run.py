@@ -2,7 +2,6 @@ import sys
 import os
 
 # Add core to path so we can import orchestrator
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "core"))
 
 from tools.infrastructure.orchestrator import orchestrate
 

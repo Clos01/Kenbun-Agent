@@ -1,5 +1,6 @@
 import os
 import json
+import asyncio
 from pathlib import Path
 from tools.utils.llm_utils import extract_json
 
@@ -122,7 +123,7 @@ async def _synthesize_review_reason_locally(raw_critique: str, proposal: str) ->
 async def _fetch_digested_rules() -> str:
     """Retrieves the synthesized architectural rules from the Local Digestion Loop."""
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
+        from tools.memory.honcho_connect import get_project_collection
         collection = get_project_collection("digested_rules")
         if not collection:
             return ""
@@ -187,10 +188,14 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
     return None
 
 async def _tier_3_fallback(user_proposal: str, code_snippet: str, memory_context: str):
-    print(f"🔄 [SYSTEM 2] Falling back to Local Senior Architect ({settings.models.lm_studio_model})...")
+    from tools.infrastructure.config import settings
+    fallback_name = settings.PRIMARY_LLM_MODEL or 'auto'
+    print(f"🔄 [SYSTEM 2] Falling back to Local Senior Architect ({fallback_name})...")
     system_prompt = (
         "You are THE SUPERVISOR (System 2), the lead architect and security officer. "
-        "Review the following proposal and code for deep systemic risks."
+        "Review the following proposal and code for deep systemic risks.\n"
+        "Return a valid JSON object matching this schema:\n"
+        '{"status": "APPROVED" | "REJECTED" | "REVIEW_NEEDED", "critique": "Detailed reasoning here"}'
     )
     context = f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}"
     prompt = f"CONTEXT: {context}\n\nCODE:\n{code_snippet}"
@@ -220,11 +225,11 @@ async def _tier_3_fallback(user_proposal: str, code_snippet: str, memory_context
             return res_obj
         
         if attempt == 0:
-            prompt += f"\n\nIMPORTANT: Return ONLY a valid JSON object."
+            prompt += '\n\nIMPORTANT: Return ONLY a valid JSON object matching this schema:\n{"status": "APPROVED" | "REJECTED" | "REVIEW_NEEDED", "critique": "Detailed reasoning here"}'
         else:
             return {"status": "REJECTED", "critique": f"Parse failure: {raw_result[:200]}"}
 
-async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = "", recovery_attempts_left: int = 2):
+async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = "", recovery_attempts_left: int = 2, iterative_mode: bool = False):
     """
     Executes a high-fidelity System 2 Executive Audit.
     Includes the Autonomic "Ralph-Loop" Recovery Engine for self-healing rejected snippets.
@@ -259,6 +264,15 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
         }
         
     elif approval_mode == "manual":
+        # Guard: Check if we actually have a TTY stdin before prompting to prevent hangs/timeouts in headless daemon mode
+        if not sys.stdin.isatty():
+            print("🛑 [GATEWAY] Manual approval requested but stdin is not a TTY (headless/daemon mode). Fail-closed.")
+            return {
+                "status": "REJECTED",
+                "critique": "[SECURITY LOCK] Headless/unattended environment cannot perform manual TTY verification.",
+                "tier": "System 2 Gateway: Hook Interceptor"
+            }
+
         print("\n⚖️ [GATEWAY] MANUAL APPROVAL REQUEST REQUIRED:")
         print(f"   ➔ User Proposal: {user_proposal}")
         if code_snippet.strip():
@@ -336,9 +350,9 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
     res = await _run_supervisor_audit_raw(user_proposal, code_snippet, memory_context, tech_key)
     
     # If the verdict is REJECTED, and we have recovery attempts left, and the code snippet is not empty:
-    if res and res.get("status") == "REJECTED" and code_snippet.strip() and recovery_attempts_left > 0:
+    if res and res.get("status") == "REJECTED" and code_snippet.strip() and recovery_attempts_left > 0 and iterative_mode:
         critique = res.get("critique", "No critique details provided.")
-        print(f"🔄 [RALPH-LOOP] Security/Compliance audit rejected the snippet. Initiating autonomic healing loop...")
+        print("🔄 [RALPH-LOOP] Security/Compliance audit rejected the snippet. Initiating autonomic healing loop...")
         print(f"🔄 [RALPH-LOOP] Critique: {critique}")
         
         # Speculatively adjust the prompt and ask the Local Senior/Defendant to correct the code
@@ -379,16 +393,16 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
                     recovery_attempts_left=recovery_attempts_left - 1
                 )
                 if recovery_res and recovery_res.get("status") == "APPROVED":
-                    print(f"🌸 [RALPH-LOOP] Autonomic recovery SUCCESSFUL! Healed code passed security audit.")
+                    print("🌸 [RALPH-LOOP] Autonomic recovery SUCCESSFUL! Healed code passed security audit.")
                     # Embed the healed code into the response
                     recovery_res["healed_code"] = healed_code
                     recovery_res["recovered_from_rejection"] = True
                     return recovery_res
                 else:
-                    print(f"❌ [RALPH-LOOP] Autonomic recovery failed. Healed code was also rejected.")
+                    print("❌ [RALPH-LOOP] Autonomic recovery failed. Healed code was also rejected.")
                     res = recovery_res  # update res with the latest rejection
             else:
-                print(f"⚠️ [RALPH-LOOP] Healer model returned identical or empty code. Cannot recover.")
+                print("⚠️ [RALPH-LOOP] Healer model returned identical or empty code. Cannot recover.")
         else:
             print(f"⚠️ [RALPH-LOOP] Healer model call failed: {err}")
 
@@ -423,65 +437,92 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
             return res_style
         print("✅ [SYSTEM 2] Heritage Design Compliance Verified.")
 
-    # Tier 1a: Adversarial LLM Court (Judge & Defendant Trial)
+    # Parallelize Tier 1a (Adversarial LLM Court) and Tier 1 (Local Ensemble)
+    court_task = None
     if adversarial_court:
-        try:
-            res_court = await adversarial_court.run_trial(user_proposal, code_snippet)
-            if res_court and res_court.get("verdict") in ["APPROVED", "REJECTED"]:
-                print(f"✅ [COURT] Verdict rendered: {res_court['verdict']} (Confidence: {res_court['confidence']:.2f})")
-                res_court_formatted = {
-                    "status": res_court["verdict"],
-                    "critique": f"[ADVERSARIAL COURT] Verdict: {res_court['verdict']}\n"
-                                f"Critique: {res_court['critique']}",
-                    "confidence": res_court["confidence"],
-                    "tier": "System 2a: Adversarial LLM Court"
-                }
-                log_swarm_event("DECISION", {
-                    "tool": "supervisor_agent", 
-                    "confidence": res_court["confidence"], 
-                    "result": res_court["verdict"], 
-                    "logic": "System 2a: Adversarial LLM Court",
-                    "output": res_court_formatted["critique"]
-                })
-                return res_court_formatted
-        except Exception as court_err:
-            print(f"⚠️ [COURT] Adversarial court trial failed, falling back to local ensemble: {court_err}")
-
-    # Tier 1: Local Ensemble
-    res = await _tier_1_local(user_proposal, code_snippet)
-    if isinstance(res, dict):
-        log_swarm_event("DECISION", {
-            "tool": "supervisor_agent", 
-            "confidence": res.get("confidence", 0.5), 
-            "result": res.get("status", "UNKNOWN"), 
-            "logic": "Tier 1: Local Ensemble",
-            "output": res.get("critique", "No critique details provided.")
-        })
-        return res
+        court_task = asyncio.create_task(asyncio.wait_for(adversarial_court.run_trial(user_proposal, code_snippet), timeout=15.0))
+        
+    ensemble_task = asyncio.create_task(asyncio.wait_for(_tier_1_local(user_proposal, code_snippet), timeout=15.0))
     
-    local_verdict = res # HUNG_JURY or None
+    tasks = [t for t in [court_task, ensemble_task] if t is not None]
+    res = None
+    local_verdict = None
+    
+    while tasks:
+        done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            tasks.remove(task)
+            
+            if task == court_task:
+                try:
+                    res_court = task.result()
+                    if res_court and res_court.get("verdict") in ["APPROVED", "REJECTED"]:
+                        print(f"✅ [COURT] Verdict rendered: {res_court['verdict']} (Confidence: {res_court['confidence']:.2f})")
+                        res_court_formatted = {
+                            "status": res_court["verdict"],
+                            "critique": f"[ADVERSARIAL COURT] Verdict: {res_court['verdict']}\n"
+                                        f"Critique: {res_court['critique']}",
+                            "confidence": res_court["confidence"],
+                            "tier": "System 2a: Adversarial LLM Court"
+                        }
+                        log_swarm_event("DECISION", {
+                            "tool": "supervisor_agent", 
+                            "confidence": res_court["confidence"], 
+                            "result": res_court["verdict"], 
+                            "logic": "System 2a: Adversarial LLM Court",
+                            "output": res_court_formatted["critique"]
+                        })
+                        for p in pending: p.cancel()
+                        return res_court_formatted
+                except Exception as e:
+                    print(f"⚠️ [COURT] Trial failed or timed out: {e}")
+                    
+            elif task == ensemble_task:
+                try:
+                    res = task.result()
+                    if isinstance(res, dict):
+                        log_swarm_event("DECISION", {
+                            "tool": "supervisor_agent", 
+                            "confidence": res.get("confidence", 0.5), 
+                            "result": res.get("status", "UNKNOWN"), 
+                            "logic": "Tier 1: Local Ensemble",
+                            "output": res.get("critique", "No critique details provided.")
+                        })
+                        for p in pending: p.cancel()
+                        return res
+                    local_verdict = res # HUNG_JURY or None
+                except Exception as e:
+                    print(f"⚠️ [ENSEMBLE] Audit failed or timed out: {e}")
+
     if local_verdict == "HUNG_JURY":
         print("⚖️ [ENSEMBLE] Hung Jury detected. Escalating to Cloud for tie-breaking...")
 
     # Tier 2: Cloud Escalation
-    res = await _tier_2_cloud(user_proposal, code_snippet, memory_context, tech_key, local_verdict)
-    if res:
-        log_swarm_event("DECISION", {
-            "tool": "supervisor_agent", 
-            "confidence": 0.9, 
-            "result": res.get("status", "UNKNOWN"), 
-            "logic": "Tier 2: Cloud Escalation",
-            "output": res.get("critique", "No critique details provided.")
-        })
-        return res
+    try:
+        res = await asyncio.wait_for(_tier_2_cloud(user_proposal, code_snippet, memory_context, tech_key, local_verdict), timeout=15.0)
+        if res:
+            log_swarm_event("DECISION", {
+                "tool": "supervisor_agent", 
+                "confidence": 0.9, 
+                "result": res.get("status", "UNKNOWN"), 
+                "logic": "Tier 2: Cloud Escalation",
+                "output": res.get("critique", "No critique details provided.")
+            })
+            return res
+    except Exception as e:
+        print(f"⚠️ [CLOUD] Tier 2 timed out or failed: {e}")
 
     # Tier 3: Local Senior Fallback
-    res = await _tier_3_fallback(user_proposal, code_snippet, memory_context)
-    log_swarm_event("DECISION", {
-        "tool": "supervisor_agent", 
-        "confidence": 0.5, 
-        "result": res.get("status", "UNKNOWN") if isinstance(res, dict) else "UNKNOWN", 
-        "logic": "Tier 3: Fallback",
-        "output": res.get("critique", "No critique details provided.") if isinstance(res, dict) else str(res)
-    })
-    return res
+    try:
+        res = await asyncio.wait_for(_tier_3_fallback(user_proposal, code_snippet, memory_context), timeout=15.0)
+        log_swarm_event("DECISION", {
+            "tool": "supervisor_agent", 
+            "confidence": 0.5, 
+            "result": res.get("status", "UNKNOWN") if isinstance(res, dict) else "UNKNOWN", 
+            "logic": "Tier 3: Fallback",
+            "output": res.get("critique", "No critique details provided.") if isinstance(res, dict) else str(res)
+        })
+        return res
+    except Exception as e:
+        print(f"⚠️ [FALLBACK] Tier 3 timed out or failed: {e}")
+        return {"status": "ERROR", "critique": f"All tiers failed or timed out: {e}"}

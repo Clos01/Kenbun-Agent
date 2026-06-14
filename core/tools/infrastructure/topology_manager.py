@@ -3,7 +3,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any
-from tools.memory.chroma_db_connect import get_project_collection
+from tools.memory.honcho_connect import get_project_collection
 
 import collections
 

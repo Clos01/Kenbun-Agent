@@ -1,12 +1,28 @@
 from tools.audit.reflection_agent import reflect_and_distill
+from tools.utils.ide_context import uses_external_review, log_ide_context
 
 def build_research_pipeline(tools):
     """
-    Pipeline: research → scan → checkpoint → sandbox test → supervisor
+    IDE-aware research & implement pipeline.
+
+    When called from Claude Code / Antigravity:
+        scan_repo → recall_fix → checkpoint → guardrail → supervisor → maze → reflect
+        (Gemini research is skipped — Claude handles research natively)
+
+    When called from local CLI or other IDEs:
+        Gemini research → scan_repo → recall_fix → checkpoint → guardrail → supervisor → maze → reflect
+
     Use case: "Research and implement JWT auth"
+    Control via: KENBUN_CALLER_IDE env var (claude | cursor | vscode | local)
     """
-    return [
-        {
+    import sys
+    print(log_ide_context(), file=sys.stderr)
+
+    steps = []
+
+    if uses_external_review():
+        # Non-Claude IDE: use Gemini for research grounding
+        steps.append({
             "id": "research",
             "label": "🔮 Researching with Gemini",
             "tool": tools["research_with_gemini"],
@@ -15,7 +31,8 @@ def build_research_pipeline(tools):
                 "tech_key": s.get("tech_key", ""),
             },
             "output_key": "research_result",
-        },
+        })
+    steps += [
         {
             "id": "scan_repo",
             "label": "🗺️ Scanning project structure",
@@ -82,3 +99,6 @@ def build_research_pipeline(tools):
             "output_key": "reflection_result",
         }
     ]
+
+    return steps
+

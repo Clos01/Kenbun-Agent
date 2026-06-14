@@ -1,7 +1,6 @@
 import ast
 import importlib
 import logging
-import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -60,11 +59,6 @@ def harvest_and_register_tools(tools_dir: Optional[Path] = None) -> List[str]:
 
     logger.info(f"🔍 System 4 Harvester: Initiating dynamic sweep of {tools_dir}")
     
-    # 1. Hardened sys.path insertion for dynamic imports
-    parent_dir = str(tools_dir.parent)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-
     imported_modules = []
     
     # 2. Walk directories safely

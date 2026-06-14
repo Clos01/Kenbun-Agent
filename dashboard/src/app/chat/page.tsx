@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
-import { Send, Terminal, Cpu, CheckCircle, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Send, Terminal, Cpu, CheckCircle, Plus, Trash2, MessageSquare, ChevronDown, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 
@@ -28,7 +28,20 @@ export default function KenbunChat() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [activeModel, setActiveModel] = useState<string>("Detecting Brain...");
+  const [workflow, setWorkflow] = useState<string>("chat");
+  const [wfOpen, setWfOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const wfRef = useRef<HTMLDivElement>(null);
+
+  // Orchestrator workflows selectable from the composer. "chat" = normal conversation.
+  const WORKFLOWS = [
+    { id: "chat", label: "💬 Chat" },
+    { id: "research_implement", label: "🔮 Research & Build" },
+    { id: "bug_fix", label: "🐞 Bug Fix" },
+    { id: "code_review", label: "🔍 Code Review" },
+    { id: "shadow_test", label: "🧪 Shadow Test" },
+    { id: "design_ui", label: "🎨 Design UI" },
+  ];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -97,6 +110,17 @@ export default function KenbunChat() {
     }
   }, [activeSessionId]);
 
+  // Close the workflow dropdown on outside click
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (wfRef.current && !wfRef.current.contains(e.target as Node)) {
+        setWfOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
   // 3. Create a New Session
   const handleCreateSession = async () => {
     try {
@@ -151,6 +175,44 @@ export default function KenbunChat() {
     }
   };
 
+  // Update a single message's content by id (used by orchestration polling).
+  const updateMessageContent = (id: string, content: string) => {
+    setMessages(prev => prev.map(m => (m.id === id ? { ...m, content } : m)));
+  };
+
+  // Poll GET /orchestrate/status/{job_id} until the job completes or fails,
+  // updating the placeholder message in place.
+  const pollOrchestration = (jobId: string, wf: string, msgId: string) => {
+    let attempts = 0;
+    const maxAttempts = 200; // ~10 min at 3s intervals
+    const tick = async () => {
+      attempts++;
+      try {
+        const res = await fetch(`${API_BASE}/orchestrate/status/${jobId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "completed") {
+            updateMessageContent(msgId, `✅ "${wf}" complete:\n\n${data.result || "(no output)"}`);
+            return;
+          }
+          if (data.status === "failed") {
+            updateMessageContent(msgId, `❌ "${wf}" failed: ${data.error || "unknown error"}`);
+            return;
+          }
+        }
+      } catch {
+        // Transient network blip — keep polling.
+      }
+      if (attempts >= maxAttempts) {
+        updateMessageContent(msgId, `⏱️ "${wf}" is still running (job ${jobId}). Stopped polling after ~10 min — check the Observatory feed.`);
+        return;
+      }
+      updateMessageContent(msgId, `🔮 "${wf}" running… (${attempts * 3}s elapsed)`);
+      setTimeout(tick, 3000);
+    };
+    setTimeout(tick, 3000);
+  };
+
   // 5. Send Message to Session
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,6 +230,48 @@ export default function KenbunChat() {
       timestamp: new Date().toISOString()
     };
     setMessages(prev => [...prev, tempUserMsg]);
+
+    // Orchestrator launch path: when a workflow (not plain chat) is selected,
+    // fire the background pipeline instead of a normal chat turn.
+    if (workflow !== "chat") {
+      const msgId = "orch-" + Date.now();
+      try {
+        const res = await fetch(`${API_BASE}/orchestrate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workflow, task: userMessageContent })
+        });
+        const data = await res.json();
+        const launched = res.ok && data.status === "initiated" && data.job_id;
+        if (!launched) {
+          setMessages(prev => [...prev, {
+            id: msgId,
+            sender: "kenbun",
+            content: `⚠️ ${data.message || data.details || "Failed to launch workflow."}`,
+            timestamp: new Date().toISOString()
+          }]);
+        } else {
+          // Placeholder message that polling will update in place.
+          setMessages(prev => [...prev, {
+            id: msgId,
+            sender: "kenbun",
+            content: `🔮 Launched "${data.workflow}" workflow (job ${data.job_id}). Running…`,
+            timestamp: new Date().toISOString()
+          }]);
+          pollOrchestration(data.job_id, data.workflow, msgId);
+        }
+      } catch {
+        setMessages(prev => [...prev, {
+          id: msgId,
+          sender: "kenbun",
+          content: "Error: Neural link disconnected. Unable to reach the orchestrator.",
+          timestamp: new Date().toISOString()
+        }]);
+      } finally {
+        setIsTyping(false);
+      }
+      return;
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/v1/chat/sessions/${activeSessionId}/message`, {
@@ -361,22 +465,85 @@ export default function KenbunChat() {
 
         {/* Input Area */}
         <div className="p-6 lg:p-10 border-t border-primary/5 bg-background/80 backdrop-blur-xl shrink-0 z-20">
-          <form onSubmit={handleSend} className="relative max-w-5xl mx-auto">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Transmit directive to Kenbun..."
-              className="w-full pl-6 pr-16 py-5 border border-primary/10 rounded-sm bg-card/60 font-sans text-sm focus:outline-none focus:border-tertiary focus:bg-card hover:border-primary/20 transition-all text-primary placeholder-primary/30 shadow-inner"
-              disabled={isTyping || !activeSessionId}
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isTyping || !activeSessionId}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 bg-tertiary/10 hover:bg-tertiary hover:text-white text-tertiary transition-all rounded-sm disabled:opacity-30 disabled:hover:bg-tertiary/10 disabled:hover:text-tertiary"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+          <form onSubmit={handleSend} className="flex items-stretch gap-3 max-w-5xl mx-auto">
+            <div ref={wfRef} className="relative shrink-0 w-48">
+              <button
+                type="button"
+                onClick={() => setWfOpen((o) => !o)}
+                disabled={isTyping || !activeSessionId}
+                title="Choose Chat or an orchestrator workflow"
+                className={`group w-full h-full flex items-center justify-between gap-3 pl-5 pr-4 py-5 rounded-sm border bg-card/60 backdrop-blur-md transition-all disabled:opacity-30 ${
+                  wfOpen ? "border-tertiary bg-card" : "border-primary/10 hover:border-primary/20"
+                }`}
+              >
+                <span className="flex flex-col items-start gap-1 min-w-0">
+                  <span className="text-[8px] font-black uppercase tracking-[0.3em] text-tertiary/70 leading-none">
+                    {workflow === "chat" ? "Mode" : "Workflow"}
+                  </span>
+                  <span className="text-xs font-bold text-primary truncate w-full text-left">
+                    {WORKFLOWS.find((w) => w.id === workflow)?.label}
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`w-4 h-4 text-tertiary shrink-0 transition-transform duration-300 ${wfOpen ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              <AnimatePresence>
+                {wfOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute bottom-full left-0 mb-2 w-full overflow-hidden rounded-sm border border-tertiary/20 bg-card/95 backdrop-blur-xl shadow-[0_0_40px_rgba(var(--tertiary-rgb),0.06)] artisan-shadow z-30"
+                  >
+                    <div className="px-4 py-2.5 border-b border-primary/5">
+                      <span className="text-[8px] font-black uppercase tracking-[0.3em] text-primary/40">
+                        Select Directive
+                      </span>
+                    </div>
+                    <div className="flex flex-col py-1">
+                      {WORKFLOWS.map((w) => {
+                        const active = w.id === workflow;
+                        return (
+                          <button
+                            key={w.id}
+                            type="button"
+                            onClick={() => { setWorkflow(w.id); setWfOpen(false); }}
+                            className={`flex items-center justify-between gap-2 px-4 py-2.5 text-left transition-all ${
+                              active
+                                ? "bg-tertiary/10 text-tertiary"
+                                : "text-primary/70 hover:bg-primary/5 hover:text-primary"
+                            }`}
+                          >
+                            <span className="text-xs font-bold truncate">{w.label}</span>
+                            {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={workflow === "chat" ? "Transmit directive to Kenbun..." : "Describe the task to orchestrate..."}
+                className="w-full pl-6 pr-16 py-5 border border-primary/10 rounded-sm bg-card/60 font-sans text-sm focus:outline-none focus:border-tertiary focus:bg-card hover:border-primary/20 transition-all text-primary placeholder-primary/30 shadow-inner"
+                disabled={isTyping || !activeSessionId}
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isTyping || !activeSessionId}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-2.5 bg-tertiary/10 hover:bg-tertiary hover:text-white text-tertiary transition-all rounded-sm disabled:opacity-30 disabled:hover:bg-tertiary/10 disabled:hover:text-tertiary"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </div>
           </form>
           <div className="text-center mt-3 flex items-center justify-center gap-2">
             <CheckCircle className="w-3 h-3 text-tertiary/40" />

@@ -32,6 +32,11 @@ pyproject.toml
 *.localstorage
 brain_health/
 scratch/
+scratch_bench/
+
+# --- Python Build Artifacts ---
+*.egg-info/
+core/artifacts/
 
 
 
@@ -102,4 +107,7 @@ temp/
 
 # --- External Dependencies / Third-Party Repos ---
 core/external/
+
+# --- Claude Code worktrees (per-session; never commit) ---
+.claude/worktrees/
 

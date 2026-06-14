@@ -2,11 +2,6 @@ import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-# Inject project root for clean importing of scripts.bootstrap
-project_root = Path(__file__).resolve().parent.parent.parent
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
-
 def test_hardware_autopilot_pro_macos():
     """Mock a high-performance Mac (32GB+ Unified RAM) -> verify Pro profile suggested."""
     with patch("sys.platform", "darwin"), \

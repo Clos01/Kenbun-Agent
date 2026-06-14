@@ -13,7 +13,6 @@ Designed to scan the entire codebase file-by-file (avoiding OOM) to detect:
 import os
 import re
 import json
-import sys
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -104,7 +103,7 @@ class FujitoraAuditor:
                         "guidance": f"Running OS-specific command '{cmd_match.group(2)}' directly will fail. Use platform detection or standard overrides."
                     })
 
-        except Exception as e:
+        except Exception:
             # Prevent OOM or crash from corrupt files
             pass
         return breaches

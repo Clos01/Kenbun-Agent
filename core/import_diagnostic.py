@@ -15,7 +15,7 @@ modules_to_test = [
     "tools.utils.workspace_manager",
     "tools.strategy.token_governor",
     "tools.autonomic.autonomic_corrector",
-    "tools.memory.chroma_db_connect"
+    "tools.memory.honcho_connect"
 ]
 
 for mod in modules_to_test:

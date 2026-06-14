@@ -34,7 +34,7 @@ def build_context(state: dict) -> str:
         lessons_list = []
         for lesson in state["memory_result"]:
             lessons_list.append(f"- **Task:** {lesson.get('task')}\n  **Fix:** {lesson.get('fix')}")
-        parts.append(f"HISTORIC HIVEMIND LESSONS:\n" + "\n".join(lessons_list))
+        parts.append("HISTORIC HIVEMIND LESSONS:\n" + "\n".join(lessons_list))
     if state.get("research_result"):
         parts.append(f"RESEARCH:\n{_prune_log(state['research_result'], 2000)}")
     parts.append(f"TASK: {state['task']}")

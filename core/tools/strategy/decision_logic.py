@@ -21,7 +21,7 @@ except ImportError:
     msvcrt = None
 
 
-from tools.memory.chroma_db_connect import get_project_collection
+from tools.memory.honcho_connect import get_project_collection
 from tools.strategy.keyword_processor import KeywordProcessor
 from tools.strategy.neural_learner import NeuralLearner
 

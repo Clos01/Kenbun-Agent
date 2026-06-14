@@ -17,7 +17,7 @@ CRITICAL_MODULES = [
     # Memory layer
     "tools.memory.knowledge_manager",
     "tools.memory.code_indexer",
-    "tools.memory.chroma_db_connect",
+    "tools.memory.honcho_connect",
     "tools.memory.repo_mapper",
     # Audit layer
     "tools.audit.gemini_reviewer",

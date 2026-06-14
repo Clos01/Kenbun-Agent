@@ -43,7 +43,8 @@ async def test_ralph_loop_recovery_success():
         res = await run_supervisor_audit(
             user_proposal="Execute command",
             code_snippet="def unsafe_code(): import os; os.system('unsafe')",
-            recovery_attempts_left=2
+            recovery_attempts_left=2,
+            iterative_mode=True
         )
         
         # Verify Ralph-Loop state and healed outcome
@@ -82,7 +83,8 @@ async def test_ralph_loop_recovery_exhausted():
         res = await run_supervisor_audit(
             user_proposal="Execute command",
             code_snippet="def unsafe_code(): pass",
-            recovery_attempts_left=2
+            recovery_attempts_left=2,
+            iterative_mode=True
         )
         
         # Verify it remains rejected after exhaustion

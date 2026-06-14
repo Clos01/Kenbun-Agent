@@ -7,6 +7,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
+from tools.registry import sovereign_tool, registry
 import io
 
 class ProtocolShield(io.TextIOBase):
@@ -100,6 +101,8 @@ PROJECT_ROOT = str(settings.PROJECT_ROOT)
 
 # --- 0.1 SILENCE HELPER ---
 import contextlib
+import os
+
 @contextlib.contextmanager
 def silence_stdout():
     """Redirects stdout to stderr temporarily to protect the MCP protocol."""
@@ -132,7 +135,7 @@ OFFICIAL_DOCS = {
 def query_system_3(query_text, n=3):
     """Internal helper to fetch project concept memories."""
     try:
-        from tools.memory.chroma_db_connect import query_embeddings
+        from tools.memory.honcho_connect import query_embeddings
         results = query_embeddings(query_text, n_results=n, category="concepts")
         raw_docs = results['documents'][0] if results['documents'] and results['documents'][0] else []
         return [doc[:4000] for doc in raw_docs]
@@ -156,7 +159,7 @@ def _clean_json_response(text):
 # (Logic moved to audit.supervisor_agent)
 
 # --- 5. TOOL: SYSTEM 2 (THE SUPERVISOR) ---
-@mcp.tool()
+@sovereign_tool()
 def consult_supervisor(user_proposal: str, code_snippet: str = "", iterative_mode: bool = False) -> str:
     """
     Activates SYSTEM 2 (Local LLM via LM Studio).
@@ -192,19 +195,19 @@ def consult_supervisor(user_proposal: str, code_snippet: str = "", iterative_mod
     return json.dumps(result, indent=2)
 
 # --- 5.1 TOOL: SYSTEM 2c (THE GUARDRAIL) ---
-@mcp.tool()
+@sovereign_tool()
 def audit_guardrail(code_snippet: str, task_context: str = "") -> str:
     """
     Fast, deterministic security and style audit (System 2c).
     Use this for continuous checks before calling the full Supervisor.
     """
-    debug_log(f"🛡️ SYSTEM 2c ACTIVATED")
+    debug_log("🛡️ SYSTEM 2c ACTIVATED")
     from tools.audit.guardrail_agent import run_guardrail_audit
     result = run_guardrail_audit(code_snippet, task_context)
     return json.dumps(result, indent=2)
 
 # --- 5.2 TOOL: AUTOMATED LINTER AUTO-FIX (STEP 0) ---
-@mcp.tool()
+@sovereign_tool()
 def autofix_linter(file_path: str, project_path: str = "") -> str:
     """
     Safe pre-flight linter auto-fix pass (eslint --fix / ruff / black).
@@ -215,7 +218,7 @@ def autofix_linter(file_path: str, project_path: str = "") -> str:
     return _autofix(file_path, project_path)
 
 # --- 6. TOOL: RESEARCHER (DOCS) ---
-@mcp.tool()
+@sovereign_tool()
 def research_official_docs(tech_key: str, query: str) -> str:
     """Searches official docs (Internet Access)."""
     tech_key = tech_key.lower()
@@ -232,19 +235,19 @@ def research_official_docs(tech_key: str, query: str) -> str:
         return f"Research failed: {e}"
 
 # --- 7. TOOL: ARCHITECT (DIRECT DB ACCESS) ---
-@mcp.tool()
+@sovereign_tool()
 def ask_architect(query: str) -> str:
     """Directly queries Vector DB for history."""
     memories = query_system_3(query, n=5)
     return "\n\n".join(memories) if memories else "No relevant memories found."
 
-@mcp.tool()
+@sovereign_tool()
 def ask_ui_expert(query: str) -> str:
     """Consult the Lead UI Designer for CSS/Layout help."""
     from tools.audit.ui_designer import consult_ui_expert
     return consult_ui_expert(query)
 
-@mcp.tool()
+@sovereign_tool()
 def get_design_tokens() -> str:
     """Returns the current Design System tokens from DESIGN.md."""
     from tools.design.oracle import DesignOracle
@@ -252,7 +255,7 @@ def get_design_tokens() -> str:
     return json.dumps(rules.get("tokens", {}), indent=2)
 
 # --- 9. TOOL: GEMINI CODE REVIEWER (Cloud AI) ---
-@mcp.tool()
+@sovereign_tool()
 def review_code_with_gemini(
     code_snippet: str,
     review_context: str = "",
@@ -280,7 +283,7 @@ def review_code_with_gemini(
     )
 
 # --- 10. TOOL: GEMINI RESEARCH (Cloud AI) ---
-@mcp.tool()
+@sovereign_tool()
 def research_with_gemini(
     query: str, 
     tech_key: str = "",
@@ -312,7 +315,7 @@ def research_with_gemini(
 # ============================================================
 
 # --- 11. TOOL: DOCKER SANDBOX (Phase 1) ---
-@mcp.tool()
+@sovereign_tool()
 def run_code_safely(code: str, language: str = "python", timeout: int = 30) -> str:
     """
     Execute code in an isolated Docker container.
@@ -323,7 +326,7 @@ def run_code_safely(code: str, language: str = "python", timeout: int = 30) -> s
     return _run_code_safely(code=code, language=language, timeout=timeout)
 
 # --- 12. TOOL: REPO MAP (Phase 2) ---
-@mcp.tool()
+@sovereign_tool()
 def scan_repo(project_path: str, extensions: str = ".py,.ts,.tsx,.js,.jsx") -> str:
     """
     Generate a skeleton map of a project. Shows classes, functions, and signatures
@@ -333,7 +336,7 @@ def scan_repo(project_path: str, extensions: str = ".py,.ts,.tsx,.js,.jsx") -> s
     return _scan_repo(project_path=project_path, extensions=extensions)
 
 # --- 13. TOOL: ERROR MEMORY — SAVE (Phase 3) ---
-@mcp.tool()
+@sovereign_tool()
 def remember_fix(error_message: str, solution: str, file_context: str = "") -> str:
     """
     Save an error->fix mapping to the knowledge base for future recall.
@@ -349,7 +352,7 @@ def remember_fix(error_message: str, solution: str, file_context: str = "") -> s
     )
 
 # --- 14. TOOL: ERROR MEMORY — RECALL (Phase 3) ---
-@mcp.tool()
+@sovereign_tool()
 def recall_fix(error_message: str) -> str:
     """
     Search for similar past errors and their solutions.
@@ -363,7 +366,7 @@ def recall_fix(error_message: str) -> str:
     )
 
 # --- 15. TOOL: BACKTRACKER — SAVE (Phase 4) ---
-@mcp.tool()
+@sovereign_tool()
 def save_checkpoint(file_path: str, label: str = "auto") -> str:
     """
     Snapshot a file's current state before making risky changes.
@@ -373,7 +376,7 @@ def save_checkpoint(file_path: str, label: str = "auto") -> str:
     return _save_checkpoint(file_path=file_path, label=label)
 
 # --- 16. TOOL: BACKTRACKER — RESTORE (Phase 4) ---
-@mcp.tool()
+@sovereign_tool()
 def restore_checkpoint(file_path: str, label: str = "") -> str:
     """
     Revert a file to a previous checkpoint.
@@ -383,7 +386,7 @@ def restore_checkpoint(file_path: str, label: str = "") -> str:
     return _restore_checkpoint(file_path=file_path, label=label)
 
 # --- 17. TOOL: BACKTRACKER — LIST (Phase 4) ---
-@mcp.tool()
+@sovereign_tool()
 def list_checkpoints(file_path: str = "") -> str:
     """
     List all saved checkpoints, optionally filtered by file path.
@@ -396,16 +399,23 @@ def list_checkpoints(file_path: str = "") -> str:
 # ============================================================
 
 # --- 18. TOOL: ORCHESTRATOR ---
-@mcp.tool()
-def orchestrate(
-    workflow: str,
-    task: str,
-    project_path: str = "",
-    file_path: str = "",
-    code_snippet: str = "",
-    tech_key: str = "",
-) -> str:
-    from tools.infrastructure.orchestrator import run_pipeline
+
+# In-process async job store (lives for the MCP server's lifetime).
+import threading as _threading
+from collections import OrderedDict as _OrderedDict
+import uuid as _uuid
+
+_ORCHESTRATE_JOBS = _OrderedDict()
+_ORCHESTRATE_JOBS_LOCK = _threading.Lock()
+_MAX_ORCHESTRATE_JOBS = 50
+
+# Heavy workflows dispatch in the background by default so the MCP call returns
+# immediately with a Job ID to poll. Shared with the HTTP route via orchestrator.py.
+from tools.infrastructure.orchestrator import HEAVY_WORKFLOWS
+
+
+def _build_orchestrate_registry() -> dict:
+    """Build the tool registry passed to run_pipeline (shared by the sync + async paths)."""
     from tools.audit.reflection_agent import reflect_and_distill as _reflect_and_distill
     from tools.audit.guardrail_agent import run_guardrail_audit
     from tools.utils.maze_protocol import backward_verify
@@ -415,7 +425,8 @@ def orchestrate(
     from tools.utils.backtracker import save_checkpoint, restore_checkpoint
     from tools.execution.sandbox_runner import run_code_safely
     from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
-    import asyncio
+    from tools.utils.bayesian import tune_swarm
+    from tools.audit.consult_architect import consult_brain as consult_hivemind
 
     def _local_view_file(AbsolutePath: str) -> str:
         # Path Traversal Guardrail (Security Hardening)
@@ -426,8 +437,7 @@ def orchestrate(
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
 
-    # Build tool registry — pass all tool functions to the orchestrator
-    tool_registry = {
+    return {
         "scan_repo": scan_repo,
         "recall_fix": lambda error_message: recall_fix(error_message, PC_IP, CHROMA_PORT),
         "remember_fix": lambda error_message, solution, file_context="": remember_fix(
@@ -447,9 +457,9 @@ def orchestrate(
             supervisor_fn=consult_supervisor,
         ),
         "research_with_gemini": lambda query, tech_key="", thinking=False, thinking_level="medium": gemini_research(
-            query=query, 
-            tech_key=tech_key, 
-            thinking=thinking, 
+            query=query,
+            tech_key=tech_key,
+            thinking=thinking,
             thinking_level=thinking_level,
             official_docs_registry=OFFICIAL_DOCS
         ),
@@ -459,12 +469,28 @@ def orchestrate(
         "maze_verification": backward_verify,
         "generate_discovery_form": generate_discovery_form,
         "view_file": _local_view_file,
+        "autofix_linter": autofix_linter,
+        "tune_swarm": tune_swarm,
+        "consult_hivemind": consult_hivemind,
     }
+
+
+def _execute_orchestration(
+    workflow: str,
+    task: str,
+    project_path: str = "",
+    file_path: str = "",
+    code_snippet: str = "",
+    tech_key: str = "",
+) -> str:
+    """Run a pipeline to completion synchronously and return the report string."""
+    from tools.infrastructure.orchestrator import run_pipeline
+    import asyncio
 
     coro = run_pipeline(
         workflow=workflow,
         task=task,
-        tools=tool_registry,
+        tools=_build_orchestrate_registry(),
         project_path=project_path,
         file_path=file_path,
         code_snippet=code_snippet,
@@ -476,64 +502,162 @@ def orchestrate(
         def _run_in_thread():
             return asyncio.run(coro)
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            result = pool.submit(_run_in_thread).result()
+            return pool.submit(_run_in_thread).result()
     except RuntimeError:
-        result = asyncio.run(coro)
-    return result
+        return asyncio.run(coro)
+
+
+def _run_orchestrate_job(
+    job_id: str,
+    workflow: str,
+    task: str,
+    project_path: str,
+    file_path: str,
+    code_snippet: str,
+    tech_key: str,
+) -> None:
+    """Background worker: run the pipeline and record the outcome in the job store."""
+    try:
+        result = _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key)
+        with _ORCHESTRATE_JOBS_LOCK:
+            if job_id in _ORCHESTRATE_JOBS:
+                _ORCHESTRATE_JOBS[job_id].update(status="completed", result=result)
+    except Exception as e:  # noqa: BLE001 — surface any failure to the poller
+        with _ORCHESTRATE_JOBS_LOCK:
+            if job_id in _ORCHESTRATE_JOBS:
+                _ORCHESTRATE_JOBS[job_id].update(status="failed", error=str(e))
+
+
+@sovereign_tool()
+def orchestrate(
+    workflow: str,
+    task: str,
+    project_path: str = "",
+    file_path: str = "",
+    code_snippet: str = "",
+    tech_key: str = "",
+    wait: bool = False,
+) -> str:
+    """Run a Kenbun pipeline.
+
+    Heavy, Gemini-bound workflows (design_ui, research_implement, code_review,
+    shadow_test) dispatch asynchronously and return a Job ID — poll it with
+    orchestrate_status() — so the MCP call never blocks past its request timeout.
+    Set wait=True to force a blocking run. Light workflows (e.g. bug_fix) run
+    synchronously regardless.
+    """
+    if workflow in HEAVY_WORKFLOWS and not wait:
+        job_id = _uuid.uuid4().hex[:12]
+        with _ORCHESTRATE_JOBS_LOCK:
+            _ORCHESTRATE_JOBS[job_id] = {
+                "status": "running",
+                "workflow": workflow,
+                "task": task,
+                "result": None,
+                "error": None,
+            }
+            # Cap memory: drop the oldest jobs once we exceed the limit.
+            while len(_ORCHESTRATE_JOBS) > _MAX_ORCHESTRATE_JOBS:
+                _ORCHESTRATE_JOBS.popitem(last=False)
+
+        _threading.Thread(
+            target=_run_orchestrate_job,
+            args=(job_id, workflow, task, project_path, file_path, code_snippet, tech_key),
+            daemon=True,
+        ).start()
+
+        return (
+            f"🚀 **Orchestration initiated (async)**\n"
+            f"- **Job ID:** `{job_id}`\n"
+            f"- **Workflow:** `{workflow}`\n"
+            f"- **Task:** {task}\n\n"
+            f"This workflow makes multiple Gemini cloud calls and runs in the background "
+            f"to avoid MCP request timeouts. Retrieve the result with "
+            f"`orchestrate_status(\"{job_id}\")`."
+        )
+
+    # Light workflow, or the caller explicitly asked to block.
+    return _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key)
+
+
+@sovereign_tool()
+def orchestrate_status(job_id: str) -> str:
+    """Check the status (or retrieve the result) of an async orchestrate() job by its Job ID."""
+    with _ORCHESTRATE_JOBS_LOCK:
+        job = _ORCHESTRATE_JOBS.get(job_id)
+        if job is None:
+            known = ", ".join(_ORCHESTRATE_JOBS.keys()) or "none"
+            return f"❌ No orchestration job `{job_id}`. Active/recent jobs: {known}"
+        status = job["status"]
+        workflow = job["workflow"]
+        task = job["task"]
+        result = job.get("result")
+        error = job.get("error")
+
+    if status == "running":
+        return f"⏳ Job `{job_id}` (`{workflow}`) is still running.\nTask: {task}"
+    if status == "failed":
+        return f"❌ Job `{job_id}` (`{workflow}`) failed:\n{error}"
+    return f"✅ Job `{job_id}` (`{workflow}`) completed.\n\n{result}"
 
 
 # ============================================================
 # KNOWLEDGE MANAGEMENT (Explicit Hivemind Control)
 # ============================================================
 
-@mcp.tool()
+@sovereign_tool()
 def save_to_hivemind(title: str, content: str, tags: str, category: str = "concepts") -> str:
     """
     Use this when the user says 'Save this to the Hivemind' or wants to store a new architectural rule, pattern, or concept.
     """
-    from tools.memory.knowledge_manager import learn_concept
-    return learn_concept(title, content, tags, category=category)
+    with silence_stdout():
+        from tools.memory.knowledge_manager import learn_concept
+        return learn_concept(title, content, tags, category=category)
 
-@mcp.tool()
+@sovereign_tool()
 def search_hivemind_concepts(query: str, category: str = "concepts") -> str:
     """
     Use this to pull up past architectural rules or concepts, especially when asked to compare new ideas against old ones.
     """
-    from tools.memory.knowledge_manager import list_concepts
-    return list_concepts(query, category=category)
+    with silence_stdout():
+        from tools.memory.knowledge_manager import list_concepts
+        return list_concepts(query, category=category)
 
-@mcp.tool()
+@sovereign_tool()
 def delete_from_hivemind(concept_id: str, category: str = "concepts") -> str:
     """
     Use this to delete outdated concepts from the database when the user explicitly asks to forget them.
     """
-    from tools.memory.knowledge_manager import forget_concept
-    return forget_concept(concept_id, category=category)
+    with silence_stdout():
+        from tools.memory.knowledge_manager import forget_concept
+        return forget_concept(concept_id, category=category)
 
 
 # ============================================================
 # CODEBASE VECTORIZATION (Semantic Code Understanding)
 # ============================================================
 
-@mcp.tool()
+@sovereign_tool()
 def index_codebase(project_path: str = "") -> str:
     """
     Indexes the entire project's code into the Hivemind (ChromaDB) using semantic code chunking.
     Call this when the user wants the system to 'understand' their massive codebase.
     """
-    if not project_path:
-        project_path = PROJECT_ROOT
-    from tools.memory.code_indexer import index_project
-    return index_project(project_path)
+    with silence_stdout():
+        if not project_path:
+            project_path = PROJECT_ROOT
+        from tools.memory.code_indexer import index_project
+        return index_project(project_path)
 
-@mcp.tool()
+@sovereign_tool()
 def search_codebase(query: str) -> str:
     """
     Searches the semantic code index for a specific function, logic, or implementation pattern.
     Use this instead of grep when you need semantic, mathematical understanding of what the code does.
     """
-    from tools.memory.code_indexer import search_code
-    return search_code(query)
+    with silence_stdout():
+        from tools.memory.code_indexer import search_code
+        return search_code(query)
 
 
 # ============================================================
@@ -581,7 +705,7 @@ META:
 20. think_about_tools(task) — THIS TOOL. Analyzes a task and recommends the optimal tool strategy.
 """
 
-@mcp.tool()
+@sovereign_tool()
 def think_about_tools(task: str) -> str:
     """
     Analyze a task and recommend which tools to use and in what order.
@@ -635,13 +759,14 @@ def think_about_tools(task: str) -> str:
 
 
 # --- Tool Registrations Continue ---
-@mcp.tool()
+@sovereign_tool()
 def patch_hivemind_concept(concept_id: str, title: str = None, content: str = None, tags: str = None) -> str:
     """Updates an existing concept in the Hivemind. Only provided fields will be updated."""
-    from tools.memory.knowledge_manager import patch_concept
-    return patch_concept(concept_id, title, content, tags)
+    with silence_stdout():
+        from tools.memory.knowledge_manager import patch_concept
+        return patch_concept(concept_id, title, content, tags)
 
-@mcp.tool()
+@sovereign_tool()
 def ingest_knowledge_from_pdf(pdf_path: str, tech_key: str = "general") -> str:
     """
     Ingests technical knowledge from a PDF file into the Hivemind.
@@ -650,49 +775,123 @@ def ingest_knowledge_from_pdf(pdf_path: str, tech_key: str = "general") -> str:
     from tools.memory.pdf_ingestor import ingest_pdf_to_hivemind
     return ingest_pdf_to_hivemind(pdf_path, tech_key)
 
-@mcp.tool()
+@sovereign_tool()
+def ingest_url_to_hivemind(url: str, title: str = "", tags: str = "web,scraped") -> str:
+    """Fetches a URL, extracts text, chunks it, and saves it to the Hivemind."""
+    import requests
+    import re
+    with silence_stdout():
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            # Simple text extraction (remove script/style, then strip tags)
+            html = response.text
+            html = re.sub(r'<(script|style).*?>.*?</\1>', '', html, flags=re.IGNORECASE | re.DOTALL)
+            text = re.sub(r'<[^>]+>', ' ', html)
+            text = re.sub(r'\s+', ' ', text).strip()
+            
+            if not text:
+                return "ERROR: No text extracted from URL."
+                
+            from tools.memory.knowledge_manager import learn_concept
+            final_title = title if title else url
+            return learn_concept(final_title, text, tags)
+        except Exception as e:
+            return f"ERROR: Failed to ingest URL. {str(e)}"
+
+@sovereign_tool()
+def ingest_file_to_hivemind(file_path: str, tags: str = "file,ingested") -> str:
+    """Reads a local file, chunks it, and saves it to the Hivemind."""
+    with silence_stdout():
+        try:
+            if not os.path.exists(file_path):
+                return f"ERROR: File not found: {file_path}"
+                
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                
+            from tools.memory.knowledge_manager import learn_concept
+            title = os.path.basename(file_path)
+            return learn_concept(title, content, tags)
+        except Exception as e:
+            return f"ERROR: Failed to ingest file. {str(e)}"
+
+@sovereign_tool()
 def prune_hivemind() -> str:
     """Removes outdated or redundant concepts from the Hivemind to maintain precision."""
-    from tools.memory import knowledge_manager
-    return knowledge_manager.prune_hivemind()
+    with silence_stdout():
+        from tools.memory import knowledge_manager
+        return knowledge_manager.prune_hivemind()
 
-@mcp.tool()
+@sovereign_tool()
 def get_intelligence_stats() -> str:
-    """Returns the current Bayesian intelligence stats for all tools (Remote Storage)."""
+    """Returns the current Bayesian intelligence stats for all tools.
+
+    Reads from whichever backend the governor is currently using:
+    - Remote ChromaDB (when SWARM_PC_IP is reachable at startup)
+    - Local SQLite fallback (when ChromaDB is unreachable)
+
+    Previously only read from governor.collection (ChromaDB), so when the
+    governor fell back to SQLite all real telemetry data was invisible.
+    """
     try:
-        # Using the governor already imported at the top of the file
-        if not governor.collection:
-            return "No intelligence data collected yet or remote store disconnected."
-        
-        # Get all entries from the special intelligence collection
-        res = governor.collection.get()
-        if not res["ids"]:
-            return "No intelligence data collected yet."
-            
-        stats = ["# 🧠 System 4: Remote Intelligence Dashboard\n"]
-        for i in range(len(res["ids"])):
-            tool = res["ids"][i]
-            m = res["metadatas"][i]
-            a = float(m.get("alpha", 2.0))
-            b = float(m.get("beta", 2.0))
-            s = int(m.get("success_count", 0))
-            f = int(m.get("failure_count", 0))
+        # Use governor's own get_all_stats() which handles both backends
+        all_stats = governor.get_all_stats()
+
+        if not all_stats:
+            # Direct SQLite fallback if get_all_stats returns empty
+            if governor.use_local and governor.local_conn:
+                with governor._lock:
+                    cursor = governor.local_conn.cursor()
+                    cursor.execute(
+                        "SELECT tool_id, alpha, beta, success_count, failure_count "
+                        "FROM intelligence ORDER BY success_count DESC"
+                    )
+                    rows = cursor.fetchall()
+                if not rows:
+                    return "No intelligence data collected yet."
+                backend = "\ud83d\uddc4\ufe0f Local SQLite"
+                stats = [f"# \U0001f9e0 System 4: Intelligence Dashboard [{backend}]\n"]
+                for tool_id, alpha, beta, s, f in rows:
+                    prob = float(alpha) / (float(alpha) + float(beta))
+                    stats.append(f"\u2022 **{tool_id}**: {prob:.2%} success probability ({s}S/{f}F)")
+                return "\n".join(stats)
+            return "No intelligence data collected yet or store disconnected."
+
+        backend = "\U0001f310 Remote ChromaDB" if not governor.use_local else "\ud83d\uddc4\ufe0f Local SQLite"
+        stats = [f"# \U0001f9e0 System 4: Intelligence Dashboard [{backend}]\n"]
+
+        # Sort by success_count descending so most-active tools appear first
+        sorted_stats = sorted(all_stats, key=lambda x: x.get("success_count", 0), reverse=True)
+
+        for entry in sorted_stats:
+            tool = entry["tool_id"]
+            a = float(entry.get("alpha", 2.0))
+            b = float(entry.get("beta", 2.0))
+            s = int(entry.get("success_count", 0))
+            f = int(entry.get("failure_count", 0))
             prob = a / (a + b)
-            stats.append(f"• **{tool}**: {prob:.2%} success probability ({s}S/{f}F)")
+            stats.append(f"\u2022 **{tool}**: {prob:.2%} success probability ({s}S/{f}F)")
+
         return "\n".join(stats)
     except Exception as e:
         return f"ERROR: Failed to retrieve stats. {e}"
 
-@mcp.tool()
+@sovereign_tool()
 def reflect_on_task(task: str, tool_logs: str) -> str:
     """
     Analyzes tool logs to extract architectural patterns for the Hivemind.
     Usually called automatically by orchestrate(), but can be run manually.
     """
     from tools.audit.reflection_agent import reflect_and_distill as _reflect_and_distill
-    return _reflect_and_distill(task, tool_logs)
+    result = _reflect_and_distill(task, tool_logs)
+    if isinstance(result, dict):
+        return result.get("report", str(result))
+    return str(result)
 
-@mcp.tool()
+@sovereign_tool()
 def get_brain_health() -> str:
     """
     Returns the latest performance metrics from brain_health/BENCHMARKS.json.
@@ -733,16 +932,54 @@ def get_brain_health() -> str:
                 
         # Handle dict structure
         elif isinstance(data, dict):
-            latest_version = data.get("system_version", "unknown")
             last_updated = data.get("last_updated", "unknown")
+            latest_version = data.get("system_version", "unknown")
+            
+            # Check for history (Paradigm 1)
+            if "history" in data and isinstance(data["history"], list) and data["history"]:
+                latest_history = data["history"][-1]
+                routing_acc = latest_history.get("routing_accuracy", 0.0)
+                latency = latest_history.get("median_latency_ms", 0.0)
+                n_cases = latest_history.get("n_cases", 0)
+                date = latest_history.get("date", last_updated)
+                
+                # Check if we also have telemetry benchmarks
+                benchmarks_list = data.get("benchmarks", [])
+                if isinstance(benchmarks_list, list) and benchmarks_list:
+                    latest = benchmarks_list[-1]
+                    m = latest.get("metrics", {})
+                    return (
+                        f"# 📊 Brain Health Dashboard (v{latest_version})\n\n"
+                        f"## 🎯 Routing Benchmark\n"
+                        f"• **Routing Accuracy:** {routing_acc:.2%}\n"
+                        f"• **Median Latency:** {latency:.2f}ms\n"
+                        f"• **Test Cases:** {n_cases}\n\n"
+                        f"## ⚙️ Execution Telemetry\n"
+                        f"• **Approval Rate:** {m.get('supervisor_approval_rate', 0):.0%}\n"
+                        f"• **Logical Depth:** {m.get('logical_depth_score', 0)} steps/task\n"
+                        f"• **Tool Efficiency:** {m.get('tool_efficiency_ratio', 0):.2f}\n"
+                        f"• **Last Updated:** {date}\n"
+                        f"• **Status:** {latest.get('status', 'unknown')}"
+                    )
+                else:
+                    return (
+                        f"# 📊 Brain Health Dashboard (v{latest_version})\n\n"
+                        f"• **Routing Accuracy:** {routing_acc:.2%}\n"
+                        f"• **Median Latency:** {latency:.2f}ms\n"
+                        f"• **Test Cases:** {n_cases}\n"
+                        f"• **Last Updated:** {date}\n"
+                        f"• **Status:** active"
+                    )
+            
+            # Fallback to standard dict benchmark list (Paradigm 2)
             benchmarks_list = data.get("benchmarks", [])
             if isinstance(benchmarks_list, list) and benchmarks_list:
                 latest = benchmarks_list[-1]
         else:
             return f"ERROR: Unrecognized JSON structure type: {type(data).__name__}"
 
-        if not isinstance(latest, dict):
-            return f"ERROR: Latest benchmark entry is not a valid object."
+        if not latest or not isinstance(latest, dict):
+            return "ERROR: Latest benchmark entry is not a valid object."
             
         m = latest.get("metrics", {})
         if not isinstance(m, dict):
@@ -759,7 +996,7 @@ def get_brain_health() -> str:
     except Exception as e:
         return f"ERROR: Unexpected schema failure during parsing: {str(e)}"
 
-@mcp.tool()
+@sovereign_tool()
 def audit_package_safety(package_name: str, ecosystem: str = "npm") -> str:
     """
     Audits a package for supply-chain risks (malware, typosquatting, age) before installation.
@@ -817,7 +1054,20 @@ def audit_package_safety(package_name: str, ecosystem: str = "npm") -> str:
     except Exception as e:
         return f"ERROR: Audit failed. {str(e)}"
 
+# ========================================================
+# DYNAMIC MCP REGISTRATION FROM CENTRAL REGISTRY
+# ========================================================
+for name, tool_entry in registry.get_all_tools().items():
+    # Use FastMCP's tool decorator directly on the handler
+    mcp.tool(name=tool_entry.name, description=tool_entry.description)(tool_entry.handler)
+
 if __name__ == "__main__":
+    import signal
+    import os
+    def handle_sigterm(*args):
+        os._exit(0)
+    signal.signal(signal.SIGTERM, handle_sigterm)
+
     # If running manually, we can print status. 
     try:
         # Low-Level Systems Memory Optimization (C# Heap Pinning equivalent)

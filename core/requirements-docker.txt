@@ -7,7 +7,7 @@ build==1.4.4
 certifi==2026.4.22
 cffi==2.0.0
 charset-normalizer==3.4.7
-chromadb==1.5.8
+honcho-ai
 click==8.3.3
 cryptography==47.0.0
 distro==1.9.0

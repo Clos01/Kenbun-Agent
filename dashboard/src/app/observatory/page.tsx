@@ -18,6 +18,7 @@ import GalaxyMap from "@/components/GalaxyMap";
 // import RoamingMascot from "@/components/RoamingMascot";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { TOOL_EQUATIONS } from "@/lib/equations";
 
 type TabId = "overview" | "intelligence" | "memory" | "feed";
 
@@ -1454,6 +1455,28 @@ export default function HeritageObservatory() {
                               </div>
                             </div>
                           </div>
+
+                          {TOOL_EQUATIONS[activeToolModal.tool_id] && (
+                            <div className="space-y-3 pt-4">
+                              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[var(--gold)] italic">Mathematical Model</span>
+                              <div className="p-5 border border-[var(--gold)]/30 bg-[var(--sand)]/15 rounded-md space-y-4">
+                                <div className="p-4 bg-[var(--background)] rounded border border-[var(--border-muted)] overflow-x-auto custom-scrollbar">
+                                  <pre className="text-[var(--foreground)] font-mono text-sm font-semibold leading-relaxed whitespace-pre-wrap">{TOOL_EQUATIONS[activeToolModal.tool_id].math}</pre>
+                                </div>
+                                <details className="group">
+                                  <summary className="text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)] opacity-60 cursor-pointer select-none list-none flex items-center gap-1.5 hover:opacity-100 transition-opacity">
+                                    <span>Explain Formula</span>
+                                    <span className="text-[8px] transition-transform duration-200 group-open:rotate-180">▼</span>
+                                  </summary>
+                                  <div className="mt-3 pt-3 border-t border-[var(--border-muted)]/50">
+                                    <p className="text-[11px] opacity-80 leading-relaxed font-mono text-[var(--foreground)]">
+                                      {TOOL_EQUATIONS[activeToolModal.tool_id].desc}
+                                    </p>
+                                  </div>
+                                </details>
+                              </div>
+                            </div>
+                          )}
                        </div>
                     </motion.div>
                   </div>

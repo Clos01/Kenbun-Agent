@@ -33,7 +33,7 @@ def backward_verify(target_file: str, project_root: str, run_tests: bool = True,
     if not paths_found:
         print(f"⚠️ WARNING: Project root {root_path} is not in sys.path")
     else:
-        print(f"✅ Entrance Verified: Root is reachable.")
+        print("✅ Entrance Verified: Root is reachable.")
 
     # 2. Package Integrity Check
     current = file_path.parent
@@ -100,7 +100,7 @@ def backward_verify(target_file: str, project_root: str, run_tests: bool = True,
 
     # 4. Behavioral Verification (Run once at the entry point)
     if run_tests and len(visited) == 1:
-        print(f"🔍 STEP 4: Behavioral Regression Check")
+        print("🔍 STEP 4: Behavioral Regression Check")
         test_dir = root_path / "tests"
         if test_dir.exists():
             try:
@@ -111,7 +111,7 @@ def backward_verify(target_file: str, project_root: str, run_tests: bool = True,
                     capture_output=True, text=True, env=env, timeout=30
                 )
                 if result.returncode != 0:
-                    print(f"   ❌ BEHAVIORAL FAILURE: Tests failed.")
+                    print("   ❌ BEHAVIORAL FAILURE: Tests failed.")
                     return False
             except Exception as e:
                 print(f"   ⚠️ WARNING: Regression check failed: {e}")

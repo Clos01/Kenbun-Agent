@@ -9,7 +9,7 @@ from tools.infrastructure.config import settings
 project_root = settings.PROJECT_ROOT
 
 from tools.utils.path_utils import get_project_root
-from tools.memory.chroma_db_connect import get_project_collection
+from tools.memory.honcho_connect import get_project_collection
 
 PROJECT_ROOT = get_project_root()
 MODEL_PATH = PROJECT_ROOT / "brain_health" / "neural_classifier.json"

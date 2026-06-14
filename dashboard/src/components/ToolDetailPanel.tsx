@@ -3,6 +3,7 @@ import MetricItem from "./MetricItem";
 import { AccuracyGauge } from "./Visuals";
 import { ToolStat, useToolMetrics, getToolDescription } from "@/lib/tools";
 import { motion, AnimatePresence } from "framer-motion";
+import { TOOL_EQUATIONS } from "@/lib/equations";
 
 interface ToolDetailPanelProps {
   selectedTool: ToolStat;
@@ -61,6 +62,7 @@ export const ToolDetailPanel = memo(function ToolDetailPanel({ selectedTool }: T
 
   const toolDesc = getToolDescription(metrics.tool_id);
   const explainer = selectedMetric ? METRIC_EXPLAINERS[selectedMetric] : null;
+  const equationObj = TOOL_EQUATIONS[metrics.tool_id];
 
   return (
     <div className="mt-6 p-6 border border-[var(--gold)] bg-[var(--background)]/60 rounded-md artisan-shadow">
@@ -141,6 +143,30 @@ export const ToolDetailPanel = memo(function ToolDetailPanel({ selectedTool }: T
           </motion.div>
         )}
       </AnimatePresence>
+
+      {equationObj && (
+        <div className="mt-6 p-5 border border-[var(--gold)]/30 bg-[var(--sand)]/15 rounded-md space-y-3">
+          <div className="flex justify-between items-center border-b border-[var(--border-muted)] pb-2.5">
+            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--gold)]">Mathematical Model</span>
+          </div>
+          <div className="space-y-4">
+            <div className="p-4 bg-[var(--background)] rounded border border-[var(--border-muted)] overflow-x-auto custom-scrollbar">
+              <pre className="text-[var(--foreground)] font-mono text-sm font-semibold leading-relaxed whitespace-pre-wrap">{equationObj.math}</pre>
+            </div>
+            <details className="group">
+              <summary className="text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)] opacity-60 cursor-pointer select-none list-none flex items-center gap-1.5 hover:opacity-100 transition-opacity">
+                <span>Explain Formula</span>
+                <span className="text-[8px] transition-transform duration-200 group-open:rotate-180">▼</span>
+              </summary>
+              <div className="mt-3 pt-3 border-t border-[var(--border-muted)]/50">
+                <p className="text-[11px] opacity-80 leading-relaxed font-mono text-[var(--foreground)]">
+                  {equationObj.desc}
+                </p>
+              </div>
+            </details>
+          </div>
+        </div>
+      )}
 
       {toolDesc && (
         <div className="mt-6 border-t border-[var(--border-muted)] pt-6 grid grid-cols-1 md:grid-cols-3 gap-6">

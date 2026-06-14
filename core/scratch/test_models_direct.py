@@ -6,7 +6,7 @@ def log(msg):
     with open("scratch/model_test_output.log", "a") as f:
         f.write(msg + "\n")
 
-async def test_model(model_id):
+async def run_test_model(model_id):
     url = "http://lg2025.tailbe4852.ts.net:11434/api/chat"
     payload = {
         "model": model_id,
@@ -38,7 +38,7 @@ async def main():
         f.write("=== Direct Model Test Start ===\n")
         
     models = ["gemma2:latest", "llama3.2:latest", "phi3:latest"]
-    await asyncio.gather(*(test_model(m) for m in models))
+    await asyncio.gather(*(run_test_model(m) for m in models))
 
 if __name__ == "__main__":
     asyncio.run(main())

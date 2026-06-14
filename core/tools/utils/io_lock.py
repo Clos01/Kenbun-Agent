@@ -1,4 +1,3 @@
-import os
 try:
     import fcntl
 except ImportError:

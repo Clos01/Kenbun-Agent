@@ -18,14 +18,35 @@ def log_tool_performance(tool_id: str, success: bool, duration: float):
         with open(BENCHMARK_PATH, "r") as f:
             content = json.load(f)
         
-        # BENCHMARKS.json is a list. Target the first system entry.
-        if isinstance(content, list) and len(content) > 0:
+        # Support dict structure or list structure
+        if isinstance(content, dict):
+            data = content
+        elif isinstance(content, list) and len(content) > 0:
             data = content[0]
         else:
             return
 
         # Update last_updated
         data["last_updated"] = datetime.now().isoformat()
+
+        # Ensure benchmarks key exists
+        if "benchmarks" not in data:
+            data["benchmarks"] = []
+
+        if not data["benchmarks"]:
+            # Seed a baseline if empty
+            new_entry = {
+                "id": f"BASE_{int(time.time())}",
+                "timestamp": datetime.now().isoformat(),
+                "metrics": {
+                    "logical_depth_score": 0,
+                    "supervisor_approval_rate": 0.0,
+                    "rag_relevance_avg": 0.0,
+                    "tool_efficiency_ratio": 0.0
+                },
+                "status": "active"
+            }
+            data["benchmarks"].append(new_entry)
 
         # Simple logic: update the most recent benchmark entry
         if data.get("benchmarks"):
@@ -63,10 +84,16 @@ def create_new_benchmark_baseline():
         with open(BENCHMARK_PATH, "r") as f:
             content = json.load(f)
 
-        if isinstance(content, list) and len(content) > 0:
+        # Support dict structure or list structure
+        if isinstance(content, dict):
+            data = content
+        elif isinstance(content, list) and len(content) > 0:
             data = content[0]
         else:
             return
+
+        if "benchmarks" not in data:
+            data["benchmarks"] = []
 
         new_entry = {
             "id": f"UPGRADE_{int(time.time())}",

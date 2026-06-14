@@ -12,7 +12,6 @@ Enforces:
 
 import os
 import re
-import sys
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -96,7 +95,7 @@ class ShakaLogicSentinel:
                             "guidance": f"Container name '{target_container}' does not match configuration. Use settings parameter or dynamic docker discovery."
                         })
 
-        except Exception as e:
+        except Exception:
             pass # Silent fail to prevent interrupting audit scans
         
         return breaches

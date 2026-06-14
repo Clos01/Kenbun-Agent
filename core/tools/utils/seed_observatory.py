@@ -20,7 +20,7 @@ else:
 DB_PATH = BRAIN_HEALTH_DIR / "kenbun_intelligence.db"
 MAB_STATS_PATH = BRAIN_HEALTH_DIR / "mab_stats.json"
 
-print(f"🚀 Initializing Observatory Seeder...")
+print("🚀 Initializing Observatory Seeder...")
 print(f"📁 DB_PATH: {DB_PATH}")
 print(f"📁 MAB_STATS_PATH: {MAB_STATS_PATH}")
 
@@ -200,8 +200,7 @@ def seed_mab_stats():
 def seed_chromadb_reasoning():
     print("📡 Seeding ChromaDB reasoning history...")
     try:
-        from tools.memory.chroma_db_connect import get_project_collection
-        collection = get_project_collection("history")
+        from tools.memory.honcho_connect import add_memory
         
         # Define 5 distinct decisions
         now = datetime.now()
@@ -261,32 +260,23 @@ def seed_chromadb_reasoning():
                 "confidence": d["confidence"],
                 "timestamp": d["timestamp"],
                 "output": d["output"]
-            }
-            collection.upsert(
-                documents=[d["logic"]],
-                metadatas=[meta],
-                ids=[d["id"]]
-            )
-        print("✅ ChromaDB reasoning history seeded successfully.")
+            content = f"DECISION: {d['logic']}\nOUTPUT:\n{d['output']}\nRESULT: {d['result']}\nCONFIDENCE: {d['confidence']}"
+            add_memory(content=content, category="history")
+        print("✅ Honcho reasoning history seeded successfully.")
     except Exception as e:
         print(f"❌ Failed to seed ChromaDB reasoning: {e}")
 
 def seed_chromadb_code():
     print("📡 Seeding ChromaDB codebase semantic index (high-fidelity subset)...")
     try:
-        from tools.memory.code_indexer import chunk_code, get_chroma_collection
+        from tools.memory.code_indexer import chunk_code
         from tools.infrastructure.config import settings
-        from tools.memory.chroma_db_connect import upsert_embedding
-
-        collection = get_chroma_collection()
-        if not collection:
-            print("⚠️ ChromaDB code collection is offline.")
-            return
+        from tools.memory.honcho_connect import add_memory
 
         key_files = [
             "tools/infrastructure/api_server.py",
             "tools/memory/code_indexer.py",
-            "tools/memory/chroma_db_connect.py",
+            "tools/memory/honcho_connect.py",
             "tools/strategy/token_governor.py",
             "tools/utils/seed_observatory.py",
             "STRUCTURE.md",
@@ -326,30 +316,19 @@ def seed_chromadb_code():
                 metas_to_add.append(chunk["metadata"])
                 ids_to_add.append(chunk["id"])
 
-        print(f"⬆️  Upserting {len(docs_to_add)} key chunks to ChromaDB...")
+        print(f"⬆️  Upserting {len(docs_to_add)} key chunks to Honcho...")
         for j in range(len(docs_to_add)):
-            meta = {**metas_to_add[j], "project": settings.PROJECT_NAME, "category": "code"}
-            upsert_embedding(
-                id=ids_to_add[j],
-                document=docs_to_add[j],
-                metadata=meta,
-                collection_name=collection.name
-            )
+            content = f"METADATA: {metas_to_add[j]}\n\nCONTENT:\n{docs_to_add[j]}"
+            add_memory(content=content, category="code")
         print("✅ High-fidelity codebase subset seeded successfully.")
     except Exception as e:
-        print(f"❌ Failed to seed ChromaDB code: {e}")
+        print(f"❌ Failed to seed Honcho code: {e}")
 
 
 def seed_chromadb_intelligence():
-    print("📡 Seeding ChromaDB system_4_intelligence collection...")
+    print("📡 Seeding Honcho system_4_intelligence collection...")
     try:
-        from tools.memory.chroma_db_connect import get_chroma_client
-        client = get_chroma_client()
-        if not client:
-            print("⚠️ ChromaDB client is offline. Skipping remote intelligence seeding.")
-            return
-            
-        collection = client.get_or_create_collection(name="system_4_intelligence")
+        from tools.memory.honcho_connect import add_memory
         
         # Tool stats data
         tools_data = [
@@ -380,15 +359,11 @@ def seed_chromadb_intelligence():
                 "success_count": s,
                 "failure_count": f,
                 "timestamp": timestamp
-            }
-            collection.upsert(
-                documents=[f"Bayesian weights for {tool_id}"],
-                metadatas=[meta],
-                ids=[tool_id]
-            )
-        print("✅ ChromaDB system_4_intelligence seeding complete.")
+            content = f"Tool: {tool_id}\nCategory: {category}\nAlpha: {alpha}\nBeta: {beta}\nSuccess: {s}\nFailure: {f}"
+            add_memory(content=content, category="system_4_intelligence")
+        print("✅ Honcho system_4_intelligence seeding complete.")
     except Exception as e:
-        print(f"❌ Failed to seed ChromaDB intelligence: {e}")
+        print(f"❌ Failed to seed Honcho intelligence: {e}")
 
 if __name__ == "__main__":
     seed_sqlite()

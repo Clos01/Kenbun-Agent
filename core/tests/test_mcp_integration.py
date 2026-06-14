@@ -7,7 +7,7 @@ from tools.infrastructure.server import mcp
 @pytest.fixture
 def mock_chroma_db():
     """Mock ChromaDB connection to avoid hitting the actual database during tests."""
-    with patch("tools.memory.chroma_db_connect.query_embeddings") as mock_query:
+    with patch("tools.memory.honcho_connect.query_embeddings") as mock_query:
         # Mocking the response structure from System 3 memory
         mock_query.return_value = {
             "documents": [["""

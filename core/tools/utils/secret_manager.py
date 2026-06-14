@@ -1,9 +1,12 @@
 import os
+
 from cryptography.fernet import Fernet
 
 # Path to the master key (hidden and protected)
 from tools.infrastructure.config import settings
+
 KEY_FILE = settings.PROJECT_ROOT / ".kenbun_master.key"
+
 
 def _ensure_key():
     """Generates a key if it doesn't exist."""
@@ -11,6 +14,7 @@ def _ensure_key():
     OLD_KEY_FILE = settings.PROJECT_ROOT / ".kenbun_master.key"
     if OLD_KEY_FILE.exists() and not KEY_FILE.exists():
         import shutil
+
         try:
             shutil.copy2(OLD_KEY_FILE, KEY_FILE)
         except Exception:
@@ -22,9 +26,10 @@ def _ensure_key():
             f.write(key)
         # Set restrictive permissions (read/write only for owner)
         os.chmod(KEY_FILE, 0o600)
-    
+
     with open(KEY_FILE, "rb") as f:
         return f.read()
+
 
 def encrypt_value(plain_text: str) -> str:
     """Encrypts a string for storage in .env."""
@@ -32,15 +37,16 @@ def encrypt_value(plain_text: str) -> str:
     f = Fernet(key)
     return f.encrypt(plain_text.encode()).decode()
 
+
 def decrypt_value(encrypted_text: str) -> str:
     """Decrypts a value retrieved from .env."""
     if not encrypted_text.startswith("enc:"):
-        return encrypted_text # Already plain text
-        
+        return encrypted_text  # Already plain text
+
     ciphertext = encrypted_text[4:]
     if ciphertext.startswith("v1:"):
         ciphertext = ciphertext[3:]
-        
+
     key = _ensure_key()
     f = Fernet(key)
     try:
@@ -52,6 +58,7 @@ def decrypt_value(encrypted_text: str) -> str:
 if __name__ == "__main__":
     # CLI for the user to encrypt keys
     import sys
+
     if len(sys.argv) > 1:
         val = sys.argv[1]
         print(f"enc:{encrypt_value(val)}")

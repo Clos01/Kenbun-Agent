@@ -109,7 +109,7 @@ def sanitize_archive_name(file_path: Path, source_dir: Path) -> str:
 
 def build_distribution(source_dir: Path, output_zip: Path):
     """Programmatically package and sanitize the source directory into the output ZIP."""
-    logger.info(f"🚀 Starting Kenbun Distribution Builder...")
+    logger.info("🚀 Starting Kenbun Distribution Builder...")
     logger.info(f"📂 Source: {source_dir.resolve()}")
     logger.info(f"📦 Output ZIP: {output_zip.resolve()}")
 

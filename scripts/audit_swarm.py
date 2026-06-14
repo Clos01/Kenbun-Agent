@@ -1,11 +1,9 @@
-import sys
 import os
 import json
 import concurrent.futures
 from pathlib import Path
 
 # Add core to path so tools imports work
-sys.path.insert(0, str(Path(__file__).parent.parent / "core"))
 
 from tools.infrastructure.orchestrator import orchestrate
 

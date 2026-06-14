@@ -34,10 +34,33 @@ def get_config():
     print(f"   Critique: {res_2c.get('critique')}")
 
     print("\n[CASE 2] Testing System 2 (Executive) High-Fidelity Audit...")
-    # System 2 Executive Audit Approved or custom string result
+    # System 2 Executive Audit Approved or custom string result.
+    # Stub every escalation seam so the supervisor runs offline and deterministic:
+    #   ensemble → HUNG_JURY  → forces escalation past Tier 1
+    #   _tier_2_cloud → None  → falls through to Tier 3 local senior
+    #   _call_local_senior    → returns approved JSON without hitting LM Studio / OpenAI
+    #   adversarial_court     → None to bypass the LLM trial
     import tools.audit.supervisor_agent as supervisor
+
     original_court = supervisor.adversarial_court
+    original_ensemble = supervisor.ensemble
+    original_cloud = supervisor._tier_2_cloud
+    original_senior = supervisor._call_local_senior
+
+    class MockEnsemble:
+        async def run_audit(self, prop, code): return {"verdict": "HUNG_JURY"}
+
+    async def mock_cloud(*args, **kwargs):
+        return None
+
+    def mock_senior(system, user):
+        return '{"status": "approved", "risk_level": "low", "critique": "Safe code"}', None
+
     supervisor.adversarial_court = None
+    supervisor.ensemble = MockEnsemble()
+    supervisor._tier_2_cloud = mock_cloud
+    supervisor._call_local_senior = mock_senior
+
     try:
         res_2 = await run_supervisor_audit("Review this standard code", "def hello(): print('world')")
         if isinstance(res_2, dict):
@@ -48,6 +71,9 @@ def get_config():
             print(f"ℹ️ System 2 Note: {res_2}")
     finally:
         supervisor.adversarial_court = original_court
+        supervisor.ensemble = original_ensemble
+        supervisor._tier_2_cloud = original_cloud
+        supervisor._call_local_senior = original_senior
 
     print("-" * 50)
     print("🏆 RIGOR VERDICT: System 2 and 2c separation is operational.")

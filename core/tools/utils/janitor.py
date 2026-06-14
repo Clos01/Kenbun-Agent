@@ -40,7 +40,7 @@ class SmartJanitor:
         return False
 
     def hunt_ghosts(self):
-        print(f"🧹 Smart Janitor is entering the 'Ghost Hunt' phase...")
+        print("🧹 Smart Janitor is entering the 'Ghost Hunt' phase...")
         all_discovered_python_files_list = self.find_all_python_files()
         print(f"  - Scanning {len(all_discovered_python_files_list)} files into memory...")
 

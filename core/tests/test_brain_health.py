@@ -110,14 +110,21 @@ async def test_supervisor_fallback():
     class MockEnsemble:
         async def run_audit(self, prop, code): return {"verdict": "HUNG_JURY"}
     supervisor.ensemble = MockEnsemble()
-    
+
+    # Mock Tier 2 cloud to return None so the flow falls through to the
+    # Tier 3 local-senior path (which is what exercises the Gemini fallback).
+    # Without this, the live cloud gateway intercepts and makes a real network call.
+    original_cloud = supervisor._tier_2_cloud
+    async def mock_cloud(*args, **kwargs): return None
+    supervisor._tier_2_cloud = mock_cloud
+
     # Mock adversarial court to None to bypass it in unit test
     original_court = supervisor.adversarial_court
     supervisor.adversarial_court = None
-    
+
     supervisor._call_local_senior = mock_fail
     supervisor.gemini_code_review = mock_gemini
-    
+
     try:
         result = await run_supervisor_audit("Test fallback")
         assert result["status"].upper() == "REJECTED"
@@ -126,4 +133,5 @@ async def test_supervisor_fallback():
         supervisor._call_local_senior = original_call
         supervisor.gemini_code_review = original_gemini
         supervisor.ensemble = original_ensemble
+        supervisor._tier_2_cloud = original_cloud
         supervisor.adversarial_court = original_court

@@ -1,0 +1,318 @@
+# ─────────────────────────────────────────────────────────────────────
+# ⚠️  SECURITY: All 'ports:' MUST keep the 127.0.0.1 prefix.
+#    Removing it binds to 0.0.0.0 (all interfaces), which:
+#      1. Exposes services to the entire LAN / internet
+#      2. Shifts the browser origin, breaking CORS authentication
+#    Correct:  "127.0.0.1:8001:8001"    Wrong: "8001:8001"
+# ─────────────────────────────────────────────────────────────────────
+services:
+  # 1. Standalone Vector Database (ChromaDB)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: portable_chroma
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chroma_data:/chroma_data
+    environment:
+      - CHROMA_DB_IMPL=sqlite
+      - PERSIST_DIRECTORY=/chroma_data
+    healthcheck:
+      # TCP probe on port 8000
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+
+  # 2. Local AI Inference Engine (Ollama)
+  ollama_server:
+    image: ollama/ollama:latest
+    container_name: portable_ollama
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/root/kenbun_training
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      # Local-model efficiency & anti-hallucination tuning.
+      # A short context window silently truncates the system prompt, which is
+      # the #1 cause of small local models "forgetting" instructions and
+      # hallucinating syntax. Flash attention + quantized KV cache free the
+      # VRAM needed to afford the larger window on low-end GPUs.
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
+      - OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV_CACHE_TYPE:-q8_0}
+      - OLLAMA_CONTEXT_LENGTH=${OLLAMA_CONTEXT_LENGTH:-8192}
+      - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-1}
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-1}
+    healthcheck:
+      # 'ollama ps' exercises the local API socket — fails until serving
+      test: ["CMD", "ollama", "ps"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+  # 3. Model Initializer (Dynamic Loop & Bypass State)
+  ollama_init:
+    image: ollama/ollama:latest
+    container_name: portable_ollama_init
+    depends_on:
+      ollama_server:
+        condition: service_healthy
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      - OLLAMA_HOST=ollama_server:11434
+      - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-gemma2:2b deepseek-r1:1.5b}
+    entrypoint: >
+      /bin/sh -c "
+      if [ \"$$OLLAMA_PULL_MODELS\" != \"none\" ]; then
+        for model in $$OLLAMA_PULL_MODELS; do
+          echo \"📡 [OLLAMA_INIT] Fetching local model: $$model\";
+          ollama pull $$model;
+        done;
+        echo \"✓ [OLLAMA_INIT] All local models successfully provisioned!\";
+      else
+        echo \"💡 [OLLAMA_INIT] Cloud-Only or Host-Only profile. Skipping pull.\";
+      fi
+      "
+    networks:
+      - kenbun_net
+
+
+  # 4. Portable FastMCP Assembly Server
+  fastmcp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portable_fastmcp
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${API_PORT:-8001}:8001"
+      - "${BIND_IP:-127.0.0.1}:${MONITOR_PORT:-8002}:8002"
+    volumes:
+      - ${PROJECT_ROOT:-.}:/app
+      - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
+      - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/app/kenbun_training
+      - ~/.config/gcloud:/root/.config/gcloud:ro
+    env_file:
+      - .env
+    environment:
+      - PROJECT_ROOT=/app
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - ASSEMBLY_PC_IP=ollama_server
+      - PRIMARY_LLM_URL=http://ollama_server:11434/v1
+      - OLLAMA_URL=http://ollama_server:11434/api/generate
+      - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      ollama_server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+  # 3. Telemetry Next.js Dashboard
+  dashboard:
+    image: node:20-slim
+    container_name: portable_dashboard
+    working_dir: /app
+    volumes:
+      - ${PROJECT_ROOT:-.}/dashboard:/app
+      - dashboard_node_modules:/app/node_modules
+      - dashboard_next_cache:/app/.next
+      - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_PORT=${API_PORT:-8001}
+      - INTERNAL_API_URL=http://fastmcp_server:8001
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+    command: sh -c "npm install -g pnpm && if [ ! -d /app/node_modules ] || [ ! -f /app/node_modules/.pnpm-lock.yaml ] || [ /app/package.json -nt /app/node_modules/.pnpm-lock.yaml ]; then pnpm install && cp /app/pnpm-lock.yaml /app/node_modules/.pnpm-lock.yaml; fi && pnpm dev"
+    depends_on:
+      fastmcp_server:
+        condition: service_healthy
+    healthcheck:
+      # node:20 ships global fetch; any HTTP response (even 404) means alive
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(()=>process.exit(0),()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # First boot runs a full pnpm install — give it plenty of headroom
+      start_period: 300s
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+  # 5. Container Log Viewer (Dozzle)
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: portable_dozzle
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${DOZZLE_PORT:-8888}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      # Dozzle ships a built-in healthcheck subcommand
+      test: ["CMD", "/dozzle", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+  # 6. Honcho AI Memory API
+  honcho_api:
+    build:
+      context: ./external/honcho
+      dockerfile: Dockerfile
+    container_name: portable_honcho_api
+    entrypoint: ["sh", "docker/entrypoint.sh"]
+    depends_on:
+      honcho_database:
+        condition: service_healthy
+      honcho_redis:
+        condition: service_healthy
+      ollama_server:
+        condition: service_healthy
+    ports:
+      - "${BIND_IP:-127.0.0.1}:8000:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/app/.venv/bin/python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@honcho_database:5432/postgres
+      - CACHE_URL=redis://honcho_redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      - DEFAULT_LLM_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://ollama_server:11434
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+  # 7. Honcho Deriver (Background Worker)
+  honcho_deriver:
+    build:
+      context: ./external/honcho
+      dockerfile: Dockerfile
+    container_name: portable_honcho_deriver
+    entrypoint: ["/app/.venv/bin/python", "-m", "src.deriver"]
+    depends_on:
+      honcho_api:
+        condition: service_healthy
+      honcho_database:
+        condition: service_healthy
+      honcho_redis:
+        condition: service_healthy
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@honcho_database:5432/postgres
+      - CACHE_URL=redis://honcho_redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      - DEFAULT_LLM_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://ollama_server:11434
+    restart: unless-stopped
+    networks:
+      - kenbun_net
+
+  # 8. Honcho PostgreSQL Database (with pgvector)
+  honcho_database:
+    image: pgvector/pgvector:pg15
+    container_name: portable_honcho_database
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:5432:5432"
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - ./external/honcho/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - honcho_pgdata:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kenbun_net
+
+  # 9. Honcho Redis
+  honcho_redis:
+    image: redis:8.2
+    container_name: portable_honcho_redis
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:6379:6379"
+    volumes:
+      - honcho_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kenbun_net
+
+
+volumes:
+  chroma_data:
+  ollama_data:
+  dashboard_node_modules:
+  dashboard_next_cache:
+  honcho_pgdata:
+  honcho_redis_data:
+
+# ─────────────────────────────────────────────────────────────────────
+# NETWORK: Explicit bridge for deterministic inter-container DNS.
+# All services share this network. Even if the host subnet changes,
+# service-name DNS (e.g., http://fastmcp_server:8001) always resolves.
+#
+# The subnet is PINNED so Docker never auto-picks a range that collides
+# with the server's LAN/VPN (a collision hijacks the host's routes and
+# knocks the whole server off the network until Docker is recreated).
+# If 172.28.77.0/24 overlaps your LAN or VPN, override KENBUN_SUBNET in
+# .env, then run:  docker compose down && docker compose up -d
+# (an existing network's subnet can only change on full recreation).
+# ─────────────────────────────────────────────────────────────────────
+networks:
+  kenbun_net:
+    driver: bridge
+    name: kenbun_net
+    ipam:
+      driver: default
+      config:
+        - subnet: ${KENBUN_SUBNET:-172.28.77.0/24}
