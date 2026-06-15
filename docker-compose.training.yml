@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  unsloth_trainer:
+    image: pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+    container_name: portable_unsloth
+    volumes:
+      - ./core/training_data:/app/training_data
+    working_dir: /app/training_data
+    command: >
+      bash -c "
+        apt-get update && apt-get install -y git build-essential &&
+        pip install --no-cache-dir 'unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git' &&
+        pip install --no-cache-dir --no-deps trl peft accelerate bitsandbytes datasets huggingface_hub &&
+        python train_brain.py &&
+        python export_brain.py
+      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -756,7 +756,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     from tools.memory.repo_mapper import scan_repo
     from tools.utils.error_memory import remember_fix, recall_fix
     from tools.utils.backtracker import save_checkpoint, restore_checkpoint
-    from tools.execution.sandbox_runner import run_code_safely as run_code_safely
+    from tools.execution.e2b_runner import run_code_safely as run_code_safely
     from tools.utils.bayesian import tune_swarm
     from tools.audit.consult_architect import consult_brain
     from tools.audit.discovery_agent import generate_discovery_form
@@ -815,7 +815,7 @@ def swarm(objective: str, project_path: str = "."):
     from tools.memory.repo_mapper import scan_repo
     from tools.utils.error_memory import remember_fix, recall_fix
     from tools.utils.backtracker import save_checkpoint, restore_checkpoint
-    from tools.execution.sandbox_runner import run_code_safely
+    from tools.execution.e2b_runner import run_code_safely
     from tools.utils.bayesian import tune_swarm
     from tools.audit.guardrail_agent import run_guardrail_audit
     from tools.utils.maze_protocol import backward_verify

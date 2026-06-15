@@ -16,14 +16,6 @@ services:
       - chroma_data:/chroma_data
     environment:
       - CHROMA_DB_IMPL=sqlite
-      - PERSIST_DIRECTORY=/chroma_data
-    healthcheck:
-      # TCP probe on port 8000
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8000/api/v1/heartbeat || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
     restart: unless-stopped
     networks:
       - kenbun_net
@@ -119,7 +111,7 @@ services:
       - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
     depends_on:
       chromadb:
-        condition: service_healthy
+        condition: service_started
       ollama_server:
         condition: service_healthy
     healthcheck:
@@ -198,7 +190,7 @@ services:
       ollama_server:
         condition: service_healthy
     ports:
-      - "${BIND_IP:-127.0.0.1}:8000:8000"
+      - "${BIND_IP:-127.0.0.1}:8006:8000"
     healthcheck:
       test:
         [

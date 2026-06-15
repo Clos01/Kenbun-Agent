@@ -3,7 +3,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 from typing import Dict, Any
-from tools.memory.honcho_connect import get_project_collection
+from tools.memory.honcho_connect import upsert_embedding
 
 import collections
 
@@ -28,32 +28,18 @@ def log_swarm_event(event_type: str, data: Dict[str, Any]):
     # Persist to Hivemind (ChromaDB) if it's a major decision
     if event_type == "DECISION":
         try:
-            collection = get_project_collection("history")
-            
-            # Type-safe confidence parser
-            raw_confidence = data.get("confidence", 0.0)
-            try:
-                confidence = float(raw_confidence)
-            except (ValueError, TypeError):
-                confidence = 0.0
-                
-            # String length protection against database size limits
-            logic_doc = str(data.get("logic", "Unknown Logic Pulse"))
-            output_val = str(data.get("output", logic_doc))
-            if len(output_val) > 10000:
-                output_val = output_val[:10000] + "... [TRUNCATED FOR SIZE SAFETY]"
-                
-            collection.add(
-                ids=[str(uuid.uuid4())],
-                documents=[logic_doc],
-                metadatas=[{
+            upsert_embedding(
+                id=str(uuid.uuid4()),
+                document=logic_doc,
+                metadata={
+                    "category": "history",
                     "type": "DECISION",
                     "tool": str(data.get("tool", "unknown")),
                     "confidence": confidence,
                     "result": str(data.get("result", "success")),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "output": output_val
-                }]
+                }
             )
         except Exception as e:
             logger.error(f"FAILED_TO_PERSIST_DECISION: {e}", exc_info=True)

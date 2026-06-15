@@ -89,3 +89,15 @@ def query_embeddings(query_text: str, n_results: int = 5, category: str = "conce
         "metadatas": [[{"source": "honcho"}] * len(results)] if results else [[]]
     }
 
+class DummyCollection:
+    def __init__(self, name):
+        self.name = name
+    def add(self, ids, documents, metadatas=None):
+        for doc, meta in zip(documents, metadatas or [{}] * len(documents)):
+            upsert_embedding(id=str(uuid.uuid4()), document=doc, metadata=meta)
+    def query(self, query_texts, n_results=5, where=None):
+        return query_embeddings(query_texts[0], n_results=n_results)
+
+def get_project_collection(name: str):
+    return DummyCollection(name)
+

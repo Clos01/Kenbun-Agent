@@ -76,7 +76,7 @@ class KenbunWatchdog(FileSystemEventHandler):
         from tools.audit.gemini_reviewer import gemini_code_review
         from tools.audit.supervisor_agent import run_supervisor_audit
         from tools.audit.ui_designer import consult_ui_expert
-        from tools.execution.sandbox_runner import run_code_safely
+        from tools.execution.e2b_runner import run_code_safely
         from tools.utils.backtracker import save_checkpoint, restore_checkpoint
 
         tools = {

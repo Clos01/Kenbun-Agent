@@ -30,7 +30,7 @@ CRITICAL_MODULES = [
     "tools.strategy.token_governor",
     "tools.strategy.strategy_manager",
     # Execution
-    "tools.execution.sandbox_runner",
+    "tools.execution.e2b_runner",
     # Utils
     "tools.utils.error_memory",
     "tools.utils.backtracker",

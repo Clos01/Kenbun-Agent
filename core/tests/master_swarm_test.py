@@ -5,7 +5,7 @@ from tools.audit.supervisor_agent import run_supervisor_audit
 from tools.memory.repo_mapper import scan_repo
 from tools.utils.error_memory import remember_fix, recall_fix
 from tools.utils.backtracker import save_checkpoint, restore_checkpoint
-from tools.execution.sandbox_runner import run_code_safely
+from tools.execution.e2b_runner import run_code_safely
 from tools.utils.bayesian import tune_swarm
 from tools.audit.consult_architect import consult_brain
 from tools.utils.maze_protocol import backward_verify
