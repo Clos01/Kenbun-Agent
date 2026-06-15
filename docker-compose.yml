@@ -55,6 +55,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: portable_fastmcp
+    user: root
     ports:
       - "127.0.0.1:${API_PORT:-8001}:8001"
       - "127.0.0.1:${MONITOR_PORT:-8002}:8002"
@@ -62,6 +63,7 @@ services:
       - ${PROJECT_ROOT:-.}:/app
       - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
       - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/app/kenbun_training
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
     environment:

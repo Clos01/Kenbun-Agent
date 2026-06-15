@@ -28,6 +28,9 @@ def log_swarm_event(event_type: str, data: Dict[str, Any]):
     # Persist to Hivemind (ChromaDB) if it's a major decision
     if event_type == "DECISION":
         try:
+            logic_doc = str(data.get("logic", data.get("output", "No reasoning provided.")))
+            confidence = float(data.get("confidence", 1.0))
+            output_val = str(data.get("output", "No output provided."))
             upsert_embedding(
                 id=str(uuid.uuid4()),
                 document=logic_doc,

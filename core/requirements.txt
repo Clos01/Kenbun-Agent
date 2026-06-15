@@ -112,3 +112,4 @@ langgraph
 langchain-core
 langchain-openai
 e2b-code-interpreter
+ruff

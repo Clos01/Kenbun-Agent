@@ -1,3 +1,5 @@
+import os
+os.environ["MKL_THREADING_LAYER"] = "GNU"
 from unsloth import FastLanguageModel
 
 # --- CONFIGURATION ---

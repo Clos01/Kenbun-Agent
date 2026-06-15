@@ -205,10 +205,11 @@ async def _tier_3_fallback(user_proposal: str, code_snippet: str, memory_context
         if err:
             print("☁️ [SYSTEM 2] Local Senior Architect unavailable. Falling back to Gemini Cloud AI...")
             try:
-                raw_result = gemini_code_review(
-                    code_snippet=code_snippet,
-                    review_context=f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}",
-                    cross_check=False
+                from tools.audit.gemini_reviewer import _call_gemini
+                raw_result = _call_gemini(
+                    system_prompt=system_prompt,
+                    user_message=prompt,
+                    temperature=0.2
                 )
                 if raw_result:
                     res_obj = extract_json(raw_result)
@@ -457,23 +458,27 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
                 try:
                     res_court = task.result()
                     if res_court and res_court.get("verdict") in ["APPROVED", "REJECTED"]:
-                        print(f"✅ [COURT] Verdict rendered: {res_court['verdict']} (Confidence: {res_court['confidence']:.2f})")
-                        res_court_formatted = {
-                            "status": res_court["verdict"],
-                            "critique": f"[ADVERSARIAL COURT] Verdict: {res_court['verdict']}\n"
-                                        f"Critique: {res_court['critique']}",
-                            "confidence": res_court["confidence"],
-                            "tier": "System 2a: Adversarial LLM Court"
-                        }
-                        log_swarm_event("DECISION", {
-                            "tool": "supervisor_agent", 
-                            "confidence": res_court["confidence"], 
-                            "result": res_court["verdict"], 
-                            "logic": "System 2a: Adversarial LLM Court",
-                            "output": res_court_formatted["critique"]
-                        })
-                        for p in pending: p.cancel()
-                        return res_court_formatted
+                        # Bypass short-circuit if the court returned a fallback error verdict
+                        if "Fallback: Failed to parse Judge JSON" in res_court.get("critique", ""):
+                            print("⚠️ [COURT] Trial returned fallback result due to JSON parse failure. Bypassing court short-circuit.")
+                        else:
+                            print(f"✅ [COURT] Verdict rendered: {res_court['verdict']} (Confidence: {res_court['confidence']:.2f})")
+                            res_court_formatted = {
+                                "status": res_court["verdict"],
+                                "critique": f"[ADVERSARIAL COURT] Verdict: {res_court['verdict']}\n"
+                                            f"Critique: {res_court['critique']}",
+                                "confidence": res_court["confidence"],
+                                "tier": "System 2a: Adversarial LLM Court"
+                            }
+                            log_swarm_event("DECISION", {
+                                "tool": "supervisor_agent", 
+                                "confidence": res_court["confidence"], 
+                                "result": res_court["verdict"], 
+                                "logic": "System 2a: Adversarial LLM Court",
+                                "output": res_court_formatted["critique"]
+                            })
+                            for p in pending: p.cancel()
+                            return res_court_formatted
                 except Exception as e:
                     print(f"⚠️ [COURT] Trial failed or timed out: {e}")
                     

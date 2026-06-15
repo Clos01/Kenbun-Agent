@@ -91,6 +91,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: portable_fastmcp
+    user: root
     ports:
       - "${BIND_IP:-127.0.0.1}:${API_PORT:-8001}:8001"
       - "${BIND_IP:-127.0.0.1}:${MONITOR_PORT:-8002}:8002"
@@ -99,6 +100,7 @@ services:
       - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
       - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/app/kenbun_training
       - ~/.config/gcloud:/root/.config/gcloud:ro
+      - /var/run/docker.sock:/var/run/docker.sock
     env_file:
       - .env
     environment:
@@ -108,6 +110,7 @@ services:
       - ASSEMBLY_PC_IP=ollama_server
       - PRIMARY_LLM_URL=http://ollama_server:11434/v1
       - OLLAMA_URL=http://ollama_server:11434/api/generate
+      - HONCHO_BASE_URL=http://honcho_api:8000
       - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
     depends_on:
       chromadb:

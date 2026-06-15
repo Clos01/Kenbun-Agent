@@ -37,6 +37,10 @@ from tools.strategy.neural_classifier import neural_classifier
 
 app = FastAPI(title="Kenbun Mission Control API")
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}
+
 from urllib.parse import urlparse
 
 def build_cors_origins() -> List[str]:

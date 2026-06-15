@@ -11,7 +11,7 @@ def print(*args, **kwargs):
     __builtins__['print'](*args, **kwargs)
 
 from tools.infrastructure.config import settings
-PC_IP = settings.SWARM_PC_IP
+PC_IP = settings.CHROMA_HOST
 CHROMA_PORT = settings.CHROMA_PORT
 LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
 

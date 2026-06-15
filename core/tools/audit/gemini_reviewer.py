@@ -79,11 +79,18 @@ def _call_gemini(
     else:
         model_to_use = token_governor.get_budget_aware_model(model_override, task_critical=thinking)
 
-    # Map our levels to official SDK values
+    # Map our levels to official SDK values (thinking_budget)
     thinking_config = None
     if thinking:
+        budget_map = {
+            "minimal": 1024,
+            "low": 2048,
+            "medium": 4096,
+            "high": 8192
+        }
+        budget = budget_map.get(thinking_level.lower(), 4096)
         thinking_config = types.ThinkingConfig(
-            thinking_level=thinking_level.lower() # minimal, low, medium, high
+            thinking_budget=budget
         )
 
     # Google Search Grounding (Gemini 3 Native)
@@ -93,18 +100,23 @@ def _call_gemini(
             google_search=types.GoogleSearch()
         ))
 
+    # Dynamically build GenerateContentConfig arguments to avoid passing None fields
+    config_args = {
+        "system_instruction": system_prompt,
+        "temperature": temperature,
+        "max_output_tokens": 8192,
+    }
+    if thinking_config is not None:
+        config_args["thinking_config"] = thinking_config
+    if tools:
+        config_args["tools"] = tools
+
     start_time = time.time()
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
                 model=model_to_use,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_prompt,
-                    temperature=temperature,
-                    max_output_tokens=8192,
-                    thinking_config=thinking_config,
-                    tools=tools if tools else None
-                ),
+                config=types.GenerateContentConfig(**config_args),
                 contents=user_message,
             )
             duration = time.time() - start_time

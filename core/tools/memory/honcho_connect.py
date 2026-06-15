@@ -95,8 +95,22 @@ class DummyCollection:
     def add(self, ids, documents, metadatas=None):
         for doc, meta in zip(documents, metadatas or [{}] * len(documents)):
             upsert_embedding(id=str(uuid.uuid4()), document=doc, metadata=meta)
+            
+    def upsert(self, ids, documents, metadatas=None):
+        self.add(ids, documents, metadatas)
     def query(self, query_texts, n_results=5, where=None):
         return query_embeddings(query_texts[0], n_results=n_results)
+    def count(self):
+        client = get_honcho_client()
+        if not client:
+            return 0
+        try:
+            session = client.session(self.name)
+            messages = session.messages()
+            return len(messages) if messages else 0
+        except Exception as e:
+            logger.warning(f"⚠️ [HONCHO] Failed to get message count for {self.name}: {e}")
+            return 0
 
 def get_project_collection(name: str):
     return DummyCollection(name)

@@ -33,6 +33,7 @@ dependencies = [
     "langchain-core",
     "langchain-openai",
     "e2b-code-interpreter",
+    "ruff",
 ]
 
 [project.optional-dependencies]

@@ -1,3 +1,9 @@
+import os
+import sys
+if os.path.exists("kenbun_model_v1/adapter_config.json"):
+    print("Model already trained! Skipping to export.")
+    sys.exit(0)
+
 from unsloth import FastLanguageModel, is_bfloat16_supported
 from trl import SFTTrainer
 from transformers import TrainingArguments
@@ -65,7 +71,7 @@ trainer = SFTTrainer(
         optim = "adamw_8bit",
         seed = 3407,
         output_dir = "outputs",
-        save_total_limit = 1,
+        save_strategy = "no",
     ),
 )
 

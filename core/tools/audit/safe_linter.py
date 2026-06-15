@@ -30,9 +30,15 @@ async def _async_safe_pre_flight_linter(code_snippet: str) -> dict:
     if len(payload) > MAX_CODE_SIZE:
         return {"status": "ERROR", "messages": [f"Snippet exceeds maximum size limit of {MAX_CODE_SIZE} bytes."], "fixed_code": None}
 
-    cmd = ["ruff", "check", "--isolated", "--select", "E,F", "-"]
+    import shutil
+    user_local_bin = os.path.expanduser("~/.local/bin")
+    current_path = os.environ.get("PATH", "")
+    new_path = f"{user_local_bin}:{current_path}" if current_path else user_local_bin
     
-    clean_env = {"PATH": os.environ.get("PATH", "")}
+    ruff_path = shutil.which("ruff", path=new_path) or "ruff"
+    cmd = [ruff_path, "check", "--isolated", "--select", "E,F", "-"]
+    
+    clean_env = {"PATH": new_path}
     
     try:
         process = await asyncio.create_subprocess_exec(

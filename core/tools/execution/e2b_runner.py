@@ -1,14 +1,120 @@
 """
-E2B Runner — Safe code execution in remote microVMs.
+E2B Runner — Safe code execution in remote microVMs or local Docker fallback.
 
 Replaces local Docker sandboxing with E2B's secure, cloud-hosted microVMs.
-This prevents container escape vulnerabilities and handles isolation natively.
+If E2B_API_KEY is missing, gracefully falls back to local Docker sandboxing.
 """
 import os
-from e2b_code_interpreter import Sandbox
+import subprocess
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --- CONFIGURATION ---
 DEFAULT_TIMEOUT_SEC = 60
+
+SANDBOX_IMAGES = {
+    "python": "python:3.11-slim",
+    "node": "node:20-slim",
+    "javascript": "node:20-slim",
+}
+
+def _check_docker():
+    """Verify Docker is available and running."""
+    try:
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True, text=True, timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def _get_stdin_command(language: str) -> list:
+    """Return the interpreter command that reads the program from stdin."""
+    lang = language.lower()
+    if lang == "python":
+        return ["python3", "-"]   # `-` => read script from stdin
+    elif lang in ("node", "javascript"):
+        return ["node"]           # node executes piped stdin when not a TTY
+    else:
+        return ["python3", "-"]
+
+def _run_docker_safely(
+    code: str,
+    language: str = "python",
+    timeout: int = DEFAULT_TIMEOUT_SEC,
+) -> str:
+    """Execute code in an isolated local Docker container (Free offline fallback).
+
+    The program is streamed to the interpreter via stdin rather than bind-mounted
+    from a host directory. A bind mount (``-v {tmpdir}:/sandbox``) is resolved by
+    the Docker *daemon's* filesystem, which differs from this process's filesystem
+    whenever Kenbun runs inside a container talking to the host's docker.sock
+    (docker-out-of-docker). In that setup the temp dir written here does not exist
+    on the host, so an empty dir was mounted and the script was "not found".
+    Piping via stdin avoids host paths entirely and keeps the container read-only.
+    """
+    if not _check_docker():
+        return (
+            "❌ Sandbox Failed: Neither E2B_API_KEY is set nor is local Docker daemon accessible.\n"
+            "To resolve:\n"
+            "1. Either add E2B_API_KEY=sk_... to your .env file to use the cloud sandbox,\n"
+            "2. Or ensure Docker is running and /var/run/docker.sock is mounted into the container."
+        )
+
+    lang = language.lower()
+    if lang not in SANDBOX_IMAGES:
+        return f"❌ Unsupported language for local sandbox: '{language}'."
+
+    image = SANDBOX_IMAGES[lang]
+    run_cmd = _get_stdin_command(lang)
+
+    docker_cmd = [
+        "docker", "run",
+        "--rm",                           # Auto-remove container
+        "-i",                             # Keep stdin open so we can pipe the code
+        "--network=none",                 # No internet access
+        "--read-only",                    # Read-only filesystem
+        "--tmpfs", "/tmp:size=64m",       # Small writable /tmp
+        "--memory=256m",                  # Memory limit
+        "--cpus=0.5",                     # CPU limit
+        "--pids-limit=64",                # Process limit (no fork bombs)
+        "--security-opt=no-new-privileges",  # No privilege escalation
+        image,                            # Container image
+        *run_cmd,                         # Interpreter reading from stdin
+    ]
+
+    try:
+        logger.info(f"🐳 Fallback Sandbox: Running local Docker container with {image}...")
+        result = subprocess.run(
+            docker_cmd,
+            input=code,                   # Stream the program to the interpreter
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+
+        stdout = result.stdout[:10000] if result.stdout else "(no output)"
+        stderr = result.stderr[:10000] if result.stderr else "(clean)"
+        exit_code = result.returncode
+        status = "✅ SUCCESS" if exit_code == 0 else "❌ FAILED"
+
+        return (
+            f"## 🐳 Local Docker Sandbox Execution ({lang})\n\n"
+            f"**Status:** {status} (exit code: {exit_code})\n\n"
+            f"### stdout\n```\n{stdout}\n```\n\n"
+            f"### stderr\n```\n{stderr}\n```"
+        )
+
+    except subprocess.TimeoutExpired:
+        return (
+            f"## 🐳 Local Docker Sandbox Execution ({lang})\n\n"
+            f"**Status:** ⏰ TIMEOUT (exceeded {timeout}s limit)\n\n"
+            f"The code took too long to execute and was killed."
+        )
+    except Exception as e:
+        return f"❌ Local Docker Sandbox error: {e}"
 
 def run_code_safely(
     code: str,
@@ -16,25 +122,19 @@ def run_code_safely(
     timeout: int = DEFAULT_TIMEOUT_SEC,
 ) -> str:
     """
-    Execute code in a secure E2B remote microVM.
-
-    Args:
-        code: The source code to execute
-        language: "python" or "javascript"
-        timeout: Execution timeout in seconds
-
-    Returns:
-        A formatted string with stdout, stderr, and exit code/status.
+    Execute code in a secure E2B remote microVM, with local Docker fallback.
     """
     e2b_api_key = os.getenv("E2B_API_KEY")
     if not e2b_api_key:
-        return "❌ E2B API Key is missing. Please set E2B_API_KEY in your environment."
+        # Graceful fallback to local Docker container execution
+        return _run_docker_safely(code, language, timeout)
 
     lang = language.lower()
     if lang not in ("python", "javascript", "node"):
         return f"❌ Unsupported language: '{language}'."
 
     try:
+        from e2b_code_interpreter import Sandbox
         # Launch a dedicated, ephemeral sandbox VM for this execution
         with Sandbox(api_key=e2b_api_key) as sandbox:
             
