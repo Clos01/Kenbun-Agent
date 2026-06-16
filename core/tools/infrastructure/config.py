@@ -102,6 +102,13 @@ class KenbunSettings(BaseSettings):
     CODEX_HOME: Path = Field(default_factory=lambda: Path.home() / ".codex")
     OPENAI_API_KEY: Optional[SecretStr] = None
 
+    @field_validator("PROJECT_ROOT", mode="after")
+    @classmethod
+    def resolve_project_root(cls, v: Path) -> Path:
+        if not v.is_absolute():
+            return (get_project_root() / v).resolve()
+        return v.resolve()
+
     @field_validator("BRAIN_HEALTH_DIR", mode="before")
     @classmethod
     def assemble_brain_health_dir(cls, v, info):

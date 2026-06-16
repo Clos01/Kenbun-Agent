@@ -102,8 +102,8 @@ async def test_supervisor_fallback():
         return '{"status": "rejected", "risk_level": "high", "critique": "Gemini Fallback Worked", "improvement_instruction": "Use local if possible"}'
     
     original_call = supervisor._call_local_senior
-    # Temporarily override the imported gemini_code_review in the module
-    original_gemini = supervisor.gemini_code_review
+    import tools.audit.gemini_reviewer as gemini_reviewer
+    original_call_gemini = gemini_reviewer._call_gemini
     
     # Mock ensemble to force escalation
     original_ensemble = supervisor.ensemble
@@ -123,7 +123,7 @@ async def test_supervisor_fallback():
     supervisor.adversarial_court = None
 
     supervisor._call_local_senior = mock_fail
-    supervisor.gemini_code_review = mock_gemini
+    gemini_reviewer._call_gemini = mock_gemini
 
     try:
         result = await run_supervisor_audit("Test fallback")
@@ -131,7 +131,7 @@ async def test_supervisor_fallback():
         assert "Gemini Fallback" in result["critique"]
     finally:
         supervisor._call_local_senior = original_call
-        supervisor.gemini_code_review = original_gemini
+        gemini_reviewer._call_gemini = original_call_gemini
         supervisor.ensemble = original_ensemble
         supervisor._tier_2_cloud = original_cloud
         supervisor.adversarial_court = original_court
