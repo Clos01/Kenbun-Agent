@@ -9,6 +9,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from tools.registry import sovereign_tool, registry
 import io
+import threading
 
 class ProtocolShield(io.TextIOBase):
     def write(self, s):
@@ -33,15 +34,8 @@ def debug_log(msg):
         f.write(f"[{datetime.now().isoformat()}] {msg}\n")
     sys.stderr.write(msg + "\n")
 
-if not sys.stdout.isatty():
-    import builtins
-    _original_print = builtins.print
-    def _stderr_print(*args, **kwargs):
-        # Force all prints to stderr if not explicitly redirected
-        if 'file' not in kwargs or kwargs['file'] is sys.stdout:
-            kwargs['file'] = sys.stderr
-        _original_print(*args, **kwargs)
-    builtins.print = _stderr_print
+# Global builtins.print override removed for safety.
+# Use debug_log or sys.stderr.write for MCP-safe printing.
 
 # --- 2. CONFIGURATION ---
 
@@ -56,6 +50,8 @@ mcp = FastMCP("Kenbun Tools")
 # ========================================================
 # 📡 DOCKER LOG TAILER DAEMON FOR REAL-TIME DOZZLE LOGGING
 # ========================================================
+_STOP_TAIL = threading.Event()
+
 def _tail_mcp_debug_log():
     """
     Background daemon function that tails mcp_debug.log and streams host-side events to stderr.
@@ -63,9 +59,9 @@ def _tail_mcp_debug_log():
     log_path = Path(settings.PROJECT_ROOT) / "mcp_debug.log"
     # Wait for file to exist
     for _ in range(15):
-        if log_path.exists():
+        if log_path.exists() or _STOP_TAIL.is_set():
             break
-        time.sleep(1)
+        _STOP_TAIL.wait(1)
     if not log_path.exists():
         return
     
@@ -73,10 +69,10 @@ def _tail_mcp_debug_log():
         with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
             # Go to the end of the file
             f.seek(0, 2)
-            while True:
+            while not _STOP_TAIL.is_set():
                 line = f.readline()
                 if not line:
-                    time.sleep(0.5)
+                    _STOP_TAIL.wait(0.5)
                     continue
                 # Stream terminal chat events directly to container standard error
                 if "[TERMCHAT]" in line:
@@ -87,8 +83,6 @@ def _tail_mcp_debug_log():
         sys.stderr.flush()
 
 # Spawn the log tailer daemon immediately on server startup
-import threading
-import time
 _tail_thread = threading.Thread(target=_tail_mcp_debug_log, daemon=True)
 _tail_thread.start()
 
@@ -143,6 +137,28 @@ def query_system_3(query_text, n=3):
         debug_log(f"⚠️ System 3 Query Failed: {e}")
         return []
 
+def _run_async_safely(coro):
+    """Helper to safely run coroutines from any thread context."""
+    import asyncio
+    import threading
+    try:
+        asyncio.get_running_loop()
+        result_box = []
+        err_box = []
+        def _runner():
+            try:
+                result_box.append(asyncio.run(coro))
+            except Exception as e:
+                err_box.append(e)
+        t = threading.Thread(target=_runner)
+        t.start()
+        t.join()
+        if err_box:
+            raise err_box[0]
+        return result_box[0]
+    except RuntimeError:
+        return asyncio.run(coro)
+
 # --- 4. INTERNAL LLM HELPER ---
 def _clean_json_response(text):
     """
@@ -174,20 +190,7 @@ def consult_supervisor(user_proposal: str, code_snippet: str = "", iterative_mod
     import asyncio
 
     coro = run_supervisor_audit(user_proposal, code_snippet, memory_context)
-    try:
-        # No running loop → safe to use asyncio.run()
-        asyncio.get_running_loop()
-        # We ARE in a running loop (e.g. MCP server context). Run the coroutine in
-        # a dedicated worker thread with its own loop to avoid the
-        # "asyncio.run() cannot be called from a running event loop" error.
-        import concurrent.futures
-        def _run_in_thread():
-            return asyncio.run(coro)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            result = pool.submit(_run_in_thread).result()
-    except RuntimeError:
-        # No loop running on this thread — original path is fine.
-        result = asyncio.run(coro)
+    result = _run_async_safely(coro)
 
     if result.get("status") == "error":
         return f"❌ Supervisor Error: {result.get('critique')}"
@@ -314,6 +317,22 @@ def research_with_gemini(
 # PRO STACK TOOLS (Phases 1-4)
 # ============================================================
 
+# --- 10.5 TOOL: ANTI-JARGON CONTENT GENERATOR ---
+@sovereign_tool()
+def write_website_content(topic: str, context: str = "", length: str = "medium") -> str:
+    """
+    Generates human-like website content without AI jargon like 'bespoke' or 'delve'.
+    Use this instead of generic Gemini/Claude for copywriting.
+    """
+    import time
+    start_time = time.time()
+    with silence_stdout():
+        debug_log("DEBUG: write_website_content tool started")
+        from tools.craft.content_generator import generate_human_content
+        res = generate_human_content(topic=topic, context=context, length=length)
+        debug_log(f"DEBUG: Total tool execution took {time.time() - start_time:.2f}s")
+        return res
+
 # --- 11. TOOL: DOCKER SANDBOX (Phase 1) ---
 @sovereign_tool()
 def run_code_safely(code: str, language: str = "python", timeout: int = 30) -> str:
@@ -372,6 +391,9 @@ def save_checkpoint(file_path: str, label: str = "auto") -> str:
     Snapshot a file's current state before making risky changes.
     Use restore_checkpoint() to revert if the fix fails.
     """
+    path = Path(file_path).resolve()
+    if not path.is_relative_to(settings.PROJECT_ROOT.resolve()):
+        return "ERROR: Security Breach Blocked: Path is outside project root."
     from tools.utils.backtracker import save_checkpoint as _save_checkpoint
     return _save_checkpoint(file_path=file_path, label=label)
 
@@ -439,6 +461,7 @@ def _build_orchestrate_registry() -> dict:
 
     return {
         "scan_repo": scan_repo,
+        "write_website_content": write_website_content,
         "recall_fix": lambda error_message: recall_fix(error_message, PC_IP, CHROMA_PORT),
         "remember_fix": lambda error_message, solution, file_context="": remember_fix(
             error_message, solution, file_context, PC_IP, CHROMA_PORT
@@ -446,7 +469,7 @@ def _build_orchestrate_registry() -> dict:
         "save_checkpoint": save_checkpoint,
         "restore_checkpoint": restore_checkpoint,
         "run_code_safely": run_code_safely,
-        "review_code_with_gemini": lambda code_snippet, review_context="", tech_key="", cross_check=True, thinking=False, thinking_level="medium": gemini_code_review(
+        "review_code_with_gemini": lambda code_snippet, review_context="", tech_key="", cross_check=True, thinking=False, thinking_level="medium", **kwargs: gemini_code_review(
             code_snippet=code_snippet,
             review_context=review_context,
             tech_key=tech_key,
@@ -496,15 +519,7 @@ def _execute_orchestration(
         code_snippet=code_snippet,
         tech_key=tech_key,
     )
-    try:
-        asyncio.get_running_loop()
-        import concurrent.futures
-        def _run_in_thread():
-            return asyncio.run(coro)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(_run_in_thread).result()
-    except RuntimeError:
-        return asyncio.run(coro)
+    return _run_async_safely(coro)
 
 
 def _run_orchestrate_job(
@@ -683,9 +698,10 @@ CODEBASE VECTORIZATION:
 8. index_codebase(project_path) — Chunk and index thousands of lines of code into the Vector DB
 9. search_codebase(query) — Search for code semantically using natural language
 
-CLOUD AI:
+CLOUD AI & CONTENT:
 10. review_code_with_gemini(code_snippet, review_context, tech_key, cross_check, thinking, thinking_level) — Full 4-stage code review pipeline
 11. research_with_gemini(query, tech_key, thinking, thinking_level) — Cloud-based research grounded in official docs
+11.5 write_website_content(topic, context, length) — Generates human-like website copy avoiding AI jargon ('bespoke', 'delve')
 
 PRO STACK:
 12. run_code_safely(code, language, timeout) — Execute code in isolated Docker container (no network, auto-destroy)
@@ -806,7 +822,11 @@ def ingest_file_to_hivemind(file_path: str, tags: str = "file,ingested") -> str:
     """Reads a local file, chunks it, and saves it to the Hivemind."""
     with silence_stdout():
         try:
-            if not os.path.exists(file_path):
+            path = Path(file_path).resolve()
+            if not path.is_relative_to(settings.PROJECT_ROOT.resolve()):
+                return "ERROR: Security Breach Blocked: Path is outside project root."
+                
+            if not path.exists():
                 return f"ERROR: File not found: {file_path}"
                 
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -1065,6 +1085,7 @@ if __name__ == "__main__":
     import signal
     import os
     def handle_sigterm(*args):
+        _STOP_TAIL.set()
         os._exit(0)
     signal.signal(signal.SIGTERM, handle_sigterm)
 
@@ -1076,7 +1097,6 @@ if __name__ == "__main__":
         # This permanently excludes them from future generational GC sweeps, maximizing throughput.
         import gc
         gc.collect(2)
-        gc.freeze()
         
         # Absolute silence required for MCP protocol.
         # No startup banners allowed.

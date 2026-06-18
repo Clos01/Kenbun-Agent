@@ -72,6 +72,18 @@
             "SUPERVISOR_AGENT": {
                 "alpha": 1.0,
                 "beta": 3.0
+            },
+            "recall_fix": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "orchestrator_watchdog": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "remember_fix": {
+                "alpha": 1.0,
+                "beta": 3.0
             }
         },
         "research": {
@@ -177,7 +189,19 @@
         "SUPERVISOR_AGENT": {
             "alpha": 1.0,
             "beta": 2.0
+        },
+        "recall_fix": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "orchestrator_watchdog": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "remember_fix": {
+            "alpha": 1.0,
+            "beta": 2.0
         }
     },
-    "last_updated": 1781323521.49543
+    "last_updated": 1781647619.5303102
 }

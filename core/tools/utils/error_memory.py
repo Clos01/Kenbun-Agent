@@ -44,8 +44,11 @@ def remember_fix(
     chroma_database_server_host_ip_address = pc_ip
     chroma_database_server_connection_port = chroma_port
 
-    if not runtime_error_stack_trace_message or not developer_resolution_or_code_diff:
-        return "❌ Both error_message and solution are required."
+    if not runtime_error_stack_trace_message:
+        return "❌ The error_message is required to save an error memory."
+    
+    if not developer_resolution_or_code_diff:
+        developer_resolution_or_code_diff = "⚠️ Unresolved: Logged for future reference without an explicit solution."
 
     try:
         chroma_vector_collection_instance = _get_collection(chroma_database_server_host_ip_address, chroma_database_server_connection_port)

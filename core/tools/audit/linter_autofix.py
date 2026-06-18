@@ -83,7 +83,7 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
             
             # Verify AST is initially valid
             if not _verify_python_ast(target_file):
-                return "❌ Aborted: Python file has active syntax errors and cannot be safely auto-fixed."
+                return f"⚠️ Skipped: Python file '{target_file.name}' has active syntax errors. Auto-fix bypassed to prevent corruption."
             
             # Running Step 3.1: Autofake (strips unused variables and imports)
             res_autofake = subprocess.run(
@@ -116,7 +116,7 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
             if not _verify_python_ast(target_file):
                 print("🚩 Post-fix AST mismatch! Reverting to pre-fix checkpoint...")
                 restore_checkpoint(str(target_file), label="pre_linter_autofix")
-                return "❌ Reverted: Auto-fix formatting caused compilation/AST failures."
+                return "⚠️ Reverted: Auto-fix formatting caused syntax errors. File restored safely."
 
         elif ext in (".js", ".jsx", ".ts", ".tsx", ".mjs"):
             print(f"🌐 Executing JavaScript/TypeScript pre-flight cleanups for '{target_file.name}'...")
@@ -136,7 +136,7 @@ def autofix_linter(file_path: str, project_path: str = ".") -> str:
             if res_eslint.returncode >= 2:
                 print("🚩 ESLint crash or parser failure detected! Reverting to pre-fix checkpoint...")
                 restore_checkpoint(str(target_file), label="pre_linter_autofix")
-                return f"❌ Reverted: ESLint run failed with code {res_eslint.returncode}. Critique:\n{res_eslint.stderr}"
+                return f"⚠️ Reverted: ESLint run failed with code {res_eslint.returncode} (likely invalid syntax). Critique:\n{res_eslint.stderr}"
 
         # 4. Formulating the Markdown Execution Report
         clean_out = "\n".join([line for line in stdout_logs if line.strip()])

@@ -8,7 +8,7 @@ services:
     ports:
       - "127.0.0.1:${CHROMA_PORT:-8000}:8000"
     volumes:
-      - chroma_data:/chroma_data
+      - kenbun-agent_chroma_data:/chroma_data
     environment:
       - CHROMA_DB_IMPL=sqlite
       - PERSIST_DIRECTORY=/chroma_data

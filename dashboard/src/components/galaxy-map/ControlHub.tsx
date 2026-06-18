@@ -1,9 +1,11 @@
 import React from 'react';
-import { ZoomIn, ZoomOut, RotateCcw, Link2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, Link2, Type } from 'lucide-react';
 
 interface ControlHubProps {
   showConnections: boolean;
   setShowConnections: (val: boolean) => void;
+  showLabels: boolean;
+  setShowLabels: (val: boolean) => void;
   handleZoom: (factor: number) => void;
   handleRecenter: () => void;
   handleToggleFullscreen: () => void;
@@ -13,6 +15,8 @@ interface ControlHubProps {
 export default function ControlHub({
   showConnections,
   setShowConnections,
+  showLabels,
+  setShowLabels,
   handleZoom,
   handleRecenter,
   handleToggleFullscreen,
@@ -36,6 +40,19 @@ export default function ControlHub({
         }`}
       >
         <Link2 className="w-4 h-4" />
+      </button>
+
+      {/* Toggle Signal Labels */}
+      <button
+        onClick={() => setShowLabels(!showLabels)}
+        title="Toggle Signal Labels"
+        className={`p-2.5 border rounded-sm transition-all duration-300 backdrop-blur-xl ${
+          showLabels 
+            ? 'bg-[var(--accent)] border-[var(--accent)] text-white' 
+            : 'border-[var(--border)] bg-[var(--background)]/90 text-[var(--foreground)] opacity-60 hover:opacity-100'
+        }`}
+      >
+        <Type className="w-4 h-4" />
       </button>
 
       {/* Zoom In */}

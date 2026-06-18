@@ -30,6 +30,7 @@ export default function GalaxyMap() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showConnections, setShowConnections] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
   
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -336,6 +337,7 @@ export default function GalaxyMap() {
   const hoveredRef = useRef(hovered);
   const selectedNodeRef = useRef(selectedNode);
   const showConnectionsRef = useRef(showConnections);
+  const showLabelsRef = useRef(showLabels);
   const dataRef = useRef(data);
   const isDarkRef = useRef(isDark);
 
@@ -343,6 +345,7 @@ export default function GalaxyMap() {
   useEffect(() => { hoveredRef.current = hovered; }, [hovered]);
   useEffect(() => { selectedNodeRef.current = selectedNode; }, [selectedNode]);
   useEffect(() => { showConnectionsRef.current = showConnections; }, [showConnections]);
+  useEffect(() => { showLabelsRef.current = showLabels; }, [showLabels]);
   useEffect(() => { dataRef.current = data; }, [data]);
   useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
 
@@ -605,6 +608,21 @@ export default function GalaxyMap() {
       // 3. Draw Nodes (Neural Pulsars)
       currentData.forEach(node => {
         const { x, y } = getProjectedCoords(node.x, node.y);
+        
+        // 🚀 Viewport Culling: Skip drawing if node is completely off-screen to save CPU/GPU cycles
+        const screenX = width / 2 + currentTransform.x + x * currentTransform.scale;
+        const screenY = height / 2 + currentTransform.y + y * currentTransform.scale;
+        const padding = 120; // safe padding to account for label text and node glow
+        
+        if (
+          screenX < -padding || 
+          screenX > width + padding || 
+          screenY < -padding || 
+          screenY > height + padding
+        ) {
+          return;
+        }
+
         const isHovered = currentHovered?.id === node.id;
         const isSelected = currentSelectedNode?.id === node.id;
         
@@ -639,6 +657,44 @@ export default function GalaxyMap() {
           ctx.beginPath();
           ctx.arc(x, y, Math.max(14 * pulseScale, 6.0 / currentTransform.scale), 0, Math.PI * 2);
           ctx.stroke();
+        }
+
+        // Draw node label (Signal)
+        if (showLabelsRef.current) {
+          // Calculate dynamic opacity based on zoom level to prevent visual clutter
+          let labelAlpha = 0.65;
+          if (currentTransform.scale < 0.6) {
+            labelAlpha = Math.max(0, (currentTransform.scale - 0.35) / 0.25) * 0.65;
+          }
+          
+          if (isHovered || isSelected) {
+            labelAlpha = 1.0;
+          }
+          
+          if (labelAlpha > 0) {
+            ctx.save();
+            // Reset transform to draw text in crisp viewport space (no fractional pixel scale blur)
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            ctx.globalAlpha = labelAlpha;
+            ctx.font = '500 9.5px ui-monospace, monospace';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            
+            ctx.shadowColor = currentIsDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.85)';
+            ctx.shadowBlur = 2;
+            
+            ctx.fillStyle = isHovered || isSelected ? baseColor : (currentIsDark ? '#E5E7EB' : '#1F2937');
+            
+            const labelText = node.file.split('/').pop() || node.id;
+            
+            // Calculate physical screen-space offset: node radius on screen + padding
+            const screenRadius = radius * pulseScale * currentTransform.scale;
+            const labelOffset = screenRadius + 7;
+            
+            ctx.fillText(labelText, screenX + labelOffset, screenY);
+            ctx.restore();
+          }
         }
       });
 
@@ -709,6 +765,8 @@ export default function GalaxyMap() {
       <ControlHub 
         showConnections={showConnections}
         setShowConnections={setShowConnections}
+        showLabels={showLabels}
+        setShowLabels={setShowLabels}
         handleZoom={handleZoom}
         handleRecenter={handleRecenter}
         handleToggleFullscreen={handleToggleFullscreen}
