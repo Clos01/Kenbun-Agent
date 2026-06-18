@@ -543,6 +543,18 @@ def _run_orchestrate_job(
                 _ORCHESTRATE_JOBS[job_id].update(status="failed", error=str(e))
 
 
+def _get_config_token() -> str:
+    import os
+    from tools.infrastructure.config import settings
+    token = os.getenv("CONFIG_TOKEN")
+    if token:
+        return token
+    token_file = settings.BRAIN_HEALTH_DIR / "config_token.secret"
+    if token_file.exists():
+        with open(token_file, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    return ""
+
 @sovereign_tool()
 def orchestrate(
     workflow: str,
@@ -562,34 +574,37 @@ def orchestrate(
     synchronously regardless.
     """
     if workflow in HEAVY_WORKFLOWS and not wait:
-        job_id = _uuid.uuid4().hex[:12]
-        with _ORCHESTRATE_JOBS_LOCK:
-            _ORCHESTRATE_JOBS[job_id] = {
-                "status": "running",
-                "workflow": workflow,
-                "task": task,
-                "result": None,
-                "error": None,
-            }
-            # Cap memory: drop the oldest jobs once we exceed the limit.
-            while len(_ORCHESTRATE_JOBS) > _MAX_ORCHESTRATE_JOBS:
-                _ORCHESTRATE_JOBS.popitem(last=False)
-
-        _threading.Thread(
-            target=_run_orchestrate_job,
-            args=(job_id, workflow, task, project_path, file_path, code_snippet, tech_key),
-            daemon=True,
-        ).start()
-
-        return (
-            f"🚀 **Orchestration initiated (async)**\n"
-            f"- **Job ID:** `{job_id}`\n"
-            f"- **Workflow:** `{workflow}`\n"
-            f"- **Task:** {task}\n\n"
-            f"This workflow makes multiple Gemini cloud calls and runs in the background "
-            f"to avoid MCP request timeouts. Retrieve the result with "
-            f"`orchestrate_status(\"{job_id}\")`."
-        )
+        try:
+            import urllib.request
+            import json
+            req = urllib.request.Request(
+                "http://127.0.0.1:8000/orchestrate",
+                data=json.dumps({
+                    "workflow": workflow,
+                    "task": task,
+                    "project_path": project_path,
+                    "file_path": file_path,
+                    "code_snippet": code_snippet,
+                    "tech_key": tech_key
+                }).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {_get_config_token()}"
+                }
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json.loads(response.read().decode("utf-8"))
+                job_id = data.get("job_id")
+                return (
+                    f"🚀 **Orchestration initiated (async)**\n"
+                    f"- **Job ID:** `{job_id}`\n"
+                    f"- **Workflow:** `{workflow}`\n"
+                    f"- **Task:** {task}\n\n"
+                    f"This workflow was securely dispatched to the permanent FastAPI server. "
+                    f"Retrieve the result with `orchestrate_status(\"{job_id}\")`."
+                )
+        except Exception as e:
+            return f"❌ Failed to dispatch workflow to persistent server: {e}"
 
     # Light workflow, or the caller explicitly asked to block.
     return _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key)
@@ -598,22 +613,33 @@ def orchestrate(
 @sovereign_tool()
 def orchestrate_status(job_id: str) -> str:
     """Check the status (or retrieve the result) of an async orchestrate() job by its Job ID."""
-    with _ORCHESTRATE_JOBS_LOCK:
-        job = _ORCHESTRATE_JOBS.get(job_id)
-        if job is None:
-            known = ", ".join(_ORCHESTRATE_JOBS.keys()) or "none"
-            return f"❌ No orchestration job `{job_id}`. Active/recent jobs: {known}"
-        status = job["status"]
-        workflow = job["workflow"]
-        task = job["task"]
-        result = job.get("result")
-        error = job.get("error")
+    try:
+        import urllib.request
+        import json
+        req = urllib.request.Request(
+            f"http://127.0.0.1:8000/orchestrate/status/{job_id}",
+            headers={"Authorization": f"Bearer {_get_config_token()}"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            
+        status = data.get("status")
+        workflow = data.get("workflow")
+        task = data.get("task")
+        result = data.get("result")
+        error = data.get("error")
 
-    if status == "running":
-        return f"⏳ Job `{job_id}` (`{workflow}`) is still running.\nTask: {task}"
-    if status == "failed":
-        return f"❌ Job `{job_id}` (`{workflow}`) failed:\n{error}"
-    return f"✅ Job `{job_id}` (`{workflow}`) completed.\n\n{result}"
+        if status == "running":
+            return f"⏳ Job `{job_id}` (`{workflow}`) is still running.\nTask: {task}"
+        if status == "failed":
+            return f"❌ Job `{job_id}` (`{workflow}`) failed:\n{error}"
+        return f"✅ Job `{job_id}` (`{workflow}`) completed.\n\n{result}"
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return f"❌ No orchestration job `{job_id}` found on the server."
+        return f"❌ HTTP Error checking status: {e}"
+    except Exception as e:
+        return f"❌ Error checking status: {e}"
 
 
 # ============================================================
