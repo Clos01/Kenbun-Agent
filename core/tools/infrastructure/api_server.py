@@ -132,3 +132,27 @@ async def startup_event():
     from tools.memory.digester import digester_daemon
     asyncio.create_task(digester_daemon.digestion_loop())
 
+
+# --- Router Registrations ---
+from tools.infrastructure.routers.health import router as health_router
+from tools.infrastructure.routers.config import router as config_router
+from tools.infrastructure.routers.telemetry import router as telemetry_router
+from tools.infrastructure.routers.intelligence import router as intelligence_router
+from tools.infrastructure.routers.chat import router as chat_router
+from tools.infrastructure.routers.swarm import router as swarm_router
+from tools.infrastructure.routers.legacy import router as legacy_router
+
+app.include_router(health_router)
+app.include_router(config_router)
+app.include_router(telemetry_router)
+app.include_router(intelligence_router)
+app.include_router(chat_router)
+app.include_router(swarm_router)
+app.include_router(legacy_router)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    # Bind host is configurable via API_HOST. Defaults to 0.0.0.0 for Docker
+    # container networking; set API_HOST=127.0.0.1 for native/loopback-only runs.
+    uvicorn.run(app, host=settings.API_HOST, port=settings.API_PORT)
