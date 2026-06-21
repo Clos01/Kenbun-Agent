@@ -1,4 +1,5 @@
 import subprocess
+import shlex
 from typing import Tuple
 from tools.audit.guardrail_agent import guardrail_agent as guardrail_engine
 
@@ -37,11 +38,11 @@ class ShellSentinel:
 
         # 3. Execution
         try:
-            # We use shell=True carefully here because this is a developer tool, 
-            # but in production, we would use list-based args.
+            # We use shlex to parse the command and use list-based args for safety.
+            cmd_args = shlex.split(command)
             result = subprocess.run(
-                command,
-                shell=True,
+                cmd_args,
+                shell=False,
                 cwd=cwd,
                 capture_output=True,
                 text=True,

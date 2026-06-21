@@ -13,6 +13,14 @@ import subprocess
 from pathlib import Path
 from datetime import datetime
 
+# ── safe_exec import (path bootstrap; agent_bus is run as a standalone script) ─
+# core/ is sibling of scripts/ in both the host repo and the docker /app mount.
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+_CORE_DIR = _REPO_ROOT / "core"
+if str(_CORE_DIR) not in sys.path:
+    sys.path.insert(0, str(_CORE_DIR))
+from tools.utils.safe_exec import safe_run, UnsafeCommandError  # noqa: E402
+
 # ── Resolve bus file path ──────────────────────────────────────────────────────
 def _get_bus_path() -> Path:
     script_dir = Path(__file__).parent.resolve()
@@ -70,15 +78,20 @@ def spawn_agent(task_name: str, command: str, cwd: str | None = None) -> str:
     }
     _write_bus(data)
 
-    # Run in a background thread so we don't block the caller
+    # Run in a background thread so we don't block the caller.
+    #
+    # Hardened (chore/security-spring-cleaning): the sub-agent command is
+    # dispatched via tools.utils.safe_exec.safe_run, which:
+    #   * shlex.split's the string (no shell invocation),
+    #   * refuses shell metacharacters (; && | > $() backtick …),
+    #   * gates argv[0] against a strict binary allowlist.
+    # Any policy refusal is recorded as a BLOCKED status on the bus so the
+    # operator can see *which* sub-agent was refused and why.
     def _run():
         try:
-            result = subprocess.run(
+            result = safe_run(
                 command,
-                shell=True,
                 cwd=cwd or os.getcwd(),
-                capture_output=True,
-                text=True,
                 timeout=600,
             )
             _update_agent(agent_id, {
@@ -87,6 +100,13 @@ def spawn_agent(task_name: str, command: str, cwd: str | None = None) -> str:
                 "exit_code": result.returncode,
                 "output": result.stdout[-4000:] if result.stdout else "",
                 "error": result.stderr[-2000:] if result.stderr else "",
+            })
+        except UnsafeCommandError as e:
+            _update_agent(agent_id, {
+                "status": "BLOCKED",
+                "finished_at": datetime.utcnow().isoformat(),
+                "exit_code": -1,
+                "error": f"Refused by safe_exec allowlist: {e}",
             })
         except subprocess.TimeoutExpired:
             _update_agent(agent_id, {
@@ -151,7 +171,7 @@ def poll_status_lines() -> list[str]:
     lines = []
     for a in agents:
         status = a["status"]
-        icon = {"RUNNING": "🟡", "DONE": "✅", "ERROR": "❌", "TIMEOUT": "⏰", "KILLED": "🛑"}.get(status, "⚪")
+        icon = {"RUNNING": "🟡", "DONE": "✅", "ERROR": "❌", "TIMEOUT": "⏰", "KILLED": "🛑", "BLOCKED": "🚫"}.get(status, "⚪")
         elapsed = ""
         if a.get("started_at") and a.get("finished_at"):
             try:

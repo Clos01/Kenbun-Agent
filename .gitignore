@@ -111,3 +111,12 @@ core/external/
 # --- Claude Code worktrees (per-session; never commit) ---
 .claude/worktrees/
 
+# --- Sub-agent scratch state (per-session; never commit) ---
+.agents/
+
+# --- Explicit security re-affirmations (defense-in-depth) ---
+# .env, .env.*, and *.log are already covered above, but we re-list them
+# here so a future reader scanning the bottom of this file cannot miss
+# the intent: secrets and runtime logs must never be committed.
+.env
+*.log

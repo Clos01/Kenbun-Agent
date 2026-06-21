@@ -136,7 +136,7 @@ def run_code_safely(
     try:
         from e2b_code_interpreter import Sandbox
         # Launch a dedicated, ephemeral sandbox VM for this execution
-        with Sandbox(api_key=e2b_api_key) as sandbox:
+        with Sandbox.create(api_key=e2b_api_key) as sandbox:
             
             # Execute the code depending on the requested language
             if lang == "python":

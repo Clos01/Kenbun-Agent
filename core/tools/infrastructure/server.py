@@ -34,8 +34,20 @@ def debug_log(msg):
         f.write(f"[{datetime.now().isoformat()}] {msg}\n")
     sys.stderr.write(msg + "\n")
 
-# Global builtins.print override removed for safety.
-# Use debug_log or sys.stderr.write for MCP-safe printing.
+# Override builtins.print to write to sys.stderr for MCP safety.
+import builtins
+_original_print = builtins.print
+
+def mcp_safe_print(*args, sep=' ', end='\n', file=None, flush=False):
+    if file is None or file is sys.stdout:
+        msg = sep.join(str(a) for a in args) + end
+        sys.stderr.write(msg)
+        if flush:
+            sys.stderr.flush()
+    else:
+        _original_print(*args, sep=sep, end=end, file=file, flush=flush)
+
+builtins.print = mcp_safe_print
 
 # --- 2. CONFIGURATION ---
 
@@ -578,7 +590,7 @@ def orchestrate(
             import urllib.request
             import json
             req = urllib.request.Request(
-                "http://127.0.0.1:8000/orchestrate",
+                f"http://127.0.0.1:{settings.API_PORT}/orchestrate",
                 data=json.dumps({
                     "workflow": workflow,
                     "task": task,
@@ -617,7 +629,7 @@ def orchestrate_status(job_id: str) -> str:
         import urllib.request
         import json
         req = urllib.request.Request(
-            f"http://127.0.0.1:8000/orchestrate/status/{job_id}",
+            f"{os.getenv('INTERNAL_API_URL', 'http://127.0.0.1:8001')}/orchestrate/status/{job_id}",
             headers={"Authorization": f"Bearer {_get_config_token()}"}
         )
         with urllib.request.urlopen(req, timeout=5) as response:

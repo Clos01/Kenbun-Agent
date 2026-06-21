@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "quick-recap": {
+      "source": "BuilderIO/skills",
+      "sourceType": "github",
+      "skillPath": "skills/quick-recap/SKILL.md",
+      "computedHash": "dd86e523be67bea3621cf7f3cc00ed8d6db0eae076aec51b8e03900071eb4893"
+    }
+  }
+}

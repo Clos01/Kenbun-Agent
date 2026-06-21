@@ -46,14 +46,16 @@ async function handleProxy(request: NextRequest, params: { slug: string[] }) {
     console.log(`[PROXY] Forwarding request to: ${backendUrl}`);
 
     // Secure shared secret token retrieval for System 2 & 4 lock compliance
-    let configToken = "";
-    try {
-      const tokenPath = "/app/brain_health/config_token.secret";
-      if (fs.existsSync(tokenPath)) {
-        configToken = fs.readFileSync(tokenPath, "utf8").trim();
+    let configToken = process.env.CONFIG_TOKEN || "";
+    if (!configToken) {
+      try {
+        const tokenPath = "/app/brain_health/config_token.secret";
+        if (fs.existsSync(tokenPath)) {
+          configToken = fs.readFileSync(tokenPath, "utf8").trim();
+        }
+      } catch (err) {
+        console.error("[PROXY] Shared config token retrieval failed:", err);
       }
-    } catch (err) {
-      console.error("[PROXY] Shared config token retrieval failed:", err);
     }
 
     const options: RequestInit = {

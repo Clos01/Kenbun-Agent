@@ -198,52 +198,15 @@ class BayesianGovernor:
 
     @lru_cache(maxsize=128)
     def get_tool_stats(self, tool_id: str):
-        """Retrieves weights from remote ChromaDB or local SQLite."""
-        if self.use_local and self.local_conn:
-            try:
-                with self._lock:
-                    cursor = self.local_conn.cursor()
-                    cursor.execute("SELECT alpha, beta, success_count, failure_count, timestamp FROM intelligence WHERE tool_id = ?", (tool_id,))
-                    row = cursor.fetchone()
-                    if row:
-                        alpha, beta, s, f, ts = row
-                        
-                        # Implementation of Temporal Decay (The "Senior Version")
-                        if ts:
-                            from datetime import datetime
-                            try:
-                                # Handle both float and ISO string timestamps
-                                if isinstance(ts, (float, int)) or (isinstance(ts, str) and ts.replace('.','',1).isdigit()):
-                                    last_update = datetime.fromtimestamp(float(ts))
-                                else:
-                                    last_update = datetime.fromisoformat(ts)
-                                    
-                                hours_passed = (datetime.now() - last_update).total_seconds() / 3600
-                                
-                                # Decay failures (beta) faster than successes (alpha) to encourage recovery
-                                decay = 0.5 ** (hours_passed / DECAY_HALFLIFE_HOURS)
-                                
-                                # Move toward the Stable Prior (2.0)
-                                alpha = STABLE_PRIOR + (alpha - STABLE_PRIOR) * (decay ** 0.5) # Successes decay slowly
-                                beta = STABLE_PRIOR + (beta - STABLE_PRIOR) * decay # Failures decay at full halflife
-                            except Exception: pass
-                            
-                        return (float(alpha), float(beta), int(s), int(f))
-            except Exception as e:
-                print(f"Debug: Error getting local stats for {tool_id}: {e}")
-            return 2.0, 2.0, 0, 0
-            
-        if not self.collection: return 2.0, 2.0, 0, 0
+        """Retrieves weights from PostgreSQL."""
         try:
-            res = self.collection.get(ids=[tool_id])
-            if res["ids"]:
-                m = res["metadatas"][0]
-                return (
-                    float(m.get("alpha", 2.0)), 
-                    float(m.get("beta", 2.0)), 
-                    int(m.get("success_count", 0)), 
-                    int(m.get("failure_count", 0))
-                )
+            from tools.memory.postgres_client import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT alpha, beta FROM bayesian_weights WHERE tool_id = %s", (tool_id,))
+                    row = cur.fetchone()
+                    if row:
+                        return float(row["alpha"]), float(row["beta"]), 0, 0
         except Exception as e:
             print(f"Debug: Error getting remote stats for {tool_id}: {e}")
         return 2.0, 2.0, 0, 0
@@ -287,70 +250,37 @@ class BayesianGovernor:
             return
 
     def get_all_stats(self):
-        """Returns all tool stats with temporal decay applied (Bridge Version)."""
+        """Returns all tool stats with temporal decay applied (Bridge Version) using PostgreSQL."""
         results = []
-        now = datetime.now()
-        
-        # 1. Try Remote First
-        if not self.use_local and self.collection:
-            try:
-                res = self.collection.get()
-                for i in range(len(res["ids"])):
-                    m = res["metadatas"][i]
-                    t_id = res["ids"][i]
-                    alpha, beta, ts = m.get("alpha", 2.0), m.get("beta", 2.0), m.get("timestamp")
-                    
-                    # Apply Decay
-                    if ts:
-                        try:
-                            last_update = datetime.fromtimestamp(float(ts)) if (isinstance(ts, (float, int)) or (isinstance(ts, str) and ts.replace('.','',1).isdigit())) else datetime.fromisoformat(ts)
-                            hours_passed = (now - last_update).total_seconds() / 3600
-                            decay = 0.5 ** (hours_passed / DECAY_HALFLIFE_HOURS)
-                            alpha = STABLE_PRIOR + (alpha - STABLE_PRIOR) * (decay ** 0.5)
-                            beta = STABLE_PRIOR + (beta - STABLE_PRIOR) * decay
-                        except: pass
-                        
-                    results.append({
-                        "tool_id": t_id,
-                        "category": m.get("category", "General"),
-                        "alpha": round(float(alpha), 2),
-                        "beta": round(float(beta), 2),
-                        "success_count": m.get("success_count", 0),
-                        "failure_count": m.get("failure_count", 0),
-                        "timestamp": ts
-                    })
-                if results: return results
-            except Exception as e:
-                print(f"Debug: Remote fetch failed: {e}")
+        try:
+            from tools.memory.postgres_client import get_connection
+            
+            tool_data = {}
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT tool_id, category, alpha, beta, last_updated FROM bayesian_weights")
+                    for row in cur:
+                        t_id = row["tool_id"]
+                        cat = row["category"]
+                        alpha = row["alpha"]
+                        beta = row["beta"]
+                        ts = row["last_updated"]
 
-        # 2. Fallback to Local
-        if self.local_conn:
-            try:
-                with self._lock:
-                    cursor = self.local_conn.cursor()
-                    cursor.execute("SELECT tool_id, category, alpha, beta, success_count, failure_count, timestamp FROM intelligence")
-                    rows = cursor.fetchall()
-                    for row in rows:
-                        t_id, cat, alpha, beta, s, f, ts = row
-                        if ts:
-                            try:
-                                last_update = datetime.fromtimestamp(float(ts)) if (isinstance(ts, (float, int)) or (isinstance(ts, str) and ts.replace('.','',1).isdigit())) else datetime.fromisoformat(ts)
-                                hours_passed = (now - last_update).total_seconds() / 3600
-                                decay = 0.5 ** (hours_passed / DECAY_HALFLIFE_HOURS)
-                                alpha = STABLE_PRIOR + (alpha - STABLE_PRIOR) * (decay ** 0.5)
-                                beta = STABLE_PRIOR + (beta - STABLE_PRIOR) * decay
-                            except: pass
-                        results.append({
-                            "tool_id": t_id,
-                            "category": cat or "General",
-                            "alpha": round(float(alpha), 2),
-                            "beta": round(float(beta), 2),
-                            "success_count": s,
-                            "failure_count": f,
-                            "timestamp": ts
-                        })
-            except Exception as e:
-                print(f"Error fetching local stats: {e}")
+                        # We have 'global' and specific categories. Prefer specific categories over 'global'.
+                        if t_id not in tool_data or (cat != 'global' and tool_data[t_id]['category'] == 'global'):
+                            tool_data[t_id] = {
+                                "tool_id": t_id,
+                                "category": cat,
+                                "alpha": round(float(alpha), 2),
+                                "beta": round(float(beta), 2),
+                                "success_count": 0,
+                                "failure_count": 0,
+                                "timestamp": str(ts)
+                            }
+            return list(tool_data.values())
+        except Exception as e:
+            print(f"Debug: Postgres fetch failed: {e}")
+        
         return results
 
     def sample_strategy(self, tools: list):

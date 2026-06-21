@@ -1082,7 +1082,7 @@ async def get_stats():
                 "type": "Vector Topology",
                 "node": "System-3"
             },
-            "lm_studio": check_local_supervisor(),
+            "lm_studio": await asyncio.to_thread(check_local_supervisor),
             "p330": await check_p330_status()
         },
         "history_trend": history_trend
@@ -1192,47 +1192,44 @@ async def delete_chat_session(session_id: str):
 
 def execute_cli_command(command: str) -> str:
     """
-    Safely executes a whitelisted CLI command on the user's hardware.
-    Protected by the absolute regex whitelist and YOLO filters of terminal_chat.py.
+    Safely executes a CLI command on the user's hardware.
+
+    Hardened (chore/security-spring-cleaning):
+      * No shell. ``shell=True`` has been removed.
+      * Command is parsed with ``shlex.split`` and dispatched as an argv list.
+      * argv[0] must be in ``tools.utils.safe_exec.ALLOWED_BINARIES``.
+      * Shell metacharacters (``;``, ``&&``, ``|``, backtick, ``$()``, ``>``…)
+        in the raw string cause an immediate refusal.
+
+    The previous ``is_yolo_safe`` substring filter is intentionally NOT used:
+    it inspected *shell* strings, which is fragile. The argv allowlist below
+    is strictly stronger because the shell is never invoked.
     """
     import subprocess
-    from pathlib import Path
     from tools.infrastructure.config import settings
+    from tools.utils.safe_exec import safe_run, UnsafeCommandError
 
     try:
-        # Load scripts directory
-        scripts_dir = Path("/app/scripts")
-        if not scripts_dir.exists():
-            scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
-            
-        from terminal_chat import is_yolo_safe
-    except Exception as e:
-        return f"❌ Internal Error: Failed to load CLI security engine: {e}"
-        
-    # Check security boundaries
-    if not is_yolo_safe(command):
-        return "❌ Security Violation: Command is blocked by yolo sandboxing rules."
-        
-    # Execute safely
-    try:
-        res = subprocess.run(
+        res = safe_run(
             command,
-            shell=True,
-            capture_output=True,
-            text=True,
             cwd=str(settings.PROJECT_ROOT),
-            timeout=30.0
+            timeout=30.0,
         )
-        output = res.stdout
-        if res.stderr:
-            output += f"\n{res.stderr}"
-        if not output.strip():
-            output = f"Command completed with exit code {res.returncode}."
-        return f"```\n{output}\n```"
+    except UnsafeCommandError as e:
+        return f"❌ Security Violation: {e}"
     except subprocess.TimeoutExpired:
         return "❌ Error: Command execution timed out after 30 seconds."
+    except FileNotFoundError as e:
+        return f"❌ Error: Binary not found: {e}"
     except Exception as e:
         return f"❌ Error: Command execution failed: {e}"
+
+    output = res.stdout or ""
+    if res.stderr:
+        output += f"\n{res.stderr}"
+    if not output.strip():
+        output = f"Command completed with exit code {res.returncode}."
+    return f"```\n{output}\n```"
 
 
 @app.post("/api/v1/chat/sessions/{session_id}/message", dependencies=[Depends(verify_authorization)])
@@ -1262,7 +1259,11 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
         scripts_dir = Path("/app/scripts")
         if not scripts_dir.exists():
             scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
-        from terminal_chat import build_system_prompt
+            
+        import sys
+        if str(scripts_dir.parent) not in sys.path:
+            sys.path.insert(0, str(scripts_dir.parent))
+        from scripts.terminal_chat import build_system_prompt
         system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
         
         # Re-fetch session to include the newly appended message
@@ -1392,7 +1393,11 @@ async def chat_with_kenbun(req: ChatRequest):
             scripts_dir = Path("/app/scripts")
             if not scripts_dir.exists():
                 scripts_dir = Path(settings.PROJECT_ROOT) / "scripts"
-            from terminal_chat import build_system_prompt
+                
+            import sys
+            if str(scripts_dir.parent) not in sys.path:
+                sys.path.insert(0, str(scripts_dir.parent))
+            from scripts.terminal_chat import build_system_prompt
             system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
             
             response_text = await run_in_threadpool(
