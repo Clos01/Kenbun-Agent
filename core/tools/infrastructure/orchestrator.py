@@ -745,6 +745,74 @@ async def run_pipeline(
 
 # --- 6. PRO STACK ENTRY POINT ---
 
+def _analyze_bug(task: str, file_path: str = "", code_snippet: str = "", project_path: str = "", past_fixes: str = "") -> str:
+    """
+    Diagnose a bug and propose a concrete patch.
+
+    This closes the long-standing gap where the `bug_fix` pipeline would
+    silently exit as "Unresolved" whenever no past memory hit existed and
+    no file_path/code_snippet was supplied: every conditional step was
+    skipped and no LLM ever inspected the bug.
+
+    Strategy:
+      1. If file_path exists and is small enough, read it for ground truth.
+      2. Compose a tight diagnostic prompt (error/log + optional code).
+      3. Call the gateway LLM (LM Studio → Ollama → cloud fallback).
+      4. Return the analyzer's verdict as a string the pipeline can persist.
+    """
+    file_context = ""
+    if file_path:
+        try:
+            with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                raw = f.read()
+            # Cap to ~6k chars to leave plenty of room for the prompt
+            file_context = raw[:6000]
+            if len(raw) > 6000:
+                file_context += "\n\n[...truncated, file longer than 6000 chars...]"
+        except Exception as read_err:
+            file_context = f"[Could not read file: {read_err}]"
+
+    memory_block = ""
+    if past_fixes:
+        snippet = str(past_fixes)[:1500]
+        memory_block = f"\n\nPAST FIXES (from error memory, may or may not apply):\n{snippet}"
+
+    code_block = ""
+    if code_snippet:
+        code_block = f"\n\nCALLER-SUPPLIED CODE/CONTEXT:\n{code_snippet[:3000]}"
+
+    file_block = ""
+    if file_context:
+        file_block = f"\n\nTARGET FILE ({file_path}):\n```\n{file_context}\n```"
+
+    project_block = f"\n\nPROJECT ROOT: {project_path}" if project_path else ""
+
+    system_prompt = (
+        "You are the Kenbun bug-fix analyzer. Diagnose the issue and propose a concrete patch. "
+        "Be terse. Output sections in this exact order with these exact headers:\n"
+        "ROOT CAUSE: <1-3 sentences>\n"
+        "PATCH: <a unified diff OR the exact replacement code, fenced. If no code change is needed "
+        "(e.g. the fix is a container restart, env var change, schema migration), say so plainly.>\n"
+        "VERIFICATION: <how to confirm the fix landed: command, test, log line to grep>"
+    )
+    user_message = (
+        f"BUG / ERROR / TASK:\n{task}"
+        f"{project_block}"
+        f"{file_block}"
+        f"{code_block}"
+        f"{memory_block}"
+    )
+
+    try:
+        from tools.utils.llm_router import call_llm_gateway
+        return call_llm_gateway(system_prompt, user_message, temperature=0.1, max_tokens=2000)
+    except Exception as e:
+        return (
+            f"⚠️ Bug analyzer LLM call failed: {e}\n\n"
+            f"Manual triage required. Re-run after restoring LLM gateway connectivity."
+        )
+
+
 def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = ""):
     """
     Synchronous entry point for the Pro Stack.
@@ -791,6 +859,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         "generate_discovery_form": generate_discovery_form,
         "autofix_linter": autofix_linter,
         "view_file": _local_view_file,
+        "analyze_bug": _analyze_bug,
     }
 
     # Run the async pipeline
@@ -851,6 +920,7 @@ def swarm(objective: str, project_path: str = "."):
         "view_file": _local_view_file,
         "consult_hivemind": consult_brain,
         "generate_discovery_form": generate_discovery_form,
+        "analyze_bug": _analyze_bug,
     }
 
     return asyncio.run(spawn_swarm(objective, tools, project_path))

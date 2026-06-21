@@ -12,7 +12,7 @@ services:
     environment:
       - CHROMA_DB_IMPL=sqlite
       - PERSIST_DIRECTORY=/chroma_data
-    restart: always
+    restart: unless-stopped
 
   # 2. Local AI Inference Engine (Ollama)
   ollama_server:
@@ -23,7 +23,7 @@ services:
     volumes:
       - ollama_data:/root/.ollama
       - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/root/kenbun_training
-    restart: always
+    restart: unless-stopped
 
   # 3. Model Initializer (Dynamic Loop & Bypass State)
   ollama_init:
@@ -75,7 +75,7 @@ services:
       - OLLAMA_URL=http://ollama_server:11434/api/generate
     depends_on:
       - chromadb
-    restart: always
+    restart: unless-stopped
 
   # 6. Relational Database (PostgreSQL)
   postgres:
@@ -104,7 +104,7 @@ services:
       - "${DOZZLE_PORT:-8888}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: always
+    restart: unless-stopped
 volumes:
   chroma_data:
   ollama_data:

@@ -20,7 +20,7 @@ services:
       - INTERNAL_API_URL=${INTERNAL_API_URL}
       - CONFIG_TOKEN=${CONFIG_TOKEN}
     command: sh -c "if [ ! -d /app/node_modules ] || [ ! -f /app/node_modules/.package-lock.json ] || [ /app/package.json -nt /app/node_modules/.package-lock.json ]; then npm install --include=optional && cp /app/package-lock.json /app/node_modules/.package-lock.json; fi && npm run dev"
-    restart: always
+    restart: unless-stopped
 
   # Web-Based Database Viewer
   db_viewer:
@@ -28,7 +28,7 @@ services:
     container_name: portable_db_viewer
     ports:
       - "8080:8080"
-    restart: always
+    restart: unless-stopped
 
 volumes:
   dashboard_node_modules:

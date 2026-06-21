@@ -172,17 +172,34 @@ async def get_topology_map():
                     room = "Central_Logic"
 
                 nodes.append({
-                    "id": results['ids'][i],
+                    "id": meta.get("id", f"node_{i}"),
                     "x": x,
                     "y": y,
-                    "file": path,
+                    "file": path.split("/")[-1] if path else "Anonymous Concept",
                     "room": room,
-                    "snippet": doc[:200]
+                    "snippet": doc[:100] + "..." if len(doc) > 100 else doc
+                })
+
+        if not nodes:
+            # Fallback: Generate mock nodes to ensure UI remains engaging if ChromaDB is uninitialized
+            for i in range(250):
+                seed = i * 4
+                x_raw = math.sin(seed + 1) * 10000
+                x = (x_raw - math.floor(x_raw)) * 100
+                y_raw = math.sin(seed + 2) * 10000
+                y = (y_raw - math.floor(y_raw)) * 100
+                nodes.append({
+                    "id": f"mock_node_{i}",
+                    "x": x,
+                    "y": y,
+                    "file": f"Unindexed Node {i}",
+                    "room": "Archives",
+                    "snippet": "Run `index_codebase` to populate real nodes."
                 })
 
         return nodes
     except Exception as e:
-        logging.error(f"TOPOLOGY_ERROR: {e}")
+        logging.error(f"Error generating topology map: {e}")
         return []
 
 

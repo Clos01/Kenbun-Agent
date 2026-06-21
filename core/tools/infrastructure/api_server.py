@@ -36,7 +36,26 @@ from tools.autonomic.autonomic_corrector import corrector
 from tools.memory.honcho_connect import get_project_collection
 from tools.strategy.neural_classifier import neural_classifier
 
-app = FastAPI(title="Kenbun Mission Control API")
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan_context(app: FastAPI):
+    """Start background daemons on server load."""
+    try:
+        get_or_create_config_token()
+    except RuntimeError as e:
+        logging.critical(f"FATAL STARTUP ERROR: {e}")
+        import sys
+        sys.exit(1)
+        
+    asyncio.create_task(update_signals_count_task())
+    from tools.memory.digester import digester_daemon
+    asyncio.create_task(digester_daemon.digestion_loop())
+    
+    yield
+    # Shutdown logic could go here
+
+app = FastAPI(title="Kenbun Mission Control API", lifespan=lifespan_context)
 
 def health_check():
     return {"status": "healthy"}
@@ -113,21 +132,6 @@ swarm_events = []
 
 
 
-@app.on_event("startup")
-async def startup_event():
-    """Start background daemons on server load."""
-    try:
-        get_or_create_config_token()
-    except RuntimeError as e:
-        logging.critical(f"FATAL STARTUP ERROR: {e}")
-        # Halt startup in production (Fail-Closed)
-        import sys
-        sys.exit(1)
-        
-    # Start the non-blocking signals count update task
-    asyncio.create_task(update_signals_count_task())
-    from tools.memory.digester import digester_daemon
-    asyncio.create_task(digester_daemon.digestion_loop())
 
 
 # --- Router Registrations ---

@@ -64,7 +64,7 @@ export default function GalaxyMap() {
     
     const fetchMap = async () => {
       try {
-        const res = await fetch(`${CONFIG.API_BASE}/api/v1/topology/map`);
+        const res = await fetch(`${CONFIG.API_BASE}/api/v1/topology/map`, { cache: 'no-store' });
         if (!res.ok) {
           const text = await res.text();
           throw new Error(`FETCH_FAIL: ${res.status} ${res.statusText} - ${text.substring(0, 150)}`);
@@ -578,7 +578,8 @@ export default function GalaxyMap() {
             const { x: x2, y: y2 } = getProjectedCoords(n2.x, n2.y);
             const distSq = (x1 - x2) ** 2 + (y1 - y2) ** 2;
             
-            if (distSq < 6400) {
+            // Increased threshold to 80000 (distance ~282px) to ensure nodes relate to each other visually
+            if (distSq < 80000) {
               lineCount++;
               const isHoveredOrSelected = 
                 currentHovered?.id === n1.id || currentHovered?.id === n2.id || 

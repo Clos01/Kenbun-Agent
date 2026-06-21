@@ -27,13 +27,19 @@ from tools.infrastructure.config import settings
 from tools.design.guardrail import DesignGuardrail
 from tools.infrastructure.topology_manager import log_swarm_event
 
-def _call_local_senior(system_prompt: str, user_message: str):
-    """Call the hardware-agnostic LLM gateway."""
+def _call_local_senior(system_prompt: str, user_message: str, max_tokens: int = 3000):
+    """Call the hardware-agnostic LLM gateway.
+
+    `max_tokens` is passed through explicitly so small local models (LM Studio
+    Gemma/Qwen variants in particular) don't truncate the JSON verdict mid-string.
+    The historical default was 4000 but only when the caller passed it — most
+    supervisor callers didn't, so the model often had ~150 tokens of headroom.
+    """
     import time
     start_time = time.time()
     try:
         from tools.utils.llm_router import call_llm_gateway
-        content = call_llm_gateway(system_prompt, user_message)
+        content = call_llm_gateway(system_prompt, user_message, max_tokens=max_tokens)
         duration = time.time() - start_time
         
         try:
@@ -200,35 +206,66 @@ async def _tier_3_fallback(user_proposal: str, code_snippet: str, memory_context
     context = f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}"
     prompt = f"CONTEXT: {context}\n\nCODE:\n{code_snippet}"
     
+    def _escalate_to_gemini(reason: str):
+        """Escalate to Gemini Cloud when the local model can't deliver clean JSON."""
+        print(f"☁️ [SYSTEM 2] {reason} Escalating to Gemini Cloud AI...")
+        try:
+            from tools.audit.gemini_reviewer import _call_gemini
+            cloud_raw = _call_gemini(
+                system_prompt=system_prompt,
+                user_message=prompt,
+                temperature=0.2
+            )
+            if cloud_raw:
+                cloud_obj = extract_json(cloud_raw)
+                if cloud_obj:
+                    cloud_obj["tier"] = "Tier 3 Fallback: Gemini Cloud AI Reviewer"
+                    return cloud_obj
+        except Exception as gem_err:
+            print(f"⚠️ [SYSTEM 2] Gemini Fallback also failed: {gem_err}")
+        return None
+
+    last_raw = ""
     for attempt in range(2):
         raw_result, err = _call_local_senior(system_prompt, prompt)
         if err:
-            print("☁️ [SYSTEM 2] Local Senior Architect unavailable. Falling back to Gemini Cloud AI...")
-            try:
-                from tools.audit.gemini_reviewer import _call_gemini
-                raw_result = _call_gemini(
-                    system_prompt=system_prompt,
-                    user_message=prompt,
-                    temperature=0.2
-                )
-                if raw_result:
-                    res_obj = extract_json(raw_result)
-                    if res_obj:
-                        res_obj["tier"] = "Tier 3 Fallback: Gemini Cloud AI Reviewer"
-                        return res_obj
-            except Exception as gem_err:
-                print(f"⚠️ [SYSTEM 2] Gemini Fallback also failed: {gem_err}")
+            cloud_res = _escalate_to_gemini("Local Senior Architect unavailable.")
+            if cloud_res:
+                return cloud_res
             return {"status": "ERROR", "critique": f"Audit failed: {err}"}
 
+        last_raw = raw_result or ""
         res_obj = extract_json(raw_result)
         if res_obj:
-            res_obj["tier"] = "Tier 3: Local Senior Fallback (LM Studio/Ollama)"
-            return res_obj
-        
+            # If the repaired JSON is missing a status, treat it like a parse failure
+            if "status" in res_obj:
+                res_obj["tier"] = "Tier 3: Local Senior Fallback (LM Studio/Ollama)"
+                return res_obj
+
         if attempt == 0:
-            prompt += '\n\nIMPORTANT: Return ONLY a valid JSON object matching this schema:\n{"status": "APPROVED" | "REJECTED" | "REVIEW_NEEDED", "critique": "Detailed reasoning here"}'
+            prompt += (
+                '\n\nIMPORTANT: Return ONLY a valid, complete JSON object matching this schema:\n'
+                '{"status": "APPROVED" | "REJECTED" | "REVIEW_NEEDED", "critique": "Detailed reasoning here"}\n'
+                'Keep the critique under 400 characters so it fits in your token budget. '
+                'Close every brace and quote before you stop.'
+            )
         else:
-            return {"status": "REJECTED", "critique": f"Parse failure: {raw_result[:200]}"}
+            # Don't return REJECTED on a parse failure — that's a false negative that
+            # blocks legitimate work. Escalate to cloud; if cloud is also down, return
+            # REVIEW_NEEDED so the caller knows a human must look.
+            cloud_res = _escalate_to_gemini(
+                f"Local model returned unparseable/truncated JSON after 2 attempts: {last_raw[:120]}..."
+            )
+            if cloud_res:
+                return cloud_res
+            return {
+                "status": "REVIEW_NEEDED",
+                "critique": (
+                    f"Local supervisor produced unparseable JSON and cloud escalation also failed. "
+                    f"Raw local output (truncated): {last_raw[:300]}"
+                ),
+                "tier": "Tier 3: Local Senior Fallback (parse failure, cloud unavailable)"
+            }
 
 async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = "", recovery_attempts_left: int = 2, iterative_mode: bool = False):
     """

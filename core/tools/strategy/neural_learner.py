@@ -72,7 +72,7 @@ class NeuralLearner:
         try:
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT timestamp AS created_at, task, wrong_path, correct_path FROM routing_failures")
+                    cur.execute("SELECT created_at, task, wrong_path, correct_path FROM routing_failures")
                     for row in cur:
                         # Convert datetime to timestamp float for compatibility
                         failures.append({
