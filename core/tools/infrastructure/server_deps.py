@@ -17,7 +17,6 @@ BENCHMARKS_FILE = project_root / "brain_health" / "BENCHMARKS.json"
 
 _cached_config_token = None
 _signals_count_cache = 0
-_signals_count_lock = asyncio.Lock()
 
 def get_or_create_config_token() -> str:
     """
@@ -116,8 +115,7 @@ async def update_signals_count_task():
                 if routing_history_path.exists():
                     # Count lines in a non-blocking background thread (eliminates DoS blocking vector)
                     count = await asyncio.to_thread(_count_lines_sync, routing_history_path)
-                    async with _signals_count_lock:
-                        _signals_count_cache = count
+                    _signals_count_cache = count
         except Exception as e:
             logging.error(f"Error updating signals count: {e}")
         await asyncio.sleep(30)
