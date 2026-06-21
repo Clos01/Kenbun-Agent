@@ -111,10 +111,7 @@ def get_projects_to_watch():
 # In-memory queue for swarm events
 swarm_events = []
 
-_cached_config_token = None
 
-_signals_count_cache = 0
-_signals_count_lock = asyncio.Lock()
 
 @app.on_event("startup")
 async def startup_event():

@@ -15,6 +15,9 @@ BENCHMARKS_FILE = project_root / "brain_health" / "BENCHMARKS.json"
 
 # Projects to scan for AG_TASKS.md
 
+_cached_config_token = None
+_signals_count_cache = 0
+_signals_count_lock = asyncio.Lock()
 
 def get_or_create_config_token() -> str:
     """
