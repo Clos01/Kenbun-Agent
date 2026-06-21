@@ -38,7 +38,7 @@ from tools.memory.honcho_connect import get_project_collection
 from tools.utils.workspace_manager import workspace_manager
 
 # Lazy import — _signals_count_cache is owned by the background task in api_server
-from tools.infrastructure.api_server import _signals_count_cache  # noqa: F811
+from tools.infrastructure import server_deps
 
 router = APIRouter()
 
@@ -46,10 +46,7 @@ router = APIRouter()
 # Module-level state
 # ---------------------------------------------------------------------------
 
-project_root = settings.PROJECT_ROOT
-LOG_FILE = project_root / "brain_health" / "live_telemetry.json"
-TASKS_FILE = project_root / "brain_health" / "swarm_tasks.json"
-BENCHMARKS_FILE = project_root / "brain_health" / "BENCHMARKS.json"
+from tools.infrastructure.server_deps import LOG_FILE, TASKS_FILE, BENCHMARKS_FILE
 
 
 def get_projects_to_watch():
@@ -194,7 +191,7 @@ def get_routing_signals_count() -> int:
     Returns the cached routing signals count in O(1) time.
     Verifiable and 100% accurate, managed asynchronously to prevent event loop blockages.
     """
-    return _signals_count_cache
+    return server_deps._signals_count_cache
 
 
 # ===========================================================================

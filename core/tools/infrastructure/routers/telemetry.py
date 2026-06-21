@@ -28,8 +28,7 @@ from tools.memory.honcho_connect import get_project_collection
 
 router = APIRouter()
 
-project_root = settings.PROJECT_ROOT
-LOG_FILE = project_root / "brain_health" / "live_telemetry.json"
+from tools.infrastructure.server_deps import LOG_FILE
 
 
 # ──────────────────────────────────────────────

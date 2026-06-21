@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
 
-from tools.infrastructure.api_server import verify_authorization, execute_cli_command
+from tools.infrastructure.server_deps import verify_authorization, execute_cli_command
 
 router = APIRouter()
 

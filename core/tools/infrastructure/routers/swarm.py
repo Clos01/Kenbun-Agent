@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from tools.infrastructure.config import settings
-from tools.infrastructure.api_server import verify_authorization
+from tools.infrastructure.server_deps import verify_authorization
 from tools.infrastructure.orchestrator import orchestrate
 from tools.audit.guardrail_agent import guardrail_agent
 from tools.execution.claude_code_agent import claude_code_agent
