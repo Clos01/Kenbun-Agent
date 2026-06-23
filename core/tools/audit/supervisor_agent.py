@@ -487,9 +487,9 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     # Parallelize Tier 1a (Adversarial LLM Court) and Tier 1 (Local Ensemble)
     court_task = None
     if adversarial_court:
-        court_task = asyncio.create_task(asyncio.wait_for(adversarial_court.run_trial(user_proposal, code_snippet), timeout=15.0))
+        court_task = asyncio.create_task(asyncio.wait_for(adversarial_court.run_trial(user_proposal, code_snippet), timeout=60.0))
         
-    ensemble_task = asyncio.create_task(asyncio.wait_for(_tier_1_local(user_proposal, code_snippet), timeout=15.0))
+    ensemble_task = asyncio.create_task(asyncio.wait_for(_tier_1_local(user_proposal, code_snippet), timeout=60.0))
     
     tasks = [t for t in [court_task, ensemble_task] if t is not None]
     res = None
@@ -544,13 +544,13 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
                     local_verdict = res # HUNG_JURY or None
                 except Exception as e:
                     print(f"⚠️ [ENSEMBLE] Audit failed or timed out: {e}")
-
+ 
     if local_verdict == "HUNG_JURY":
         print("⚖️ [ENSEMBLE] Hung Jury detected. Escalating to Cloud for tie-breaking...")
-
+ 
     # Tier 2: Cloud Escalation
     try:
-        res = await asyncio.wait_for(_tier_2_cloud(user_proposal, code_snippet, memory_context, tech_key, local_verdict), timeout=15.0)
+        res = await asyncio.wait_for(_tier_2_cloud(user_proposal, code_snippet, memory_context, tech_key, local_verdict), timeout=45.0)
         if res:
             log_swarm_event("DECISION", {
                 "tool": "supervisor_agent", 
@@ -562,10 +562,10 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
             return res
     except Exception as e:
         print(f"⚠️ [CLOUD] Tier 2 timed out or failed: {e}")
-
+ 
     # Tier 3: Local Senior Fallback
     try:
-        res = await asyncio.wait_for(_tier_3_fallback(user_proposal, code_snippet, memory_context), timeout=15.0)
+        res = await asyncio.wait_for(_tier_3_fallback(user_proposal, code_snippet, memory_context), timeout=60.0)
         log_swarm_event("DECISION", {
             "tool": "supervisor_agent", 
             "confidence": 0.5, 
