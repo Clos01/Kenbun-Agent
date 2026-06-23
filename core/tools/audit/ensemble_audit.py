@@ -32,9 +32,9 @@ config = AuditConfig()
 
 # Default Ensemble Members (Optimized for user's Parallel=4 setting)
 DEFAULT_MODELS = [
-    {"id": "gemma2:latest", "role": "Architect", "weight_bonus": 1.2},
-    {"id": "llama3.2:latest", "role": "Security", "weight_bonus": 1.0},
-    {"id": "phi3:latest", "role": "Logic", "weight_bonus": 0.8}
+    {"id": "deepseek-r1:8b", "role": "Architect", "weight_bonus": 1.2},
+    {"id": "llama3.2:3b", "role": "Security", "weight_bonus": 1.0},
+    {"id": "qwen2.5:1.5b", "role": "Logic", "weight_bonus": 0.8}
 ]
 
 class WeightedVoteCalculator:
