@@ -22,7 +22,7 @@ COPY pyproject.toml .
 
 # Install UV resolver for modern dependency installation
 RUN pip install --no-cache-dir uv && \
-    uv pip install --system . || pip install --no-cache-dir .
+    uv pip install --system ".[test]" || pip install --no-cache-dir ".[test]"
 
 # Copy remaining codebase
 COPY . .

@@ -379,9 +379,14 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         if resolved_model != primary_model:
             logging.info(f"📉 Budget Governor dynamically swapped model '{primary_model}' ➔ '{resolved_model}'")
             primary_model = resolved_model
-            # If forced to local, dynamically map the local container endpoint
+            # If forced to local, prefer the user's configured PRIMARY_LLM_URL.
+            # Only fall back to the docker-internal `ollama_server` hostname when
+            # PRIMARY_LLM_URL is unset — otherwise we'd clobber an externally
+            # reachable endpoint (e.g. http://127.0.0.1:11434/v1 on the host)
+            # with a name that only resolves on the compose network.
             if primary_model == "local":
-                primary_url = "http://ollama_server:11434/v1"
+                if not settings.PRIMARY_LLM_URL:
+                    primary_url = "http://ollama_server:11434/v1"
                 primary_model = "llama3.2:1b"
     except Exception as e:
         logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
@@ -423,10 +428,20 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         try:
             return _try_endpoint(fallback_url, fallback_model, "Fallback")
         except Exception as fallback_err:
-            error_msg = (
-                f"❌ LLM_ROUTER CRITICAL: Both primary and fallback endpoints failed. "
-                f"Primary error: {primary_err}. Fallback error: {fallback_err}"
-            )
-            logging.error(error_msg)
-            raise RuntimeError(error_msg)
+            try:
+                logging.warning("⚠️ LLM_ROUTER: Both OpenAI primary/fallback failed. Attempting native Google GenAI SDK fallback...")
+                from tools.audit.gemini_reviewer import _call_gemini
+                return _call_gemini(
+                    system_prompt=system_prompt,
+                    user_message=user_message,
+                    temperature=temperature,
+                    model_override=None
+                )
+            except Exception as gemini_err:
+                error_msg = (
+                    f"❌ LLM_ROUTER CRITICAL: All endpoints failed (Primary, Fallback, and Native Gemini). "
+                    f"Primary error: {primary_err}. Fallback error: {fallback_err}. Native Gemini error: {gemini_err}"
+                )
+                logging.error(error_msg)
+                raise RuntimeError(error_msg)
 

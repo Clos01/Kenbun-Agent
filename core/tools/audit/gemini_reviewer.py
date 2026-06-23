@@ -100,11 +100,16 @@ def _call_gemini(
             google_search=types.GoogleSearch()
         ))
 
-    # Dynamically build GenerateContentConfig arguments to avoid passing None fields
+    # Dynamically build GenerateContentConfig arguments to avoid passing None fields.
+    # max_output_tokens: bumped from 8192 → 32768 to stop mid-string truncation when
+    # drafting multi-test responses for large source files (the shadow_test pipeline
+    # was clipping at line 24 with `mock_gateway.return_value = "ROOT CAUSE: Test\nPATCH:`
+    # because the whole 700+-line orchestrator.py + analysis prose + test draft was
+    # blowing the 8k cap). Well within Gemini 2.5 Flash/Pro's 65k output ceiling.
     config_args = {
         "system_instruction": system_prompt,
         "temperature": temperature,
-        "max_output_tokens": 8192,
+        "max_output_tokens": 32768,
     }
     if thinking_config is not None:
         config_args["thinking_config"] = thinking_config
@@ -154,10 +159,16 @@ def _call_gemini(
                 status_code == 429
             )
             
-            if is_rate_limit and attempt < max_retries - 1:
+            is_server_error = (
+                "503" in err_msg or "500" in err_msg or "502" in err_msg or "504" in err_msg or
+                status_code in [500, 502, 503, 504]
+            )
+            
+            if (is_rate_limit or is_server_error) and attempt < max_retries - 1:
                 # Exponential backoff with jitter: delay = base * 2^attempt + random_jitter
                 sleep_time = (base_delay * (2 ** attempt)) + (random.random() * 2)
-                print(f"⚠️ Gemini Rate Limit (429). Quota exhausted. Retrying in {sleep_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
+                reason = "Rate Limit (429)" if is_rate_limit else "Server Error (5xx)"
+                print(f"⚠️ Gemini {reason}. Retrying in {sleep_time:.1f}s... (Attempt {attempt+1}/{max_retries})")
                 time.sleep(sleep_time)
                 continue
             

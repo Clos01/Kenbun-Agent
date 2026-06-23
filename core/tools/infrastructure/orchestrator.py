@@ -35,21 +35,33 @@ from tools.infrastructure.pipelines.code_review import build_code_review_pipelin
 from tools.infrastructure.pipelines.research import build_research_pipeline
 from tools.infrastructure.pipelines.shadow_test import build_shadow_test_pipeline
 from tools.infrastructure.pipelines.design_ui import build_design_ui_pipeline
+from tools.infrastructure.pipelines.self_improve import build_self_improve_pipeline
+from tools.infrastructure.pipelines.sdlc_loop import build_sdlc_loop_pipeline
+from tools.infrastructure.pipelines.git_push_integration import build_git_push_integration_pipeline
 from tools.utils.orchestrator_helpers import _prune_log
 from tools.utils.telemetry import log_tool_performance
 
 # --- 2. GHOST UTILS (Prevent Crashes) ---
+import fcntl
+import threading
+
 TELEMETRY_PATH = settings.BRAIN_HEALTH_DIR / "live_telemetry.json"
+_telemetry_lock = threading.RLock()
 
 def log_to_dashboard(message: str):
     """Sends a message to the UI dashboard by writing to live_telemetry.json."""
     print(f"🖥️ [SWARM] {message}")
-    try:
-        data = {"timestamp": time.time(), "message": message, "type": "log"}
-        with open(TELEMETRY_PATH, "a") as f:
-            f.write(json.dumps(data) + "\n")
-    except (IOError, OSError, json.JSONDecodeError) as e:
-        print(f"⚠️ Dashboard log failed: {e}")
+    with _telemetry_lock:
+        try:
+            data = {"timestamp": time.time(), "message": message, "type": "log"}
+            with open(TELEMETRY_PATH, "a") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    f.write(json.dumps(data) + "\n")
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except (IOError, OSError, json.JSONDecodeError) as e:
+            print(f"⚠️ Dashboard log failed: {e}")
 
 async def check_connectivity(ip: str) -> bool:
     """Checks if the Remote PC is reachable via non-blocking ping."""
@@ -80,12 +92,17 @@ def save_topology(tasks_ref: list, data: dict):
     
     tasks_ref.append(data)
     
-    try:
-        topology_data = {"timestamp": time.time(), "topology": tasks_ref, "type": "topology"}
-        with open(TELEMETRY_PATH, "a") as f:
-            f.write(json.dumps(topology_data) + "\n")
-    except (IOError, OSError, json.JSONDecodeError) as e:
-        print(f"⚠️ Topology save failed: {e}")
+    with _telemetry_lock:
+        try:
+            topology_data = {"timestamp": time.time(), "topology": tasks_ref, "type": "topology"}
+            with open(TELEMETRY_PATH, "a") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    f.write(json.dumps(topology_data) + "\n")
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except (IOError, OSError, json.JSONDecodeError) as e:
+            print(f"⚠️ Topology save failed: {e}")
 
 
 # ============================================================
@@ -128,13 +145,182 @@ registry.register_pipeline(PipelineEntry(
     builder=build_design_ui_pipeline,
     description="Strategic UI Design: discovery → research → artifact generation → 5D audit",
 ))
+registry.register_pipeline(PipelineEntry(
+    name="agent_self_improve",
+    builder=build_self_improve_pipeline,
+    description="Strategic Agent Self-Improvement: hardware detection → evaluation → prompt optimization",
+))
+registry.register_pipeline(PipelineEntry(
+    name="sdlc_loop",
+    builder=build_sdlc_loop_pipeline,
+    description="SDLC Multi-Agent Integration Pipeline (Jira & Bitbucket)",
+))
+registry.register_pipeline(PipelineEntry(
+    name="git_push_integration",
+    builder=build_git_push_integration_pipeline,
+    description="Git Push Integration Pipeline: watch → analyze → checkpoint → apply → sandbox → supervisor",
+))
 
 # Workflows whose Gemini-heavy pipelines routinely exceed a synchronous client's
 # request timeout. The MCP tool (server.py) uses this set to decide which workflows
-# to dispatch in the background (with a pollable Job ID) vs. run inline; the HTTP
-# route (api_server.py) dispatches everything in the background. Defined here as the
-# single source of truth so the transport layers stay in sync.
-HEAVY_WORKFLOWS = {"design_ui", "research_implement", "code_review", "shadow_test"}
+# should return an immediate Job ID instead of running inline.
+HEAVY_WORKFLOWS = {"design_ui", "research_implement", "code_review", "shadow_test", "bug_fix", "agent_self_improve", "sdlc_loop", "git_push_integration"}
+
+
+# ============================================================
+# ANALYSIS LOGIC (Bug Diagnostics & Patching)
+# ============================================================
+
+def _analyze_bug(
+    task: str,
+    file_path: str = "",
+    code_snippet: str = "",
+    project_path: str = "",
+    past_fixes: str = "",
+) -> str:
+    """Invokes primary LLM to diagnose a bug and propose a solution/patch."""
+    try:
+        from tools.utils.llm_router import call_llm_gateway
+        
+        # Build grounding context from codebase if file_path is supplied
+        file_ctx = ""
+        if file_path:
+            try:
+                file_ctx = f"Target File: {file_path}\nContent:\n{_local_view_file(file_path)}"
+            except Exception as read_err:
+                file_ctx = f"Target File: {file_path} (could not read: {read_err})"
+                
+        system_prompt = (
+            "You are a Senior CTO and Architect. Analyze the reported bug, identify the root cause, "
+            "and output a precise, robust patch or code change. Keep your suggestions highly scalable "
+            "and secure. Output your findings in markdown, detailing 'ROOT CAUSE' and 'PATCH'."
+        )
+        
+        user_message = (
+            f"Bug Description: {task}\n\n"
+            f"Code Snippet: {code_snippet or 'None'}\n\n"
+            f"Memory History of past fixes:\n{past_fixes or 'None'}\n\n"
+            f"{file_ctx}"
+        )
+        
+        return call_llm_gateway(system_prompt, user_message, max_tokens=3000)
+    except Exception as e:
+        return (
+            f"⚠️ Bug analyzer LLM call failed: {e}\n\n"
+            f"Manual triage required. Re-run after restoring LLM gateway connectivity."
+        )
+
+
+def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", fast: bool = False):
+    """
+    Synchronous entry point for the Pro Stack.
+    Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
+    """
+    import asyncio
+    from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
+    from tools.audit.supervisor_agent import run_supervisor_audit
+    from tools.memory.repo_mapper import scan_repo
+    from tools.utils.error_memory import remember_fix, recall_fix
+    from tools.utils.backtracker import save_checkpoint, restore_checkpoint
+    from tools.execution.e2b_runner import run_code_safely as run_code_safely
+    from tools.utils.bayesian import tune_swarm
+    from tools.audit.consult_architect import consult_brain
+    from tools.audit.discovery_agent import generate_discovery_form
+    from tools.audit.linter_autofix import autofix_linter
+    from tools.infrastructure.server import write_website_content, sync_jira_issue, create_bitbucket_pr
+    from tools.infrastructure.git_watcher_tools import fetch_git_pushes, analyze_push_changes, apply_git_patch
+    from tools.strategy.kanban_tools import (
+        kanban_create, kanban_show, kanban_list, kanban_complete,
+        kanban_block, kanban_unblock, kanban_heartbeat, kanban_comment, kanban_link
+    )
+
+    def _local_view_file(AbsolutePath: str) -> str:
+        path = Path(AbsolutePath).resolve()
+        root = Path(project_path).resolve()
+        if not root.is_absolute():
+            root = Path(settings.PROJECT_ROOT).resolve()
+        if not path.is_relative_to(root):
+            raise PermissionError(f"Security Breach Blocked: Path '{path}' is outside project root '{root}'.")
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+
+    # Map actual functions to the tool registry
+    tools = {
+        "scan_repo": scan_repo,
+        "review_code_with_gemini": gemini_code_review,
+        "research_with_gemini": gemini_research,
+        "consult_supervisor": run_supervisor_audit,
+        "remember_fix": remember_fix,
+        "recall_fix": recall_fix,
+        "save_checkpoint": save_checkpoint,
+        "restore_checkpoint": restore_checkpoint,
+        "run_code_safely": run_code_safely,
+        "reflect_and_distill": _reflect_and_distill,
+        "guardrail_audit": run_guardrail_audit,
+        "maze_verification": backward_verify,
+        "tune_swarm": tune_swarm,
+        "consult_hivemind": consult_brain,  # Renamed for clarity
+        "write_website_content": write_website_content,
+        "generate_discovery_form": generate_discovery_form,
+        "autofix_linter": autofix_linter,
+        "view_file": _local_view_file,
+        "analyze_bug": _analyze_bug,
+        "sync_jira_issue": sync_jira_issue,
+        "create_bitbucket_pr": create_bitbucket_pr,
+        "fetch_git_pushes": fetch_git_pushes,
+        "analyze_push_changes": analyze_push_changes,
+        "apply_git_patch": apply_git_patch,
+        "kanban_create": kanban_create,
+        "kanban_show": kanban_show,
+        "kanban_list": kanban_list,
+        "kanban_complete": kanban_complete,
+        "kanban_block": kanban_block,
+        "kanban_unblock": kanban_unblock,
+        "kanban_heartbeat": kanban_heartbeat,
+        "kanban_comment": kanban_comment,
+        "kanban_link": kanban_link,
+    }
+
+    # Run the async pipeline
+    try:
+        loop = asyncio.get_running_loop()
+        import threading
+        class PipelineThread(threading.Thread):
+            def __init__(self):
+                super().__init__()
+                self.result = None
+                self.error = None
+            def run(self):
+                try:
+                    self.result = asyncio.run(run_pipeline(
+                        workflow=workflow,
+                        task=task,
+                        tools=tools,
+                        project_path=project_path,
+                        file_path=file_path,
+                        code_snippet=code_snippet,
+                        tech_key=tech_key,
+                        fast=fast
+                    ))
+                except Exception as e:
+                    self.error = e
+        t = PipelineThread()
+        t.start()
+        t.join()
+        if t.error:
+            raise t.error
+        return t.result
+    except RuntimeError:
+        return asyncio.run(run_pipeline(
+            workflow=workflow,
+            task=task,
+            tools=tools,
+            project_path=project_path,
+            file_path=file_path,
+            code_snippet=code_snippet,
+            tech_key=tech_key,
+            fast=fast
+        ))
 
 
 # ============================================================
@@ -405,6 +591,7 @@ async def run_pipeline(
     file_path: str = "",
     code_snippet: str = "",
     tech_key: str = "",
+    fast: bool = False,
     tasks_ref: list = None,
     task_index: int = -1
 ) -> str:
@@ -419,6 +606,9 @@ async def run_pipeline(
         file_path: Target file
         code_snippet: Code to review/fix
         tech_key: Tech key for doc grounding
+        fast: If True, skips optional heavy diagnostic steps
+        tasks_ref: Optional shared task list
+        task_index: Index in shared task list
 
     Returns:
         Formatted report of the entire pipeline execution.
@@ -432,6 +622,7 @@ async def run_pipeline(
     state = {
         "task": task,
         "project_path": project_path,
+        "fast": fast,
         "file_path": file_path,
         "code_snippet": code_snippet,
         "tech_key": tech_key,
@@ -519,7 +710,16 @@ async def run_pipeline(
             
         # --- CIRCUIT BREAKER (System 2 Fallback) ---
         if consecutive_failures >= 3:
-            report.append("\n⛔ **Circuit Breaker Tripped.** 3 consecutive tool failures detected. Halting pipeline. **Recommendation:** Run `consult_supervisor` to diagnose the underlying logic flaw.")
+            supervisor_feedback = ""
+            try:
+                from tools.audit.supervisor_agent import run_supervisor_audit
+                res = await run_supervisor_audit("Diagnose pipeline failure", f"Pipeline {workflow} failed 3 times. Last error: {error_msg}")
+                if res and "critique" in res:
+                    supervisor_feedback = f"\n\n**System 2 Diagnosis:** {res['critique']}"
+            except Exception as e:
+                supervisor_feedback = f"\n\n(Supervisor diagnosis failed: {e})"
+            
+            report.append(f"\n⛔ **Circuit Breaker Tripped.** 3 consecutive tool failures detected. Halting pipeline.{supervisor_feedback}")
             print("   ⛔ Circuit Breaker tripped. Halting pipeline.")
             break
 
@@ -745,7 +945,14 @@ async def run_pipeline(
 
 # --- 6. PRO STACK ENTRY POINT ---
 
-def _analyze_bug(task: str, file_path: str = "", code_snippet: str = "", project_path: str = "", past_fixes: str = "") -> str:
+def _analyze_bug(
+    task: str,
+    file_path: str = "",
+    code_snippet: str = "",
+    project_path: str = "",
+    past_fixes: str = "",
+    **_unused_kwargs,
+) -> str:
     """
     Diagnose a bug and propose a concrete patch.
 
@@ -759,6 +966,13 @@ def _analyze_bug(task: str, file_path: str = "", code_snippet: str = "", project
       2. Compose a tight diagnostic prompt (error/log + optional code).
       3. Call the gateway LLM (LM Studio → Ollama → cloud fallback).
       4. Return the analyzer's verdict as a string the pipeline can persist.
+
+    The trailing **_unused_kwargs sink absorbs spurious kwargs (e.g. ``tech_key``)
+    that older or hot-reloaded pipeline definitions may still pass. Without it,
+    the orchestrator step crashes with ``TypeError: _analyze_bug() got an
+    unexpected keyword argument ...`` whenever ``skip_if`` does not mask the step.
+    Mirrors the ``**kwargs`` pattern used by the ``review_code_with_gemini`` lambda
+    in ``server.py::_build_orchestrate_registry``.
     """
     file_context = ""
     if file_path:
@@ -813,7 +1027,7 @@ def _analyze_bug(task: str, file_path: str = "", code_snippet: str = "", project
         )
 
 
-def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = ""):
+def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", fast: bool = False):
     """
     Synchronous entry point for the Pro Stack.
     Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
@@ -829,6 +1043,8 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     from tools.audit.consult_architect import consult_brain
     from tools.audit.discovery_agent import generate_discovery_form
     from tools.audit.linter_autofix import autofix_linter
+    from tools.infrastructure.server import write_website_content, sync_jira_issue, create_bitbucket_pr
+    from tools.infrastructure.git_watcher_tools import fetch_git_pushes, analyze_push_changes, apply_git_patch
 
     def _local_view_file(AbsolutePath: str) -> str:
         path = Path(AbsolutePath).resolve()
@@ -855,11 +1071,17 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         "guardrail_audit": run_guardrail_audit,
         "maze_verification": backward_verify,
         "tune_swarm": tune_swarm,
-        "consult_hivemind": consult_brain,
+        "consult_hivemind": consult_brain,  # Renamed for clarity
+        "write_website_content": write_website_content,
         "generate_discovery_form": generate_discovery_form,
         "autofix_linter": autofix_linter,
         "view_file": _local_view_file,
         "analyze_bug": _analyze_bug,
+        "sync_jira_issue": sync_jira_issue,
+        "create_bitbucket_pr": create_bitbucket_pr,
+        "fetch_git_pushes": fetch_git_pushes,
+        "analyze_push_changes": analyze_push_changes,
+        "apply_git_patch": apply_git_patch,
     }
 
     # Run the async pipeline
@@ -870,7 +1092,8 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         project_path=project_path,
         file_path=file_path,
         code_snippet=code_snippet,
-        tech_key=tech_key
+        tech_key=tech_key,
+        fast=fast
     ))
 
 def swarm(objective: str, project_path: str = "."):
@@ -891,6 +1114,7 @@ def swarm(objective: str, project_path: str = "."):
     from tools.audit.linter_autofix import autofix_linter
     from tools.audit.consult_architect import consult_brain
     from tools.audit.discovery_agent import generate_discovery_form
+    from tools.infrastructure.server import write_website_content
 
     def _local_view_file(AbsolutePath: str) -> str:
         path = Path(AbsolutePath).resolve()
@@ -918,7 +1142,8 @@ def swarm(objective: str, project_path: str = "."):
         "tune_swarm": tune_swarm,
         "autofix_linter": autofix_linter,
         "view_file": _local_view_file,
-        "consult_hivemind": consult_brain,
+        "consult_hivemind": consult_brain,  # Renamed for clarity
+        "write_website_content": write_website_content,
         "generate_discovery_form": generate_discovery_form,
         "analyze_bug": _analyze_bug,
     }

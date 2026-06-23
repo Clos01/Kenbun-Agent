@@ -106,7 +106,7 @@ async def _tier_1_local(user_proposal: str, code_snippet: str):
         return verdict # Could be HUNG_JURY
     except Exception as e:
         print(f"⚠️ [ENSEMBLE] Audit error: {e}")
-        return None
+        return {"_tier_error": f"ensemble: {type(e).__name__}: {e}"}
 
 async def _synthesize_review_reason_locally(raw_critique: str, proposal: str) -> str:
     """Uses the local Gemma 26B model via LM Studio to summarize and write a clear manual review explanation, saving cloud cost."""
@@ -429,7 +429,8 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
                         code_snippet=healed_code,
                         memory_context=memory_context,
                         tech_key=tech_key,
-                        recovery_attempts_left=recovery_attempts_left - 1
+                        recovery_attempts_left=recovery_attempts_left - 1,
+                        iterative_mode=iterative_mode,
                     )
                     if recovery_res and recovery_res.get("status") == "APPROVED":
                         print("🌸 [RALPH-LOOP] Autonomic recovery SUCCESSFUL! Healed code passed security audit.")
@@ -575,4 +576,13 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
         return res
     except Exception as e:
         print(f"⚠️ [FALLBACK] Tier 3 timed out or failed: {e}")
-        return {"status": "ERROR", "critique": f"All tiers failed or timed out: {e}"}
+        
+        errors = []
+        if isinstance(local_verdict, dict) and "_tier_error" in local_verdict:
+            errors.append(local_verdict["_tier_error"])
+            
+        err_msg = f"All tiers failed or timed out: {e}"
+        if errors:
+            err_msg += f". Previous tier errors: {'; '.join(errors)}"
+            
+        return {"status": "ERROR", "critique": err_msg}

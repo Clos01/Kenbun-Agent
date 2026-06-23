@@ -49,6 +49,20 @@ def build_research_pipeline(tools):
             "output_key": "past_fixes",
         },
         {
+            "id": "implement_candidate",
+            "label": "🔬 Generating implementation candidate (LLM)",
+            "tool": tools.get("analyze_bug"),
+            "input": lambda s: {
+                "task": s["task"],
+                "project_path": s.get("project_path", ""),
+                "file_path": s.get("file_path", ""),
+                "code_snippet": s.get("code_snippet", ""),
+                "past_fixes": s.get("past_fixes", "")
+            },
+            "skip_if": lambda s: bool(s.get("code_snippet")),
+            "output_key": "code_snippet",
+        },
+        {
             "id": "save_checkpoint",
             "label": "🔄 Saving checkpoint",
             "tool": tools["save_checkpoint"],

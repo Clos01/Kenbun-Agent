@@ -1,8 +1,33 @@
+import contextlib
 import functools
 import inspect
+import sys
 import threading
 from typing import Callable, Dict, Any, List, Optional
 from pydantic import BaseModel, Field, field_validator
+
+
+@contextlib.contextmanager
+def _silence_stdout_during_tool_call():
+    """Redirect stdout → stderr while a sovereign tool is executing.
+
+    FastMCP uses stdout for JSON-RPC framing; any stray ``print(...)`` from a
+    tool implementation (or one of its transitive imports) corrupts that
+    channel and crashes the MCP client. This guard isolates the noisy body of
+    the tool from the framing layer. FastMCP serializes the tool's return
+    value AFTER this context exits, so the JSON-RPC write still lands on the
+    real stdout.
+
+    A 1:1 copy of ``silence_stdout`` in ``tools/infrastructure/server.py`` —
+    duplicated here so ``sovereign_tool`` (which is imported very early during
+    bootstrap) can use it without a circular dependency on ``server``.
+    """
+    old_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        yield
+    finally:
+        sys.stdout = old_stdout
 
 class ToolEntry(BaseModel):
     """Metadata representing a dynamically registered Kenbun sovereign tool."""
@@ -98,10 +123,20 @@ def sovereign_tool(
         )
         
         registry.register_tool(entry)
-        
-        @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
-            
+
+        if is_async:
+            @functools.wraps(func)
+            async def wrapper(*args, **kwargs):
+                # Stdout guard around the entire coroutine: any stray print()
+                # inside async tool bodies (or their awaited internals) gets
+                # routed to stderr so the MCP JSON-RPC channel stays clean.
+                with _silence_stdout_during_tool_call():
+                    return await func(*args, **kwargs)
+        else:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs):
+                with _silence_stdout_during_tool_call():
+                    return func(*args, **kwargs)
+
         return wrapper
     return decorator

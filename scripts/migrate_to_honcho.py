@@ -17,7 +17,7 @@ PROJECT_NAME = settings.PROJECT_NAME
 # By default, point Honcho SDK to the local docker instance we just configured
 HONCHO_BASE_URL = os.getenv("HONCHO_BASE_URL", "http://127.0.0.1:8000")
 
-async def migrate_data():
+def migrate_data():
     logger.info("📡 Connecting to ChromaDB...")
     try:
         from chromadb.config import Settings
@@ -46,7 +46,7 @@ async def migrate_data():
     peer_name = f"kenbun_system_{PROJECT_NAME}"
     logger.info(f"Creating Peer: {peer_name}")
     try:
-        peer = await honcho_client.peer(peer_name)
+        peer = honcho_client.peer(peer_name)
     except Exception as e:
         logger.error(f"❌ Failed to create Honcho Peer: {e}")
         return
@@ -63,7 +63,7 @@ async def migrate_data():
         # Create a Session for this collection
         session_name = f"migration_{collection.name}"
         logger.info(f"Creating Session: {session_name}")
-        session = await honcho_client.session(session_name)
+        session = honcho_client.session(session_name)
         
         # Retrieve all documents
         data = collection.get(include=['documents', 'metadatas'])
@@ -86,17 +86,17 @@ async def migrate_data():
             messages_to_add.append(peer.message(msg_content))
             
             if len(messages_to_add) >= batch_size:
-                await session.add_messages(messages_to_add)
+                session.add_messages(messages_to_add)
                 messages_to_add = []
                 logger.info(f"  └─ Migrated batch up to index {i+1}")
                 
         # Add any remaining messages
         if messages_to_add:
-            await session.add_messages(messages_to_add)
+            session.add_messages(messages_to_add)
             logger.info(f"  └─ Migrated final batch")
             
     logger.info("🎉 Migration to Honcho complete!")
     logger.info("The Honcho deriver worker will now automatically process these messages in the background.")
 
 if __name__ == "__main__":
-    asyncio.run(migrate_data())
+    migrate_data()

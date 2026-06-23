@@ -30,7 +30,7 @@ def get_or_create_config_token() -> str:
         return _cached_config_token
 
     # 1. Prioritize secure Environment-Based Secret Injection (Least Privilege)
-    token = os.getenv("CONFIG_TOKEN")
+    token = getattr(settings, "CONFIG_TOKEN", None) or os.getenv("CONFIG_TOKEN")
     if token:
         _cached_config_token = token
         return token

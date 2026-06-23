@@ -1126,9 +1126,9 @@ export default function IntelStream() {
                         {/* Success vs Failure Accuracy Bar */}
                         <div className="pt-2">
                           <AccuracyGauge 
-                            success={selectedTool.success_count ?? 0} 
-                            total={(selectedTool.success_count ?? 0) + (selectedTool.failure_count ?? 0)}
-                            label="Success Distribution"
+                            success={(selectedTool.success_count ?? 0) + (selectedTool.failure_count ?? 0) > 0 ? (selectedTool.success_count ?? 0) : selectedTool.alpha} 
+                            total={(selectedTool.success_count ?? 0) + (selectedTool.failure_count ?? 0) > 0 ? (selectedTool.success_count ?? 0) + (selectedTool.failure_count ?? 0) : selectedTool.alpha + selectedTool.beta}
+                            label={(selectedTool.success_count ?? 0) + (selectedTool.failure_count ?? 0) > 0 ? "Success Distribution" : "Bayesian Prior Distribution"}
                           />
                         </div>
 
@@ -1143,11 +1143,11 @@ export default function IntelStream() {
                             <div className="text-lg font-serif font-black text-foreground">{selectedTool.beta.toFixed(2)}</div>
                           </div>
                           <div className="pt-2 border-t border-border/40">
-                            <div className="text-[8px] opacity-40 uppercase font-bold tracking-widest">Success Trails</div>
+                            <div className="text-[8px] opacity-40 uppercase font-bold tracking-widest">Success Trials</div>
                             <div className="text-lg font-serif font-black text-gold">{selectedTool.success_count}</div>
                           </div>
                           <div className="pt-2 border-t border-border/40">
-                            <div className="text-[8px] opacity-40 uppercase font-bold tracking-widest">Failure Trails</div>
+                            <div className="text-[8px] opacity-40 uppercase font-bold tracking-widest">Failure Trials</div>
                             <div className="text-lg font-serif font-black text-foreground/50">{selectedTool.failure_count}</div>
                           </div>
                         </div>

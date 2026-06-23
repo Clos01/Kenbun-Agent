@@ -50,7 +50,7 @@ def build_bug_fix_pipeline(tools):
             # Skip if we already have a strong memory hit OR the caller pre-supplied
             # a concrete code_snippet to test. Otherwise always run the analyzer so
             # we never silently exit with "Unresolved".
-            "skip_if": lambda s: _has_useful_recall(s) and bool(s.get("code_snippet")),
+            "skip_if": lambda s: s.get("fast") or (_has_useful_recall(s) and bool(s.get("code_snippet"))),
             "output_key": "analysis",
         })
 

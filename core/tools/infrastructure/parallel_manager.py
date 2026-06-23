@@ -1,14 +1,30 @@
 import asyncio
 from typing import List, Dict, Any, Callable
 import time
+import threading
 
 class ParallelManager:
     """
     Manages Swarm Slots and Throttling for concurrent task execution.
     """
     def __init__(self, max_slots: int = 4):
-        self.semaphore = asyncio.Semaphore(max_slots)
+        self._max_slots = max_slots
+        self._semaphore = None
+        self._semaphore_lock = threading.Lock()
         self.active_tasks = 0
+
+    @property
+    def semaphore(self):
+        if self._semaphore is None:
+            with self._semaphore_lock:
+                if self._semaphore is None:
+                    self._semaphore = asyncio.Semaphore(self._max_slots)
+        return self._semaphore
+
+    @semaphore.setter
+    def semaphore(self, value):
+        with self._semaphore_lock:
+            self._semaphore = value
 
     async def run_task(self, task_func: Callable, *args, **kwargs):
         """

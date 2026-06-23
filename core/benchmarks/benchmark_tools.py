@@ -5,7 +5,7 @@ from core.tools.infrastructure.config import get_settings
 
 def run_benchmark():
     settings = get_settings()
-    settings.PRIMARY_LLM_MODEL = "google/gemma-4-12b-qat"
+    settings.PRIMARY_LLM_MODEL = "google/gemma-4-26b-a4b"
     print(f"DEBUG: Active Primary Model -> {settings.PRIMARY_LLM_MODEL}")
     
     scenario = (
@@ -26,13 +26,13 @@ def run_benchmark():
         "then output the exact tool call you would make at the end (e.g. `orchestrate(...)`)."
     )
     
-    print("\n[PROMPTING GEMMA-4-12B...]")
+    print("\n[PROMPTING GEMMA-4-26B-A4B...]")
     response, err = _call_local_senior(system_prompt, scenario)
     
     if err:
         print(f"ERROR: {err}")
     else:
-        print(f"\n--- Gemma 4-12b Response ---\n{response}\n-----------------------------")
+        print(f"\n--- Gemma 4-26b-a4b Response ---\n{response}\n-----------------------------")
 
 if __name__ == "__main__":
     run_benchmark()

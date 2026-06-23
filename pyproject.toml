@@ -35,6 +35,7 @@ dependencies = [
     "langchain-openai",
     "e2b-code-interpreter",
     "ruff",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]

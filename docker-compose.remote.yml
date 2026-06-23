@@ -17,16 +17,21 @@ services:
     cap_add:
     - net_admin
     - net_raw
+    networks:
+    - default
+    - kenbun_planka-tier
     restart: unless-stopped
   chromadb:
-    image: chromadb/chroma:0.4.15
+    image: chromadb/chroma:latest
     container_name: portable_chroma
     volumes:
     - chroma_data:/chroma_data
     environment:
-    - CHROMA_DB_IMPL=sqlite
+    - IS_PERSISTENT=TRUE
+    - PERSIST_DIRECTORY=/chroma_data
+    - ALLOW_RESET=TRUE
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
     depends_on:
       tailscale:
         condition: service_started
@@ -36,9 +41,6 @@ services:
     volumes:
     - ollama_data:/root/.ollama
     - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/root/kenbun_training
-    dns:
-    - 8.8.8.8
-    - 8.8.4.4
     environment:
     - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
     - OLLAMA_KV_CACHE_TYPE=${OLLAMA_KV_CACHE_TYPE:-q8_0}
@@ -56,7 +58,7 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
     depends_on:
       tailscale:
         condition: service_started
@@ -68,9 +70,6 @@ services:
         condition: service_healthy
       tailscale:
         condition: service_started
-    dns:
-    - 8.8.8.8
-    - 8.8.4.4
     environment:
     - OLLAMA_HOST=localhost:11434
     - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-gemma2:2b deepseek-r1:1.5b}
@@ -80,7 +79,7 @@ services:
       \ \\\"\u2713 [OLLAMA_INIT] All local models successfully provisioned!\\\";\n\
       else\n  echo \\\"\U0001F4A1 [OLLAMA_INIT] Cloud-Only or Host-Only profile. Skipping\
       \ pull.\\\";\nfi \"\n"
-    network_mode: service:tailscale
+    network_mode: container:tailscale
   fastmcp_server:
     build:
       context: .
@@ -100,7 +99,8 @@ services:
     - CHROMA_HOST=localhost
     - CHROMA_PORT=8000
     - ASSEMBLY_PC_IP=localhost
-    - PRIMARY_LLM_URL=http://localhost:11434/v1
+    # PRIMARY_LLM_URL intentionally NOT overridden here — inherit from .env so
+    # it respects the dynamic token governor and Tailscale configs.
     - OLLAMA_URL=http://localhost:11434/api/generate
     - HONCHO_BASE_URL=http://localhost:8006
     - DASHBOARD_PORT=${DASHBOARD_PORT:-3000}
@@ -122,7 +122,7 @@ services:
       retries: 5
       start_period: 45s
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
   dashboard:
     image: node:20-slim
     container_name: portable_dashboard
@@ -156,7 +156,7 @@ services:
       retries: 5
       start_period: 300s
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
   dozzle:
     image: amir20/dozzle:latest
     container_name: portable_dozzle
@@ -172,7 +172,7 @@ services:
       retries: 3
       start_period: 15s
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
     depends_on:
       tailscale:
         condition: service_started
@@ -201,7 +201,7 @@ services:
       - CMD
       - /app/.venv/bin/python
       - -c
-      - import urllib.request; urllib.request.urlopen('http://localhost:8000/health',
+      - import urllib.request; urllib.request.urlopen('http://localhost:8006/health',
         timeout=2).read()
       interval: 5s
       timeout: 5s
@@ -214,8 +214,9 @@ services:
     - DEFAULT_LLM_PROVIDER=ollama
     - OLLAMA_BASE_URL=http://localhost:11434
     - PORT=8006
+    - EMBED_MESSAGES=false
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
   honcho_deriver:
     build:
       context: ./external/honcho
@@ -240,8 +241,9 @@ services:
     - CACHE_ENABLED=true
     - DEFAULT_LLM_PROVIDER=ollama
     - OLLAMA_BASE_URL=http://localhost:11434
+    - EMBED_MESSAGES=false
     restart: unless-stopped
-    network_mode: service:tailscale
+    network_mode: container:tailscale
   honcho_database:
     image: pgvector/pgvector:pg15
     container_name: portable_honcho_database
@@ -266,7 +268,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    network_mode: service:tailscale
+    network_mode: container:tailscale
     depends_on:
       tailscale:
         condition: service_started
@@ -283,7 +285,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    network_mode: service:tailscale
+    network_mode: container:tailscale
     depends_on:
       tailscale:
         condition: service_started
@@ -294,3 +296,9 @@ volumes:
   dashboard_next_cache: null
   honcho_pgdata: null
   honcho_redis_data: null
+
+networks:
+  default:
+    name: kenbun_default
+  kenbun_planka-tier:
+    external: true

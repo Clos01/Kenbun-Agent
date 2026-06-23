@@ -148,6 +148,26 @@ async def run_orchestrate(payload: dict):
         while len(_HTTP_ORCHESTRATE_JOBS) > _MAX_HTTP_ORCHESTRATE_JOBS:
             _HTTP_ORCHESTRATE_JOBS.popitem(last=False)
 
+    # Host→container path translation: if the caller passed an absolute path
+    # that doesn't exist inside this process (e.g. a Mac path like
+    # `/Users/.../Kenbun` POSTed to a Dockerised server), drop it so the
+    # orchestrator falls back to its own PROJECT_ROOT (`/app` inside Docker).
+    incoming_project_path = payload.get("project_path", ".") or "."
+    try:
+        from pathlib import Path as _Path
+        if (
+            incoming_project_path not in (".", "")
+            and _Path(incoming_project_path).is_absolute()
+            and not _Path(incoming_project_path).exists()
+        ):
+            logging.info(
+                f"🔁 /orchestrate: stripping unreachable host path "
+                f"'{incoming_project_path}' → '.' (using container PROJECT_ROOT)"
+            )
+            incoming_project_path = "."
+    except Exception as _path_err:  # noqa: BLE001 — defensive, never block dispatch
+        logging.debug(f"project_path translation skipped: {_path_err}")
+
     loop = asyncio.get_event_loop()
     loop.run_in_executor(
         None,
@@ -156,7 +176,7 @@ async def run_orchestrate(payload: dict):
         workflow,
         task,
         payload.get("file_path", ""),
-        payload.get("project_path", ".") or ".",
+        incoming_project_path,
         payload.get("code_snippet", ""),
         payload.get("tech_key", ""),
     )

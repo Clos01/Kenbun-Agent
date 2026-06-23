@@ -71,7 +71,10 @@ services:
       - CHROMA_HOST=chromadb
       - CHROMA_PORT=8000
       - SWARM_PC_IP=ollama_server
-      - PRIMARY_LLM_URL=http://ollama_server:11434/v1
+      # PRIMARY_LLM_URL intentionally NOT overridden here — inherit from .env so
+      # the container can target a Tailscale / host-side LM Studio endpoint.
+      # Set to http://ollama_server:11434/v1 in .env if you want the in-compose
+      # Ollama service to be the primary instead.
       - OLLAMA_URL=http://ollama_server:11434/api/generate
     depends_on:
       - chromadb

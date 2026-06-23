@@ -36,54 +36,11 @@ interface Guardrail {
   complianceScore: number;
 }
 
-const DEFAULT_CHECKPOINTS: Checkpoint[] = [
-  {
-    id: "cp_008",
-    name: "Auth Integrity Patch",
-    timestamp: "10 mins ago",
-    author: "Supervisor Node",
-    hash: "a9f8b7c6",
-    description: "Autosaved after system audit passed with zero security alerts."
-  },
-  {
-    id: "cp_007",
-    name: "Dashboard Telemetry Final",
-    timestamp: "1 hour ago",
-    author: "CTO Architect",
-    hash: "6d5c4b3a",
-    description: "Manual savepoint before merging System 4 Bayesian token governor."
-  },
-  {
-    id: "cp_006",
-    name: "Bayesian Calibration Sync",
-    timestamp: "4 hours ago",
-    author: "Governor Worker",
-    hash: "f1e2d3c4",
-    description: "Stabilized alpha/beta parameters for remote model execution."
-  },
-  {
-    id: "cp_005",
-    name: "Chroma Vector DB Sync",
-    timestamp: "1 day ago",
-    author: "System 3 Memory",
-    hash: "b9a8f7e6",
-    description: "Initial complete semantic code structural vector indexing."
-  }
-];
-
-const DEFAULT_GUARDRAILS: Guardrail[] = [
-  { id: "gr_ast", name: "AST Abstract Syntax Tree Structural Laws", category: "ast", status: "active", complianceScore: 100 },
-  { id: "gr_sqli", name: "SQL Injection & Database Infiltration Protection", category: "security", status: "active", complianceScore: 100 },
-  { id: "gr_leak", name: "API Credential Leak & Plaintext Key Guardian", category: "security", status: "active", complianceScore: 100 },
-  { id: "gr_ethics", name: "Ethical Hallucination & Alignment Guardian", category: "ethics", status: "active", complianceScore: 98 },
-  { id: "gr_tdd", name: "TDD Test Coverage Minimum Validation (>=80%)", category: "syntax", status: "active", complianceScore: 92 }
-];
-
 export default function SupervisorDashboard() {
   const API_BASE = CONFIG.API_BASE;
   
-  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>(DEFAULT_CHECKPOINTS);
-  const [guardrails, setGuardrails] = useState<Guardrail[]>(DEFAULT_GUARDRAILS);
+  const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [guardrails, setGuardrails] = useState<Guardrail[]>([]);
   const [newCheckpointName, setNewCheckpointName] = useState("");
   const [newCheckpointDesc, setNewCheckpointDesc] = useState("");
   const [isSavingCheckpoint, setIsSavingCheckpoint] = useState(false);
@@ -101,23 +58,60 @@ export default function SupervisorDashboard() {
 
   const [stats, setStats] = useState({
     activeAudits: 24,
-    linesAudited: 4212,
+    linesAudited: 0,
     astIntegrity: 100,
-    checkpointsSaved: 8
+    checkpointsSaved: 0
   });
   const [isOnline, setIsOnline] = useState(true);
 
-  // Sync checkpoints & health statistics
+  const fetchCheckpoints = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/supervisor/checkpoints`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.status === "success" && Array.isArray(data.data)) {
+        const mapped = data.data.map((cp: any, i: number) => ({
+          id: `cp_${i}`,
+          name: cp.label || "Unnamed",
+          timestamp: new Date(cp.timestamp).toLocaleString(),
+          author: "Supervisor Node",
+          hash: cp.label || cp.checkpoint_path,
+          description: `Snapshot of ${cp.original_path?.split('/').pop() || 'workspace'}`
+        }));
+        setCheckpoints(mapped.reverse());
+      }
+    } catch (e) {
+      console.warn("Failed to fetch checkpoints", e);
+    }
+  }, [API_BASE]);
+
+  const fetchGuardrails = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/supervisor/guardrails`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.status === "success" && Array.isArray(data.data)) {
+        setGuardrails(data.data);
+      }
+    } catch (e) {
+      console.warn("Failed to fetch guardrails", e);
+    }
+  }, [API_BASE]);
+
   const fetchSupervisorStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/build/status`, { cache: "no-store" });
+      const res = await fetch(`${API_BASE}/api/v1/supervisor/stats`, { cache: "no-store" });
       if (!res.ok) throw new Error("API_ERROR");
       const data = await res.json();
       
-      setStats(prev => ({
-        ...prev,
-        astIntegrity: data.status === "Healthy" ? 100 : 96,
-      }));
+      if (data.status === "success" && data.data) {
+        setStats(prev => ({
+          ...prev,
+          linesAudited: data.data.lines_audited,
+          astIntegrity: data.data.ast_integrity,
+          checkpointsSaved: data.data.checkpoints_saved
+        }));
+      }
       setIsOnline(true);
     } catch (err) {
       console.warn("SUPERVISOR_FETCH_ERROR, utilizing offline fallback", err);
@@ -126,10 +120,12 @@ export default function SupervisorDashboard() {
   }, [API_BASE]);
 
   useEffect(() => {
+    fetchCheckpoints();
+    fetchGuardrails();
     fetchSupervisorStats();
-    const interval = setInterval(fetchSupervisorStats, 5000);
+    const interval = setInterval(fetchSupervisorStats, 10000);
     return () => clearInterval(interval);
-  }, [fetchSupervisorStats]);
+  }, [fetchCheckpoints, fetchGuardrails, fetchSupervisorStats]);
 
   // Create checkpoint trigger
   const handleCreateCheckpoint = async (e: React.FormEvent) => {
@@ -138,23 +134,40 @@ export default function SupervisorDashboard() {
 
     setIsSavingCheckpoint(true);
     
-    // Simulate checkpoint creation delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/supervisor/checkpoints`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer KenbunSwarm" },
+        body: JSON.stringify({ name: newCheckpointName.trim(), description: newCheckpointDesc.trim() })
+      });
+      if (res.ok) {
+        await fetchCheckpoints();
+        setNewCheckpointName("");
+        setNewCheckpointDesc("");
+      }
+    } catch (e) {
+      console.error("Checkpoint save failed", e);
+    } finally {
+      setIsSavingCheckpoint(false);
+    }
+  };
 
-    const newCp: Checkpoint = {
-      id: `cp_00${checkpoints.length + 1}`,
-      name: newCheckpointName.trim(),
-      timestamp: "Just now",
-      author: "CTO Architect",
-      hash: Math.random().toString(16).substr(2, 8),
-      description: newCheckpointDesc.trim() || "Manual checkpoint snapshot."
-    };
-
-    setCheckpoints([newCp, ...checkpoints]);
-    setStats(s => ({ ...s, checkpointsSaved: s.checkpointsSaved + 1 }));
-    setNewCheckpointName("");
-    setNewCheckpointDesc("");
-    setIsSavingCheckpoint(false);
+  const handleRestoreCheckpoint = async (hash: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to restore to checkpoint [${hash}]: ${name}? This will overwrite current files.`)) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/supervisor/checkpoints/${hash}/restore`, {
+        method: "POST",
+        headers: { "Authorization": "Bearer KenbunSwarm" }
+      });
+      if (res.ok) {
+        alert("Restore completed successfully.");
+        await fetchSupervisorStats();
+      } else {
+        alert("Restore failed.");
+      }
+    } catch (e) {
+      alert("Restore failed: " + String(e));
+    }
   };
 
   // Run audit safety code sandbox
@@ -165,70 +178,34 @@ export default function SupervisorDashboard() {
     setIsAuditingCode(true);
     setAuditReport(null);
 
-    // Simulate Supervisor AST review latency
-    await new Promise(resolve => setTimeout(resolve, 1200));
-
-    const code = snippetCode.toLowerCase();
-    
-    // Evaluate logic for mockup guardrails
-    if (auditType === "security") {
-      if (code.includes("eval(") || code.includes("select * from") || code.includes("password =") || code.includes("api_key =")) {
-        setAuditReport({
-          status: "REJECTED",
-          score: 34,
-          violations: [
-            "Severe risk: Found potentially unsafe raw SQL or dangerous execution function (eval).",
-            "Vulnerability warning: Detected plaintext variable assignments that resemble credentials."
-          ],
-          remedy: "Replace raw strings with dynamic parametrized statements and retrieve secrets from local config or Environment variables."
-        });
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/supervisor/audit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer KenbunSwarm" },
+        body: JSON.stringify({ 
+          code_snippet: snippetCode, 
+          audit_type: auditType,
+          iterative_mode: false 
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === "success" && data.data) {
+          setAuditReport({
+            status: data.data.status,
+            score: data.data.score,
+            violations: data.data.violations || [],
+            remedy: data.data.remedy
+          });
+        }
       } else {
-        setAuditReport({
-          status: "APPROVED",
-          score: 100,
-          violations: []
-        });
+        setAuditReport({ status: "REJECTED", score: 0, violations: ["Server returned HTTP error."], remedy: "Check API logs." });
       }
-    } else if (auditType === "ast") {
-      if (code.includes("any") || code.includes("todo") || code.includes("fixme")) {
-        setAuditReport({
-          status: "WARNING",
-          score: 82,
-          violations: [
-            "AST smell: Discovered non-strictly typed generic declarations ('any').",
-            "Developer notice: Found placeholder markers ('TODO' / 'FIXME') in functional block."
-          ],
-          remedy: "Refactor types to explicitly declare payload schemas and implement draft blocks."
-        });
-      } else {
-        setAuditReport({
-          status: "APPROVED",
-          score: 98,
-          violations: []
-        });
-      }
-    } else {
-      // Ethics check
-      if (code.includes("hack") || code.includes("bypass") || code.includes("ignore rules")) {
-        setAuditReport({
-          status: "REJECTED",
-          score: 15,
-          violations: [
-            "System 2 Override detected: Discovered prompts attempting to bypass structural instruction sets.",
-            "Alignment anomaly: Input patterns contain unsafe logical bypass directives."
-          ],
-          remedy: "Sovereign AI rules require absolute compliance. Ensure that code commands respect all standard local boundaries."
-        });
-      } else {
-        setAuditReport({
-          status: "APPROVED",
-          score: 100,
-          violations: []
-        });
-      }
+    } catch (err) {
+      setAuditReport({ status: "REJECTED", score: 0, violations: [String(err)], remedy: "Backend is unreachable." });
+    } finally {
+      setIsAuditingCode(false);
     }
-
-    setIsAuditingCode(false);
   };
 
   return (
@@ -419,7 +396,7 @@ export default function SupervisorDashboard() {
                         <div className="text-[9px] font-mono text-primary/30 uppercase">{cp.author} • {cp.timestamp}</div>
                       </div>
                       <button 
-                        onClick={() => alert(`Initiating rollback sequence to state [${cp.hash}]: ${cp.name}`)}
+                        onClick={() => handleRestoreCheckpoint(cp.hash, cp.name)}
                         className="px-3 py-1.5 border border-primary/10 hover:border-tertiary hover:text-tertiary rounded-sm text-[8px] font-black uppercase tracking-wider transition-all shrink-0"
                       >
                         Restore

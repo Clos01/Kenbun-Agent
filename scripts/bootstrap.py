@@ -301,6 +301,57 @@ def bootstrap_core(silent=False):
                     timestamp TEXT
                 )
             ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kenbun_cron_jobs (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    schedule TEXT NOT NULL,
+                    prompt TEXT,
+                    script_path TEXT,
+                    no_agent INTEGER DEFAULT 0,
+                    context_from TEXT,
+                    workdir TEXT,
+                    delivery_targets TEXT,
+                    enabled_toolsets TEXT,
+                    status TEXT DEFAULT 'active',
+                    last_run_at TEXT,
+                    next_run_at TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kenbun_kanban_tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    body TEXT,
+                    assignee TEXT,
+                    tenant TEXT,
+                    priority INTEGER DEFAULT 0,
+                    parent_id TEXT,
+                    status TEXT DEFAULT 'triage',
+                    max_retries INTEGER DEFAULT 3,
+                    comments TEXT DEFAULT '[]',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kenbun_kanban_runs (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    run_number INTEGER NOT NULL,
+                    outcome TEXT NOT NULL,
+                    assignee TEXT,
+                    started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    ended_at TEXT,
+                    duration_seconds REAL,
+                    summary TEXT,
+                    metadata TEXT,
+                    error TEXT,
+                    pid INTEGER,
+                    FOREIGN KEY(task_id) REFERENCES kenbun_kanban_tasks(id) ON DELETE CASCADE
+                )
+            ''')
             conn.commit()
             log_status(5, "Pre-initializing local SQLite database with WAL Mode", "WAL concurrency active", status="WAL")
     except Exception as e:

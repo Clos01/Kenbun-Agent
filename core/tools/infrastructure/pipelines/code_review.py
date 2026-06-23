@@ -28,6 +28,19 @@ def build_code_review_pipeline(tools):
             "skip_if": lambda s: not s.get("project_path"),
             "output_key": "repo_map",
         },
+        {
+            "id": "analyze_review_request",
+            "label": "🔬 Analyzing review request (LLM)",
+            "tool": tools.get("analyze_bug"),
+            "input": lambda s: {
+                "task": s["task"],
+                "project_path": s.get("project_path", ""),
+                "file_path": s.get("file_path", ""),
+                "code_snippet": s.get("code_snippet", "")
+            },
+            "skip_if": lambda s: bool(s.get("code_snippet") or s.get("repo_map")),
+            "output_key": "code_snippet",
+        },
     ]
 
     if uses_external_review():

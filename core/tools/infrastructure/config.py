@@ -40,9 +40,9 @@ class SupabaseSettings(BaseModel):
     db_url: Optional[SecretStr] = None
 
 class ModelSettings(BaseModel):
-    default_local_model: str = "google/gemma-4-12b"
+    default_local_model: str = "google/gemma-4-26b-a4b"
     lm_studio_port: int = 2065
-    lm_studio_model: str = "google/gemma-4-12b"
+    lm_studio_model: str = "google/gemma-4-26b-a4b"
     lm_studio_draft_model: str = "google/gemma-4-e4b"
     use_speculative_decoding: bool = True
     speculative_lookahead: int = Field(default=5, ge=1, le=20)
@@ -55,6 +55,7 @@ class ModelSettings(BaseModel):
     lm_studio_read_timeout: float = 60.0
     ollama_pull_models: str = "qwen2.5:1.5b"
     primary_llm_model: str = "qwen2.5:1.5b"  # Set by bootstrap.py wizard
+    openai_runtime: str = "auto"
 
 
 class TelegramSettings(BaseModel):
@@ -77,6 +78,7 @@ class SecuritySettings(BaseModel):
     approval_mode: str = "smart"
     approval_timeout: int = 45
     custom_hook_path: Optional[str] = None
+    sandbox_mode: str = "docker"
 
 # --- 2. MAIN CONFIGURATION HUB ---
 
@@ -138,6 +140,11 @@ class KenbunSettings(BaseSettings):
             password=self.SIP_PASSWORD,
             user_phone_number=self.USER_PHONE_NUMBER
         )
+
+    # --- ORCHESTRATION ---
+    MAX_CONCURRENT_ORCHESTRATE_JOBS: int = Field(default=10)
+    ORCHESTRATE_JOB_TIMEOUT_SEC: int = Field(default=600)
+    CONFIG_TOKEN: Optional[str] = Field(default=None)
 
     # --- CHROMA DB ---
     CHROMA_HOST: str = Field(default="localhost")
@@ -202,6 +209,7 @@ class KenbunSettings(BaseSettings):
     PRIMARY_LLM_MODEL: str = "qwen2.5:1.5b"
     OLLAMA_PORT: int = 11434
     FALLBACK_LLM_URL: Optional[str] = None
+    OPENAI_RUNTIME: str = Field(default="auto")
     FALLBACK_LLM_MODEL: Optional[str] = None
     SPECULATIVE_SERVER_IP: Optional[str] = None
     SPECULATIVE_SERVER_PORT: Optional[int] = None
@@ -222,7 +230,8 @@ class KenbunSettings(BaseSettings):
             deepseek_model=self.DEEPSEEK_MODEL,
             lm_studio_connect_timeout=self.LM_STUDIO_CONNECT_TIMEOUT,
             lm_studio_read_timeout=self.LM_STUDIO_READ_TIMEOUT,
-            ollama_pull_models=self.OLLAMA_PULL_MODELS
+            ollama_pull_models=self.OLLAMA_PULL_MODELS,
+            openai_runtime=self.OPENAI_RUNTIME
         )
 
     # --- TELEGRAM ---
@@ -267,6 +276,7 @@ class KenbunSettings(BaseSettings):
     SECURITY_APPROVAL_MODE: str = Field(default="smart")
     SECURITY_APPROVAL_TIMEOUT: int = Field(default=45)
     SECURITY_CUSTOM_HOOK_PATH: Optional[str] = Field(default=None)
+    SECURITY_SANDBOX_MODE: str = Field(default="docker")
 
     @property
     def security(self) -> SecuritySettings:
@@ -274,7 +284,8 @@ class KenbunSettings(BaseSettings):
             cron_mode=self.SECURITY_CRON_MODE,
             approval_mode=self.SECURITY_APPROVAL_MODE,
             approval_timeout=self.SECURITY_APPROVAL_TIMEOUT,
-            custom_hook_path=self.SECURITY_CUSTOM_HOOK_PATH
+            custom_hook_path=self.SECURITY_CUSTOM_HOOK_PATH,
+            sandbox_mode=self.SECURITY_SANDBOX_MODE
         )
         return security_settings_instance
 
@@ -291,8 +302,23 @@ class KenbunSettings(BaseSettings):
     API_HOST: str = Field(default="0.0.0.0")
     API_PORT: int = Field(default=8001)
     MONITOR_PORT: int = Field(default=8002)
+    # Internal URL the MCP / dashboard use to reach the FastAPI server. Set by
+    # docker-compose to http://localhost:8001 inside the dashboard container and
+    # http://fastmcp_server:8001 inside other compose services. Defaults to
+    # 127.0.0.1 for host-side dev. Several call sites (server.py:601, :726)
+    # read this directly via settings.INTERNAL_API_URL.
+    INTERNAL_API_URL: str = Field(default="http://127.0.0.1:8001")
     DASHBOARD_PORT: int = Field(default=3000)
     DOZZLE_PORT: int = Field(default=8888)
+
+    # --- GIT PUSH WATCHER ---
+    GIT_WATCH_REPOS: str = Field(default="nousresearch/hermes-agent")
+    GIT_WATCH_INTERVAL: int = Field(default=600)
+    GITHUB_TOKEN: Optional[str] = Field(default=None)
+
+    @property
+    def GIT_WATCH_STATE_FILE(self) -> Path:
+        return self.BRAIN_HEALTH_DIR / "git_watcher_state.json"
 
 # --- 3. CACHED SINGLETON ACCESS ---
 

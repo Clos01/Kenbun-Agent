@@ -113,9 +113,19 @@ class BayesianGovernor:
         self.local_conn = None
         self.use_local = False
         self._lock = threading.RLock() # Atomic Consolidation Lock
-        self._init_remote_db()
-        if self.use_local:
-            self._init_local_db()
+        self._db_initialized = False
+
+    def _ensure_db(self):
+        """Ensures that either the remote or local database is initialized thread-safely."""
+        if self._db_initialized:
+            return
+        with self._lock:
+            if self._db_initialized:
+                return
+            self._init_remote_db()
+            if self.use_local:
+                self._init_local_db()
+            self._db_initialized = True
 
     def _init_remote_db(self):
         """Initializes connection to the remote weight store or falls back to local."""
@@ -198,7 +208,20 @@ class BayesianGovernor:
 
     @lru_cache(maxsize=128)
     def get_tool_stats(self, tool_id: str):
-        """Retrieves weights from PostgreSQL."""
+        """Retrieves weights from PostgreSQL or local SQLite."""
+        self._ensure_db()
+        if self.use_local and self.local_conn:
+            try:
+                with self._lock:
+                    cursor = self.local_conn.cursor()
+                    cursor.execute("SELECT alpha, beta FROM intelligence WHERE tool_id = ?", (tool_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        return float(row[0]), float(row[1]), 0, 0
+            except Exception as e:
+                print(f"Debug: Error getting local stats for {tool_id}: {e}")
+            return 2.0, 2.0, 0, 0
+
         try:
             from tools.memory.postgres_client import get_connection
             with get_connection() as conn:
@@ -213,6 +236,7 @@ class BayesianGovernor:
 
     def update_intelligence(self, tool_id: str, category: str, success: bool):
         """Updates weights in the remote store or local SQLite fallback."""
+        self._ensure_db()
         # Clear the lru_cache to reflect new learning
         self.get_tool_stats.cache_clear()
         
@@ -250,8 +274,30 @@ class BayesianGovernor:
             return
 
     def get_all_stats(self):
-        """Returns all tool stats with temporal decay applied (Bridge Version) using PostgreSQL."""
+        """Returns all tool stats with temporal decay applied (Bridge Version) using PostgreSQL or local SQLite."""
+        self._ensure_db()
         results = []
+        if self.use_local and self.local_conn:
+            try:
+                with self._lock:
+                    cursor = self.local_conn.cursor()
+                    cursor.execute("SELECT tool_id, category, alpha, beta, success_count, failure_count, timestamp FROM intelligence")
+                    rows = cursor.fetchall()
+                    for row in rows:
+                        t_id, cat, alpha, beta, s, f, ts = row
+                        results.append({
+                            "tool_id": t_id,
+                            "category": cat or "General",
+                            "alpha": round(float(alpha), 2),
+                            "beta": round(float(beta), 2),
+                            "success_count": s,
+                            "failure_count": f,
+                            "timestamp": ts
+                        })
+            except Exception as e:
+                print(f"Error fetching local stats: {e}")
+            return results
+
         try:
             from tools.memory.postgres_client import get_connection
             

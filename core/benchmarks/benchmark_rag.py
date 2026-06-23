@@ -14,7 +14,7 @@ def run_benchmark():
     print(f"--- Retrieved Context ---\n{context[:200]}...\n-----------------------")
     
     # Step 2: Query the LLM
-    print("\n[2] Prompting Local Model (Gemma 4-12b) with Context...")
+    print("\n[2] Prompting Local Model (Gemma 4-26b-a4b) with Context...")
     system_prompt = "You are a Next.js SEO expert. Use the following Hivemind context to answer the user's question exactly as specified in the rules.\n\nHIVEMIND CONTEXT:\n" + context
     user_message = "According to our internal protocols, what is the required Redirect type for Next.js and why?"
     

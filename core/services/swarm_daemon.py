@@ -221,6 +221,21 @@ if __name__ == "__main__":
     # Run the task loop in the background
     asyncio.run_coroutine_threadsafe(task_loop(), loop)
 
+    # 4. Start Git Push Watcher Daemon
+    from services.git_push_watcher_daemon import GitPushWatcherDaemon
+    git_watcher = GitPushWatcherDaemon(loop)
+    asyncio.run_coroutine_threadsafe(git_watcher.start(), loop)
+
+    # 5. Start Chronos Scheduling Daemon
+    from services.scheduler_daemon import ChronosDaemon
+    chronos_daemon = ChronosDaemon(loop)
+    asyncio.run_coroutine_threadsafe(chronos_daemon.start(), loop)
+
+    # 6. Start Kanban Dispatcher Daemon
+    from services.kanban_dispatcher import KanbanDispatcher
+    kanban_dispatcher = KanbanDispatcher(loop)
+    asyncio.run_coroutine_threadsafe(kanban_dispatcher.start(), loop)
+
     try:
         # Keep the main thread alive
         while True:

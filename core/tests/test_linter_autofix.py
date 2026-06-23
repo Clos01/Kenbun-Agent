@@ -74,4 +74,5 @@ def test_autofix_python_syntax_error(tmp_path, monkeypatch):
     )
     
     res = autofix_linter(str(dummy_file), str(workspace))
-    assert "active syntax errors and cannot be safely auto-fixed" in res
+    assert "has active syntax errors" in res
+

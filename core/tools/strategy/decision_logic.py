@@ -402,23 +402,35 @@ class DecisionRouter:
         self.processor = KeywordProcessor()
         self.learner = NeuralLearner(LOG_DIR)
         
-        # Initialize weights and failures
-        self.weights = self.learner.load_weights(
-            list(self.processor.keywords.keys()), 
-            self.processor.keywords
-        )
-        self.failures = self.learner.load_failures()
+        # Initialize weights and failures lazily
+        self.weights = None
+        self.failures = None
         self.recent_paths: List[str] = []
         self.bandit = ContextualModelBandit(LOG_DIR / "mab_stats.json")
+        self._init_lock = threading.Lock()
+        self._initialized = False
+
+    def _ensure_initialized(self):
+        with self._init_lock:
+            if not self._initialized:
+                self.weights = self.learner.load_weights(
+                    list(self.processor.keywords.keys()), 
+                    self.processor.keywords
+                )
+                self.failures = self.learner.load_failures()
+                self._initialized = True
 
     def save_weights(self):
+        self._ensure_initialized()
         self.learner.save_weights(self.weights)
 
     def record_failure(self, task: str, wrong_path: str, correct_path: str):
+        self._ensure_initialized()
         failure = self.learner.record_failure(task, wrong_path, correct_path)
         self.failures.append(failure)
 
     def _check_self_healing(self, task: str) -> Optional[str]:
+        self._ensure_initialized()
         task_lower = task.lower()
         for failure in self.failures:
             if failure["task"].lower() in task_lower or task_lower in failure["task"].lower():
@@ -457,6 +469,7 @@ class DecisionRouter:
         if not task or not isinstance(task, str):
             return {"valid": False}
 
+        self._ensure_initialized()
         matched = self.processor.match_categories(task)
         
         def get_confidence(cat_matches: List[str]) -> float:
@@ -492,6 +505,7 @@ class DecisionRouter:
             logging.error(f"Failed to log routing decision: {e}")
 
     def get_strategy_path(self, task: str, fast_mode: bool = False) -> str:
+        self._ensure_initialized()
         corrected_path = self._check_self_healing(task)
         if corrected_path:
             return corrected_path
