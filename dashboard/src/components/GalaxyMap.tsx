@@ -6,7 +6,7 @@ import { CONFIG } from '@/lib/config';
 import { useTheme } from '@/context/ThemeContext';
 import { Compass } from 'lucide-react';
 
-import { StarNode, TransformState } from './galaxy-map/types';
+import { StarNode, TransformState, ActiveJob } from './galaxy-map/types';
 import { 
   getProjectedCoords, 
   ROOM_COLORS_DARK, 
@@ -31,6 +31,177 @@ export default function GalaxyMap() {
   const [mounted, setMounted] = useState(false);
   const [showConnections, setShowConnections] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+
+  const [activeJobs, setActiveJobs] = useState<Record<string, ActiveJob>>({});
+  const activeIntervalsRef = useRef<Record<string, any>>({});
+
+  useEffect(() => {
+    return () => {
+      // Clear all active intervals on unmount
+      if (activeIntervalsRef.current) {
+        Object.values(activeIntervalsRef.current).forEach(clearInterval);
+      }
+    };
+  }, []);
+
+  const triggerNodeAudit = async (node: StarNode, workflow: 'code_review' | 'bug_fix') => {
+    // Clear any existing poller for this node first
+    if (activeIntervalsRef.current[node.id]) {
+      clearInterval(activeIntervalsRef.current[node.id]);
+      delete activeIntervalsRef.current[node.id];
+    }
+
+    // Set status to running
+    setActiveJobs(prev => ({
+      ...prev,
+      [node.id]: {
+        jobId: '',
+        nodeId: node.id,
+        file: node.file,
+        workflow,
+        status: 'running'
+      }
+    }));
+
+    try {
+      const res = await fetch(`${CONFIG.API_BASE}/orchestrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workflow,
+          task: workflow === 'code_review' 
+            ? `Run a full SVE verifier audit and supervisor style check on ${node.file.split('/').pop()}.`
+            : `Diagnose and fix any logical regressions or syntax errors in ${node.file.split('/').pop()}.`,
+          file_path: node.file,
+          project_path: '.'
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP Error ${res.status} ${res.statusText}`);
+      }
+
+      const data = await res.json();
+      if (data.status === 'error' || data.status === 'blocked') {
+        setActiveJobs(prev => ({
+          ...prev,
+          [node.id]: {
+            jobId: '',
+            nodeId: node.id,
+            file: node.file,
+            workflow,
+            status: 'error',
+            error: data.message || 'Job blocked by security guardrails'
+          }
+        }));
+        return;
+      }
+
+      const jobId = data.job_id;
+      
+      // Update job ID in state
+      setActiveJobs(prev => {
+        if (prev[node.id]) {
+          return {
+            ...prev,
+            [node.id]: {
+              ...prev[node.id],
+              jobId
+            }
+          };
+        }
+        return prev;
+      });
+
+      let attempts = 0;
+      const maxAttempts = 60; // 2 minutes max polling
+
+      const interval = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${CONFIG.API_BASE}/orchestrate/status/${jobId}`);
+          if (!statusRes.ok) {
+            throw new Error(`Failed to fetch status`);
+          }
+          const statusData = await statusRes.json();
+          
+          if (statusData.status === 'completed' || statusData.status === 'approved' || statusData.status === 'review_needed' || statusData.status === 'error') {
+            clearInterval(interval);
+            delete activeIntervalsRef.current[node.id];
+            
+            if (statusData.status === 'error') {
+              setActiveJobs(prev => ({
+                ...prev,
+                [node.id]: {
+                  ...prev[node.id],
+                  status: 'error',
+                  error: statusData.error || 'Pipeline execution failed.'
+                }
+              }));
+            } else {
+              setActiveJobs(prev => ({
+                ...prev,
+                [node.id]: {
+                  ...prev[node.id],
+                  status: 'completed',
+                  report: statusData.result || 'No report returned.'
+                }
+              }));
+            }
+          } else if (attempts >= maxAttempts) {
+            clearInterval(interval);
+            delete activeIntervalsRef.current[node.id];
+            setActiveJobs(prev => ({
+              ...prev,
+              [node.id]: {
+                ...prev[node.id],
+                status: 'error',
+                error: 'Orchestration job timed out.'
+              }
+            }));
+          }
+          attempts++;
+        } catch (err) {
+          clearInterval(interval);
+          delete activeIntervalsRef.current[node.id];
+          setActiveJobs(prev => ({
+            ...prev,
+            [node.id]: {
+              ...prev[node.id],
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Error polling job status'
+            }
+          }));
+        }
+      }, 2000);
+
+      activeIntervalsRef.current[node.id] = interval;
+
+    } catch (err) {
+      setActiveJobs(prev => ({
+        ...prev,
+        [node.id]: {
+          jobId: '',
+          nodeId: node.id,
+          file: node.file,
+          workflow,
+          status: 'error',
+          error: err instanceof Error ? err.message : 'Network error initiating job'
+        }
+      }));
+    }
+  };
+
+  const clearNodeAudit = (nodeId: string) => {
+    if (activeIntervalsRef.current[nodeId]) {
+      clearInterval(activeIntervalsRef.current[nodeId]);
+      delete activeIntervalsRef.current[nodeId];
+    }
+    setActiveJobs(prev => {
+      const copy = { ...prev };
+      delete copy[nodeId];
+      return copy;
+    });
+  };
   
   const { theme } = useTheme();
   const isDark = theme === "dark";
@@ -363,6 +534,7 @@ export default function GalaxyMap() {
   const showLabelsRef = useRef(showLabels);
   const dataRef = useRef(data);
   const isDarkRef = useRef(isDark);
+  const activeJobsRef = useRef(activeJobs);
 
   useEffect(() => { transformRef.current = transform; }, [transform]);
   useEffect(() => { hoveredRef.current = hovered; }, [hovered]);
@@ -371,6 +543,7 @@ export default function GalaxyMap() {
   useEffect(() => { showLabelsRef.current = showLabels; }, [showLabels]);
   useEffect(() => { dataRef.current = data; }, [data]);
   useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
+  useEffect(() => { activeJobsRef.current = activeJobs; }, [activeJobs]);
 
   // Heritage Design System Dynamic Theme colors (Synchronized from actual CSS Variables)
   const [themeColors, setThemeColors] = useState({
@@ -762,6 +935,19 @@ export default function GalaxyMap() {
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1.0;
 
+        // Check for active running job on this node
+        const activeJob = activeJobsRef.current[node.id];
+        if (activeJob && activeJob.status === 'running') {
+          ctx.save();
+          ctx.strokeStyle = activeJob.workflow === 'bug_fix' ? '#F59E0B' : '#06B6D4';
+          ctx.lineWidth = Math.max(1.5, 0.65 / currentTransform.scale);
+          ctx.beginPath();
+          const jobPulse = radius * (1.6 + Math.sin(time * 8 + pulseOffset) * 0.3);
+          ctx.arc(x, y, jobPulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+
         if (isHovered && !isSelected) {
           ctx.strokeStyle = baseColor;
           ctx.lineWidth = Math.max(0.5, 0.22 / currentTransform.scale);
@@ -816,8 +1002,18 @@ export default function GalaxyMap() {
           const forceDraw = isHovered || isSelected;
           if (!forceDraw && labelsDrawnCount >= maxLabels) return;
 
-          // Compute label text
-          const labelText = node.file.split('/').pop() || node.id;
+          // Compute label text and append active sovereign state
+          let labelText = node.file.split('/').pop() || node.id;
+          const activeJob = activeJobsRef.current[node.id];
+          if (activeJob) {
+            if (activeJob.status === 'running') {
+              labelText += ` [${activeJob.workflow === 'bug_fix' ? 'FIXING...' : 'AUDITING...'}]`;
+            } else if (activeJob.status === 'completed') {
+              labelText += ' [DONE]';
+            } else if (activeJob.status === 'error') {
+              labelText += ' [ERROR]';
+            }
+          }
           
           // Estimate bounding box in screen-space
           const fontSize = isHovered || isSelected ? 10.5 : 9;
@@ -990,6 +1186,9 @@ export default function GalaxyMap() {
             handleFocusNode={handleFocusNode}
             isFullscreen={isFullscreen}
             isDark={isDark}
+            activeJob={activeJobs[selectedNode.id]}
+            triggerNodeAudit={triggerNodeAudit}
+            clearNodeAudit={clearNodeAudit}
           />
         )}
       </AnimatePresence>
@@ -1001,6 +1200,7 @@ export default function GalaxyMap() {
             hovered={hovered}
             isFullscreen={isFullscreen}
             isDark={isDark}
+            activeJob={activeJobs[hovered.id]}
           />
         )}
       </AnimatePresence>

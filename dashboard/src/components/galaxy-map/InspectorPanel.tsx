@@ -1,10 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Focus, X, FileText, ShieldAlert, Wrench, Loader2 } from 'lucide-react';
-import { StarNode } from './types';
+import { StarNode, ActiveJob } from './types';
 import { ROOM_COLORS_MAP_DARK, ROOM_COLORS_MAP_LIGHT } from './constants';
 import { TOOL_EQUATIONS } from '@/lib/equations';
-import { CONFIG } from '@/lib/config';
 
 interface InspectorPanelProps {
   selectedNode: StarNode;
@@ -12,6 +11,9 @@ interface InspectorPanelProps {
   handleFocusNode: (node: StarNode) => void;
   isFullscreen: boolean;
   isDark: boolean;
+  activeJob?: ActiveJob;
+  triggerNodeAudit: (node: StarNode, workflow: 'code_review' | 'bug_fix') => void;
+  clearNodeAudit: (nodeId: string) => void;
 }
 
 export default function InspectorPanel({
@@ -19,119 +21,19 @@ export default function InspectorPanel({
   setSelectedNode,
   handleFocusNode,
   isFullscreen,
-  isDark
+  isDark,
+  activeJob,
+  triggerNodeAudit,
+  clearNodeAudit
 }: InspectorPanelProps) {
   const roomColorsMap = isDark ? ROOM_COLORS_MAP_DARK : ROOM_COLORS_MAP_LIGHT;
   
   const toolName = selectedNode.file.split('/').pop()?.replace('.py', '') || '';
   const equationObj = TOOL_EQUATIONS[toolName];
 
-  const [auditStatus, setAuditStatus] = React.useState<'idle' | 'running' | 'completed' | 'error'>('idle');
-  const [auditReport, setAuditReport] = React.useState<string | null>(null);
-  const [auditError, setAuditError] = React.useState<string | null>(null);
-  const intervalRef = React.useRef<any>(null);
-
-  React.useEffect(() => {
-    // Reset audit states and clear interval when active node changes
-    setAuditStatus('idle');
-    setAuditReport(null);
-    setAuditError(null);
-    
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [selectedNode.id]);
-
-  const handleRunAudit = async (workflow: 'code_review' | 'bug_fix') => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-
-    setAuditStatus('running');
-    setAuditReport(null);
-    setAuditError(null);
-
-    try {
-      const res = await fetch(`${CONFIG.API_BASE}/orchestrate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflow,
-          task: workflow === 'code_review' 
-            ? `Run a full SVE verifier audit and supervisor style check on ${selectedNode.file.split('/').pop()}.`
-            : `Diagnose and fix any logical regressions or syntax errors in ${selectedNode.file.split('/').pop()}.`,
-          file_path: selectedNode.file,
-          project_path: '.'
-        })
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP Error ${res.status} ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      if (data.status === 'error' || data.status === 'blocked') {
-        setAuditStatus('error');
-        setAuditError(data.message || 'Job blocked by security guardrails');
-        return;
-      }
-
-      const jobId = data.job_id;
-      let attempts = 0;
-      const maxAttempts = 60; // 2 minutes max polling
-
-      const interval = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`${CONFIG.API_BASE}/orchestrate/status/${jobId}`);
-          if (!statusRes.ok) {
-            throw new Error(`Failed to fetch status`);
-          }
-          const statusData = await statusRes.json();
-          
-          if (statusData.status === 'completed' || statusData.status === 'approved' || statusData.status === 'review_needed' || statusData.status === 'error') {
-            clearInterval(interval);
-            intervalRef.current = null;
-            if (statusData.status === 'error') {
-              setAuditStatus('error');
-              setAuditError(statusData.error || 'Pipeline execution failed.');
-            } else {
-              setAuditStatus('completed');
-              setAuditReport(statusData.result || 'No report returned.');
-            }
-          } else if (attempts >= maxAttempts) {
-            clearInterval(interval);
-            intervalRef.current = null;
-            setAuditStatus('error');
-            setAuditError('Orchestration job timed out.');
-          }
-          attempts++;
-        } catch (err) {
-          clearInterval(interval);
-          intervalRef.current = null;
-          setAuditStatus('error');
-          setAuditError(err instanceof Error ? err.message : 'Error polling job status');
-        }
-      }, 2000);
-      
-      intervalRef.current = interval;
-
-    } catch (err) {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
-      setAuditStatus('error');
-      setAuditError(err instanceof Error ? err.message : 'Network error initiating job');
-    }
-  };
+  const auditStatus = activeJob?.status || 'idle';
+  const auditReport = activeJob?.report || null;
+  const auditError = activeJob?.error || null;
 
   return (
     <motion.div 
@@ -166,7 +68,7 @@ export default function InspectorPanel({
             {auditError}
           </p>
           <button 
-            onClick={() => setAuditStatus('idle')}
+            onClick={() => clearNodeAudit(selectedNode.id)}
             className="px-4 py-2 border border-rose-500/30 hover:bg-rose-500/10 text-[9px] font-mono uppercase tracking-widest text-rose-500 rounded-sm"
           >
             Close
@@ -183,7 +85,7 @@ export default function InspectorPanel({
               Sovereign Report
             </span>
             <button 
-              onClick={() => setAuditStatus('idle')}
+              onClick={() => clearNodeAudit(selectedNode.id)}
               className="p-1 text-[var(--foreground)] opacity-50 hover:opacity-100 transition-all"
             >
               <X className="w-4 h-4" />
@@ -264,7 +166,7 @@ export default function InspectorPanel({
         <span className="text-[8px] font-mono font-bold uppercase tracking-widest opacity-30 select-none">Sovereign Orchestration</span>
         <div className="flex gap-2">
           <button
-            onClick={() => handleRunAudit('code_review')}
+            onClick={() => triggerNodeAudit(selectedNode, 'code_review')}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--accent)]/10 text-[8px] font-mono uppercase tracking-wider transition-all rounded-sm hover:scale-[1.02] active:scale-[0.98]"
             title="Trigger full SVE code review"
           >
@@ -272,7 +174,7 @@ export default function InspectorPanel({
             SVE Code Audit
           </button>
           <button
-            onClick={() => handleRunAudit('bug_fix')}
+            onClick={() => triggerNodeAudit(selectedNode, 'bug_fix')}
             className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 border border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--accent)]/10 text-[8px] font-mono uppercase tracking-wider transition-all rounded-sm hover:scale-[1.02] active:scale-[0.98]"
             title="Attempt autonomic bug fix"
           >

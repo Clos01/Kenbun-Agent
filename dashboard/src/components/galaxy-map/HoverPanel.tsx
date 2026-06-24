@@ -1,18 +1,20 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { StarNode } from './types';
+import { StarNode, ActiveJob } from './types';
 import { ROOM_COLORS_MAP_DARK, ROOM_COLORS_MAP_LIGHT } from './constants';
 
 interface HoverPanelProps {
   hovered: StarNode;
   isFullscreen: boolean;
   isDark: boolean;
+  activeJob?: ActiveJob;
 }
 
 export default function HoverPanel({
   hovered,
   isFullscreen,
-  isDark
+  isDark,
+  activeJob
 }: HoverPanelProps) {
   const roomColorsMap = isDark ? ROOM_COLORS_MAP_DARK : ROOM_COLORS_MAP_LIGHT;
 
@@ -33,6 +35,20 @@ export default function HoverPanel({
       </div>
       <h4 className="text-xs font-heading font-bold text-[var(--foreground)] truncate">{hovered.file.split('/').pop()}</h4>
       <p className="text-[10px] font-mono opacity-35 truncate">{hovered.file}</p>
+      
+      {activeJob && (
+        <div className="pt-2 border-t border-[var(--border)]/30 flex items-center justify-between text-[8px] font-mono">
+          <span className="opacity-40 uppercase">Sovereign State:</span>
+          <span className={`font-bold ${
+            activeJob.status === 'running' ? 'text-amber-500 animate-pulse' :
+            activeJob.status === 'completed' ? 'text-emerald-500' : 'text-rose-500'
+          }`}>
+            {activeJob.status === 'running' 
+              ? (activeJob.workflow === 'bug_fix' ? 'AUTONOMIC FIXING...' : 'SVE AUDITING...') 
+              : activeJob.status.toUpperCase()}
+          </span>
+        </div>
+      )}
     </motion.div>
   );
 }
