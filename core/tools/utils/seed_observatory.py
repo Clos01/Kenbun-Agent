@@ -253,13 +253,6 @@ def seed_chromadb_reasoning():
         ]
 
         for d in decisions:
-            meta = {
-                "type": "DECISION",
-                "result": d["result"],
-                "tool": d["tool"],
-                "confidence": d["confidence"],
-                "timestamp": d["timestamp"],
-                "output": d["output"]
             content = f"DECISION: {d['logic']}\nOUTPUT:\n{d['output']}\nRESULT: {d['result']}\nCONFIDENCE: {d['confidence']}"
             add_memory(content=content, category="history")
         print("✅ Honcho reasoning history seeded successfully.")
@@ -352,13 +345,6 @@ def seed_chromadb_intelligence():
         
         timestamp = str(time.time())
         for tool_id, category, alpha, beta, s, f in tools_data:
-            meta = {
-                "category": category,
-                "alpha": alpha,
-                "beta": beta,
-                "success_count": s,
-                "failure_count": f,
-                "timestamp": timestamp
             content = f"Tool: {tool_id}\nCategory: {category}\nAlpha: {alpha}\nBeta: {beta}\nSuccess: {s}\nFailure: {f}"
             add_memory(content=content, category="system_4_intelligence")
         print("✅ Honcho system_4_intelligence seeding complete.")

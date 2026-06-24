@@ -23,7 +23,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
-    subparsers = parser.add_subparsers(dest="operation", help="Math operations", required=True)
+    subparsers = parser.add_subparsers(
+        dest="operation", help="Math operations", required=True
+    )
     
     # Subparser template for operations
     def add_operation(name, help_text):
