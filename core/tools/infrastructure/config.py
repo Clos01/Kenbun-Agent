@@ -80,6 +80,15 @@ class SecuritySettings(BaseModel):
     custom_hook_path: Optional[str] = None
     sandbox_mode: str = "docker"
 
+class BitwardenSettings(BaseModel):
+    enabled: bool = False
+    access_token_env: str = "BWS_ACCESS_TOKEN"
+    project_id: str = ""
+    server_url: str = ""
+    cache_ttl_seconds: int = 300
+    override_existing: bool = True
+    auto_install: bool = True
+
 # --- 2. MAIN CONFIGURATION HUB ---
 
 class KenbunSettings(BaseSettings):
@@ -96,7 +105,7 @@ class KenbunSettings(BaseSettings):
     # --- PROJECT PATHS ---
     PROJECT_ROOT: Path = Field(default_factory=get_project_root)
     DEV_ROOT: Path = Field(default_factory=lambda: Path.home() / "Dev")
-    BRAIN_HEALTH_DIR: Optional[Path] = None
+    BRAIN_HEALTH_DIR: Path = Field(default_factory=lambda: get_project_root() / "brain_health")
     FRONTEND_URL: str = Field(default="http://localhost:3000")
     MASTER_KEY_PATH: Path = Field(default_factory=lambda: Path.home() / ".gemini" / "antigravity" / "keys" / ".kenbun_master.key")
     OLD_MASTER_KEY_PATH: Path = Field(default_factory=lambda: Path.home() / ".gemini" / "antigravity" / "keys" / ".antigravity_master.key")
@@ -114,7 +123,9 @@ class KenbunSettings(BaseSettings):
     @field_validator("BRAIN_HEALTH_DIR", mode="before")
     @classmethod
     def assemble_brain_health_dir(cls, v, info):
-        return get_project_root() / "brain_health"
+        if v is None:
+            return get_project_root() / "brain_health"
+        return Path(v)
 
     @property
     def INTELLIGENCE_DB_PATH(self) -> Path:
@@ -145,6 +156,27 @@ class KenbunSettings(BaseSettings):
     MAX_CONCURRENT_ORCHESTRATE_JOBS: int = Field(default=10)
     ORCHESTRATE_JOB_TIMEOUT_SEC: int = Field(default=600)
     CONFIG_TOKEN: Optional[str] = Field(default=None)
+
+    # --- SECRETS & BITWARDEN ---
+    secrets_bitwarden_enabled: bool = Field(default=False, validation_alias="SECRETS_BITWARDEN_ENABLED")
+    secrets_bitwarden_access_token_env: str = Field(default="BWS_ACCESS_TOKEN")
+    secrets_bitwarden_project_id: str = Field(default="")
+    secrets_bitwarden_server_url: str = Field(default="")
+    secrets_bitwarden_cache_ttl_seconds: int = Field(default=300)
+    secrets_bitwarden_override_existing: bool = Field(default=True)
+    secrets_bitwarden_auto_install: bool = Field(default=True)
+
+    @property
+    def secrets_bitwarden(self) -> BitwardenSettings:
+        return BitwardenSettings(
+            enabled=self.secrets_bitwarden_enabled,
+            access_token_env=self.secrets_bitwarden_access_token_env,
+            project_id=self.secrets_bitwarden_project_id,
+            server_url=self.secrets_bitwarden_server_url,
+            cache_ttl_seconds=self.secrets_bitwarden_cache_ttl_seconds,
+            override_existing=self.secrets_bitwarden_override_existing,
+            auto_install=self.secrets_bitwarden_auto_install
+        )
 
     # --- CHROMA DB ---
     CHROMA_HOST: str = Field(default="localhost")
@@ -215,6 +247,65 @@ class KenbunSettings(BaseSettings):
     SPECULATIVE_SERVER_PORT: Optional[int] = None
     SPECULATIVE_SERVER_MODEL: Optional[str] = None
     SPECULATIVE_LATENCY_THRESHOLD_SEC: Optional[float] = None
+    CODE_EXECUTION_MODE: str = Field(default="project")
+    CODE_EXECUTION_TIMEOUT: int = Field(default=300)
+    CODE_EXECUTION_MAX_TOOL_CALLS: int = Field(default=50)
+
+    # --- WEB SEARCH & EXTRACT ---
+    FIRECRAWL_API_KEY: Optional[SecretStr] = None
+    FIRECRAWL_API_URL: Optional[str] = None
+    SEARXNG_URL: Optional[str] = None
+    BRAVE_SEARCH_API_KEY: Optional[SecretStr] = None
+    TAVILY_API_KEY: Optional[SecretStr] = None
+    EXA_API_KEY: Optional[SecretStr] = None
+    PARALLEL_API_KEY: Optional[SecretStr] = None
+    WEB_BACKEND: str = Field(default="ddgs")
+    WEB_SEARCH_BACKEND: Optional[str] = None
+    WEB_EXTRACT_BACKEND: Optional[str] = None
+    AUXILIARY_WEB_EXTRACT_PROVIDER: str = Field(default="auto")
+    AUXILIARY_WEB_EXTRACT_MODEL: Optional[str] = None
+    AUXILIARY_WEB_EXTRACT_TIMEOUT: int = Field(default=360)
+
+    # --- BROWSER AUTOMATION ---
+    BROWSERBASE_API_KEY: Optional[SecretStr] = None
+    BROWSERBASE_PROJECT_ID: Optional[str] = None
+    BROWSER_USE_API_KEY: Optional[SecretStr] = None
+    CAMOFOX_URL: Optional[str] = None
+    CAMOFOX_USER_ID: Optional[str] = None
+    CAMOFOX_SESSION_KEY: Optional[str] = None
+    CAMOFOX_ADOPT_EXISTING_TAB: bool = Field(default=False)
+    CAMOFOX_REWRITE_LOOPBACK_URLS: bool = Field(default=False)
+    CAMOFOX_LOOPBACK_HOST_ALIAS: str = Field(default="host.docker.internal")
+    CAMOFOX_MANAGED_PERSISTENCE: bool = Field(default=False)
+    BROWSER_CLOUD_PROVIDER: Optional[str] = None
+    BROWSER_AUTO_LOCAL_FOR_PRIVATE_URLS: bool = Field(default=True)
+    BROWSER_ALLOW_PRIVATE_URLS: bool = Field(default=False)
+    BROWSER_RECORD_SESSIONS: bool = Field(default=False)
+    BROWSER_INACTIVITY_TIMEOUT: int = Field(default=120)
+    BROWSER_DIALOG_POLICY: str = Field(default="must_respond")
+    BROWSER_DIALOG_TIMEOUT_S: int = Field(default=300)
+    AGENT_BROWSER_ARGS: Optional[str] = None
+
+    # --- COMPUTER USE ---
+    CUA_DRIVER_CMD: str = Field(default="cua-driver")
+    CUA_TELEMETRY: bool = Field(default=False)
+    COMPUTER_USE_BACKEND: str = Field(default="mcp")
+    COMPUTER_USE_APPROVAL_REQUIRED: bool = Field(default=True)
+
+    # --- VISION & IMAGE PASTE ---
+    AUXILIARY_VISION_PROVIDER: str = Field(default="auto")
+    AUXILIARY_VISION_MODEL: Optional[str] = None
+    AUXILIARY_VISION_TIMEOUT: int = Field(default=360)
+
+    # --- VOICE & TTS ---
+    TTS_PROVIDER: str = Field(default="edge")
+    TTS_SPEED: float = Field(default=1.0)
+    STT_PROVIDER: str = Field(default="local")
+    STT_MODEL: str = Field(default="base")
+    HERMES_CONFIG_PATH: str = Field(default="~/.hermes/config.yaml")
+
+
+
 
     @property
     def models(self) -> ModelSettings:
@@ -349,6 +440,12 @@ def migrate_database_safely(settings: KenbunSettings):
 @lru_cache()
 def get_settings() -> KenbunSettings:
     """Returns the globally shared KenbunSettings singleton with caching."""
+    try:
+        from tools.utils.secrets_bitwarden import apply_secrets_to_env
+        apply_secrets_to_env()
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"Warning: Failed to bootstrap Bitwarden secrets: {e}\n")
     _settings = KenbunSettings()
     if _settings.BRAIN_HEALTH_DIR:
         _settings.BRAIN_HEALTH_DIR.mkdir(parents=True, exist_ok=True)

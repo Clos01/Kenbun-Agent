@@ -39,8 +39,12 @@ async function handleProxy(request: NextRequest, params: { slug: string[] }) {
       return NextResponse.json({ error: "Forbidden: Path Traversal Detected" }, { status: 403 });
     }
 
-    // If running outside docker (e.g. npm run dev on Mac), fallback to 127.0.0.1
-    const internalBackendUrl = process.env.INTERNAL_API_URL || "http://127.0.0.1:8001";
+    // Smart backend URL resolution: fallback to host.docker.internal inside Docker container, otherwise 127.0.0.1
+    let internalBackendUrl = process.env.INTERNAL_API_URL;
+    if (!internalBackendUrl) {
+      const isDocker = fs.existsSync("/.dockerenv");
+      internalBackendUrl = isDocker ? "http://host.docker.internal:8001" : "http://127.0.0.1:8001";
+    }
     
     // We append the exact search params (like ?page=1) to the backend URL, plus a cache buster
     const searchParams = new URLSearchParams(request.nextUrl.search);
@@ -53,9 +57,21 @@ async function handleProxy(request: NextRequest, params: { slug: string[] }) {
     let configToken = process.env.CONFIG_TOKEN || "";
     if (!configToken) {
       try {
-        const tokenPath = "/app/brain_health/config_token.secret";
-        if (fs.existsSync(tokenPath)) {
-          configToken = fs.readFileSync(tokenPath, "utf8").trim();
+        const pathsToTry = [
+          "/app/brain_health/config_token.secret",
+          path.resolve(process.cwd(), "../brain_health/config_token.secret"),
+          path.resolve(process.cwd(), "brain_health/config_token.secret"),
+        ];
+        if (process.env.PROJECT_ROOT) {
+          pathsToTry.push(path.resolve(process.env.PROJECT_ROOT, "brain_health/config_token.secret"));
+        }
+        
+        for (const tokenPath of pathsToTry) {
+          if (fs.existsSync(tokenPath)) {
+            configToken = fs.readFileSync(tokenPath, "utf8").trim();
+            console.log(`[PROXY] Cryptographic config token loaded successfully from ${tokenPath}`);
+            break;
+          }
         }
       } catch (err) {
         console.error("[PROXY] Shared config token retrieval failed:", err);

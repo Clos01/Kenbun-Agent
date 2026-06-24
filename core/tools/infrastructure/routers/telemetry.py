@@ -230,3 +230,40 @@ async def get_sovereignty_status():
         return {"error": "Registry not found"}
     except Exception as e:
         return {"error": str(e)}
+
+
+@router.get("/api/v1/proxy/status")
+async def get_proxy_status():
+    """Checks the status of the subscription proxy."""
+    import socket
+    port = 8645
+    host = "127.0.0.1"
+    active = False
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(0.5)
+            s.connect((host, port))
+            active = True
+    except Exception:
+        pass
+
+    providers = []
+    if settings.GEMINI_API_KEY:
+        providers.append("gemini")
+    if settings.DEEPSEEK_API_KEY:
+        providers.append("deepseek")
+    if settings.OPENAI_API_KEY:
+        providers.append("openai")
+    if settings.ANTHROPIC_API_KEY:
+        providers.append("anthropic")
+    if hasattr(settings, "XAI_API_KEY") and settings.XAI_API_KEY:
+        providers.append("xai")
+    if hasattr(settings, "NVIDIA_API_KEY") and settings.NVIDIA_API_KEY:
+        providers.append("nvidia")
+
+    return {
+        "status": "running" if active else "stopped",
+        "port": port,
+        "host": host,
+        "providers": providers
+    }

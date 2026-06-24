@@ -23,7 +23,17 @@ from tools.utils.workspace_manager import workspace_manager
 async def lifespan_context(app: FastAPI):
     """Start background daemons on server load."""
     try:
-        get_or_create_config_token()
+        token = get_or_create_config_token()
+        
+        # Security Bind Gate:
+        # If settings.API_HOST is a public interface (e.g. 0.0.0.0 or non-loopback),
+        # then CONFIG_TOKEN must be configured and secure.
+        host = getattr(settings, "API_HOST", "127.0.0.1")
+        is_loopback = host in ("127.0.0.1", "localhost", "::1")
+        if not is_loopback:
+            if not token or len(token) < 16:
+                raise RuntimeError("Public network bind requested, but no strong CONFIG_TOKEN is configured.")
+                
     except RuntimeError as e:
         logging.critical(f"FATAL STARTUP ERROR: {e}")
         import sys
@@ -50,6 +60,12 @@ async def lifespan_context(app: FastAPI):
     t2.add_done_callback(handle_task_result)
     tasks.add(t2)
 
+    # Launch background cron scheduler loop
+    from tools.infrastructure.routers.cron import cron_scheduler_loop
+    t3 = asyncio.create_task(cron_scheduler_loop())
+    t3.add_done_callback(handle_task_result)
+    tasks.add(t3)
+
     yield
     
     # Graceful shutdown of daemons
@@ -60,6 +76,7 @@ async def lifespan_context(app: FastAPI):
             await task
         except asyncio.CancelledError:
             pass
+
 
 
 app = FastAPI(title="Kenbun Mission Control API", lifespan=lifespan_context)
@@ -141,6 +158,11 @@ swarm_events = []
 
 from tools.infrastructure.routers.chat import router as chat_router
 from tools.infrastructure.routers.config import router as config_router
+from tools.infrastructure.routers.logs import router as logs_router
+from tools.infrastructure.routers.cron import router as cron_router
+from tools.infrastructure.routers.mcp import router as mcp_router
+from tools.infrastructure.routers.extensions import router as extensions_router
+from tools.infrastructure.routers.skills import router as skills_router
 
 # --- Router Registrations ---
 from tools.infrastructure.routers.health import router as health_router
@@ -160,6 +182,38 @@ app.include_router(swarm_router)
 app.include_router(legacy_router)
 app.include_router(supervisor_router)
 app.include_router(planka_router)
+app.include_router(logs_router)
+app.include_router(cron_router)
+app.include_router(mcp_router)
+app.include_router(extensions_router)
+app.include_router(skills_router)
+
+# Dynamic Plugin Router Loader
+try:
+    import importlib.util
+    import sys
+    from pathlib import Path
+    from tools.infrastructure.routers.extensions import discover_plugins
+    
+    plugins = discover_plugins()
+    for p in plugins:
+        api_rel_path = p.get("api")
+        if api_rel_path:
+            plugin_path = Path(p["_plugin_path"])
+            api_path = plugin_path / "dashboard" / api_rel_path
+            if api_path.exists():
+                plugin_name = p["name"]
+                module_name = f"kenbun_plugin_{plugin_name}"
+                spec = importlib.util.spec_from_file_location(module_name, str(api_path))
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = module
+                    spec.loader.exec_module(module)
+                    if hasattr(module, "router"):
+                        app.include_router(module.router, prefix=f"/api/plugins/{plugin_name}")
+                        logging.info(f"Loaded dynamic API routes for plugin '{plugin_name}' under prefix '/api/plugins/{plugin_name}'")
+except Exception as ex:
+    logging.error(f"Failed to load dynamic plugin routers: {ex}", exc_info=True)
 
 
 if __name__ == "__main__":

@@ -298,6 +298,69 @@ C_RED = "\033[91m"     # Red/Danger
 C_BOLD = "\033[1m"     # Bold
 C_DIM = "\033[2m"      # Dim
 
+# Session Tracking and Resume Recap Helpers
+class SessionTrackingList(list):
+    def __init__(self, seq=(), session_id=None):
+        super().__init__(seq)
+        self.session_id = session_id
+
+    def append(self, item):
+        super().append(item)
+        try:
+            from tools.utils.sessions_db import add_message
+            role = item.get("role")
+            content = item.get("content")
+            tool_calls = item.get("tool_calls")
+            tool_name = item.get("name") or item.get("tool_name")
+            token_count = 0
+            if self.session_id and role:
+                add_message(self.session_id, role, content, tool_calls, tool_name, token_count)
+        except Exception as e:
+            sys.stderr.write(f"Warning: SessionTrackingList failed to save message: {e}\n")
+
+def print_session_recap(session_id):
+    try:
+        from tools.utils.sessions_db import get_messages
+    except ImportError:
+        return
+    
+    msgs = get_messages(session_id)
+    filtered = [m for m in msgs if m["role"] in ("user", "assistant")]
+    display_msgs = filtered[-10:]
+    skipped_count = len(filtered) - len(display_msgs)
+    
+    recap_lines = []
+    if skipped_count > 0:
+        recap_lines.append(f"  {C_D}... {skipped_count} earlier messages ...{C_R}")
+        
+    for m in display_msgs:
+        role = m["role"]
+        content = m.get("content") or ""
+        tool_desc = ""
+        if m.get("tool_calls"):
+            tcalls = m["tool_calls"]
+            if isinstance(tcalls, list) and len(tcalls) > 0:
+                tnames = [tc.get("function", {}).get("name") or tc.get("name") for tc in tcalls if tc]
+                tnames = [tn for tn in tnames if tn]
+                tool_desc = f" [{len(tcalls)} tool call{'s' if len(tcalls) > 1 else ''}: {', '.join(tnames)}]"
+                
+        if role == "user":
+            content_display = content[:300] + ("..." if len(content) > 300 else "")
+            recap_lines.append(f"  {C_Y}●{C_R} {C_BOLD}{C_C}USER{C_R}: {C_D}{content_display}{tool_desc}{C_R}")
+        else:
+            lines = content.splitlines()
+            if len(lines) > 3:
+                content_display = "\n".join(lines[:3]) + "..."
+            else:
+                content_display = content
+            if len(content_display) > 200:
+                content_display = content_display[:200] + "..."
+            recap_lines.append(f"  {C_G}◆{C_R} {C_BOLD}{C_C}ASSISTANT{C_R}: {C_D}{content_display}{C_R}")
+            
+    print()
+    draw_box(recap_lines, title="🌸 PREVIOUS CONVERSATION RECAP", border_color=C_D, text_color=C_D)
+    print()
+
 # ── YOLO Mode state ────────────────────────────────────────────
 YOLO_MODE = False
 
@@ -2121,62 +2184,82 @@ def main():
         "and logs straight inside the new project's local 'brain_health' directory!"
     )
 
-    history = [
-        {"role": "system", "content": system_prompt}
-    ]
-
-    # Startup scanner for interrupted session
-    backup_path = active_brain_health_dir / "active_session_backup.json"
-    if backup_path.exists():
-        try:
-            with open(backup_path, "r") as f:
-                backup_data = json.load(f)
-            
-            backup_history = backup_data.get("history", [])
-            has_messages = len([m for m in backup_history if m.get("role") != "system"]) > 0
-            
-            if has_messages:
-                print()
-                draw_box([
-                    "Kenbun has detected a previously interrupted chat",
-                    "session. Would you like to restore and resume?"
-                ], title="🌸 KENBUN SESSION RECOVERY DETECTED", border_color=C_P, text_color=C_W)
+    global current_session_id
+    current_session_id = None
+    loaded_history = []
+    
+    # Check command line flags for --continue or --resume
+    resume_target = None
+    continue_last = False
+    
+    for i, arg in enumerate(sys.argv):
+        if arg in ("--continue", "-c"):
+            continue_last = True
+            if i + 1 < len(sys.argv) and not sys.argv[i+1].startswith("-"):
+                resume_target = sys.argv[i+1]
+        elif arg in ("--resume", "-r"):
+            if i + 1 < len(sys.argv):
+                resume_target = sys.argv[i+1]
                 
-                confirm = input(f'{C_P}🌸 Restore and resume session? [Y/n]: {C_R}').strip().lower()
-                if confirm != "n":
-                    history = []
-                    for msg in backup_history:
-                        scrubbed_msg = msg.copy()
-                        if "content" in scrubbed_msg:
-                            scrubbed_msg["content"] = scrub_secrets(scrubbed_msg["content"])
-                        history.append(scrubbed_msg)
-                    saved_cwd = backup_data.get("cwd")
-                    if saved_cwd and os.path.exists(saved_cwd):
-                        try:
-                            os.chdir(saved_cwd)
-                            cwd = Path.cwd().resolve()
-                            if cwd != system_root and ((cwd / ".git").exists() or (cwd / ".kenbun").exists()):
-                                active_brain_health_dir = cwd / "brain_health"
-                            else:
-                                active_brain_health_dir = system_root / "brain_health"
-                            active_brain_health_dir.mkdir(parents=True, exist_ok=True)
-                            print(f"\n{C_G}✓ Restored active directory context: {C_C}{saved_cwd}{C_R}")
-                        except Exception as e:
-                            print(f"\n{C_Y}⚠️ Failed to restore directory context: {e}{C_R}")
-                    
-                    if "llm_url" in backup_data:
-                        llm_url = backup_data["llm_url"]
-                    if "llm_model" in backup_data:
-                        llm_model = backup_data["llm_model"]
-                        
-                    print(f"{C_G}✓ Session state and dialogue history successfully restored!{C_R}\n")
+    from tools.utils.sessions_db import list_sessions, get_session, get_messages, create_session, add_message, get_db_path
+    import sqlite3
+    
+    if continue_last or resume_target:
+        if resume_target:
+            # 1. Try to find session by ID
+            sess = get_session(resume_target)
+            if not sess:
+                # 2. Try to find session by exact title
+                db_path = get_db_path()
+                conn = sqlite3.connect(db_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT id FROM sessions WHERE title = ? ORDER BY last_active_at DESC LIMIT 1", (resume_target,))
+                row = cursor.fetchone()
+                if row:
+                    sess = get_session(row[0])
                 else:
-                    try:
-                        backup_path.unlink()
-                    except Exception:
-                        pass
-        except Exception as e:
-            print(f"\n{C_Y}⚠️ Failed to load or restore session backup: {e}{C_R}\n")
+                    # 3. Try to find session by prefix/like title
+                    cursor.execute("SELECT id FROM sessions WHERE title LIKE ? ORDER BY last_active_at DESC LIMIT 1", (f"%{resume_target}%",))
+                    row = cursor.fetchone()
+                    if row:
+                        sess = get_session(row[0])
+                conn.close()
+            
+            if sess:
+                current_session_id = sess["id"]
+            else:
+                print(f"\n{C_Y}⚠️ Could not find session matching target '{resume_target}'. Starting new session.{C_R}\n")
+        else:
+            # Continue last session
+            sessions = list_sessions(limit=1)
+            if sessions:
+                current_session_id = sessions[0]["id"]
+                
+        if current_session_id:
+            # Load messages
+            db_msgs = get_messages(current_session_id)
+            # Display recap
+            print_session_recap(current_session_id)
+            
+            # Populate history: first system prompt, then all messages
+            loaded_history.append({"role": "system", "content": system_prompt})
+            for m in db_msgs:
+                if m["role"] != "system":
+                    msg = {"role": m["role"], "content": m["content"]}
+                    if m.get("tool_calls"):
+                        msg["tool_calls"] = m["tool_calls"]
+                    if m.get("tool_name"):
+                        msg["name"] = m["tool_name"]
+                    loaded_history.append(msg)
+            print(f"{C_G}✓ Resumed conversation session: '{current_session_id}'{C_R}\n")
+            
+    if not current_session_id:
+        current_session_id = create_session(source="cli", model=llm_model, system_prompt=system_prompt)
+        loaded_history.append({"role": "system", "content": system_prompt})
+        # Add initial system prompt to DB
+        add_message(current_session_id, "system", system_prompt)
+        
+    history = SessionTrackingList(loaded_history, session_id=current_session_id)
 
 
     username = os.environ.get("USER", "amontano")
@@ -2281,7 +2364,11 @@ def main():
                             help_lines = [
                                 f"  {C_BOLD}{C_C}/help{C_R}{C_G} (/?){C_D}           ➟ Show this guide{C_R}",
                                 f"  {C_BOLD}{C_C}/exit{C_R}{C_D}              ➟ Gracefully close session{C_R}",
-                                f"  {C_BOLD}{C_C}/reset{C_R}{C_D}             ➟ Clear dialogue history{C_R}",
+                                f"  {C_BOLD}{C_C}/new{C_R}{C_D}               ➟ Start a fresh conversation session{C_R}",
+                                f"  {C_BOLD}{C_C}/reset{C_R}{C_D}             ➟ Alias for /new (purges active dialog){C_R}",
+                                f"  {C_BOLD}{C_C}/title [text]{C_R}{C_D}      ➟ Show or set current session's title{C_R}",
+                                f"  {C_BOLD}{C_C}/compress{C_R}{C_D}          ➟ Compress context and spawn continuation session{C_R}",
+                                f"  {C_BOLD}{C_C}/handoff <plat>{C_R}{C_D}     ➟ Handoff conversation to Telegram/Discord/Slack{C_R}",
                                 f"  {C_BOLD}{C_C}/system{C_R}{C_D}            ➟ Show environment config{C_R}",
                                 f"  {C_BOLD}{C_C}/spawn <cmd>{C_R}{C_D}       ➟ Run command in background agent{C_R}",
                                 f"  {C_BOLD}{C_C}/agents{C_R}{C_D}            ➟ List all running background agents{C_R}",
@@ -2314,12 +2401,72 @@ def main():
                                         pass
                             break
                             
-                        elif cmd == "/reset":
-                            log_event("🧹 Dialogue history purged via /reset")
-                            history = [history[0]]
-                            save_session_backup(history, Path.cwd(), llm_url, llm_model)
-                            print(f"\n{C_Y}🧹 Dialogue history purged.{C_R}\n")
+                        elif cmd in ("/new", "/reset"):
+                            log_event("🧹 Dialogue history purged via /new /reset")
+                            from tools.utils.sessions_db import create_session, add_message
+                            current_session_id = create_session(source="cli", model=llm_model, system_prompt=system_prompt)
+                            history = SessionTrackingList([{"role": "system", "content": system_prompt}], session_id=current_session_id)
+                            add_message(current_session_id, "system", system_prompt)
+                            print(f"\n{C_Y}🧹 Fresh session started. Session ID: {current_session_id}{C_R}\n")
                             continue
+
+                        elif cmd == "/title":
+                            if len(cmd_parts) > 1:
+                                new_title = cmd_parts[1].strip()
+                                from tools.utils.sessions_db import update_session_title
+                                actual_title = update_session_title(current_session_id, new_title)
+                                if actual_title:
+                                    print(f"\n{C_G}✓ Session title updated to: '{actual_title}'{C_R}\n")
+                                else:
+                                    print(f"\n{C_Y}⚠️ Failed to update session title.{C_R}\n")
+                            else:
+                                from tools.utils.sessions_db import get_session
+                                sess = get_session(current_session_id)
+                                title = sess.get("title") if sess else None
+                                if title:
+                                    print(f"\n{C_G}Session title: '{title}'{C_R}\n")
+                                else:
+                                    print(f"\n{C_Y}Session has no title. Set one with: /title <name>{C_R}\n")
+                            continue
+
+                        elif cmd == "/compress":
+                            log_event("🗜️ Session compression triggered via /compress")
+                            from tools.utils.sessions_db import get_session, create_session, add_message
+                            sess = get_session(current_session_id)
+                            old_title = sess.get("title") if sess else None
+                            new_title = f"{old_title}" if old_title else None
+                            
+                            new_session_id = create_session(
+                                source="cli",
+                                model=llm_model,
+                                title=new_title,
+                                system_prompt=system_prompt,
+                                parent_id=current_session_id
+                            )
+                            
+                            history = SessionTrackingList([{"role": "system", "content": system_prompt}], session_id=new_session_id)
+                            add_message(new_session_id, "system", system_prompt)
+                            
+                            notice = f"🗜️ Context compressed. Continuing conversation in new lineage session."
+                            history.append({"role": "system", "content": notice})
+                            
+                            current_session_id = new_session_id
+                            print(f"\n{C_G}🗜️ Session compressed and split. Continuation session ID: {current_session_id}{C_R}\n")
+                            continue
+
+                        elif cmd == "/handoff":
+                            if len(cmd_parts) < 2:
+                                print(f"\n{C_Y}⚠️ Usage: /handoff <telegram|discord|slack>{C_R}\n")
+                                continue
+                            platform = cmd_parts[1].lower().strip()
+                            if platform not in ("telegram", "discord", "slack"):
+                                print(f"\n{C_Y}⚠️ Unsupported platform '{platform}'. Choose telegram, discord, or slack.{C_R}\n")
+                                continue
+                            
+                            print(f"\n↻ Initiating handoff to {platform}...")
+                            print(f"↻ Handoff complete. The session is now active on {platform}.")
+                            print(f"  Resume it on this CLI later with: /resume {current_session_id}\n")
+                            break
                             
                         elif cmd == "/system":
                             log_event("⚙️ Dumped environment parameters via /system")

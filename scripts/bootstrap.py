@@ -829,29 +829,33 @@ def configure_api_keys():
             except Exception:
                 pass
 
-        primary_url = env_vars.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
-        primary_model = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
+        primary_url = str(env_vars.get("PRIMARY_LLM_URL") or "http://localhost:11434/v1")
+        primary_model = str(env_vars.get("PRIMARY_LLM_MODEL") or "llama3.2:3b")
 
         # Decrypt for screen display to make it clear for the user
-        decrypted_url = decrypt_value_local(primary_url, project_root)
-        decrypted_model = decrypt_value_local(primary_model, project_root)
+        decrypted_url = str(decrypt_value_local(primary_url, project_root) or "")
+        decrypted_model = str(decrypt_value_local(primary_model, project_root) or "")
 
         # Detect active provider
         active_provider_name = "Unknown / Custom"
         active_provider_key_status = "[No Key Required]"
         
         for p in PROVIDERS_MAP:
-            if p["url"] in decrypted_url or decrypted_url in p["url"] or p["url"] in primary_url or primary_url in p["url"]:
-                active_provider_name = p["name"]
-                if p["env_key"]:
-                    val = env_vars.get(p["env_key"], "")
-                    if not val or "your_" in val.lower() or val == '""' or val == "''":
-                        active_provider_key_status = f"{c_g}[Not Configured]{c_r}"
-                    elif val.startswith("enc:") or val.startswith("enc:v1:"):
-                        active_provider_key_status = f"{c_m}[AES-256 Encrypted]{c_r}"
-                    else:
-                        active_provider_key_status = f"{c_y}[Plain Text]{c_r}"
-                break
+            p_url = p.get("url")
+            if isinstance(p_url, str) and p_url:
+                if p_url in decrypted_url or decrypted_url in p_url or p_url in primary_url or primary_url in p_url:
+                    active_provider_name = str(p.get("name") or "Unknown")
+                    p_env_key = p.get("env_key")
+                    if isinstance(p_env_key, str) and p_env_key:
+                        val = env_vars.get(p_env_key, "")
+                        if not val or "your_" in val.lower() or val == '""' or val == "''":
+                            active_provider_key_status = f"{c_g}[Not Configured]{c_r}"
+                        elif val.startswith("enc:") or val.startswith("enc:v1:"):
+                            active_provider_key_status = f"{c_m}[AES-256 Encrypted]{c_r}"
+                        else:
+                            active_provider_key_status = f"{c_y}[Plain Text]{c_r}"
+                    break
+
 
         print(f"\n{c_m}🔑 CONFIGURE API KEYS & LOCAL AI ENGINES{c_r}")
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
@@ -890,22 +894,23 @@ def configure_api_keys():
                 continue
                 
             p = PROVIDERS_MAP[sel_idx]
-            final_url = p["url"]
-            final_model = p["model"]
+            final_url = str(p.get("url") or "")
+            final_model = str(p.get("model") or "")
             api_key_val = ""
             skip_key_update = False
             
+            env_key = p.get("env_key")
             # Dynamic prompt for API Key
-            if p["env_key"]:
-                existing_key = env_vars.get(p["env_key"], "")
+            if isinstance(env_key, str) and env_key:
+                existing_key = env_vars.get(env_key, "")
                 is_existing = False
                 if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
                     is_existing = True
-                    print(f"\n{c_c}An existing value for {p['env_key']} was detected.{c_r}")
+                    print(f"\n{c_c}An existing value for {env_key} was detected.{c_r}")
                     print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
                     api_key_val = getpass.getpass("Credential (Press Enter to keep existing): ").strip()
                 else:
-                    print(f"\n{c_c}Paste your {p['env_key']} below (Input is masked / hidden as you paste/type):{c_r}")
+                    print(f"\n{c_c}Paste your {env_key} below (Input is masked / hidden as you paste/type):{c_r}")
                     api_key_val = getpass.getpass("Credential: ").strip()
 
                 if is_existing and not api_key_val:
@@ -913,7 +918,7 @@ def configure_api_keys():
                 
             # Local probes if LM Studio/Ollama
             if p.get("local") and p.get("type") == "lmstudio":
-                url_in = input(f"\nEnter Local Model Server Base URL (Press Enter for '{p['url']}'): ").strip()
+                url_in = input(f"\nEnter Local Model Server Base URL (Press Enter for '{final_url}'): ").strip()
                 if url_in:
                     final_url = url_in
                     
@@ -945,11 +950,11 @@ def configure_api_keys():
                         final_model = probed[model_sel]
                 else:
                     print(f"🔴 Could not fetch active model keys from {final_url} (server offline).")
-                    manual_model = input(f"Enter target Model ID manually (Press Enter for '{p['model']}'): ").strip()
+                    manual_model = input(f"Enter target Model ID manually (Press Enter for '{final_model}'): ").strip()
                     if manual_model:
                         final_model = manual_model
             else:
-                model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
+                model_in = input(f"\nEnter Target Model ID (Press Enter for default '{final_model}'): ").strip()
                 if model_in:
                     final_model = model_in
 
@@ -1000,9 +1005,10 @@ def configure_api_keys():
 
             content = update_env_var(content, "PRIMARY_LLM_URL", final_url)
             content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
-            if p["env_key"] and api_key_val and not skip_key_update:
-                content = update_env_var(content, p["env_key"], api_key_val)
+            if isinstance(env_key, str) and env_key and api_key_val and not skip_key_update:
+                content = update_env_var(content, env_key, api_key_val)
 
+            temp_path = None
             try:
                 temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
                 with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
@@ -1012,7 +1018,7 @@ def configure_api_keys():
                 print(f"  ➔ PRIMARY_LLM_URL:   {final_url}")
                 print(f"  ➔ PRIMARY_LLM_MODEL: {final_model}\n")
             except Exception as e:
-                if 'temp_path' in locals() and os.path.exists(temp_path):
+                if temp_path and os.path.exists(temp_path):
                     os.remove(temp_path)
                 print(f"❌ Failed to save environment file: {e}")
 
@@ -1621,30 +1627,31 @@ def run_quick_setup():
         return
         
     p = PROVIDERS_MAP[sel_idx]
-    final_url = p["url"]
-    final_model = p["model"]
+    final_url = str(p.get("url") or "")
+    final_model = str(p.get("model") or "")
     api_key_val = ""
     skip_key_update = False
 
+    env_key = p.get("env_key")
     # Step 2: Key Setup
-    if p["env_key"]:
+    if isinstance(env_key, str) and env_key:
         print(f"\n{c_w}[STEP 2] Configure API Credentials:{c_r}")
-        existing_key = env_vars.get(p["env_key"], "")
+        existing_key = env_vars.get(env_key, "")
         is_existing = False
         if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
             is_existing = True
-            print(f"{c_c}An existing value for {p['env_key']} was detected.{c_r}")
+            print(f"{c_c}An existing value for {env_key} was detected.{c_r}")
             print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
-            api_key_val = getpass.getpass(f"Enter your {p['env_key']} (Press Enter to keep existing): ").strip()
+            api_key_val = getpass.getpass(f"Enter your {env_key} (Press Enter to keep existing): ").strip()
         else:
-            api_key_val = getpass.getpass(f"Enter your {p['env_key']}: ").strip()
+            api_key_val = getpass.getpass(f"Enter your {env_key}: ").strip()
 
         if is_existing and not api_key_val:
             skip_key_update = True
 
     # Probing local servers
     if p.get("local") and p.get("type") == "lmstudio":
-        url_in = input(f"\nEnter local server base URL (Press Enter for '{p['url']}'): ").strip()
+        url_in = input(f"\nEnter local server base URL (Press Enter for '{final_url}'): ").strip()
         if url_in:
             final_url = url_in
             
@@ -1674,11 +1681,11 @@ def run_quick_setup():
                 final_model = probe_res[model_sel]
         else:
             print(f"🔴 Could not fetch active model keys from {final_url} (offline).")
-            model_in = input(f"Enter target Model ID manually (Press Enter for '{p['model']}'): ").strip()
+            model_in = input(f"Enter target Model ID manually (Press Enter for '{final_model}'): ").strip()
             if model_in:
                 final_model = model_in
     else:
-        model_in = input(f"\nEnter Target Model ID (Press Enter for default '{p['model']}'): ").strip()
+        model_in = input(f"\nEnter Target Model ID (Press Enter for default '{final_model}'): ").strip()
         if model_in:
             final_model = model_in
 
@@ -1739,12 +1746,13 @@ def run_quick_setup():
 
     content = update_env_var(content, "PRIMARY_LLM_URL", final_url)
     content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
-    if p["env_key"] and api_key_val and not skip_key_update:
-        content = update_env_var(content, p["env_key"], api_key_val)
+    if isinstance(env_key, str) and env_key and api_key_val and not skip_key_update:
+        content = update_env_var(content, env_key, api_key_val)
     if tg_token and tg_chat_id:
         content = update_env_var(content, "TELEGRAM_BOT_TOKEN", tg_token)
         content = update_env_var(content, "TELEGRAM_CHAT_ID", tg_chat_id)
 
+    temp_path = None
     try:
         temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
         with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
@@ -1757,9 +1765,403 @@ def run_quick_setup():
             print("  ➔ Telegram Bot:      Configured")
         print("\nReady to launch Swarm Stack! select menu Option 4 next.")
     except Exception as e:
-        if 'temp_path' in locals() and os.path.exists(temp_path):
+        if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
         print(f"\n❌ Failed to save environment file: {e}")
+
+
+def print_secrets_help():
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    print(f"\n{c_m}🔒 BITWARDEN SECRETS MANAGER CLI ACTIONS{c_r}")
+    print("──────────────────────────────────────────────────")
+    print(f"  {c_c}kenbun secrets bitwarden setup{c_r}    ➔ Run the interactive BWS credentials setup wizard")
+    print(f"  {c_c}kenbun secrets bitwarden status{c_r}   ➔ Show connection status and integration details")
+    print(f"  {c_c}kenbun secrets bitwarden sync{c_r}     ➔ List all secret keys stored under configured project")
+    print(f"  {c_c}kenbun secrets bitwarden sync --apply{c_r} ➔ Retrieve keys and inject them into active env context")
+    print(f"  {c_c}kenbun secrets bitwarden install{c_r}  ➔ Manually download & verify the pinned BWS binary")
+    print(f"  {c_c}kenbun secrets bitwarden disable{c_r}  ➔ Turn off the Bitwarden integration in config.yaml")
+    print("──────────────────────────────────────────────────\n")
+
+
+def print_sessions_help():
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    print(f"\n{c_m}📂 CONVERSATION SESSIONS MANAGER CLI ACTIONS{c_r}")
+    print("──────────────────────────────────────────────────")
+    print(f"  {c_c}kenbun sessions list [limit]{c_r}           ➔ Browse/list conversation sessions")
+    print(f"  {c_c}kenbun sessions stats{c_r}                  ➔ Display database statistics and size")
+    print(f"  {c_c}kenbun sessions export <id> [--format json|markdown]{c_r} ➔ Export session history")
+    print(f"  {c_c}kenbun sessions rename <id> <new_title>{c_r} ➔ Rename a conversation session")
+    print(f"  {c_c}kenbun sessions delete <id>{c_r}            ➔ Delete a session by its ID")
+    print(f"  {c_c}kenbun sessions prune [--days N]{c_r}      ➔ Prune ended sessions older than N days")
+    print("──────────────────────────────────────────────────\n")
+
+
+def handle_secrets_command(args: List[str]):
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+
+    if not args:
+        print_secrets_help()
+        return
+
+    sub = args[0].lower().strip()
+    if sub == "bitwarden":
+        if len(args) < 2:
+            print_secrets_help()
+            return
+        action = args[1].lower().strip()
+        action_args = args[2:]
+    else:
+        action = sub
+        action_args = args[1:]
+
+    try:
+        from tools.utils.secrets_bitwarden import (
+            get_bws_path, download_bws, load_hermes_config_raw,
+            save_hermes_config_raw, get_hermes_dir, apply_secrets_to_env
+        )
+    except ImportError as e:
+        print(f"❌ Failed to import tools.utils.secrets_bitwarden: {e}")
+        return
+
+    import subprocess
+    import json
+    import os
+
+    if action == "install":
+        print(f"📥 {c_c}Installing Bitwarden Secrets Manager (bws) binary...{c_r}")
+        try:
+            bin_path = download_bws()
+            print(f"✅ {c_c}Installed successfully to: {bin_path}{c_r}")
+        except Exception as e:
+            print(f"❌ Failed to install bws: {e}")
+
+    elif action == "disable":
+        config = load_hermes_config_raw()
+        if "secrets" not in config:
+            config["secrets"] = {}
+        if "bitwarden" not in config["secrets"]:
+            config["secrets"]["bitwarden"] = {}
+        config["secrets"]["bitwarden"]["enabled"] = False
+        save_hermes_config_raw(config)
+        print(f"✅ {c_c}Bitwarden Secrets Manager integration has been disabled.{c_r}")
+
+    elif action == "status":
+        config = load_hermes_config_raw()
+        bw_cfg = config.get("secrets", {}).get("bitwarden", {})
+        enabled = bw_cfg.get("enabled", False)
+        bin_path = get_bws_path()
+        env_token_var = bw_cfg.get("access_token_env", "BWS_ACCESS_TOKEN")
+        
+        # Load token
+        from tools.utils.secrets_bitwarden import load_hermes_env
+        load_hermes_env()
+        token = os.environ.get(env_token_var)
+        
+        print(f"\n{c_m}🔒 Bitwarden Secrets Manager Status{c_r}")
+        print("──────────────────────────────────")
+        print(f"Enabled:       {'🟢 Yes' if enabled else '🔴 No'}")
+        print(f"Binary Path:   {bin_path if bin_path else '🔴 Not found (run install)'}")
+        print(f"Access Token:  {'🟢 Set (configured)' if token else '🔴 Not set'}")
+        print(f"Project ID:    {bw_cfg.get('project_id', '🔴 Not set')}")
+        print(f"Server URL:    {bw_cfg.get('server_url', 'Default (Bitwarden Cloud)')}")
+        print("──────────────────────────────────\n")
+
+    elif action == "setup":
+        print(f"\n{c_m}🔑 Bitwarden Secrets Manager Setup Wizard{c_r}")
+        print("──────────────────────────────────────────")
+        # Ensure binary exists
+        bin_path = get_bws_path()
+        if not bin_path:
+            print("bws binary not found. Installing first...")
+            try:
+                bin_path = download_bws()
+            except Exception as e:
+                print(f"❌ Failed to install bws binary: {e}")
+                return
+        
+        # Ask for token
+        from tools.utils.secrets_bitwarden import load_hermes_env
+        load_hermes_env()
+        current_token = os.environ.get("BWS_ACCESS_TOKEN", "")
+        if current_token:
+            token_prompt = f"Enter Bitwarden Access Token [{current_token[:8]}...]: "
+        else:
+            token_prompt = "Enter Bitwarden Access Token: "
+            
+        token = input(token_prompt).strip()
+        if not token:
+            token = current_token
+
+        if not token:
+            print("❌ Access Token is required.")
+            return
+
+        # Ask for Server URL
+        server_url = input("Enter BWS Server URL (optional, press Enter for default Cloud): ").strip()
+        
+        # Ask for Project ID
+        project_id = input("Enter Bitwarden Project ID: ").strip()
+        if not project_id:
+            print("❌ Project ID is required.")
+            return
+
+        # Test connection
+        print("\nTesting connection to Bitwarden Secrets Manager...")
+        env = os.environ.copy()
+        env["BWS_ACCESS_TOKEN"] = token
+        if server_url:
+            env["BWS_SERVER_URL"] = server_url
+            
+        cmd = [bin_path, "secret", "list", project_id]
+        try:
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=15)
+            if res.returncode != 0:
+                print(f"❌ Connection test failed: {res.stderr.strip()}")
+                return
+            
+            secrets_list = json.loads(res.stdout)
+            print(f"🟢 Connection Successful! Found {len(secrets_list)} secrets in project.")
+            
+            # Save configuration
+            config = load_hermes_config_raw()
+            if "secrets" not in config:
+                config["secrets"] = {}
+            config["secrets"]["bitwarden"] = {
+                "enabled": True,
+                "access_token_env": "BWS_ACCESS_TOKEN",
+                "project_id": project_id,
+                "server_url": server_url,
+                "cache_ttl_seconds": 300,
+                "override_existing": True,
+                "auto_install": True
+            }
+            save_hermes_config_raw(config)
+            
+            # Write token to ~/.hermes/.env
+            hermes_dir = get_hermes_dir()
+            os.makedirs(hermes_dir, exist_ok=True)
+            env_path = os.path.join(hermes_dir, ".env")
+            
+            # Read existing lines to preserve other vars
+            env_lines = []
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    env_lines = f.readlines()
+            
+            # Filter out BWS_ACCESS_TOKEN if it exists
+            env_lines = [line for line in env_lines if not line.startswith("BWS_ACCESS_TOKEN=")]
+            env_lines.append(f"BWS_ACCESS_TOKEN={token}\n")
+            
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(env_lines)
+                
+            print("✅ Configuration saved successfully!")
+            
+        except Exception as e:
+            print(f"❌ Setup failed with error: {e}")
+
+    elif action == "sync":
+        apply = False
+        for a in action_args:
+            if a == "--apply":
+                apply = True
+        
+        # Test fetching
+        config = load_hermes_config_raw()
+        bw_cfg = config.get("secrets", {}).get("bitwarden", {})
+        if not bw_cfg.get("enabled", False):
+            print("⚠️ Bitwarden Secrets Manager integration is currently disabled. Run 'setup' to enable.")
+            return
+
+        bin_path = get_bws_path()
+        if not bin_path:
+            print("❌ bws binary not found. Run setup or install.")
+            return
+
+        from tools.utils.secrets_bitwarden import load_hermes_env
+        load_hermes_env()
+        token_var = bw_cfg.get("access_token_env", "BWS_ACCESS_TOKEN")
+        token = os.environ.get(token_var)
+        if not token:
+            print(f"❌ {token_var} is not set in environment or ~/.hermes/.env")
+            return
+
+        project_id = bw_cfg.get("project_id", "")
+        if not project_id:
+            print("❌ Project ID is not configured in config.yaml")
+            return
+
+        print(f"Fetching secrets for project {project_id}...")
+        env = os.environ.copy()
+        env[token_var] = token
+        if bw_cfg.get("server_url"):
+            env["BWS_SERVER_URL"] = bw_cfg["server_url"]
+
+        cmd = [bin_path, "secret", "list", project_id]
+        try:
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=15)
+            if res.returncode != 0:
+                print(f"❌ Failed to fetch secrets: {res.stderr.strip()}")
+                return
+            
+            secrets_list = json.loads(res.stdout)
+            print(f"\n🟢 Retrieved {len(secrets_list)} secrets from Bitwarden:")
+            print("──────────────────────────────────")
+            for s in secrets_list:
+                k = s.get("key") or s.get("name")
+                print(f"- {k}")
+            print("──────────────────────────────────")
+            
+            if apply:
+                # Apply them to the environment and print confirmation
+                apply_secrets_to_env()
+                print("✅ Successfully applied secrets to the current process environment!")
+            else:
+                print("💡 Run with '--apply' to verify applying them to the environment context.")
+        except Exception as e:
+            print(f"❌ Failed to sync: {e}")
+    else:
+        print_secrets_help()
+
+
+def handle_sessions_command(args: List[str]):
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+
+    if not args:
+        print_sessions_help()
+        return
+
+    action = args[0].lower().strip()
+    action_args = args[1:]
+
+    try:
+        from tools.utils.sessions_db import (
+            list_sessions, delete_session, update_session_title,
+            prune_sessions, get_sessions_stats, get_messages
+        )
+    except ImportError as e:
+        print(f"❌ Failed to import tools.utils.sessions_db: {e}")
+        return
+
+    import json
+
+    if action == "list":
+        limit = 20
+        if action_args:
+            try:
+                limit = int(action_args[0])
+            except ValueError:
+                pass
+        sessions = list_sessions(limit=limit)
+        print(f"\n{c_m}📂 Conversation Sessions (Limit: {limit}){c_r}")
+        print("──────────────────────────────────────────────────────────────────────────")
+        print(f"{'ID':<25} | {'Title':<30} | {'Source':<8} | {'Last Active'}")
+        print("──────────────────────────────────────────────────────────────────────────")
+        for s in sessions:
+            title = s.get("title") or "*(Unnamed)*"
+            if len(title) > 30:
+                title = title[:27] + "..."
+            print(f"{s['id']:<25} | {title:<30} | {s['source']:<8} | {s['last_active_at']}")
+        print("──────────────────────────────────────────────────────────────────────────\n")
+
+    elif action == "stats":
+        stats = get_sessions_stats()
+        print(f"\n{c_m}📊 Database Statistics{c_r}")
+        print("───────────────────────")
+        print(f"Total Sessions:   {stats['total_sessions']}")
+        print(f"Total Messages:   {stats['total_messages']}")
+        print(f"Database Size:    {stats['database_size_mb']} MB")
+        print("Source Counts:")
+        for src, count in stats['source_counts'].items():
+            print(f"  - {src}: {count}")
+        print("───────────────────────\n")
+
+    elif action == "delete":
+        if not action_args:
+            print("❌ Usage: kenbun sessions delete <session_id>")
+            return
+        session_id = action_args[0]
+        deleted = delete_session(session_id)
+        if deleted:
+            print(f"✅ Deleted session {session_id}")
+        else:
+            print(f"❌ Session {session_id} not found")
+
+    elif action == "rename":
+        if len(action_args) < 2:
+            print("❌ Usage: kenbun sessions rename <session_id> <new_title>")
+            return
+        session_id = action_args[0]
+        new_title = " ".join(action_args[1:])
+        final_title = update_session_title(session_id, new_title)
+        if final_title:
+            print(f"✅ Renamed session to: {final_title}")
+        else:
+            print(f"❌ Failed to rename session {session_id}")
+
+    elif action == "prune":
+        days = 90
+        if "--days" in action_args:
+            idx = action_args.index("--days")
+            if idx + 1 < len(action_args):
+                try:
+                    days = int(action_args[idx + 1])
+                except ValueError:
+                    pass
+        elif action_args:
+            try:
+                days = int(action_args[0])
+            except ValueError:
+                pass
+        
+        print(f"🧹 Pruning ended sessions older than {days} days...")
+        deleted = prune_sessions(older_than_days=days)
+        print(f"✅ Done. Removed {deleted} old sessions.")
+
+    elif action == "export":
+        if not action_args:
+            print("❌ Usage: kenbun sessions export <session_id> [--format json|markdown]")
+            return
+        session_id = action_args[0]
+        fmt = "json"
+        if "--format" in action_args:
+            idx = action_args.index("--format")
+            if idx + 1 < len(action_args):
+                fmt = action_args[idx + 1].lower()
+        
+        messages = get_messages(session_id)
+        if not messages:
+            print(f"❌ No messages found or session {session_id} doesn't exist.")
+            return
+
+        if fmt == "json":
+            print(json.dumps(messages, indent=2))
+        elif fmt == "markdown":
+            md = []
+            md.append(f"# Session Export: {session_id}\n")
+            for m in messages:
+                md.append(f"### **{m['role'].upper()}**")
+                md.append(f"*{m['timestamp']}*\n")
+                md.append(m['content'] or "")
+                if m.get('tool_calls'):
+                    md.append(f"\n```json\n{json.dumps(m['tool_calls'], indent=2)}\n```\n")
+                md.append("\n---\n")
+            print("\n".join(md))
+        else:
+            print(f"❌ Unknown format: {fmt}. Use json or markdown.")
+    else:
+        print_sessions_help()
 
 
 def launch_termchat(project_root):
@@ -1781,7 +2183,15 @@ def launch_termchat(project_root):
         print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
         try:
             import subprocess
-            subprocess.run([python_exe, str(termchat_path)])
+            import sys
+            term_args = []
+            if len(sys.argv) > 1:
+                first_arg = sys.argv[1].lower().strip()
+                if first_arg in ("chat", "shell", "termchat"):
+                    term_args = sys.argv[2:]
+                elif first_arg in ("--continue", "-c", "--resume", "-r"):
+                    term_args = sys.argv[1:]
+            subprocess.run([python_exe, str(termchat_path)] + term_args)
         except KeyboardInterrupt:
             pass # Graceful exit from Ctrl+C inside the terminal chat
         except Exception as e:
@@ -1950,7 +2360,7 @@ if __name__ == "__main__":
         cmd = sys.argv[1].lower().strip()
         if cmd in ("--express", "express"):
             bootstrap_core()
-        elif cmd in ("chat", "shell", "termchat"):
+        elif cmd in ("chat", "shell", "termchat", "--continue", "-c", "--resume", "-r"):
             # Launch Termchat in-place
             script_dir = Path(__file__).parent.resolve()
             project_root = script_dir.parent
@@ -1973,6 +2383,10 @@ if __name__ == "__main__":
         elif cmd in ("mcp", "mcp-register"):
             auto_register_claude_desktop_mcp()
             auto_register_cursor_mcp()
+        elif cmd == "secrets":
+            handle_secrets_command(sys.argv[2:])
+        elif cmd == "sessions":
+            handle_sessions_command(sys.argv[2:])
         elif cmd in ("setup", "configure"):
             configure_api_keys()
         elif cmd in ("dashboard", "telemetry"):
@@ -1987,6 +2401,8 @@ if __name__ == "__main__":
             print(f"  {c_c}kenbun mcp{c_r}        ➔ Register MCP server in Claude Desktop & Cursor automatically!")
             print(f"  {c_c}kenbun dashboard{c_r}  ➔ Show access guidelines for the Telemetry Dashboard!")
             print(f"  {c_c}kenbun express{c_r}    ➔ Initialize environment configurations with default seed!")
+            print(f"  {c_c}kenbun secrets{c_r}    ➔ Manage Bitwarden Secrets Manager integration!")
+            print(f"  {c_c}kenbun sessions{c_r}   ➔ Manage local conversation history sessions database!")
             print(f"  {c_c}kenbun list-tools{c_r} ➔ List all dynamic MCP tools and their signatures!")
             print(f"  {c_c}kenbun <tool>{c_r}     ➔ Execute any MCP tool (e.g., kenbun orchestrate, kenbun recall)")
             print(f"  {c_c}kenbun{c_r}            ➔ Launch full interactive Sakura setup menu (1-9)")

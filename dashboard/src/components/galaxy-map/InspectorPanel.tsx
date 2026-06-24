@@ -34,7 +34,7 @@ export default function InspectorPanel({
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: -30, scale: 0.98 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`absolute z-[150] w-88 md:w-96 bg-[var(--background)]/95 border border-[var(--border)] backdrop-blur-2xl p-6 md:p-8 artisan-shadow space-y-6 rounded-sm ${
+      className={`absolute z-[150] w-88 md:w-96 bg-[var(--background)]/80 border border-[var(--border)] backdrop-blur-3xl p-6 md:p-8 shadow-[0_0_50px_rgba(0,0,0,0.25)] dark:shadow-[0_0_50px_rgba(0,0,0,0.65)] space-y-6 rounded-sm transition-all duration-300 ${
         isFullscreen ? 'bottom-28 left-10' : 'top-24 left-10'
       }`}
     >
@@ -70,7 +70,7 @@ export default function InspectorPanel({
             {selectedNode.file.split('/').pop()}
           </h3>
         </div>
-        <p className="text-[9px] font-mono text-[var(--foreground)] opacity-40 break-all select-all leading-normal bg-primary/[0.02] p-2 border border-primary/5 rounded-sm">
+        <p className="text-[9px] font-mono text-[var(--foreground)] opacity-40 break-all select-all leading-normal bg-[var(--border)]/10 p-2 border border-[var(--border)]/30 rounded-sm">
           {selectedNode.file}
         </p>
       </div>
@@ -78,7 +78,7 @@ export default function InspectorPanel({
       {/* Semantic Snippet Code Block */}
       <div className="space-y-2">
         <span className="text-[8px] font-mono font-bold uppercase tracking-widest opacity-30">Semantic Signal Code</span>
-        <div className="text-[10px] font-mono leading-relaxed p-4 border bg-primary/[0.02] border-primary/5 text-[var(--foreground)] max-h-44 overflow-y-auto custom-scrollbar whitespace-pre-wrap select-text">
+        <div className="text-[10px] font-mono leading-relaxed p-4 border border-[var(--border)]/30 bg-[var(--background)]/40 text-[var(--foreground)] max-h-44 overflow-y-auto custom-scrollbar whitespace-pre-wrap select-text rounded-sm">
           {selectedNode.snippet || "Empty signal payload."}
         </div>
       </div>
@@ -87,14 +87,14 @@ export default function InspectorPanel({
       {equationObj && (
         <div className="space-y-2">
           <span className="text-[8px] font-mono font-bold uppercase tracking-widest opacity-30 text-[var(--foreground)]">Mathematical Model</span>
-          <div className="p-4 border bg-[var(--background)] border-[var(--border-muted)] rounded-sm">
+          <div className="p-4 border bg-[var(--background)]/30 border-[var(--border)]/30 rounded-sm">
             <pre className="text-[10px] font-mono text-[var(--foreground)] font-semibold leading-relaxed whitespace-pre-wrap">{equationObj.math}</pre>
             <details className="group mt-3">
               <summary className="text-[9px] font-bold uppercase tracking-wider text-[var(--foreground)] opacity-60 cursor-pointer select-none list-none flex items-center gap-1.5 hover:opacity-100 transition-opacity">
                 <span>Explain Formula</span>
                 <span className="text-[7px] transition-transform duration-200 group-open:rotate-180">▼</span>
               </summary>
-              <div className="mt-2 pt-2 border-t border-[var(--border-muted)]/50">
+              <div className="mt-2 pt-2 border-t border-[var(--border)]/30">
                 <p className="text-[9px] font-mono text-[var(--foreground)] opacity-70 mt-1">{equationObj.desc}</p>
               </div>
             </details>
@@ -107,7 +107,7 @@ export default function InspectorPanel({
         <span className="text-[8px] font-mono opacity-30 select-none">NODE_ID: {selectedNode.id.slice(0, 8)}</span>
         <button
           onClick={() => handleFocusNode(selectedNode)}
-          className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white text-[9px] font-mono uppercase tracking-widest transition-all duration-300 rounded-sm"
+          className="flex items-center gap-2 px-4 py-2 border border-[var(--border)] hover:border-[var(--accent)] hover:bg-[var(--accent)] hover:text-white text-[9px] font-mono uppercase tracking-widest transition-all duration-200 rounded-sm hover:scale-[1.03] active:scale-[0.98]"
         >
           <Focus className="w-3.5 h-3.5" />
           Recenter Focus

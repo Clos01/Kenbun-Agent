@@ -178,7 +178,13 @@ def delete_session(session_id: str) -> bool:
         return len(sessions) < initial_len
     return _modify_sessions(transform) or False
 
-def add_message_to_session(session_id: str, sender: str, content: str) -> Optional[Dict]:
+def add_message_to_session(
+    session_id: str,
+    sender: str,
+    content: str,
+    metrics: Optional[Dict] = None,
+    tool_calls: Optional[List[Dict]] = None
+) -> Optional[Dict]:
     """Appends a new message to a session and updates the list."""
     def transform(sessions):
         target_session = None
@@ -196,7 +202,11 @@ def add_message_to_session(session_id: str, sender: str, content: str) -> Option
             "content": content,
             "timestamp": datetime.fromtimestamp(time.time()).isoformat()
         }
-        
+        if metrics:
+            new_msg["metrics"] = metrics
+        if tool_calls:
+            new_msg["tool_calls"] = tool_calls
+            
         target_session["messages"].append(new_msg)
         
         # Auto-title generation if this is the first user message
@@ -220,3 +230,37 @@ def add_message_to_session(session_id: str, sender: str, content: str) -> Option
         return new_msg
         
     return _modify_sessions(transform)
+
+
+def search_sessions(query: str) -> List[Dict]:
+    """
+    Performs a case-insensitive search across all session message contents.
+    Returns a list of sessions containing matching messages, along with snippets.
+    """
+    sessions = load_sessions()
+    results = []
+    query_lower = query.lower()
+    for s in sessions:
+        matching_messages = []
+        for msg in s.get("messages", []):
+            content = msg.get("content", "")
+            if query_lower in content.lower():
+                # Extract a snippet around the match
+                idx = content.lower().find(query_lower)
+                start = max(0, idx - 40)
+                end = min(len(content), idx + len(query) + 40)
+                snippet = ("..." if start > 0 else "") + content[start:end] + ("..." if end < len(content) else "")
+                matching_messages.append({
+                    "message_id": msg.get("id"),
+                    "sender": msg.get("sender"),
+                    "timestamp": msg.get("timestamp"),
+                    "snippet": snippet
+                })
+        if matching_messages:
+            results.append({
+                "id": s["id"],
+                "title": s.get("title", "New Transmissions"),
+                "timestamp": s.get("timestamp"),
+                "matches": matching_messages
+            })
+    return results

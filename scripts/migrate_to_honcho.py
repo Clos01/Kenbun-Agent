@@ -67,8 +67,8 @@ def migrate_data():
         
         # Retrieve all documents
         data = collection.get(include=['documents', 'metadatas'])
-        documents = data.get('documents', [])
-        metadatas = data.get('metadatas', [])
+        documents = data.get('documents') or []
+        metadatas = data.get('metadatas') or []
         
         if not documents:
             logger.info(f"  └─ Empty collection, skipping.")

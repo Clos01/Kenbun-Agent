@@ -299,7 +299,7 @@ def _make_openai_compatible_call(
             "temperature": temperature
         }
         url = f"{base_url}/messages"
-        response = requests.post(url, json=payload, headers=headers, timeout=60.0)
+        response = requests.post(url, json=payload, headers=headers, timeout=settings.models.lm_studio_read_timeout)
         response.raise_for_status()
         res_json = response.json()
         content = res_json["content"][0]["text"]
@@ -327,7 +327,7 @@ def _make_openai_compatible_call(
         "max_tokens": max_tokens
     }
     
-    response = requests.post(url, json=payload, headers=headers, timeout=60.0)
+    response = requests.post(url, json=payload, headers=headers, timeout=settings.models.lm_studio_read_timeout)
     response.raise_for_status()
     res_json = response.json()
     content = res_json["choices"][0]["message"]["content"]
@@ -404,8 +404,18 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         if not url:
             raise RuntimeError(f"{label} endpoint not configured")
         try:
-            if "127.0.0.1" in url or "localhost" in url or "2065" in url:
-                ensure_lmstudio_model_loaded(model, url)
+            is_lmstudio = (
+                "127.0.0.1" in url
+                or "localhost" in url
+                or "lmstudio" in url.lower()
+                or (settings.SWARM_PC_IP and settings.SWARM_PC_IP in url)
+                or str(settings.models.lm_studio_port) in url
+                or "lg2025" in url.lower()
+            )
+            if is_lmstudio:
+                ensure_lmstudio_model_loaded(
+                    model, url, timeout=settings.models.lm_studio_read_timeout
+                )
         except Exception as pre_err:
             logging.debug(f"LM Studio pre-load failed or skipped for {label.lower()}: {pre_err}")
         content = _make_openai_compatible_call(

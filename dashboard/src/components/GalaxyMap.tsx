@@ -99,6 +99,29 @@ export default function GalaxyMap() {
     pulseOffsetsRef.current = offsets;
   }, [data]);
 
+  // Pre-calculate room centroids for nebula cluster glows
+  const roomCentroidsRef = useRef<Record<string, { x: number; y: number }>>({});
+  useEffect(() => {
+    const centroids: Record<string, { x: number; y: number; count: number }> = {};
+    data.forEach(node => {
+      if (!centroids[node.room]) {
+        centroids[node.room] = { x: 0, y: 0, count: 0 };
+      }
+      centroids[node.room].x += node.x;
+      centroids[node.room].y += node.y;
+      centroids[node.room].count += 1;
+    });
+    
+    const result: Record<string, { x: number; y: number }> = {};
+    Object.entries(centroids).forEach(([room, d]) => {
+      result[room] = {
+        x: d.x / d.count,
+        y: d.y / d.count
+      };
+    });
+    roomCentroidsRef.current = result;
+  }, [data]);
+
   // Listen to native OS Fullscreen changes to keep React state in perfect sync
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -562,7 +585,61 @@ export default function GalaxyMap() {
       ctx.translate(width / 2 + currentTransform.x, height / 2 + currentTransform.y);
       ctx.scale(currentTransform.scale, currentTransform.scale);
 
-      // 2. Draw Constellation Links
+      // Draw blueprint coordinate grid
+      ctx.save();
+      ctx.strokeStyle = currentIsDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)';
+      ctx.lineWidth = Math.max(0.5, 0.15 / currentTransform.scale);
+      
+      const gridStep = 250;
+      const gridMin = -2000;
+      const gridMax = 2000;
+      
+      for (let g = gridMin; g <= gridMax; g += gridStep) {
+        ctx.beginPath();
+        ctx.moveTo(g, gridMin);
+        ctx.lineTo(g, gridMax);
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(gridMin, g);
+        ctx.lineTo(gridMax, g);
+        ctx.stroke();
+      }
+      
+      // Faint origin crosshair
+      ctx.strokeStyle = currentIsDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
+      ctx.lineWidth = Math.max(1.0, 0.35 / currentTransform.scale);
+      ctx.beginPath();
+      ctx.moveTo(-150, 0); ctx.lineTo(150, 0);
+      ctx.moveTo(0, -150); ctx.lineTo(0, 150);
+      ctx.stroke();
+      ctx.restore();
+
+      // Draw Nebula Cluster Glows (Spatial Auroras)
+      const currentCentroids = roomCentroidsRef.current;
+      Object.entries(currentCentroids).forEach(([room, pos]) => {
+        const { x: cx, y: cy } = getProjectedCoords(pos.x, pos.y);
+        const baseColor = roomColors[room] || themeColorsRef.current.secondary;
+        
+        ctx.save();
+        const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 320);
+        
+        const r = parseInt(baseColor.slice(1, 3), 16) || 0;
+        const g_color = parseInt(baseColor.slice(3, 5), 16) || 0;
+        const b = parseInt(baseColor.slice(5, 7), 16) || 0;
+        
+        grad.addColorStop(0, `rgba(${r}, ${g_color}, ${b}, ${currentIsDark ? 0.06 : 0.08})`);
+        grad.addColorStop(0.5, `rgba(${r}, ${g_color}, ${b}, ${currentIsDark ? 0.02 : 0.03})`);
+        grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 320, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // 2. Draw Constellation Links & Animated Photons
       if (currentShowConnections && currentData.length > 0) {
         for (let i = 0; i < currentData.length; i++) {
           const n1 = currentData[i];
@@ -578,7 +655,6 @@ export default function GalaxyMap() {
             const { x: x2, y: y2 } = getProjectedCoords(n2.x, n2.y);
             const distSq = (x1 - x2) ** 2 + (y1 - y2) ** 2;
             
-            // Increased threshold to 80000 (distance ~282px) to ensure nodes relate to each other visually
             if (distSq < 80000) {
               lineCount++;
               const isHoveredOrSelected = 
@@ -600,6 +676,29 @@ export default function GalaxyMap() {
                 ctx.globalAlpha = currentIsDark ? 0.08 : 0.12;
               }
               ctx.stroke();
+
+              // Draw animated photon
+              ctx.save();
+              ctx.globalAlpha = isHoveredOrSelected ? 0.85 : 0.45;
+              ctx.fillStyle = baseColor;
+              
+              const pulseOffset = pulseOffsetsRef.current[n1.id] || 0;
+              const offsetSpeed = 0.5 + (pulseOffset % 5) * 0.1;
+              const t = (time * offsetSpeed + (pulseOffset * 0.17)) % 1.0;
+              
+              const px = x1 + (x2 - x1) * t;
+              const py = y1 + (y2 - y1) * t;
+              
+              const pRadius = Math.max(1.1, 0.6 / currentTransform.scale);
+              ctx.beginPath();
+              ctx.arc(px, py, pRadius, 0, Math.PI * 2);
+              
+              if (isHoveredOrSelected) {
+                ctx.shadowColor = baseColor;
+                ctx.shadowBlur = 4;
+              }
+              ctx.fill();
+              ctx.restore();
             }
           }
         }
@@ -607,6 +706,17 @@ export default function GalaxyMap() {
       }
 
       // 3. Draw Nodes (Neural Pulsars)
+      const visibleNodesForLabels: {
+        node: StarNode;
+        screenX: number;
+        screenY: number;
+        radius: number;
+        pulseScale: number;
+        isHovered: boolean;
+        isSelected: boolean;
+        baseColor: string;
+      }[] = [];
+
       currentData.forEach(node => {
         const { x, y } = getProjectedCoords(node.x, node.y);
         
@@ -660,44 +770,135 @@ export default function GalaxyMap() {
           ctx.stroke();
         }
 
-        // Draw node label (Signal)
+        // Collect visible node for the labels pass
         if (showLabelsRef.current) {
-          // Calculate dynamic opacity based on zoom level to prevent visual clutter
-          let labelAlpha = 0.65;
-          if (currentTransform.scale < 0.6) {
-            labelAlpha = Math.max(0, (currentTransform.scale - 0.35) / 0.25) * 0.65;
-          }
+          visibleNodesForLabels.push({
+            node,
+            screenX,
+            screenY,
+            radius,
+            pulseScale,
+            isHovered,
+            isSelected,
+            baseColor
+          });
+        }
+      });
+
+      // Draw labels pass (collision-free & organized)
+      if (showLabelsRef.current && visibleNodesForLabels.length > 0) {
+        // Sort visible nodes so that hovered and selected nodes are processed first
+        const sortedNodesForLabels = [...visibleNodesForLabels].sort((a, b) => {
+          const scoreA = (a.isSelected ? 2 : 0) + (a.isHovered ? 1 : 0);
+          const scoreB = (b.isSelected ? 2 : 0) + (b.isHovered ? 1 : 0);
+          return scoreB - scoreA; // Descending order: selected/hovered first
+        });
+
+        const occupiedBoxes: { minX: number; minY: number; maxX: number; maxY: number }[] = [];
+        const maxLabels = 80; // Limit number of visible labels to prevent clutter
+        let labelsDrawnCount = 0;
+
+        sortedNodesForLabels.forEach(item => {
+          const { node, screenX, screenY, radius, pulseScale, isHovered, isSelected, baseColor } = item;
           
+          let labelAlpha = 0;
           if (isHovered || isSelected) {
             labelAlpha = 1.0;
+          } else if (currentTransform.scale >= 1.5) { // Fade in labels slightly earlier when zooming
+            // Fade in all labels as zoom level increases past 1.5
+            labelAlpha = Math.min(0.65, (currentTransform.scale - 1.5) / 1.5) * 0.65;
           }
+
+          if (labelAlpha <= 0) return;
+
+          // Performance Optimization: If density cap is reached and this is not a priority label,
+          // short-circuit immediately to avoid text measurement and collision checks.
+          const forceDraw = isHovered || isSelected;
+          if (!forceDraw && labelsDrawnCount >= maxLabels) return;
+
+          // Compute label text
+          const labelText = node.file.split('/').pop() || node.id;
           
-          if (labelAlpha > 0) {
-            ctx.save();
-            // Reset transform to draw text in crisp viewport space (no fractional pixel scale blur)
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          // Estimate bounding box in screen-space
+          const fontSize = isHovered || isSelected ? 10.5 : 9;
+          
+          ctx.save();
+          // Reset transform to viewport space to measure text accurately
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.font = isHovered || isSelected ? 'bold 10.5px ui-monospace, monospace' : '500 9px ui-monospace, monospace';
+          
+          // Measure the text width in canvas pixels
+          const textWidth = ctx.measureText(labelText).width;
+          const textHeight = fontSize;
+          
+          const screenRadius = radius * pulseScale * currentTransform.scale;
+          const labelOffset = screenRadius + 7;
+          
+          // Calculate screen-space bounding box with a small margin
+          const paddingX = 6;
+          const paddingY = 4;
+          const box = {
+            minX: screenX + labelOffset - paddingX,
+            minY: screenY - textHeight / 2 - paddingY,
+            maxX: screenX + labelOffset + textWidth + paddingX,
+            maxY: screenY + textHeight / 2 + paddingY
+          };
+
+          // Check for collision with already drawn labels
+          let hasCollision = false;
+          for (let i = 0; i < occupiedBoxes.length; i++) {
+            const other = occupiedBoxes[i];
+            if (
+              box.minX < other.maxX &&
+              box.maxX > other.minX &&
+              box.minY < other.maxY &&
+              box.maxY > other.minY
+            ) {
+              hasCollision = true;
+              break;
+            }
+          }
+
+          if (forceDraw || !hasCollision) {
+            // Draw label background for premium contrast and readability
+            ctx.globalAlpha = labelAlpha * 0.85;
+            ctx.fillStyle = currentIsDark ? 'rgba(10, 10, 10, 0.75)' : 'rgba(247, 245, 242, 0.75)';
+            ctx.beginPath();
             
+            const rx = screenX + labelOffset - 3;
+            const ry = screenY - textHeight / 2 - 2;
+            const rw = textWidth + 6;
+            const rh = textHeight + 4;
+            const radiusRad = 3;
+            
+            if ('roundRect' in ctx && typeof (ctx as any).roundRect === 'function') {
+              (ctx as any).roundRect(rx, ry, rw, rh, radiusRad);
+            } else {
+              ctx.rect(rx, ry, rw, rh);
+            }
+            ctx.fill();
+
+            // Draw text
             ctx.globalAlpha = labelAlpha;
-            ctx.font = '500 9.5px ui-monospace, monospace';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
             
-            ctx.shadowColor = currentIsDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.85)';
-            ctx.shadowBlur = 2;
+            ctx.shadowColor = currentIsDark ? 'rgba(0, 0, 0, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+            ctx.shadowBlur = isHovered || isSelected ? 4 : 2;
             
             ctx.fillStyle = isHovered || isSelected ? baseColor : (currentIsDark ? '#E5E7EB' : '#1F2937');
-            
-            const labelText = node.file.split('/').pop() || node.id;
-            
-            // Calculate physical screen-space offset: node radius on screen + padding
-            const screenRadius = radius * pulseScale * currentTransform.scale;
-            const labelOffset = screenRadius + 7;
-            
             ctx.fillText(labelText, screenX + labelOffset, screenY);
-            ctx.restore();
+            
+            // Add to occupied boxes
+            occupiedBoxes.push(box);
+            if (!forceDraw) {
+              labelsDrawnCount++;
+            }
           }
-        }
-      });
+          
+          ctx.restore();
+        });
+      }
 
       // 4. Draw Selected Active Target Reticle
       if (currentSelectedNode) {

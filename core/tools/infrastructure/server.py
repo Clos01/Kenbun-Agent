@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from tools.registry import sovereign_tool, registry
+from typing import Optional
 import io
 import threading
 
@@ -1384,6 +1385,36 @@ def create_bitbucket_pr(repo_slug: str, source_branch: str, target_branch: str =
         return "\n".join(report)
     except Exception as e:
         return f"❌ Failed to create Bitbucket Pull Request: {str(e)}"
+
+@sovereign_tool()
+def session_search(
+    query: Optional[str] = None,
+    session_id: Optional[str] = None,
+    around_message_id: Optional[int] = None,
+    window: int = 5,
+    limit: int = 3,
+    sort: str = "newest",
+    role_filter: str = "user,assistant"
+) -> str:
+    """Recall past conversation contexts, resume, and search database.
+    
+    This tool supports three shapes depending on parameters:
+    1. Discovery (pass query): Searches past messages using SQLite FTS5.
+    2. Scroll (pass session_id + around_message_id): Returns a window of messages.
+    3. Browse (no args): Lists recent sessions.
+    """
+    with silence_stdout():
+        from tools.sensory.session_search import perform_session_search, render_search_results_markdown
+        res = perform_session_search(
+            query=query,
+            session_id=session_id,
+            around_message_id=around_message_id,
+            window=window,
+            limit=limit,
+            sort=sort,
+            role_filter=role_filter
+        )
+        return render_search_results_markdown(res)
 
 # ========================================================
 # DYNAMIC MCP REGISTRATION FROM CENTRAL REGISTRY

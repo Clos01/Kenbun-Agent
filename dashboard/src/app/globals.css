@@ -10,6 +10,7 @@
   --color-primary: var(--primary);
   --color-secondary: var(--secondary);
   --color-tertiary: var(--tertiary);
+  --color-accent: var(--accent);
   --color-neutral: var(--neutral);
   --color-card: var(--card);
   --color-border: var(--border);
@@ -32,6 +33,7 @@
   --primary: #0F2537;       /* Deep Oceanic Blue (Midnight) */
   --secondary: rgba(15, 37, 55, 0.65); /* Translucent ink instead of slate gray */
   --tertiary: #00885F;      /* Planhat Premium Emerald Green */
+  --accent: #B8422E;        /* Boston Clay Interactive Accent */
   --neutral: #FFFFFF;       /* Pure white backdrop */
   
   --background: var(--neutral);
@@ -51,6 +53,7 @@
   --primary: #0F2537;
   --secondary: rgba(15, 37, 55, 0.65);
   --tertiary: #00885F;
+  --accent: #B8422E;
   --neutral: #FFFFFF;
   
   --background: var(--neutral);

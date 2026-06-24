@@ -136,8 +136,17 @@ class BayesianGovernor:
             if not PC_IP:
                 raise ValueError("PC_IP_ADDRESS not set")
             
-            # 2 second timeout for reachability
+            # 2 second timeout for reachability of ChromaDB
             with socket.create_connection((self.pc_ip, int(self.chroma_port)), timeout=2):
+                pass
+            
+            # 2 second timeout for reachability of PostgreSQL
+            with socket.create_connection((settings.POSTGRES_HOST, int(settings.POSTGRES_PORT)), timeout=2):
+                pass
+            
+            # Try to connect to PostgreSQL to verify auth/credentials
+            from tools.memory.postgres_client import get_connection
+            with get_connection() as conn:
                 pass
             
             self.client = chromadb.HttpClient(host=self.pc_ip, port=int(self.chroma_port))
@@ -165,7 +174,7 @@ class BayesianGovernor:
             
             self.use_local = False
         except Exception as e:
-            print(f"⚠️ System 4: Remote PC {self.pc_ip} unreachable ({e}). Using local SQLite.")
+            print(f"⚠️ System 4: Remote PC {self.pc_ip} / DB unreachable ({e}). Using local SQLite.")
             self.use_local = True
 
     def _init_local_db(self):
@@ -177,6 +186,7 @@ class BayesianGovernor:
             print(f"✅ Bayesian Governor: Connected to {LOCAL_DB_PATH} in WAL mode")
         except Exception as e:
             print(f"❌ Bayesian Governor: Failed to connect to DB at {LOCAL_DB_PATH}: {e}")
+            return
         cursor = self.local_conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS intelligence (
@@ -232,6 +242,17 @@ class BayesianGovernor:
                         return float(row["alpha"]), float(row["beta"]), 0, 0
         except Exception as e:
             print(f"Debug: Error getting remote stats for {tool_id}: {e}")
+            # Fallback to local SQLite if remote query fails
+            if self.local_conn:
+                try:
+                    with self._lock:
+                        cursor = self.local_conn.cursor()
+                        cursor.execute("SELECT alpha, beta FROM intelligence WHERE tool_id = ?", (tool_id,))
+                        row = cursor.fetchone()
+                        if row:
+                            return float(row[0]), float(row[1]), 0, 0
+                except Exception as local_err:
+                    print(f"Debug: Fallback to local stats also failed: {local_err}")
         return 2.0, 2.0, 0, 0
 
     def update_intelligence(self, tool_id: str, category: str, success: bool):
@@ -272,6 +293,43 @@ class BayesianGovernor:
             except Exception as e:
                 print(f"Debug: Error updating local stats for {tool_id}: {e}")
             return
+
+        # Remote update to PostgreSQL
+        try:
+            from tools.memory.postgres_client import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute('''
+                        INSERT INTO bayesian_weights (tool_id, category, alpha, beta, last_updated)
+                        VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (tool_id, category) DO UPDATE SET
+                            alpha = EXCLUDED.alpha,
+                            beta = EXCLUDED.beta,
+                            last_updated = CURRENT_TIMESTAMP
+                    ''', (tool_id, category or 'global', alpha, beta))
+                    conn.commit()
+        except Exception as e:
+            print(f"Debug: Error updating remote stats for {tool_id}: {e}")
+            # Fallback to local SQLite update if remote fails
+            if self.local_conn:
+                try:
+                    with self._lock:
+                        cursor = self.local_conn.cursor()
+                        cursor.execute('''
+                        INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(tool_id) DO UPDATE SET
+                            category=excluded.category,
+                            alpha=excluded.alpha,
+                            beta=excluded.beta,
+                            success_count=excluded.success_count,
+                            failure_count=excluded.failure_count,
+                            timestamp=excluded.timestamp
+                    ''', (tool_id, category, alpha, beta, s, f, timestamp))
+                        self.local_conn.commit()
+                        self.get_tool_stats.cache_clear()
+                except Exception as local_err:
+                    print(f"Debug: Fallback local update also failed: {local_err}")
 
     def get_all_stats(self):
         """Returns all tool stats with temporal decay applied (Bridge Version) using PostgreSQL or local SQLite."""
@@ -326,6 +384,26 @@ class BayesianGovernor:
             return list(tool_data.values())
         except Exception as e:
             print(f"Debug: Postgres fetch failed: {e}")
+            # Fallback to local SQLite if remote fetch fails
+            if self.local_conn:
+                try:
+                    with self._lock:
+                        cursor = self.local_conn.cursor()
+                        cursor.execute("SELECT tool_id, category, alpha, beta, success_count, failure_count, timestamp FROM intelligence")
+                        rows = cursor.fetchall()
+                        for row in rows:
+                            t_id, cat, alpha, beta, s, f, ts = row
+                            results.append({
+                                "tool_id": t_id,
+                                "category": cat or "General",
+                                "alpha": round(float(alpha), 2),
+                                "beta": round(float(beta), 2),
+                                "success_count": s,
+                                "failure_count": f,
+                                "timestamp": ts
+                            })
+                except Exception as local_err:
+                    print(f"Debug: Fallback local fetch also failed: {local_err}")
         
         return results
 

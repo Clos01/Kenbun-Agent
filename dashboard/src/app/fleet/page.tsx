@@ -321,6 +321,8 @@ export default function FleetCommand() {
     ? (tools.reduce((sum, t) => sum + t.success_rate, 0) / tools.length * 100).toFixed(1) 
     : "0";
 
+  console.log("[browser] DEBUG_FLEET: tools length =", tools.length, "error =", error, "budget =", !!budget);
+
   return (
     <div className="min-h-screen bg-[var(--background)] flex selection:bg-[var(--gold)] selection:text-white max-w-[100vw] overflow-x-hidden">
       <Sidebar />

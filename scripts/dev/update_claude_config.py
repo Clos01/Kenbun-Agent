@@ -10,7 +10,7 @@ so the script works from any clone on any machine.
 import json
 import os
 
-REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def load_dotenv(path):
@@ -64,6 +64,9 @@ server_env = {
     "GEMINI_API_KEY": cfg("GEMINI_API_KEY"),
     "LM_STUDIO_PORT": cfg("LM_STUDIO_PORT", "1234"),
     "PC_IP_ADDRESS": cfg("PC_IP_ADDRESS", "127.0.0.1"),
+    "PRIMARY_LLM_URL": cfg("PRIMARY_LLM_URL"),
+    "PRIMARY_LLM_MODEL": cfg("PRIMARY_LLM_MODEL"),
+    "INTERNAL_API_URL": cfg("INTERNAL_API_URL"),
     "PYTHONPATH": pythonpath,
 }
 # Drop empty credentials rather than writing blank keys.
@@ -73,7 +76,7 @@ if not server_env.get("GEMINI_API_KEY"):
     print("⚠️  GEMINI_API_KEY not found in environment or .env — "
           "the server will start without it. Set it in .env before running.")
 
-config["mcpServers"]["Kenbun"] = {
+config["mcpServers"]["kenbun-local"] = {
     "command": venv_python,
     "args": ["-u", server_entry],
     "env": server_env,

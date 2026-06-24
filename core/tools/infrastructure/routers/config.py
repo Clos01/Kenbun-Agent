@@ -393,3 +393,111 @@ async def api_update_env_key(payload: SecretUpdateEnvRequest):
     except Exception as e:
         logging.error(f"Failed to update .env: {e}", exc_info=True)
         return JSONResponse(status_code=500, content={"error": "Failed to update environment file."})
+
+
+@router.get("/api/v1/config/schema")
+async def get_config_schema(request: Request):
+    """
+    Returns the JSON Schema of KenbunSettings, organized into logical categories
+    to power form rendering in the frontend settings view.
+    """
+    verify_authorization(request)
+    try:
+        from tools.infrastructure.config import KenbunSettings
+        # Extract raw schema using pydantic's model_json_schema
+        schema = KenbunSettings.model_json_schema()
+        properties = schema.get("properties", {})
+        
+        # Categorized registry
+        categories = {
+            "Models": [],
+            "Database": [],
+            "Sensory & Voice": [],
+            "Worker & Swarm": [],
+            "Security": [],
+            "Paths & Project": [],
+            "Other": []
+        }
+        
+        for field_name, prop in properties.items():
+            field_info = {
+                "name": field_name,
+                "title": prop.get("title", field_name),
+                "type": prop.get("type", "string"),
+                "default": prop.get("default", None),
+                "description": prop.get("description", ""),
+                "enum": prop.get("enum", None)
+            }
+            
+            # Categorize based on prefix or name
+            upper_name = field_name.upper()
+            if any(p in upper_name for p in ["MODEL", "LLM", "GEMINI", "DEEPSEEK", "ANTHROPIC", "OPENROUTER", "NOUS", "NVIDIA", "XAI", "ZHIPU", "KIMI", "MOONSHOT", "STEPFUN", "DASHSCOPE", "MIMO", "TOKENHUB"]):
+                categories["Models"].append(field_info)
+            elif any(p in upper_name for p in ["CHROMA", "SUPABASE", "POSTGRES", "DB", "SQLITE"]):
+                categories["Database"].append(field_info)
+            elif any(p in upper_name for p in ["TTS", "STT", "VOICE", "AUDIO", "SPEECH"]):
+                categories["Sensory & Voice"].append(field_info)
+            elif any(p in upper_name for p in ["WORKER", "SWARM", "PC_IP"]):
+                categories["Worker & Swarm"].append(field_info)
+            elif any(p in upper_name for p in ["SECURITY", "CRON_MODE", "APPROVAL", "SANDBOX", "HOOK"]):
+                categories["Security"].append(field_info)
+            elif any(p in upper_name for p in ["ROOT", "PATH", "DIR", "HOME", "VAULT"]):
+                categories["Paths & Project"].append(field_info)
+            else:
+                categories["Other"].append(field_info)
+                
+        return {"status": "success", "schema": categories}
+    except Exception as e:
+        logging.error(f"Failed to generate config schema: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate configuration schema.")
+
+
+@router.get("/api/v1/credentials/keys")
+async def get_credentials_status(request: Request):
+    """
+    Returns a status list of all API keys / credentials, grouping them by category,
+    indicating whether they are currently configured (True/False) without exposing the secret values.
+    """
+    verify_authorization(request)
+    try:
+        from tools.infrastructure.config import discover_env_file
+        
+        # Read from environment/settings or .env file
+        env_path = Path(discover_env_file())
+        env_vars = {}
+        if env_path.exists():
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    match = re.match(r"^\s*([A-Za-z0-9_]+)\s*=\s*(.*)$", line)
+                    if match:
+                        k = match.group(1)
+                        val = match.group(2).strip().strip("'").strip('"')
+                        if val:
+                            env_vars[k] = val
+
+        # Populate a credential status dictionary
+        credential_status = {}
+        
+        # Gather all model fields in KenbunSettings that represent credentials
+        for field_name, field_field in settings.model_fields.items():
+            upper_name = field_name.upper()
+            is_secret = "SecretStr" in str(field_field.annotation) or any(p in upper_name for p in ["KEY", "TOKEN", "SECRET", "PASSWORD"])
+            if is_secret:
+                # Resolve value safely
+                val = getattr(settings, field_name, None)
+                if val:
+                    # Unwrap SecretStr
+                    val_str = val.get_secret_value() if hasattr(val, "get_secret_value") else str(val)
+                else:
+                    # Fallback to env or .env file
+                    val_str = env_vars.get(field_name) or os.environ.get(field_name)
+                
+                credential_status[field_name] = {
+                    "is_configured": bool(val_str and val_str != "********" and not val_str.startswith("enc:Error")),
+                    "category": "LLM Providers" if any(p in upper_name for p in ["GEMINI", "DEEPSEEK", "ANTHROPIC", "OPENROUTER", "NOUS", "NVIDIA", "XAI", "ZHIPU", "KIMI", "MOONSHOT", "STEPFUN", "DASHSCOPE", "MIMO", "TOKENHUB"]) else "Integrations"
+                }
+
+        return {"status": "success", "credentials": credential_status}
+    except Exception as e:
+        logging.error(f"Failed to check credentials status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to check credentials status.")

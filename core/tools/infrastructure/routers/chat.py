@@ -161,8 +161,26 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
         except Exception as e:
             response_text = f"Neural Link Error: {str(e)}"
 
-    # 6. Append final AI response to history
-    ai_msg = chat_history_manager.add_message_to_session(session_id, "kenbun", response_text)
+    # 6. Append final AI response to history with estimated metrics and tool calls
+    input_tokens = len(full_user_message) // 4 if 'full_user_message' in locals() else len(req.message) // 4
+    output_tokens = len(response_text) // 4
+    est_cost = (input_tokens * 0.00015 + output_tokens * 0.0006) / 1000
+    metrics = {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "estimated_cost": est_cost
+    }
+    
+    tool_calls = None
+    if 'commands' in locals() and commands:
+        tool_calls = [{
+            "tool_name": "execute_cli_command",
+            "arguments": {"command": commands[0].strip()}
+        }]
+
+    ai_msg = chat_history_manager.add_message_to_session(
+        session_id, "kenbun", response_text, metrics=metrics, tool_calls=tool_calls
+    )
 
     # Reload session to return latest state
     updated_session = chat_history_manager.get_session(session_id)
@@ -241,3 +259,12 @@ async def chat_with_kenbun(req: ChatRequest):
     except Exception as e:
         logging.error(f"KENBUN_CHAT_ERROR: {e}")
         return {"response": f"Neural Link Error: {str(e)}", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@router.get("/api/v1/chat/sessions/search")
+async def search_chat_sessions(q: str):
+    """
+    Performs case-insensitive keyword search across chat session histories.
+    """
+    from tools.utils.chat_history_manager import search_sessions
+    return search_sessions(q)

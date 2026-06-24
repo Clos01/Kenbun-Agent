@@ -55,3 +55,12 @@ test = [
 
 [tool.setuptools]
 packages = []
+
+[tool.pyright]
+include = ["core", "scripts"]
+extraPaths = ["core"]
+
+[tool.pyrefly]
+search-path = [".", "core", "scripts", "src"]
+disable-search-path-heuristics = true
+
