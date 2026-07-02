@@ -9,7 +9,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - BASE_URL=http://127.0.0.1:1337
+      - BASE_URL=http://100.104.211.61:1337
       - DATABASE_URL=postgresql://postgres:planka@planka-db:5432/planka
       - SECRET_KEY=${PLANKA_SECRET_KEY}
       - DEFAULT_ADMIN_EMAIL=${PLANKA_DEFAULT_ADMIN_EMAIL}
@@ -27,7 +27,7 @@ services:
     image: nginx:alpine
     container_name: planka_proxy
     ports:
-      - "127.0.0.1:1337:80"
+      - "1337:80"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

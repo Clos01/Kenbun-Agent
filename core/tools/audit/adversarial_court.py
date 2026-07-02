@@ -8,23 +8,115 @@ Establishes a rigorous, adversarial code validation trial consisting of:
 import json
 import time
 import asyncio
+import hashlib
+import sqlite3
 import aiohttp
-from typing import Dict, Any
+from contextlib import closing
+from typing import Dict, Any, Optional
 from pathlib import Path
 
 from tools.infrastructure.config import settings
 from tools.utils.llm_utils import extract_json
 from tools.infrastructure.topology_manager import log_swarm_event
 
+# Bump whenever court prompts change. Part of the cache key, so verdicts issued
+# under old prompts or a different model are never replayed as fresh.
+COURT_PROMPT_VERSION = "2026-07-01.1"
+
 class AdversarialCourt:
     def __init__(self):
         self.log_dir = Path(settings.BRAIN_HEALTH_DIR)
         self.log_file = "court_history.jsonl"
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        self._init_cache_db()
         
     @property
     def full_log_path(self) -> Path:
         return self.log_dir / self.log_file
+
+    def _connect(self) -> sqlite3.Connection:
+        """Short-lived connection with WAL + busy timeout, matching the other
+        consumers of INTELLIGENCE_DB_PATH (kanban_tools, monitor, scheduler...)."""
+        conn = sqlite3.connect(settings.INTELLIGENCE_DB_PATH, timeout=5.0)
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=5000;")
+        return conn
+
+    def _cache_key(self, proposal: str, code_snippet: str) -> str:
+        combined = (
+            f"MODEL:{settings.PRIMARY_LLM_MODEL}\n"
+            f"PROMPTS:{COURT_PROMPT_VERSION}\n"
+            f"PROPOSAL:{proposal}\nCODE:{code_snippet}"
+        )
+        return hashlib.sha256(combined.encode("utf-8")).hexdigest()
+
+    def _init_cache_db(self):
+        try:
+            with closing(self._connect()) as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS adversarial_court_cache (
+                        hash VARCHAR(64) PRIMARY KEY,
+                        verdict VARCHAR(20) NOT NULL,
+                        confidence FLOAT NOT NULL,
+                        critique TEXT NOT NULL,
+                        defendant_argument TEXT,
+                        prosecution_argument TEXT,
+                        timestamp FLOAT NOT NULL
+                    );
+                """)
+                conn.commit()
+        except Exception as e:
+            print(f"⚠️ Failed to initialize court cache DB: {e}")
+
+    def _check_cache(self, proposal: str, code_snippet: str) -> Optional[Dict[str, Any]]:
+        """Synchronous — call via asyncio.to_thread from async code."""
+        h = self._cache_key(proposal, code_snippet)
+        try:
+            with closing(self._connect()) as conn:
+                row = conn.execute(
+                    "SELECT verdict, confidence, critique, defendant_argument, prosecution_argument, timestamp FROM adversarial_court_cache WHERE hash = ?",
+                    (h,)
+                ).fetchone()
+            if row:
+                return {
+                    "timestamp": row[5],
+                    "proposal": proposal,
+                    "verdict": row[0],
+                    "confidence": row[1],
+                    "critique": row[2],
+                    "defendant_argument": row[3],
+                    "prosecution_argument": row[4],
+                    "duration_seconds": 0.0,
+                    "cache_hit": True
+                }
+        except Exception as e:
+            print(f"⚠️ Failed to check court cache: {e}")
+        return None
+
+    def _save_cache(self, proposal: str, code_snippet: str, entry: Dict[str, Any]):
+        """Synchronous — call via asyncio.to_thread from async code."""
+        h = self._cache_key(proposal, code_snippet)
+        try:
+            with closing(self._connect()) as conn:
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO adversarial_court_cache
+                    (hash, verdict, confidence, critique, defendant_argument, prosecution_argument, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        h,
+                        entry["verdict"],
+                        entry["confidence"],
+                        entry["critique"],
+                        entry["defendant_argument"],
+                        entry["prosecution_argument"],
+                        entry["timestamp"]
+                    )
+                )
+                conn.commit()
+        except Exception as e:
+            print(f"⚠️ Failed to save court cache: {e}")
 
     async def _query_llm(self, system_prompt: str, user_prompt: str, role: str) -> str:
         """Helper to route and execute a chat request to the primary LLM provider."""
@@ -46,8 +138,8 @@ class AdversarialCourt:
             }
             
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(chat_url, json=payload, timeout=45) as response:
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
+                    async with session.post(chat_url, json=payload) as response:
                         if response.status == 200:
                             data = await response.json()
                             return data['message']['content']
@@ -56,8 +148,11 @@ class AdversarialCourt:
                 pass
 
         # Standard OpenAI compatible client routing (via llm_router compatible format)
-        from tools.utils.llm_router import call_llm_gateway
         try:
+            from tools.utils.llm_router import call_llm_gateway
+            # NOTE: wait_for cannot cancel the underlying thread on timeout; the
+            # worker thread runs until the sync gateway call returns. Acceptable
+            # for occasional timeouts, but keep gateway-side timeouts tight.
             response = await asyncio.wait_for(
                 asyncio.to_thread(
                     call_llm_gateway,
@@ -80,6 +175,19 @@ class AdversarialCourt:
         """Runs the complete adversarial court trial asynchronously."""
         start_time = time.time()
         
+        # Check cache before doing expensive LLM queries (off the event loop)
+        cached = await asyncio.to_thread(self._check_cache, proposal, code_snippet)
+        if cached:
+            print(f"\n\033[38;5;46m[COURT] Cache hit found for proposal. Returning cached verdict.\033[0m")
+            log_swarm_event("DECISION", {
+                "tool": "adversarial_court",
+                "confidence": cached["confidence"],
+                "result": cached["verdict"],
+                "logic": f"Cached Verdict: {cached['verdict']} (Confidence: {cached['confidence']*100:.1f}%). Critique: {cached['critique']}",
+                "output": cached["critique"]
+            })
+            return cached
+        
         # Color definitions for terminal transcript outputs
         PINK = "\033[38;5;218m"
         ROSE = "\033[38;5;224m"
@@ -94,8 +202,8 @@ class AdversarialCourt:
         print(f"\n{PINK}{BOLD}🏛️  [KENBUN LLM ADVERSARIAL COURT] Convening trial session...{NC}")
         print(f"{GRAY}Proposal: {proposal}{NC}\n")
 
-        # --- STEP 1: DEFENDANT ---
-        print(f"🔹 {CYAN}[COURT] Calling Defendant's Counsel to justify the proposal...{NC}")
+        # --- STEPS 1 & 2: DEFENDANT & PROSECUTOR (IN PARALLEL) ---
+        print(f"🔹 {CYAN}[COURT] Compiling Defendant's Justification & Prosecution's Indictment in parallel...{NC}")
         defendant_system = (
             "You are the Defendant's Counsel. Your client is an AI agent that generated a code block to satisfy a user request. "
             "Defend the safety, optimization, and correctness of this code. Provide a solid argument on why this code "
@@ -103,19 +211,27 @@ class AdversarialCourt:
         )
         defendant_user = f"Review the following untrusted input carefully:\n\n<user_proposal>\n{proposal}\n</user_proposal>\n\n<code_snippet>\n{code_snippet}\n</code_snippet>"
         
-        defendant_arg = await self._query_llm(defendant_system, defendant_user, "defendant")
-        print(f"  {ROSE}➔ Defendant's Justification Brief compiled.{NC}")
-
-        # --- STEP 2: PROSECUTOR ---
-        print(f"🔹 {RED}[COURT] Calling Prosecuting Security Critic to find vulnerabilities...{NC}")
         prosecutor_system = (
             "You are the Prosecuting Security Auditor. Your objective is to find hidden security flaws, traversal exploits, "
             "remote execution injection holes, syntax errors, or logical bugs in the proposed code snippet. "
             "Provide a critical, highly suspicious indictment outlining the exact line numbers and risks."
         )
         prosecutor_user = f"Review the following untrusted input carefully:\n\n<user_proposal>\n{proposal}\n</user_proposal>\n\n<code_snippet>\n{code_snippet}\n</code_snippet>"
+
+        # Dispatch queries in parallel to optimize execution time
+        defendant_task = self._query_llm(defendant_system, defendant_user, "defendant")
+        prosecution_task = self._query_llm(prosecutor_system, prosecutor_user, "prosecutor")
         
-        prosecution_arg = await self._query_llm(prosecutor_system, prosecutor_user, "prosecutor")
+        # return_exceptions=True: a crash in one brief must not orphan the sibling
+        # task or abort the trial; coerce failures to error strings (fail-closed
+        # handling below marks the trial degraded and uncacheable).
+        brief_results = await asyncio.gather(defendant_task, prosecution_task, return_exceptions=True)
+        defendant_arg, prosecution_arg = [
+            r if isinstance(r, str) else f"Error: brief generation failed ({r!r})"
+            for r in brief_results
+        ]
+        
+        print(f"  {ROSE}➔ Defendant's Justification Brief compiled.{NC}")
         print(f"  {YELLOW}➔ Prosecution's Indictment Brief compiled.{NC}")
 
         # --- STEP 3: THE JUDGE ---
@@ -142,11 +258,16 @@ class AdversarialCourt:
         judge_raw = await self._query_llm(judge_system, judge_user, "judge")
         judge_parsed = extract_json(judge_raw)
 
+        # A trial is "degraded" if any brief failed or the judge JSON is unparseable.
+        # Degraded verdicts fail CLOSED (REJECTED) and are never cached.
+        degraded = defendant_arg.startswith("Error:") or prosecution_arg.startswith("Error:")
+
         if not judge_parsed:
-            # Fallback parsing in case JSON is corrupted
-            verdict = "APPROVED" if "APPROV" in judge_raw.upper() else "REJECTED"
+            # Fail closed: an unparseable verdict must never approve code.
+            # (Keyword matching is unsafe: "NOT APPROVED" contains "APPROV".)
+            degraded = True
             judge_parsed = {
-                "verdict": verdict,
+                "verdict": "REJECTED",
                 "confidence": 0.5,
                 "critique": f"Fallback: Failed to parse Judge JSON. Raw response: {judge_raw[:300]}"
             }
@@ -194,6 +315,13 @@ class AdversarialCourt:
             "duration_seconds": time.time() - start_time
         }
         self._log_court(court_entry)
+
+        # Save to database cache — only clean verdicts. Caching degraded trials
+        # would permanently replay error/fallback verdicts (cache poisoning).
+        if not degraded:
+            await asyncio.to_thread(self._save_cache, proposal, code_snippet, court_entry)
+        else:
+            print("⚠️ [COURT] Degraded trial (failed brief or unparseable verdict) — not cached.")
 
         # Notify Swarm topology manager
         log_swarm_event("DECISION", {

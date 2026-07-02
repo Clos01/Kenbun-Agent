@@ -15,7 +15,8 @@ import {
   Database,
   ShieldCheck,
   Terminal,
-  Columns
+  Columns,
+  Layers
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -29,6 +30,7 @@ export default function Sidebar() {
     { name: "Bridge", href: "/observatory", icon: Compass },
     { name: "Fleet", href: "/fleet", icon: LayoutGrid },
     { name: "Board", href: "/board", icon: Columns },
+    { name: "Apps", href: "/apps", icon: Layers },
     { name: "Intel", href: "/telemetry", icon: Activity },
     { name: "Supervisor", href: "/supervisor", icon: ShieldCheck },
     { name: "Hivemind", href: "/hivemind", icon: Database },
