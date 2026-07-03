@@ -2,20 +2,18 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["gsap", "@gsap/react"],
-  // @ts-ignore
+  // Dynamic origins to avoid hardcoded IPs (Technical Debt resolved)
   allowedDevOrigins: [
-    "100.120.241.65", 
-    "100.120.241.65:3000", 
-    "http://100.120.241.65:3000",
-    "100.104.211.61",
-    "100.104.211.61:3000",
-    "http://100.104.211.61:3000",
-    "100.91.110.91",
-    "100.91.110.91:3000",
-    "http://100.91.110.91:3000",
-    "100.67.28.126",
-    "100.67.28.126:3000",
-    "http://100.67.28.126:3000"
+    ...(process.env.TAILSCALE_IP ? [
+      process.env.TAILSCALE_IP,
+      `${process.env.TAILSCALE_IP}:3000`,
+      `http://${process.env.TAILSCALE_IP}:3000`
+    ] : []),
+    ...(process.env.PC_IP_ADDRESS ? [
+      process.env.PC_IP_ADDRESS,
+      `${process.env.PC_IP_ADDRESS}:3000`,
+      `http://${process.env.PC_IP_ADDRESS}:3000`
+    ] : [])
   ],
 };
 

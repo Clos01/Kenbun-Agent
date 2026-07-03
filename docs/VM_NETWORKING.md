@@ -233,3 +233,23 @@ If you still cannot connect, walk through this checklist in order:
 3. [ ] **Docker Containers Running:** Are the Docker containers up? Run `docker compose ps` to ensure the containers are active.
 4. [ ] **Binding Socket Check:** Run `sudo ss -tulpn | grep 3000` on the VM. Is it listening on `*:3000` or `0.0.0.0:3000`?
 5. [ ] **Subnet Match Check:** Ensure your host laptop IP and VM bridged IP are on the same subnet (e.g., both are `192.168.1.x` with a netmask of `255.255.255.0`). If they are on different subnets (e.g. host is `192.168.1.15` and VM is `192.168.56.101`), your hypervisor is still using Host-Only or NAT adaptions instead of a bridged adaptor.
+
+---
+
+## 🐉 Tailscale Mesh Networking (PostgreSQL & Honcho)
+
+As of Phase 8, Kenbun leverages **Tailscale** for secure mesh networking, particularly when establishing connections between the core Orchestrator and the backend **PostgreSQL / Honcho** persistence layers.
+
+### Why Tailscale?
+Instead of exposing PostgreSQL (`5432`) or Honcho to the public internet or dealing with complex local bridge networks, Tailscale creates a secure, encrypted peer-to-peer mesh.
+
+### Connecting PostgreSQL over Tailscale
+1. **Install Tailscale** on both the host running Kenbun and the VM/container hosting PostgreSQL.
+2. Authenticate both nodes to the same Tailscale network (Tailnet).
+3. Update `core/tools/infrastructure/config.py` (or your `.env` file) to point to the Tailscale IP of the PostgreSQL instance (e.g. `100.x.y.z`).
+   ```env
+   HONCHO_POSTGRES_URI=postgresql://user:password@100.115.x.y:5432/kenbun_memory
+   ```
+
+### Benefits for Docker/Proxmox
+When deploying the `docker-compose.yml`, you no longer need to bind ports to `0.0.0.0` or worry about UFW rules for the database. By using Tailscale IPs, the traffic is routed directly through the encrypted `tailscale0` interface, bypassing local network complexities and keeping your Hivemind data completely hidden from the physical LAN.
