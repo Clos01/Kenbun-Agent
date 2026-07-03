@@ -344,14 +344,14 @@ def _make_openai_compatible_call(
         
     return content
 
-def call_llm_gateway(system_prompt: str, user_message: str, temperature: float = 0.1, max_tokens: int = 4000) -> str:
+def call_llm_gateway(system_prompt: str, user_message: str, temperature: float = 0.1, max_tokens: int = 4000, url_override: str = None, model_override: str = None) -> str:
     """
     Standardized, hardware-agnostic LLM router.
     Routes queries to PRIMARY_LLM_URL and falls back to FALLBACK_LLM_URL upon failure.
     Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
     """
-    primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
-    primary_model = settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
+    primary_url = url_override or settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
+    primary_model = model_override or settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
     fallback_url = settings.FALLBACK_LLM_URL or ""
     fallback_model = settings.FALLBACK_LLM_MODEL or ""
     
@@ -387,7 +387,10 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
             if primary_model == "local":
                 if not settings.PRIMARY_LLM_URL:
                     primary_url = "http://ollama_server:11434/v1"
-                primary_model = "llama3.2:1b"
+                # llama3.2:1b was never actually pulled by OLLAMA_PULL_MODELS
+                # (qwen2.5:1.5b, deepseek-r1:8b, llama3.2:3b are) — this
+                # emergency downgrade path would 404 against a real Ollama.
+                primary_model = "qwen2.5:1.5b"
     except Exception as e:
         logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
     

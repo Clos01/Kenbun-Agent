@@ -877,6 +877,7 @@ def configure_api_keys():
         print(f"{c_g}──────────────────────────────────────────────────{c_r}")
         config_options = [
             "⚙️  Select Primary AI Provider & Model (Select from 20+ options)",
+            "⚙️  Configure Decoupled Hybrid Setup (Ollama Swarm + LM Studio Supervisor) [PERK]",
             "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
             "🔙 Return to Main Menu",
         ]
@@ -1023,9 +1024,95 @@ def configure_api_keys():
                 print(f"❌ Failed to save environment file: {e}")
 
         elif opt == "2":
+            # Hybrid Swarm Setup
+            print(f"\n{c_m}⚙️  CONFIGURING DECOUPLED HYBRID SWARM (OLLAMA + LM STUDIO){c_r}")
+            print("This setup uses Ollama (1.5B/3B) for fast swarm mapping and LM Studio (26B/Gemma) for high-fidelity supervisor audits.")
+            
+            # 1. Ollama Swarm Gateway configuration
+            print(f"\n{c_c}Step 1: Swarm Gateway (Ollama){c_r}")
+            default_ollama_url = decrypted_url if "11434" in decrypted_url else "http://localhost:11434/v1"
+            ollama_url = input(f"Enter Ollama API URL [{default_ollama_url}]: ").strip() or default_ollama_url
+            
+            default_ollama_model = decrypted_model if "qwen" in decrypted_model or "llama" in decrypted_model else "qwen2.5:1.5b"
+            ollama_model = input(f"Enter Ollama Swarm Model [{default_ollama_model}]: ").strip() or default_ollama_model
+            
+            # 2. LM Studio Supervisor configuration
+            print(f"\n{c_c}Step 2: Executive Supervisor (LM Studio){c_r}")
+            existing_lm_model = env_vars.get("LM_STUDIO_MODEL", "google/gemma-4-26b-a4b")
+            existing_lm_timeout = env_vars.get("LM_STUDIO_READ_TIMEOUT", "300")
+            
+            # Search for Tailscale IP or default to localhost:2065
+            default_lm_url = "http://localhost:2065/v1"
+            for k, v in env_vars.items():
+                if "100.104" in v:
+                    default_lm_url = f"http://{v}:2065/v1" if ":" not in v else f"http://{v}/v1"
+                    break
+            
+            lm_url = input(f"Enter LM Studio API URL [{default_lm_url}]: ").strip() or default_lm_url
+            lm_model = input(f"Enter LM Studio Model (or 'auto') [{existing_lm_model}]: ").strip() or existing_lm_model
+            lm_timeout = input(f"Enter LM Studio Read Timeout (seconds) [{existing_lm_timeout}]: ").strip() or existing_lm_timeout
+            
+            # Save variables to Kenbun/.env
+            with open(env_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            content = update_env_var(content, "PRIMARY_LLM_URL", ollama_url)
+            content = update_env_var(content, "PRIMARY_LLM_MODEL", ollama_model)
+            content = update_env_var(content, "LM_STUDIO_MODEL", lm_model)
+            content = update_env_var(content, "LM_STUDIO_READ_TIMEOUT", lm_timeout)
+            
+            try:
+                from urllib.parse import urlparse
+                parsed_ollama = urlparse(ollama_url)
+                if parsed_ollama.hostname and parsed_ollama.port:
+                    content = update_env_var(content, "OLLAMA_URL", f"http://{parsed_ollama.hostname}:{parsed_ollama.port}/api/chat")
+                    content = update_env_var(content, "OLLAMA_PORT", str(parsed_ollama.port))
+            except Exception:
+                pass
+                
+            temp_path = None
+            try:
+                temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
+                with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                    f.write(content)
+                os.replace(temp_path, env_file)
+                print(f"\n🟢 {c_m}Successfully updated Kenbun local .env!{c_r}")
+            except Exception as e:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+                print(f"❌ Failed to save Kenbun environment file: {e}")
+                
+            # Propagation Perk: Auto-sync with sibling kenbun-agent
+            sibling_agent_dir = project_root.parent / "kenbun-agent"
+            sibling_env = sibling_agent_dir / ".env"
+            if sibling_env.exists():
+                print(f"✨ {c_g}Propagating Hybrid Swarm config to sibling directory: {sibling_agent_dir}{c_r}")
+                try:
+                    with open(sibling_env, "r", encoding="utf-8") as f:
+                        sub_content = f.read()
+                    sub_content = update_env_var(sub_content, "PRIMARY_LLM_URL", ollama_url)
+                    sub_content = update_env_var(sub_content, "PRIMARY_LLM_MODEL", ollama_model)
+                    sub_content = update_env_var(sub_content, "LM_STUDIO_MODEL", lm_model)
+                    sub_content = update_env_var(sub_content, "LM_STUDIO_READ_TIMEOUT", lm_timeout)
+                    
+                    sub_temp_path = None
+                    try:
+                        sub_temp_fd, sub_temp_path = tempfile.mkstemp(dir=sibling_agent_dir, prefix=".env.tmp")
+                        with os.fdopen(sub_temp_fd, "w", encoding="utf-8") as f:
+                            f.write(sub_content)
+                        os.replace(sub_temp_path, sibling_env)
+                        print(f"🟢 {c_m}Successfully propagated config to sibling kenbun-agent .env!{c_r}")
+                    except Exception as e:
+                        if sub_temp_path and os.path.exists(sub_temp_path):
+                            os.remove(sub_temp_path)
+                        print(f"❌ Failed to propagate to sibling: {e}")
+                except Exception as e:
+                    print(f"⚠️ Could not read sibling .env: {e}")
+                    
+        elif opt == "3":
             auto_register_claude_desktop_mcp()
             auto_register_cursor_mcp()
-        elif opt == "3":
+        elif opt == "4":
             break
 
 def detect_hardware():
@@ -1825,8 +1912,8 @@ def handle_secrets_command(args: List[str]):
 
     try:
         from tools.utils.secrets_bitwarden import (
-            get_bws_path, download_bws, load_hermes_config_raw,
-            save_hermes_config_raw, get_hermes_dir, apply_secrets_to_env
+            get_bws_path, download_bws, load_kenbun_config_raw,
+            save_kenbun_config_raw, get_kenbun_dir, apply_secrets_to_env
         )
     except ImportError as e:
         print(f"❌ Failed to import tools.utils.secrets_bitwarden: {e}")
@@ -1845,25 +1932,25 @@ def handle_secrets_command(args: List[str]):
             print(f"❌ Failed to install bws: {e}")
 
     elif action == "disable":
-        config = load_hermes_config_raw()
+        config = load_kenbun_config_raw()
         if "secrets" not in config:
             config["secrets"] = {}
         if "bitwarden" not in config["secrets"]:
             config["secrets"]["bitwarden"] = {}
         config["secrets"]["bitwarden"]["enabled"] = False
-        save_hermes_config_raw(config)
+        save_kenbun_config_raw(config)
         print(f"✅ {c_c}Bitwarden Secrets Manager integration has been disabled.{c_r}")
 
     elif action == "status":
-        config = load_hermes_config_raw()
+        config = load_kenbun_config_raw()
         bw_cfg = config.get("secrets", {}).get("bitwarden", {})
         enabled = bw_cfg.get("enabled", False)
         bin_path = get_bws_path()
         env_token_var = bw_cfg.get("access_token_env", "BWS_ACCESS_TOKEN")
         
         # Load token
-        from tools.utils.secrets_bitwarden import load_hermes_env
-        load_hermes_env()
+        from tools.utils.secrets_bitwarden import load_kenbun_env
+        load_kenbun_env()
         token = os.environ.get(env_token_var)
         
         print(f"\n{c_m}🔒 Bitwarden Secrets Manager Status{c_r}")
@@ -1889,8 +1976,8 @@ def handle_secrets_command(args: List[str]):
                 return
         
         # Ask for token
-        from tools.utils.secrets_bitwarden import load_hermes_env
-        load_hermes_env()
+        from tools.utils.secrets_bitwarden import load_kenbun_env
+        load_kenbun_env()
         current_token = os.environ.get("BWS_ACCESS_TOKEN", "")
         if current_token:
             token_prompt = f"Enter Bitwarden Access Token [{current_token[:8]}...]: "
@@ -1932,7 +2019,7 @@ def handle_secrets_command(args: List[str]):
             print(f"🟢 Connection Successful! Found {len(secrets_list)} secrets in project.")
             
             # Save configuration
-            config = load_hermes_config_raw()
+            config = load_kenbun_config_raw()
             if "secrets" not in config:
                 config["secrets"] = {}
             config["secrets"]["bitwarden"] = {
@@ -1944,12 +2031,12 @@ def handle_secrets_command(args: List[str]):
                 "override_existing": True,
                 "auto_install": True
             }
-            save_hermes_config_raw(config)
+            save_kenbun_config_raw(config)
             
-            # Write token to ~/.hermes/.env
-            hermes_dir = get_hermes_dir()
-            os.makedirs(hermes_dir, exist_ok=True)
-            env_path = os.path.join(hermes_dir, ".env")
+            # Write token to ~/.kenbun/.env
+            kenbun_dir = get_kenbun_dir()
+            os.makedirs(kenbun_dir, exist_ok=True)
+            env_path = os.path.join(kenbun_dir, ".env")
             
             # Read existing lines to preserve other vars
             env_lines = []
@@ -1976,7 +2063,7 @@ def handle_secrets_command(args: List[str]):
                 apply = True
         
         # Test fetching
-        config = load_hermes_config_raw()
+        config = load_kenbun_config_raw()
         bw_cfg = config.get("secrets", {}).get("bitwarden", {})
         if not bw_cfg.get("enabled", False):
             print("⚠️ Bitwarden Secrets Manager integration is currently disabled. Run 'setup' to enable.")
@@ -1987,12 +2074,12 @@ def handle_secrets_command(args: List[str]):
             print("❌ bws binary not found. Run setup or install.")
             return
 
-        from tools.utils.secrets_bitwarden import load_hermes_env
-        load_hermes_env()
+        from tools.utils.secrets_bitwarden import load_kenbun_env
+        load_kenbun_env()
         token_var = bw_cfg.get("access_token_env", "BWS_ACCESS_TOKEN")
         token = os.environ.get(token_var)
         if not token:
-            print(f"❌ {token_var} is not set in environment or ~/.hermes/.env")
+            print(f"❌ {token_var} is not set in environment or ~/.kenbun/.env")
             return
 
         project_id = bw_cfg.get("project_id", "")

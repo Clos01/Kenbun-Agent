@@ -5,8 +5,13 @@ from pathlib import Path
 from tools.utils.llm_utils import extract_json
 
 # --- 1. ENSEMBLE INTEGRATION ---
+from tools.infrastructure.config import settings
+
 try:
-    from tools.audit.ensemble_audit import ensemble
+    if settings.PRIMARY_LLM_URL and "11434" not in str(settings.PRIMARY_LLM_URL):
+        ensemble = None
+    else:
+        from tools.audit.ensemble_audit import ensemble
 except ImportError:
     ensemble = None
 
@@ -39,7 +44,19 @@ def _call_local_senior(system_prompt: str, user_message: str, max_tokens: int = 
     start_time = time.time()
     try:
         from tools.utils.llm_router import call_llm_gateway
-        content = call_llm_gateway(system_prompt, user_message, max_tokens=max_tokens)
+        
+        # Override to ensure the local senior ALWAYS uses LM Studio
+        lm_url = f"http://{settings.SWARM_PC_IP}:{settings.models.lm_studio_port}/v1" if settings.SWARM_PC_IP else "http://100.104.211.61:2065/v1"
+        # Read the model from settings (maps to LM_STUDIO_MODEL in .env), fallback to 26B
+        lm_model = settings.models.lm_studio_model or "google/gemma-4-26b-a4b"
+        
+        content = call_llm_gateway(
+            system_prompt, 
+            user_message, 
+            max_tokens=max_tokens, 
+            url_override=lm_url, 
+            model_override=lm_model
+        )
         duration = time.time() - start_time
         
         try:
