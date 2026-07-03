@@ -1442,6 +1442,22 @@ if __name__ == "__main__":
         
         # Absolute silence required for MCP protocol.
         # No startup banners allowed.
+        # brain_health/ is gitignored (holds local .db state), so this module
+        # may be absent on fresh clones — SRE monitoring is optional and must
+        # never block the MCP server from starting.
+        try:
+            import threading
+            from core.brain_health.docker_sre import SREAgent
+            def _run_sre_agent():
+                try:
+                    agent = SREAgent(check_interval_sec=60, unhealthy_threshold=3)
+                    agent.start_monitoring()
+                except Exception as e:
+                    debug_log(f"SRE Agent crashed: {e}")
+            threading.Thread(target=_run_sre_agent, daemon=True).start()
+        except Exception as e:
+            debug_log(f"SRE Agent unavailable (skipping): {e}")
+        
         mcp.run()
     except Exception as e:
         import traceback

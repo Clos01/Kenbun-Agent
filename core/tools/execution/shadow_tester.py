@@ -1,4 +1,7 @@
+import json
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
@@ -44,12 +47,42 @@ class ShadowTesterHandler(FileSystemEventHandler):
         self.trigger_swarm(file_path)
 
     def trigger_swarm(self, file_path):
-        # This is a placeholder for the actual trigger logic
-        # In a real scenario, this would call a FastAPI endpoint or a background task queue
+        """Dispatch the 'shadow_test' workflow to the persistent FastAPI server.
+
+        Posts to the same /orchestrate endpoint the MCP server itself uses
+        (see server.py:_dispatch_orchestrate_http) so this runs through the
+        real read → draft-test → guardrail → supervisor → sandbox pipeline
+        instead of a no-op print.
+        """
         task = f"Analyze the changes in {file_path.name} and suggest/write unit tests."
         print(f"🚀 Swarm Task: {task}")
-        # Note: run_pipeline needs the 'tools' dict which is usually managed by the FastMCP server.
-        # We will implement a 'background_queue' in server.py later.
+        try:
+            from tools.infrastructure.server_deps import get_or_create_config_token
+            token = get_or_create_config_token()
+            # Loopback, not settings.INTERNAL_API_URL: the watcher always runs
+            # on the same host/network namespace as the FastAPI server it's
+            # calling. INTERNAL_API_URL points at a Tailscale address meant
+            # for cross-machine callers (e.g. the MCP client) and isn't
+            # reachable via hairpin NAT from inside the same container.
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{settings.API_PORT}/orchestrate",
+                data=json.dumps({
+                    "workflow": "shadow_test",
+                    "task": task,
+                    "file_path": str(file_path),
+                    "project_path": str(self.project_path),
+                }).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {token}",
+                },
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            job_id = data.get("job_id")
+            print(f"✅ Shadow Tester: dispatched shadow_test job {job_id} for {file_path.name}")
+        except Exception as e:
+            print(f"⚠️ Shadow Tester: failed to trigger swarm for {file_path.name}: {e}")
 
 def start_shadow_tester(path_to_watch):
     print(f"🛡️ Kenbun Shadow Tester active. Watching: {path_to_watch}")

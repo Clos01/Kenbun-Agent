@@ -180,7 +180,25 @@ def run_code_safely(
     """
     from tools.infrastructure.config import settings
     if settings.security.sandbox_mode == "host":
-        return _run_on_host(code, language, timeout)
+        result = _run_on_host(code, language, timeout)
+        # "host" mode runs directly in this process's environment so drafted
+        # tests can `import tools.*` from the real Kenbun codebase — but that
+        # means a missing host dependency (e.g. watchdog wasn't installed
+        # yet) looks identical to a real test failure. A ModuleNotFoundError
+        # specifically means the *environment* is broken, not the code under
+        # test, so retry once in the isolated Docker sandbox before giving up.
+        if "ModuleNotFoundError" in result or "ImportError" in result:
+            if _check_docker():
+                docker_result = _run_docker_safely(code, language, timeout)
+                return (
+                    f"{result}\n\n"
+                    f"---\n"
+                    f"⚠️ **Host execution hit a missing dependency — falling back to local Docker sandbox.**\n"
+                    f"Note: the Docker sandbox has no access to the Kenbun project source, so this "
+                    f"fallback only helps for standalone code; project-internal imports will still fail there.\n\n"
+                    f"{docker_result}"
+                )
+        return result
 
     e2b_api_key = os.getenv("E2B_API_KEY")
     if not e2b_api_key:

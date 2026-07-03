@@ -36,6 +36,8 @@ dependencies = [
     "e2b-code-interpreter",
     "ruff",
     "croniter>=2.0.0",
+    "docker>=7.1.0",
+    "watchdog>=6.0.0",
 ]
 
 [project.optional-dependencies]

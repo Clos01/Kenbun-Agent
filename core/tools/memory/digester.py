@@ -19,16 +19,18 @@ class SystemDigester:
     
     def fetch_recent_telemetry(self) -> str:
         """
-        In a full implementation, this fetches the last N records from Honcho 
-        or the raw ChromaDB session history. 
-        For now, we simulate fetching recent unsynced telemetry.
+        In a full implementation, this fetches the last N records from Honcho
+        or the raw ChromaDB session history.
+
+        No real telemetry source is wired up yet. Returning a fixed sample
+        here previously caused generate_digest() to distill the same fake
+        conversation into a "rule" every cycle, which persist_rules() then
+        upserted into the digested_rules collection — so the Tier 2
+        Supervisor was permanently enforcing a fabricated requirement
+        against every unrelated proposal. Return empty until this is
+        actually wired to a real session-history source.
         """
-        # Simulated recent history context
-        return (
-            "User: 'ok so go to my portable kenbun file and lets start to implement that...'\n"
-            "System: 'Drafting Implementation Plan for Portable Kenbun Cognitive Architecture...'\n"
-            "System Event: Added host.docker.internal to docker-compose.yml for Mac Passthrough."
-        )
+        return ""
 
     def generate_digest(self, raw_telemetry: str) -> str:
         """Calls the lightweight local LLM to extract meaning from raw telemetry."""

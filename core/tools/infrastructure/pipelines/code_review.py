@@ -66,7 +66,7 @@ def build_code_review_pipeline(tools):
         "tool": tools["consult_supervisor"],
         "input": lambda s: {
             "user_proposal": s["task"],
-            "code_snippet": s.get("code_snippet", ""),
+            "code_snippet": s.get("code_snippet") or s.get("repo_map", ""),
             "iterative_mode": False,
         },
         "skip_if": lambda s: not (s.get("code_snippet") or s.get("repo_map")),

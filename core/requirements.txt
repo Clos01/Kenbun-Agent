@@ -98,6 +98,7 @@ uritemplate==4.2.0
 urllib3==2.6.3
 uvicorn==0.46.0
 uvloop==0.22.1
+watchdog==6.0.0
 watchfiles==1.1.1
 websocket-client==1.9.0
 websockets==16.0
