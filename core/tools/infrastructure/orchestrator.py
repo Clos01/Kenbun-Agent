@@ -641,6 +641,14 @@ async def run_pipeline(
     # --- BUILD PIPELINE ---
     steps = pipeline_def.builder(tools)
 
+    # --- PLANKA WORKFLOW SYNC ---
+    planka_ctx = None
+    try:
+        from tools.strategy.planka_workflow import sync_pipeline_start
+        planka_ctx = sync_pipeline_start(workflow, task, steps)
+    except Exception as e:
+        print(f"⚠️ Planka workflow sync failed to start: {e}")
+
     # --- EXECUTE ---
     report = [
         f"# 🎯 Orchestrator: `{workflow}`",
@@ -813,12 +821,28 @@ async def run_pipeline(
             report.append(f"```\n{result_preview}\n```")
             report.append("")
 
+            # --- PLANKA STEP SYNC (SUCCESS) ---
+            if planka_ctx:
+                try:
+                    from tools.strategy.planka_workflow import sync_pipeline_step
+                    sync_pipeline_step(planka_ctx, step_id, label, success=True, result_preview=result_preview)
+                except Exception as e:
+                    print(f"⚠️ Planka step sync failed: {e}")
+
         except asyncio.TimeoutError:
             duration = TOOL_TIMEOUT * settings.SWARM_TIMEOUT_MULTIPLIER
             error_msg = f"⏱️ `{step_id}` TIMED OUT after {duration}s. Swarm watchdog intervened."
             report.append(error_msg)
             print(f"   {error_msg}")
             consecutive_failures += 1
+
+            # --- PLANKA STEP SYNC (TIMEOUT) ---
+            if planka_ctx:
+                try:
+                    from tools.strategy.planka_workflow import sync_pipeline_step
+                    sync_pipeline_step(planka_ctx, step_id, label, success=False, result_preview=error_msg)
+                except Exception as e:
+                    print(f"⚠️ Planka step sync failed: {e}")
         except Exception as e:
             duration = time.time() - start_time if "start_time" in locals() else 0
             error_msg = f"❌ `{step_id}` failed: {e}"
@@ -829,6 +853,14 @@ async def run_pipeline(
             # --- UPDATE INTELLIGENCE & TELEMETRY (FAILURE) ---
             governor.update_intelligence(step_id, workflow, success=False)
             log_tool_performance(step_id, success=False, duration=duration)
+
+            # --- PLANKA STEP SYNC (FAILURE) ---
+            if planka_ctx:
+                try:
+                    from tools.strategy.planka_workflow import sync_pipeline_step
+                    sync_pipeline_step(planka_ctx, step_id, label, success=False, result_preview=error_msg)
+                except Exception as e:
+                    print(f"⚠️ Planka step sync failed: {e}")
 
             # --- BACKTRACKING OR FALLBACK ---
             on_failure = step.get("on_failure")
@@ -939,6 +971,22 @@ async def run_pipeline(
             print(f"   ⚠️ MARS Breach: {message}")
         else:
             report.append(f"\n✅ **MARS BOUNDARY VERIFIED:** {message}")
+
+    # --- PLANKA END SYNC ---
+    if planka_ctx:
+        try:
+            from tools.strategy.planka_workflow import sync_pipeline_end
+            pipeline_success = (consecutive_failures < 3) and token_governor.can_spend(0.0)
+            final_report_str = "\n".join(report)
+            summary_lines = []
+            if "## 🧠 Architectural Reflection" in final_report_str:
+                parts = final_report_str.split("## 🧠 Architectural Reflection")
+                summary_lines.append("### 🧠 Architectural Reflection\n" + parts[-1].strip())
+            else:
+                summary_lines.append(f"Pipeline finished with {consecutive_failures} failures.")
+            sync_pipeline_end(planka_ctx, pipeline_success, "\n".join(summary_lines))
+        except Exception as e:
+            print(f"⚠️ Planka end sync failed: {e}")
 
     return "\n\n".join(report)
 
