@@ -7,10 +7,10 @@ kenbun:
 ---
 
 # Kenbun Agent Skill
-Configure, extend, or contribute to Nous Research's Kenbun Agent. This skill provides CLI references, configuration details, profiles management, and troubleshooting strategies.
+Configure, extend, or contribute to Kenbun Agent (a fork of Nous Research's Hermes Agent). This skill provides CLI references, configuration details, profiles management, and troubleshooting strategies.
 
 ## Prerequisites
-- Install: `curl -fsSL https://kenbun-agent.nousresearch.com/install.sh | bash`
+- Install: `curl -fsSL https://raw.githubusercontent.com/Clos01/Kenbun-Agent/main/install.sh | bash`
 - Start chat session: `kenbun` or `kenbun chat`
 - Interactive model setup: `kenbun model`
 - Health check: `kenbun doctor`

@@ -46,7 +46,7 @@ def _call_local_senior(system_prompt: str, user_message: str, max_tokens: int = 
         from tools.utils.llm_router import call_llm_gateway
         
         # Override to ensure the local senior ALWAYS uses LM Studio
-        lm_url = f"http://{settings.SWARM_PC_IP}:{settings.models.lm_studio_port}/v1" if settings.SWARM_PC_IP else "http://100.104.211.61:2065/v1"
+        lm_url = f"http://{settings.SWARM_PC_IP or 'localhost'}:{settings.models.lm_studio_port}/v1"
         # Read the model from settings (maps to LM_STUDIO_MODEL in .env), fallback to 26B
         lm_model = settings.models.lm_studio_model or "google/gemma-4-26b-a4b"
         
