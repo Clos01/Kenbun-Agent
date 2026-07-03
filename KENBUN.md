@@ -13,37 +13,37 @@ Kenbun is structured as a **Multi-Tiered Agentic Swarm** that operates under the
 ```
        +----------------------------------------------------------------+
        |                  SYSTEM 6: The Autonomic                       |
-       |  Monitors regressions, tech debt, and AST compliance.          |
+       |  Daemons (Git Watcher, Scheduler) & SVE AST Compliance Checks. |
        +----------------------------------------------------------------+
                                        ^
                                        |
        +----------------------------------------------------------------+
        |                  SYSTEM 5: The Oracle                          |
-       |  Refines post-mortems and lessons inside the global brain.    |
+       |  Refines post-mortems and enforces Heritage Design aesthetics. |
        +----------------------------------------------------------------+
                                        ^
                                        |
        +----------------------------------------------------------------+
        |                  SYSTEM 4: The Governor                        |
-       |  Bayesian tool governance, real-time budgets, token tracking.   |
+       |  Token tracking, scheduling, Kanban Workflow, and Tool Budgets.|
        +----------------------------------------------------------------+
                                        ^
                                        |
        +----------------------------------------------------------------+
        |                  SYSTEM 3: Namespaced Memory                   |
-       |  Vector databases in ChromaDB (Code, Concepts, History).       |
+       |  PostgreSQL/Honcho integrations, Project Knowledge & Indexers. |
        +----------------------------------------------------------------+
                                        ^
                                        |
        +----------------------------------------------------------------+
        |                  SYSTEM 2: Cognitive Auditing                  |
-       |  Consensus-driven code verification & supervisor checks.       |
+       |  Ensemble-Based logic, pre-flight linters & specialized agents.|
        +----------------------------------------------------------------+
                                        ^
                                        |
        +----------------------------------------------------------------+
        |                  SYSTEM 1: Jailed Sandbox                      |
-       |  You running inside the isolated Docker Jail (Non-Root).       |
+       |  Orchestration layer, deterministic bug-fix pipelines & logic. |
        +----------------------------------------------------------------+
 ```
 
@@ -93,12 +93,12 @@ Every query or insert you make must include a `project_id` generated determinist
 
 ## 🛡️ 4. Execution Sandbox Boundaries (System 1)
 
-When running tasks, executing scripts, or evaluating user code, you run inside the **Jailed Container Workspace** (`hermes_sandbox_jail`):
+When running tasks, executing scripts, or evaluating user code, you run inside the **Jailed Container Workspace** (`kenbun_sandbox_jail`):
 
-1. **Non-Root Gating:** You execute as `user: hermes_jail` (UID `2000`). You have **zero root privileges** and cannot escalate privileges.
+1. **Non-Root Gating:** You execute as `user: kenbun_jail` (UID `2000`). You have **zero root privileges** and cannot escalate privileges.
 2. **Cap Drop:** Docker capabilities are fully dropped (`cap_drop: [ALL]`). You cannot perform low-level networking hacks or driver alterations.
 3. **Privilege Gating:** No-new-privileges is strictly enforced (`no-new-privileges:true`).
-4. **Volume Isolation:** You only have access to `/home/hermes_jail/workspace`. Host files are completely invisible and unreachable to you.
+4. **Volume Isolation:** You only have access to `/home/kenbun_jail/workspace`. Host files are completely invisible and unreachable to you.
 
 ---
 
@@ -109,9 +109,10 @@ When running tasks, executing scripts, or evaluating user code, you run inside t
 > You are **FORBIDDEN** from declaring any task group as "Complete" without passing a System 2 Cognitive Audit.
 
 Before committing changes or finalizing work, follow this 4-step pipeline:
-1. **Pre-flight Lint:** Run formatting and linting tools locally (`autofix_linter`).
+1. **Pre-flight Lint:** Run formatting and linting tools locally (`autofix_linter`) before code ever hits the LLM layers.
 2. **Write Unit Tests:** Ensure test coverage is generated (`shadow_tester.py`).
-3. **Trigger Supervisor Audit:** Invoke `consult_supervisor(user_proposal, code_snippet)` to review security, scalability, and structural regressions.
+3. **Trigger Supervisor Audit:** Invoke the **Ensemble-Based Auditing Architecture** (`consult_supervisor`, `adversarial_court`, `vision_auditor`) to review security, scalability, and structural regressions.
+   - **Timeout Constraints**: Hardcoded supervisor timeouts strictly enforce performance boundaries. Local execution timeouts are capped at **60s**, while cloud escalation tasks are capped at **45s**.
 4. **Obtain Approval:** Mark the task done only after System 2 reports an `Approved` status.
 
 ---

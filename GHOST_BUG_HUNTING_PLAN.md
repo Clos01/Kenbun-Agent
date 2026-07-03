@@ -12,8 +12,9 @@ A "ghost bug" here = a defect that doesn't raise at import or unit-test time, bu
 
 **Why ghosts live here:** Pipelines build a list of steps where each step has an `input` lambda that constructs a dict, and the step's `tool` is looked up by string key from the registry. Python keyword-arg mismatches between what the lambda passes and what the tool function actually accepts are silent until the step runs.
 
-**Confirmed ghost (caught during this audit):**
-- `pipelines/code_review.py:56` passes `tech_key=` into the `analyze_bug` slot, but the registry maps `analyze_bug` to `_analyze_bug(task, file_path, code_snippet, project_path, past_fixes)` (`orchestrator.py:762`). There is no `tech_key` parameter — so the `analyze_review_request` step crashes every time it isn't skipped. The current `skip_if` (`bool(s.get("code_snippet") or s.get("repo_map"))`) hides it for most calls.
+**Confirmed ghost (RESOLVED during Phase 6):**
+- *Bug*: `pipelines/code_review.py:56` passed `tech_key=` into the `analyze_bug` slot, but the registry mapped `analyze_bug` to `_analyze_bug(task, file_path, code_snippet, project_path, past_fixes)` (`orchestrator.py:762`). There was no `tech_key` parameter.
+- *Fix*: The Orchestrator pipeline was updated to use a unified `_analyze_review_request` wrapper that safely consumes `tech_key` and delegates correctly to the bug-fix analyzer.
 
 **Classes to hunt:**
 1. **Signature drift** — lambda passes a kwarg the tool doesn't accept (the bug above).
@@ -74,7 +75,7 @@ A "ghost bug" here = a defect that doesn't raise at import or unit-test time, bu
 **Why ghosts live here:** Migrations are noted in `POST_MORTEM.md` and `scripts/migrate_to_*.py`; sqlite + chroma + honcho + postgres all coexist. The bridge code that decides which backend to use is a classic ghost-bug habitat.
 
 **Classes to hunt:**
-1. **Dual-write / dual-read drift** — `knowledge_manager` reads from honcho and chromadb; if writes go to only one, queries miss.
+1. **Dual-write / dual-read drift (RESOLVED during Phase 6)** — `knowledge_manager` read from honcho and chromadb; writes went to only one, causing queries to miss. *Fix*: Implemented a strict PostgreSQL/Honcho adapter as the sole source of truth for System 3. ChromaDB is now formally deprecated and bypassed, closing the dual-write drift.
 2. **Schema drift across `weights.json` / `weights.json.migrated`** — two artifacts coexisting at `core/` is a tell that a migration may be half-applied.
 3. **Connection pooling under fork** — `postgres_client.py` constructs a conn string per call; long-running daemon (`services/swarm_daemon.py`) can leak.
 4. **Embedding dimension drift** — different models produce different vector sizes; old vectors in the collection break similarity search silently (queries return junk, not errors).

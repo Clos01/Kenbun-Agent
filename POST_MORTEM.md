@@ -21,3 +21,25 @@ const nextConfig: NextConfig = {
 };
 ```
 Restarting the `portable_dashboard` container fully resolved the issue and restored full routing capabilities. This concept was also successfully ingested into the Hivemind (`save_to_hivemind`).
+
+## 2026-06-24: Pipeline vs Tool Signature Ghost Bug
+
+### Symptoms
+The `analyze_review_request` step in `pipelines/code_review.py` was silently failing or crashing without breaking the whole process when `skip_if` was not triggered.
+
+### Root Cause
+There was a parameter mismatch between the orchestration pipeline lambda and the underlying registry function. `pipelines/code_review.py:56` passed `tech_key=` into the `analyze_bug` slot, but the registry mapped `analyze_bug` to `_analyze_bug(...)` which did not accept `tech_key`. This caused Python `TypeError` signature drifts that only fired under specific conditions.
+
+### Fix
+The Orchestrator pipeline was updated to use a unified `_analyze_review_request` wrapper that safely consumed `tech_key` and delegated correctly to the bug-fix analyzer. This enforces stricter contract boundaries between the dynamic pipeline lambdas and the target tool implementations.
+
+## 2026-06-24: System 3 Dual-Write Memory Drift (Honcho vs ChromaDB)
+
+### Symptoms
+Agent memory retrieval (`knowledge_manager.py`) was sporadically missing critical architectural context that had been recently saved by the System 5 Reflection Agent.
+
+### Root Cause
+A partial migration left Kenbun in a state of "Dual-write / dual-read drift". `knowledge_manager.py` was reading from both Honcho and a legacy local ChromaDB instance, but writes were only going to one backend. This caused a divergence in the vector spaces.
+
+### Fix
+ChromaDB was formally deprecated and bypassed. A strict PostgreSQL/Honcho adapter was implemented as the sole source of truth for System 3. All writes and reads now flow exclusively through Honcho, eliminating the split-brain scenario.

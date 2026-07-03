@@ -7,34 +7,34 @@ This is the master map of the Kenbun system, a Twelve-Factor, Sovereign Intellig
 Kenbun is organized into a nested hierarchy of reasoning, from immediate reflexes to long-term architectural planning.
 
 ### 🧘 System 1: The Reflex (Immediate Action)
-- **Component**: `FastMCP` / `server.py`
-- **Function**: Immediate tool execution and file manipulation.
+- **Component**: `core/tools/infrastructure/server.py` & Orchestration Layer
+- **Function**: Immediate tool execution, file manipulation, and deterministic `bug_fix` pipelines.
 - **Goal**: Execution latency < 100ms.
 
 ### 🧠 System 2: The Supervisor (Reasoning & Ethics)
-- **Component**: `supervisor_agent.py` / `LM Studio (Local)`
-- **Function**: Audits System 1's proposals for security, design consistency, and logic errors.
+- **Component**: `core/tools/audit/` (Ensemble-Based Auditing Architecture)
+- **Function**: Audits System 1's proposals via specialized agents (e.g. `adversarial_court`, `guardrail_agent`, `vision_auditor`) and pre-flight linters.
 - **Goal**: Zero "Draft Quality" code in production.
 
 ### 🐝 System 3: The Hivemind (Short-Term Memory)
-- **Component**: `chroma_db_connect.py` / `repo_mapper.py`
-- **Function**: Semantic indexing of the current repository. Maps all "Neural Signals" (functions, variables, logic) into a vector space.
-- **Goal**: Total codebase awareness.
+- **Component**: `core/tools/memory/` (PostgreSQL / Honcho)
+- **Function**: Context ingestion (`code_indexer`, `digester`, `pdf_ingestor`, `knowledge_manager`) and cross-agent memory management.
+- **Goal**: Total codebase awareness and robust knowledge retrieval.
 
 ### ⚖️ System 4: The Governor (Bayesian Intelligence)
-- **Component**: `strategy_manager.py` / `token_governor.py`
-- **Function**: Tracks tool performance (Success/Failure) using Bayesian alpha/beta weights. Manages financial budgets and API rate limits.
-- **Goal**: Cost-efficient, high-probability execution paths.
+- **Component**: `core/tools/strategy/`
+- **Function**: Token tracking, atomic file locks, scheduling, Kanban Workflow Logic (`kanban_tools.py`, `delegation_tool.py`), and Neural Evaluation.
+- **Goal**: Cost-efficient, high-probability execution paths and efficient task distribution.
 
 ### 🔮 System 5: The Oracle (Architectural Vision)
-- **Component**: `oracle.py` / `gemini_reviewer.py`
+- **Component**: `core/tools/design/oracle.py` & `core/tools/audit/gemini_reviewer.py`
 - **Function**: Long-term planning, research, and deep architectural audits. Grounded in official documentation and the **Heritage** Design System (DESIGN.md).
 - **Goal**: Maintaining the Heritage aesthetic and architectural integrity.
 
 ### 🌌 System 6: The Autonomic (Self-Healing & SVE)
-- **Component**: `swarm_daemon.py` / `sve_pulse.py` (System 5.1)
-- **Function**: Monitors the system for regressions, technical debt, and logical hallucinations. The **Sovereign Verification Engine (SVE)** enforces AST structural laws and logical provenance project-wide.
-- **Goal**: Infinite system stability and total architectural grounding.
+- **Component**: `core/services/` (Daemons) & `core/tools/autonomic/` (Correctors)
+- **Function**: Monitors the system via `sve_pulse.py`, `git_push_watcher_daemon.py`, and `scheduler_daemon.py`. The **Sovereign Verification Engine (SVE)** enforces AST structural laws project-wide.
+- **Goal**: Infinite system stability, task scheduling, and total architectural grounding.
 
 ---
 

@@ -57,7 +57,17 @@ This document provides a 1:1 functional description of every Python file in the 
 *   **`sync_intelligence.py`**: Synchronizes Bayesian weights across nodes.
 *   **`nightly_bake.py`**: Scheduled job for re-indexing and system maintenance.
 
+## 🎨 `tools/skills/` (HTML/UI Capabilities & Behaviors)
+*   **`PROTOCOL.md`**: Core rules for applying skills and modifying HTML UI components.
+*   **`html-ppt-kenbun-cyber-terminal`**: (Renamed from Hermes) The primary terminal UI skill/theme used by the agent for rendering text and terminal feedback.
+*   **`dashboard/`**: Dashboard generation skills and UI overrides.
+*   *(Includes dozens of optional aesthetic skills like `html-ppt-obsidian-claude-gradient`, `saas-landing`, and `web-prototype` for rapid UI generation).*
+
 ## 🧪 `tests/` (Sovereign Verification Suite)
 *   **`test_autopilot.py`**: Automated unit tests validating dynamic VRAM/RAM hardware sensing profiles on macOS and Linux.
 *   **`test_ralph_loop.py`**: Automated integration tests validating autonomic rollback, re-grounding, and self-healing trial results inside the supervisor.
+*   **`test_brain_health.py`**: Tests for Honcho/PostgreSQL memory persistence and memory boundaries.
+*   **`test_scheduler.py`**: Validates CRON execution and time-based delays.
+*   **`test_git_watcher.py`**: Validates the Git push autonomic integration.
+*   **`test_pipeline_contracts.py`**: Prevents ghost bugs by testing orchestration tool kwarg matching.
 
