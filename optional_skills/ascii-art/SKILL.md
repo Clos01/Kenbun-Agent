@@ -132,9 +132,9 @@ boxes -l                                       # List all 70+ designs
 
 ### Combine with pyfiglet or asciified
 ```bash
-python3 -m pyfiglet "HERMES" -f slant | boxes -d stone
+python3 -m pyfiglet "KENBUN" -f slant | boxes -d stone
 # Or without pyfiglet installed:
-curl -s "https://asciified.thelicato.io/api/v2/ascii?text=HERMES&font=Slant" | boxes -d stone
+curl -s "https://asciified.thelicato.io/api/v2/ascii?text=KENBUN&font=Slant" | boxes -d stone
 ```
 
 ---

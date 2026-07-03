@@ -302,7 +302,7 @@ class KenbunSettings(BaseSettings):
     TTS_SPEED: float = Field(default=1.0)
     STT_PROVIDER: str = Field(default="local")
     STT_MODEL: str = Field(default="base")
-    HERMES_CONFIG_PATH: str = Field(default="~/.hermes/config.yaml")
+    KENBUN_CONFIG_PATH: str = Field(default="~/.kenbun/config.yaml")
 
 
 
@@ -403,7 +403,7 @@ class KenbunSettings(BaseSettings):
     DOZZLE_PORT: int = Field(default=8888)
 
     # --- GIT PUSH WATCHER ---
-    GIT_WATCH_REPOS: str = Field(default="nousresearch/hermes-agent")
+    GIT_WATCH_REPOS: str = Field(default="Clos01/Kenbun-Agent")
     GIT_WATCH_INTERVAL: int = Field(default=600)
     GITHUB_TOKEN: Optional[str] = Field(default=None)
 

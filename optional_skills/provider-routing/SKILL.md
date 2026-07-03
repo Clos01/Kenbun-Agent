@@ -16,7 +16,7 @@ Configure fine-grained control over which underlying AI providers (e.g., Anthrop
 ---
 
 ## Configuration
-Add a `provider_routing` section to your `~/.hermes/config.yaml`:
+Add a `provider_routing` section to your `~/.kenbun/config.yaml`:
 
 ```yaml
 provider_routing:

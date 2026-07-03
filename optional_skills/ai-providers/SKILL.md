@@ -14,23 +14,23 @@ This page covers configuring inference providers for the agent — from cloud AP
 
 ## Supported Providers & Setup Commands
 
-| Provider | Setup Method | Environment Variable (in `~/.hermes/.env`) |
+| Provider | Setup Method | Environment Variable (in `~/.kenbun/.env`) |
 | :--- | :--- | :--- |
-| **Nous Portal** | `hermes model` (OAuth) | *None (managed via auth.json)* |
-| **OpenAI Codex** | `hermes model` (OAuth device code) | *None (managed via auth.json)* |
-| **GitHub Copilot** | `hermes model` (OAuth device code) | `COPILOT_GITHUB_TOKEN` or `GH_TOKEN` |
-| **Anthropic (Native)** | `hermes model` (OAuth / API Key) | `ANTHROPIC_API_KEY` |
+| **Nous Portal** | `kenbun model` (OAuth) | *None (managed via auth.json)* |
+| **OpenAI Codex** | `kenbun model` (OAuth device code) | *None (managed via auth.json)* |
+| **GitHub Copilot** | `kenbun model` (OAuth device code) | `COPILOT_GITHUB_TOKEN` or `GH_TOKEN` |
+| **Anthropic (Native)** | `kenbun model` (OAuth / API Key) | `ANTHROPIC_API_KEY` |
 | **OpenRouter** | Manual config | `OPENROUTER_API_KEY` |
 | **DeepSeek** | Manual config | `DEEPSEEK_API_KEY` |
 | **Google Gemini** | Manual config | `GOOGLE_API_KEY` or `GEMINI_API_KEY` |
 | **OpenAI API (direct)**| Manual config | `OPENAI_API_KEY` |
-| **AWS Bedrock** | `hermes model` | Uses standard AWS SDK (`boto3`) auth chain |
-| **Azure AI Foundry** | `hermes model` | *Uses Azure endpoint credentials* |
-| **Ollama Cloud** | `hermes model` | `OLLAMA_API_KEY` |
+| **AWS Bedrock** | `kenbun model` | Uses standard AWS SDK (`boto3`) auth chain |
+| **Azure AI Foundry** | `kenbun model` | *Uses Azure endpoint credentials* |
+| **Ollama Cloud** | `kenbun model` | `OLLAMA_API_KEY` |
 | **NovitaAI** | Manual config | `NOVITA_API_KEY` |
 | **z.ai / GLM** | Manual config | `GLM_API_KEY` |
 | **Kimi / Moonshot** | Manual config | `KIMI_API_KEY` or `KIMI_CN_API_KEY` |
-| **xAI (Grok)** | `hermes model` (OAuth / API Key) | `XAI_API_KEY` |
+| **xAI (Grok)** | `kenbun model` (OAuth / API Key) | `XAI_API_KEY` |
 | **NVIDIA NIM** | Manual config | `NVIDIA_API_KEY` |
 | **Hugging Face** | Manual config | `HF_TOKEN` |
 | **StepFun** | Manual config | `STEPFUN_API_KEY` |
@@ -40,7 +40,7 @@ This page covers configuring inference providers for the agent — from cloud AP
 ## Model Management Commands
 
 Use these commands to configure or switch models/providers:
-- **`hermes model`** (Run in terminal, outside active session): Full setup wizard. Use this to add new providers, register API keys, or authenticate via OAuth.
+- **`kenbun model`** (Run in terminal, outside active session): Full setup wizard. Use this to add new providers, register API keys, or authenticate via OAuth.
 - **`/model`** (Type inside active chat session): Quick-switch between already-configured models and providers.
   *Example:* `/model openrouter:anthropic/claude-sonnet-4.6`
 
@@ -49,7 +49,7 @@ Use these commands to configure or switch models/providers:
 ## Custom & Self-Hosted LLM Providers
 Any API implementing the OpenAI `/v1/chat/completions` endpoint can be wired into the agent.
 
-### General Configuration (in `~/.hermes/config.yaml`)
+### General Configuration (in `~/.kenbun/config.yaml`)
 ```yaml
 model:
   default: your-custom-model-name

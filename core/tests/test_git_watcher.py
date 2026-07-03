@@ -8,16 +8,16 @@ from tools.registry import registry
 import tools.infrastructure.orchestrator  # Trigger pipeline registrations
 
 def test_parse_github_repo():
-    assert _parse_github_repo("https://github.com/nousresearch/hermes-agent") == ("nousresearch", "hermes-agent")
-    assert _parse_github_repo("git@github.com:nousresearch/hermes-agent.git") == ("nousresearch", "hermes-agent")
-    assert _parse_github_repo("nousresearch/hermes-agent") == ("nousresearch", "hermes-agent")
+    assert _parse_github_repo("https://github.com/Clos01/Kenbun-Agent") == ("Clos01", "Kenbun-Agent")
+    assert _parse_github_repo("git@github.com:Clos01/Kenbun-Agent.git") == ("Clos01", "Kenbun-Agent")
+    assert _parse_github_repo("Clos01/Kenbun-Agent") == ("Clos01", "Kenbun-Agent")
     assert _parse_github_repo("invalid-repo-url") is None
 
 def test_apply_git_patch_safety_block():
     # Attempt to write a file outside project root using path traversal
     unsafe_changes = json.dumps({
         "status": "success",
-        "repo": "nousresearch/hermes-agent",
+        "repo": "Clos01/Kenbun-Agent",
         "latest_sha": "abc123sha",
         "changes": [
             {

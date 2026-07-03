@@ -27,7 +27,7 @@ def log_event(level: str, event: str, **kwargs):
 class GitPushWatcherDaemon:
     """
     Autonomic Git Push Integration Daemon (System 6.2).
-    Polls configured Git repositories (e.g. nousresearch/hermes-agent)
+    Polls configured Git repositories (e.g. Clos01/Kenbun-Agent)
     and integrates updates into Kenbun using the git_push_integration pipeline.
     """
     def __init__(self, loop):

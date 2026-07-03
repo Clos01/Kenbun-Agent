@@ -5,9 +5,9 @@ import json
 import uuid
 
 def get_db_path():
-    hermes_dir = os.path.expanduser("~/.hermes")
-    os.makedirs(hermes_dir, exist_ok=True)
-    return os.path.join(hermes_dir, "state.db")
+    kenbun_dir = os.path.expanduser("~/.kenbun")
+    os.makedirs(kenbun_dir, exist_ok=True)
+    return os.path.join(kenbun_dir, "state.db")
 
 def get_connection():
     db_path = get_db_path()

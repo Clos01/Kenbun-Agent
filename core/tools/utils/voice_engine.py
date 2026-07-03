@@ -17,15 +17,15 @@ from tools.utils.secret_manager import decrypt_value
 
 logger = logging.getLogger(__name__)
 
-def load_hermes_config() -> dict:
-    """Loads ~/.hermes/config.yaml if it exists, returning a parsed dict."""
-    path = os.path.expanduser(settings.HERMES_CONFIG_PATH)
+def load_kenbun_config() -> dict:
+    """Loads ~/.kenbun/config.yaml if it exists, returning a parsed dict."""
+    path = os.path.expanduser(settings.KENBUN_CONFIG_PATH)
     if os.path.exists(path):
         try:
             with open(path, "r", encoding="utf-8") as f:
                 return yaml.safe_load(f.read()) or {}
         except Exception as e:
-            logger.warning(f"Failed to load Hermes config at {path}: {e}")
+            logger.warning(f"Failed to load Kenbun config at {path}: {e}")
     return {}
 
 def prune_audio_cache(cache_dir: str, max_files: int = 100):
@@ -59,8 +59,8 @@ class VoiceEngine:
     """
 
     def __init__(self):
-        self.config = load_hermes_config()
-        self.cache_dir = os.path.expanduser("~/.hermes/audio_cache")
+        self.config = load_kenbun_config()
+        self.cache_dir = os.path.expanduser("~/.kenbun/audio_cache")
         os.makedirs(self.cache_dir, exist_ok=True)
         prune_audio_cache(self.cache_dir)
 

@@ -32,18 +32,18 @@ Routing for essential agent actions without registering for separate API account
 
 ### One-Command Setup
 ```bash
-hermes setup --portal
+kenbun setup --portal
 ```
 This command:
 1. Opens your browser to `portal.nousresearch.com` for OAuth login.
-2. Stores the refresh token locally at `~/.hermes/auth.json`.
-3. Sets up inference provider settings in `~/.hermes/config.yaml`.
+2. Stores the refresh token locally at `~/.kenbun/auth.json`.
+3. Sets up inference provider settings in `~/.kenbun/config.yaml`.
 4. Automatically opts in and turns on the Tool Gateway.
 
 ### Adding alongside other providers
 If you already have other API keys configured and want to add Nous Portal as a secondary option:
 ```bash
-hermes model
+kenbun model
 # Select "Nous Portal" from the list and complete the browser OAuth flow
 ```
 
@@ -53,23 +53,23 @@ hermes model
 
 ```bash
 # Onboard and login to Nous Portal
-hermes portal
+kenbun portal
 
 # Check login status, subscription info, and model/gateway routing
-hermes portal info
-hermes portal status
+kenbun portal info
+kenbun portal status
 
 # View detailed Tool Gateway catalog with per-tool routing
-hermes portal tools
+kenbun portal tools
 
 # Open the subscription management page in your browser
-hermes portal open
+kenbun portal open
 ```
 
 ---
 
 ## Configuration Reference
-After onboarding, your `~/.hermes/config.yaml` will be structured as follows:
+After onboarding, your `~/.kenbun/config.yaml` will be structured as follows:
 
 ```yaml
 model:
@@ -89,12 +89,12 @@ tts:
 browser:
   backend: nous
 ```
-*(Note: OAuth refresh tokens are stored separately at `~/.hermes/auth.json` to keep credentials distinct from configuration).*
+*(Note: OAuth refresh tokens are stored separately at `~/.kenbun/auth.json` to keep credentials distinct from configuration).*
 
 ---
 
 ## Troubleshooting
 
-- **Portal info shows "not logged in":** Run `hermes portal` or run `hermes model` and select "Nous Portal" to re-authenticate.
-- **Got a "re-authentication required" message:** Your refresh token has been invalidated or expired. Run `hermes auth add nous` to refresh the session.
+- **Portal info shows "not logged in":** Run `kenbun portal` or run `kenbun model` and select "Nous Portal" to re-authenticate.
+- **Got a "re-authentication required" message:** Your refresh token has been invalidated or expired. Run `kenbun auth add nous` to refresh the session.
 - **Model missing from /model selection:** Ensure you use the exact OpenRouter-style slug (e.g. `/model anthropic/claude-opus-4.6`).

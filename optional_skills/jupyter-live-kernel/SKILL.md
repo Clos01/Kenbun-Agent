@@ -16,7 +16,7 @@ Gives you a stateful Python REPL via a live Jupyter kernel. Variables persist ac
 | Tool / Skill | Use When |
 | :--- | :--- |
 | **This skill** | Iterative exploration, state across steps, data science, ML, "let me try this and check" loops |
-| **execute_code** | One-shot scripts needing hermes tool access (web_search, file ops). Stateless. |
+| **execute_code** | One-shot scripts needing kenbun tool access (web_search, file ops). Stateless. |
 | **terminal** | Shell commands, builds, installs, git, process management |
 
 *Rule of thumb: If you'd want a Jupyter notebook for the task, use this skill.*

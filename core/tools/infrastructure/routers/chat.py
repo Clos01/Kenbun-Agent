@@ -26,7 +26,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 class ChatRequest(BaseModel):
-    message: str = Field(..., description="User message to Hermes")
+    message: str = Field(..., description="User message to Kenbun")
 
 
 class CreateSessionRequest(BaseModel):

@@ -294,7 +294,7 @@ class KanbanDispatcher:
             try:
                 env = os.environ.copy()
                 env["KENBUN_KANBAN_TASK"] = task_id
-                env["HERMES_KANBAN_TASK"] = task_id
+                env["KENBUN_KANBAN_TASK"] = task_id
                 script_path = str(settings.PROJECT_ROOT / "scripts" / "kanban_worker.py")
                 
                 proc = await asyncio.create_subprocess_exec(

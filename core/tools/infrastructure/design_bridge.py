@@ -96,7 +96,7 @@ class GenericStrategy(AgentStrategy):
     def get_args(self, prompt: str) -> List[str]:
         return [self.bin_path]
 
-class HermesStrategy(AgentStrategy):
+class KenbunStrategy(AgentStrategy):
     def get_args(self, prompt: str) -> List[str]:
         return [self.bin_path, "acp", "--accept-hooks"]
 
@@ -108,7 +108,7 @@ AGENT_REGISTRY = {
     "opencode": GenericStrategy("opencode", "opencode"),
     "qwen": GenericStrategy("qwen", "qwen"),
     "copilot": CopilotStrategy("copilot", "copilot"),
-    "hermes": HermesStrategy("hermes", "hermes"),
+    "kenbun": KenbunStrategy("kenbun", "kenbun"),
 }
 
 def validate_path(base_dir: Path, sub_dir: str) -> Path:

@@ -18,7 +18,7 @@ kenbun:
 ---
 
 ## Architecture
-`Hermes Agent` &rarr; `MCP (Streamable HTTP)` &rarr; `twozero.tox` (port 40404) &rarr; `TD Python`
+`Kenbun Agent` &rarr; `MCP (Streamable HTTP)` &rarr; `twozero.tox` (port 40404) &rarr; `TD Python`
 
 - **36 native tools:** Free plugin (no payment/license required — confirmed April 2026).
 - **Context-aware:** Knows selected OP and current active network.
@@ -29,7 +29,7 @@ kenbun:
 ## Setup (Automated)
 Run the setup script to handle dependencies:
 ```bash
-bash "${HERMES_HOME:-$HOME/.hermes}/skills/creative/touchdesigner-mcp/scripts/setup.sh"
+bash "${KENBUN_HOME:-$HOME/.kenbun}/skills/creative/touchdesigner-mcp/scripts/setup.sh"
 ```
 The script will check if TouchDesigner is running, download `twozero.tox` if not cached, add the `twozero_td` MCP server to the agent configuration, test port 40404, and report remaining manual steps.
 

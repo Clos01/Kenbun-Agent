@@ -47,8 +47,8 @@ REPLACEMENT_MAP = [
     ("CLOAUDE.md", "KENBUN.md"),
     ("claude.md", "kenbun.md"),
     ("CLAUDE.md", "KENBUN.md"),
-    ("README_HERMES.md", "KENBUN.md"),
-    ("readme_hermes.md", "kenbun.md"),
+    ("README_KENBUN.md", "KENBUN.md"),
+    ("readme_kenbun.md", "kenbun.md"),
 ]
 
 def scan_and_refactor():

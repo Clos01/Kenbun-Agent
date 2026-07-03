@@ -30,7 +30,7 @@ def ingest_project_rules(project_path: str) -> str:
     resolved_path = Path(project_path).resolve()
     
     files_to_ingest = [
-        "HERMES.md", ".cursorrules", ".kenbun_rules.md", 
+        "KENBUN.md", ".cursorrules", ".kenbun_rules.md", 
         "AGENTS.md", "KENBUN.md", "README.md"
     ]
     

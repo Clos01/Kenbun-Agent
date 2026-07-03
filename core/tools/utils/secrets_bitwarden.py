@@ -44,11 +44,11 @@ def get_target_triple():
 def get_bws_bin_name():
     return "bws.exe" if sys.platform == "win32" else "bws"
 
-def get_hermes_dir():
-    return os.path.expanduser("~/.hermes")
+def get_kenbun_dir():
+    return os.path.expanduser("~/.kenbun")
 
 def get_bws_local_path():
-    return os.path.join(get_hermes_dir(), "bin", get_bws_bin_name())
+    return os.path.join(get_kenbun_dir(), "bin", get_bws_bin_name())
 
 def get_bws_path():
     # 1. Check PATH
@@ -57,7 +57,7 @@ def get_bws_path():
     if path_bin:
         return path_bin
     
-    # 2. Check ~/.hermes/bin/
+    # 2. Check ~/.kenbun/bin/
     local_bin = get_bws_local_path()
     if os.path.exists(local_bin) and os.access(local_bin, os.X_OK):
         return local_bin
@@ -75,8 +75,8 @@ def download_bws():
     
     url = f"https://github.com/bitwarden/sdk-sm/releases/download/bws-v{BWS_VERSION}/bws-{triple}-{BWS_VERSION}.zip"
     
-    hermes_dir = get_hermes_dir()
-    bin_dir = os.path.join(hermes_dir, "bin")
+    kenbun_dir = get_kenbun_dir()
+    bin_dir = os.path.join(kenbun_dir, "bin")
     os.makedirs(bin_dir, exist_ok=True)
     
     zip_path = os.path.join(bin_dir, f"bws-{BWS_VERSION}.zip")
@@ -84,7 +84,7 @@ def download_bws():
     sys.stderr.write(f"Downloading bws v{BWS_VERSION} for {triple}...\n")
     
     # Download zip file
-    req = urllib.request.Request(url, headers={"User-Agent": "HermesSecretsDownloader"})
+    req = urllib.request.Request(url, headers={"User-Agent": "KenbunSecretsDownloader"})
     with urllib.request.urlopen(req) as response:
         content = response.read()
     
@@ -123,8 +123,8 @@ def download_bws():
     sys.stderr.write(f"Successfully installed and verified bws binary at {extracted_bin}\n")
     return extracted_bin
 
-def load_hermes_config_raw() -> dict:
-    config_path = os.path.join(get_hermes_dir(), "config.yaml")
+def load_kenbun_config_raw() -> dict:
+    config_path = os.path.join(get_kenbun_dir(), "config.yaml")
     if os.path.exists(config_path):
         try:
             with open(config_path, "r", encoding="utf-8") as f:
@@ -133,17 +133,17 @@ def load_hermes_config_raw() -> dict:
             sys.stderr.write(f"Warning: Failed to load config.yaml at {config_path}: {e}\n")
     return {}
 
-def save_hermes_config_raw(config: dict):
-    os.makedirs(get_hermes_dir(), exist_ok=True)
-    config_path = os.path.join(get_hermes_dir(), "config.yaml")
+def save_kenbun_config_raw(config: dict):
+    os.makedirs(get_kenbun_dir(), exist_ok=True)
+    config_path = os.path.join(get_kenbun_dir(), "config.yaml")
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(config, f, default_flow_style=False)
     except Exception as e:
         sys.stderr.write(f"Error: Failed to save config.yaml at {config_path}: {e}\n")
 
-def load_hermes_env():
-    env_path = os.path.join(get_hermes_dir(), ".env")
+def load_kenbun_env():
+    env_path = os.path.join(get_kenbun_dir(), ".env")
     if os.path.exists(env_path):
         try:
             with open(env_path, "r", encoding="utf-8") as f:
@@ -163,11 +163,11 @@ def load_hermes_env():
 def apply_secrets_to_env():
     global _CACHE, _APPLIED_NOTICE
     
-    # 1. Load ~/.hermes/.env first to bootstrap variables
-    load_hermes_env()
+    # 1. Load ~/.kenbun/.env first to bootstrap variables
+    load_kenbun_env()
     
     # 2. Check config.yaml if secrets.bitwarden is enabled
-    config = load_hermes_config_raw()
+    config = load_kenbun_config_raw()
     secrets_cfg = config.get("secrets", {})
     bw_cfg = secrets_cfg.get("bitwarden", {})
     
@@ -258,5 +258,5 @@ def apply_secrets_to_env():
                 applied_count += 1
                 
     if applied_count > 0 and not _APPLIED_NOTICE:
-        sys.stderr.write(f"Hermes: Applied {applied_count} secrets from Bitwarden Secrets Manager.\n")
+        sys.stderr.write(f"Kenbun: Applied {applied_count} secrets from Bitwarden Secrets Manager.\n")
         _APPLIED_NOTICE = True

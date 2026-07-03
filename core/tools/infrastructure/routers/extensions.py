@@ -29,7 +29,7 @@ _plugins_cache: Optional[List[Dict[str, Any]]] = None
 BUILTIN_THEMES = {
     "default": {
         "name": "default",
-        "label": "Hermes Teal",
+        "label": "Kenbun Teal",
         "description": "Dark teal + cream (default)",
         "palette": {"background": "#0a1628", "midground": "#a8d0ff"}
     },
@@ -54,7 +54,7 @@ class ThemeSelection(BaseModel):
 
 def get_themes_directories() -> List[Path]:
     return [
-        Path.home() / ".hermes" / "dashboard-themes",
+        Path.home() / ".kenbun" / "dashboard-themes",
         Path.home() / ".kenbun" / "dashboard-themes",
     ]
 
@@ -79,7 +79,7 @@ def get_plugin_scan_directories() -> List[Path]:
     return [
         settings.PROJECT_ROOT / "plugins" / "memory",
         settings.PROJECT_ROOT / "plugins",
-        Path.home() / ".hermes" / "plugins",
+        Path.home() / ".kenbun" / "plugins",
         Path.home() / ".kenbun" / "plugins",
     ]
 

@@ -290,7 +290,7 @@ class BrowserEngine:
         if not screenshot_path or not os.path.exists(screenshot_path):
             return {"success": False, "error": "Screenshot file not found."}
 
-        cache_dir = Path.home() / ".hermes" / "cache" / "screenshots"
+        cache_dir = Path.home() / ".kenbun" / "cache" / "screenshots"
         cache_dir.mkdir(parents=True, exist_ok=True)
         dest_path = cache_dir / f"screenshot_{int(time.time())}.png"
         import shutil

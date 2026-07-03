@@ -33,12 +33,12 @@ Use these when you want a coherent, opinionated look for an entire deck — not 
 - **When to use:** system architecture diagrams, data-flow maps, engineering white-papers; you want a serious, printable, README-friendly feel.
 - **Path:** `templates/full-decks/knowledge-arch-blueprint/index.html`
 
-## 4. hermes-cyber-terminal — 暗终端 honest-review
+## 4. kenbun-cyber-terminal — 暗终端 honest-review
 
-- **Source inspiration:** `20260414-hermes-agent/ppt/hermes-record.html` + `hermes-vs-openclaw.html`
+- **Source inspiration:** `20260414-kenbun-agent/ppt/kenbun-record.html` + `kenbun-vs-openclaw.html`
 - **Key visual traits:** `#0a0c10` black, 56px cyber grid + CRT vignette + scanlines, window traffic-light chrome, `$ prompt` command-line headlines, mint-green `#7ed3a4` glow big text, JetBrains Mono throughout, stroke-only bar charts, blinking cursor, amber/green/red tag hierarchy, dark code box.
 - **When to use:** reviews of CLI / agent / dev tools with trace, diff, and benchmarks; when you want the "honest technical reviewer" voice.
-- **Path:** `templates/full-decks/hermes-cyber-terminal/index.html`
+- **Path:** `templates/full-decks/kenbun-cyber-terminal/index.html`
 
 ## 5. obsidian-claude-gradient — GitHub 暗紫渐变
 

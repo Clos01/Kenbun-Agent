@@ -5,14 +5,14 @@ def _extract_repo_from_task(task: str) -> str:
     match = re.search(r"from\s+([^\s:]+)", task)
     if match:
         return match.group(1).strip()
-    return "nousresearch/hermes-agent"
+    return "Clos01/Kenbun-Agent"
 
 def build_git_push_integration_pipeline(tools):
     """
     Git Push Integration Pipeline:
     fetch_git_pushes → analyze_push_changes → apply_git_patch → run_code_safely → consult_supervisor → remember_fix
     
-    Use case: Automatically poll a remote repository (such as nousresearch/hermes-agent),
+    Use case: Automatically poll a remote repository (such as Clos01/Kenbun-Agent),
     analyze commits & diffs, design ported features/fixes, safely apply them to Kenbun,
     run sandbox verification, and obtain supervisor approval.
     """

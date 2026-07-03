@@ -7,7 +7,7 @@ kenbun:
 ---
 
 # Infographic Generator
-Adapted from `baoyu-infographic` for Hermes Agent's tool ecosystem.
+Adapted from `baoyu-infographic` for Kenbun Agent's tool ecosystem.
 
 Two dimensions: layout (information structure) × style (visual aesthetics). Freely combine any layout with any style.
 

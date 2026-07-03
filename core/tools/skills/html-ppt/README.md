@@ -97,7 +97,7 @@ Eight extracted from real-world decks, seven generic scenario scaffolds:
 - `xhs-white-editorial` — 小红书白底杂志风
 - `graphify-dark-graph` — 暗底 + 力导向知识图谱
 - `knowledge-arch-blueprint` — 蓝图 / 架构图风
-- `hermes-cyber-terminal` — 终端 cyberpunk
+- `kenbun-cyber-terminal` — 终端 cyberpunk
 - `obsidian-claude-gradient` — 紫色渐变卡
 - `testing-safety-alert` — 红 / 琥珀警示风
 - `xhs-pastel-card` — 柔和马卡龙图文

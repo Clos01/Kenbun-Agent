@@ -8,15 +8,15 @@ core_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if core_dir not in sys.path:
     sys.path.insert(0, core_dir)
 
-from tools.utils.voice_engine import VoiceEngine, load_hermes_config
+from tools.utils.voice_engine import VoiceEngine, load_kenbun_config
 from tools.sensory.voice_tools import text_to_speech, transcribe_audio
 
 class TestVoiceEngine(unittest.IsolatedAsyncioTestCase):
 
-    def test_load_hermes_config_missing(self):
+    def test_load_kenbun_config_missing(self):
         """Tests fallback behavior when configuration file is absent."""
-        with patch("tools.infrastructure.config.settings.HERMES_CONFIG_PATH", "/tmp/nonexistent_config.yaml"):
-            cfg = load_hermes_config()
+        with patch("tools.infrastructure.config.settings.KENBUN_CONFIG_PATH", "/tmp/nonexistent_config.yaml"):
+            cfg = load_kenbun_config()
             self.assertEqual(cfg, {})
 
     @patch("tools.utils.voice_engine.VoiceEngine.edge_tts_synthesize")
@@ -25,7 +25,7 @@ class TestVoiceEngine(unittest.IsolatedAsyncioTestCase):
         mock_edge.return_value = True
         engine = VoiceEngine()
         
-        with patch("tools.utils.voice_engine.load_hermes_config", return_value={"tts": {"provider": "edge"}}):
+        with patch("tools.utils.voice_engine.load_kenbun_config", return_value={"tts": {"provider": "edge"}}):
             path = await engine.synthesize("Hello Swarm", provider="edge", voice="en-US-AriaNeural", speed=1.2)
             self.assertTrue(path.endswith(".mp3"))
             mock_edge.assert_called_once_with("Hello Swarm", "en-US-AriaNeural", 1.2, path)
@@ -53,7 +53,7 @@ class TestVoiceEngine(unittest.IsolatedAsyncioTestCase):
             }
         }
         
-        with patch("tools.utils.voice_engine.load_hermes_config", return_value=custom_config):
+        with patch("tools.utils.voice_engine.load_kenbun_config", return_value=custom_config):
             engine = VoiceEngine()
             with patch("tools.utils.voice_engine.os.path.exists", return_value=True):
                 with patch("tools.utils.voice_engine.os.path.getsize", return_value=100):

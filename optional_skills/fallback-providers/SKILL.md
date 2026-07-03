@@ -17,11 +17,11 @@ When your main LLM provider encounters errors — rate limits (HTTP 429), server
 
 ### Interactive Configuration
 ```bash
-hermes fallback
+kenbun fallback
 ```
 Use subcommands (`add`, `list`/`ls`, `remove`/`rm`, `clear`) to manage your fallback chain.
 
-### Manual Configuration (in `~/.hermes/config.yaml`)
+### Manual Configuration (in `~/.kenbun/config.yaml`)
 Add a top-level `fallback_providers` list containing the preferred fallback model stack:
 ```yaml
 fallback_providers:
@@ -52,7 +52,7 @@ The agent uses separate, lighter-weight models for side tasks (vision, web extra
 When an auxiliary task's provider is set to `"auto"`, the fallback path runs as:
 `Main provider + main model` → `auxiliary.<task>.fallback_chain` → `fallback_providers` → `built-in discovery chain`
 
-### Configuring Auxiliary Providers (in `~/.hermes/config.yaml`)
+### Configuring Auxiliary Providers (in `~/.kenbun/config.yaml`)
 Configure tasks individually:
 ```yaml
 auxiliary:

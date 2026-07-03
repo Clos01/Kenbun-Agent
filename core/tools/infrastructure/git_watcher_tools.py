@@ -184,7 +184,7 @@ def fetch_git_pushes(repo_url: str, branch: str = "main") -> str:
 @sovereign_tool(name="analyze_push_changes")
 def analyze_push_changes(repo_url: str, commit_data: str, project_path: str = ".") -> str:
     """
-    Analyzes the git push changes (commits & diffs) from a watched repository (like hermes-agent)
+    Analyzes the git push changes (commits & diffs) from a watched repository (like kenbun-agent)
     and designs code modifications to port those changes or ideas into Kenbun.
     Outputs a JSON array of file operations: [{"file_path": "...", "content": "...", "action": "create|modify"}].
     """
@@ -217,7 +217,7 @@ def analyze_push_changes(repo_url: str, commit_data: str, project_path: str = ".
 
     system_prompt = (
         "You are the Kenbun Autonomic Integrator. Your goal is to keep Kenbun highly sophisticated, "
-        "incorporating state-of-the-art agent engineering paradigms from Hermes Agent (nousresearch/hermes-agent) "
+        "incorporating state-of-the-art agent engineering paradigms from Kenbun Agent (Clos01/Kenbun-Agent) "
         "and other advanced systems.\n\n"
         "Analyze the provided git commit pushes and determine if they contain useful ideas, features, patterns, "
         "prompts, or fixes that should be ported to Kenbun. Draft corresponding changes for Kenbun.\n\n"

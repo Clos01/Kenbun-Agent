@@ -16,22 +16,22 @@ Register multiple API keys or OAuth tokens for the same provider. When one key h
 ---
 
 ## Quick Start
-To register multiple credentials for the same provider, run `hermes auth add` commands:
+To register multiple credentials for the same provider, run `kenbun auth add` commands:
 
 ```bash
 # Add a second OpenRouter key
-hermes auth add openrouter --api-key sk-or-v1-your-second-key
+kenbun auth add openrouter --api-key sk-or-v1-your-second-key
 
 # Add a second Anthropic key
-hermes auth add anthropic --type api-key --api-key sk-ant-api03-your-second-key
+kenbun auth add anthropic --type api-key --api-key sk-ant-api03-your-second-key
 
 # Add an Anthropic OAuth credential
-hermes auth add anthropic --type oauth
+kenbun auth add anthropic --type oauth
 ```
 
 ### Check Pool Status
 ```bash
-hermes auth list
+kenbun auth list
 ```
 *Example Output:*
 ```
@@ -44,15 +44,15 @@ openrouter (2 credentials):
 ---
 
 ## Interactive Pool Wizard
-Run `hermes auth` with no subcommands to manage credentials interactively:
+Run `kenbun auth` with no subcommands to manage credentials interactively:
 ```bash
-hermes auth
+kenbun auth
 ```
 
 ---
 
 ## Rotation Strategies
-Configure rotation strategies in `~/.hermes/config.yaml`:
+Configure rotation strategies in `~/.kenbun/config.yaml`:
 ```yaml
 credential_pool_strategies:
   openrouter: round_robin
@@ -80,7 +80,7 @@ credential_pool_strategies:
 ## Custom Endpoint Pools
 Custom OpenAI-compatible endpoints (e.g., Together.ai, RunPod, local servers) get their own pools, keyed by their endpoint name:
 ```bash
-hermes auth add Together.ai --api-key sk-together-second-key
+kenbun auth add Together.ai --api-key sk-together-second-key
 ```
 
 ---

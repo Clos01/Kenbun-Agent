@@ -380,7 +380,7 @@ register_binary() {
     BIN_DIR="$HOME/.local/bin"
     mkdir -p "$BIN_DIR"
     WRAPPER_PATH="$BIN_DIR/kenbun"
-    HERMES_WRAPPER_PATH="$BIN_DIR/hermes"
+    KENBUN_WRAPPER_PATH="$BIN_DIR/kenbun"
 
     # Create robust wrapper script with absolute path expanded at install-time
     cat << EOF > "$WRAPPER_PATH" || exit_with_error "$ERR_006_BINARY_WRITE" \
@@ -402,13 +402,13 @@ EOF
         
     log_success "Wrapper created at $WRAPPER_PATH"
 
-    # Create hermes wrapper acting identically
-    cp "$WRAPPER_PATH" "$HERMES_WRAPPER_PATH" || exit_with_error "$ERR_006_BINARY_WRITE" \
-        "Could not copy wrapper to: $HERMES_WRAPPER_PATH" \
+    # Create kenbun wrapper acting identically
+    cp "$WRAPPER_PATH" "$KENBUN_WRAPPER_PATH" || exit_with_error "$ERR_006_BINARY_WRITE" \
+        "Could not copy wrapper to: $KENBUN_WRAPPER_PATH" \
         "Verify write permissions for: $BIN_DIR"
-    chmod +x "$HERMES_WRAPPER_PATH"
+    chmod +x "$KENBUN_WRAPPER_PATH"
 
-    log_success "Hermes wrapper created at $HERMES_WRAPPER_PATH"
+    log_success "Kenbun wrapper created at $KENBUN_WRAPPER_PATH"
 
     # Guide user on system-wide access instead of executing automatic sudo symlinks (Security Best Practice)
     if [ "$(id -u)" -eq 0 ]; then

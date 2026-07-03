@@ -20,10 +20,10 @@ def resolve_task_id(task_id: str) -> str:
     """Resolves task_id fallback to env vars if not explicitly provided."""
     if task_id:
         return task_id.strip()
-    env_id = os.environ.get("KENBUN_KANBAN_TASK") or os.environ.get("HERMES_KANBAN_TASK")
+    env_id = os.environ.get("KENBUN_KANBAN_TASK")
     if env_id:
         return env_id.strip()
-    raise ValueError("Task ID must be provided or set via KENBUN_KANBAN_TASK/HERMES_KANBAN_TASK environment variable.")
+    raise ValueError("Task ID must be provided or set via KENBUN_KANBAN_TASK environment variable.")
 
 @sovereign_tool(name="kanban_create", category="Strategy")
 def kanban_create(

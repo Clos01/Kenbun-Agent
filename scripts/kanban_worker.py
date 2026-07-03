@@ -16,9 +16,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("kanban_worker")
 
 def main():
-    task_id = os.environ.get("KENBUN_KANBAN_TASK") or os.environ.get("HERMES_KANBAN_TASK")
+    task_id = os.environ.get("KENBUN_KANBAN_TASK")
     if not task_id:
-        logger.error("❌ Error: KENBUN_KANBAN_TASK or HERMES_KANBAN_TASK env var not set.")
+        logger.error("❌ Error: KENBUN_KANBAN_TASK env var not set.")
         sys.exit(1)
 
     logger.info(f"Worker spawned for task: {task_id}")

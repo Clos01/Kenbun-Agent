@@ -67,9 +67,9 @@ where={"project_id": project_id}
 
 ## 🛡️ 4. Restricted Execution Jail (System 1)
 
-When running shell scripts, testing code, or evaluating proposed fixes, you execute inside the `hermes_sandbox_jail` container:
+When running shell scripts, testing code, or evaluating proposed fixes, you execute inside the `kenbun_sandbox_jail` container:
 
-1.  **Isolated User:** You run as `user: hermes_jail` (UID `2000`). You have **zero root privileges** and cannot execute `sudo` or access host files.
+1.  **Isolated User:** You run as `user: kenbun_jail` (UID `2000`). You have **zero root privileges** and cannot execute `sudo` or access host files.
 2.  **Resource Limits:** Docker restricts CPU and memory consumption.
 3.  **Dropped Capabilities:** Linux capabilities are fully dropped (`cap_drop: [ALL]`) and privilege escalation is blocked (`no-new-privileges:true`).
 

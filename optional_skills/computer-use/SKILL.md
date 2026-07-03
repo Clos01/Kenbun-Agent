@@ -10,7 +10,7 @@ kenbun:
 Drive the user's desktop in the background — clicking, typing, scrolling, dragging — without stealing the cursor, keyboard focus, or switching virtual desktops / Spaces. Supports macOS, Windows, and Linux.
 
 ## Prerequisites
-- Hermes computer-use installation or `cua-driver` enabled
+- Kenbun computer-use installation or `cua-driver` enabled
 - Screen Recording permissions granted where applicable
 - Local active desktop session (on Windows, avoid Session 0 / SSH isolation without config)
 
