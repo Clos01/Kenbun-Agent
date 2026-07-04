@@ -9,7 +9,8 @@ from tools.memory.project_memory import get_project_id
 IGNORE_DIRS = {
     "node_modules", "venv", ".venv", ".git", ".next", "dist", "build", 
     ".idea", "__pycache__", ".agent", ".vercel", ".DS_Store", "public", "coverage",
-    "benchmarks", "tests", "external", "design_systems", "dev", "training_data", ".pytest_cache", "brain_health", "skills"
+    "benchmarks", "tests", "external", "design_systems", "dev", "training_data", ".pytest_cache", "brain_health", "skills",
+    ".claude", ".benchmarks", "optional_skills"
 }
 ALLOWED_EXTS = {".js", ".jsx", ".ts", ".tsx", ".py", ".md", ".json"}
 ALLOWED_ROOMS = {"Archives", "Central_Logic", "Observatory", "Simulations", "Vault"}
