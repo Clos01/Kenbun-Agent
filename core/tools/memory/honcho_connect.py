@@ -77,7 +77,12 @@ def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concep
             search_query=query_text,
             search_top_k=n_results
         )
-        
+
+        # SDK v2 returns the representation as one formatted string; iterating
+        # it would yield single characters.
+        if isinstance(conclusions, str):
+            return [conclusions] if conclusions.strip() else []
+
         results = []
         for c in conclusions:
             if hasattr(c, 'content'):
