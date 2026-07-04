@@ -165,6 +165,10 @@ services:
     container_name: portable_dozzle
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+    # DOZZLE_ADDR (not `command: --addr`) so the `dozzle healthcheck`
+    # subprocess probes the same port the server listens on.
+    - DOZZLE_ADDR=:8888
     healthcheck:
       test:
       - CMD
@@ -179,9 +183,6 @@ services:
     depends_on:
       tailscale:
         condition: service_started
-    command:
-    - --addr
-    - :8888
   honcho_api:
     build:
       context: ./external/honcho
@@ -214,8 +215,26 @@ services:
     - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
     - CACHE_URL=redis://localhost:6379/0?suppress=true
     - CACHE_ENABLED=true
-    - DEFAULT_LLM_PROVIDER=ollama
-    - OLLAMA_BASE_URL=http://localhost:11434
+    - LLM_OPENAI_API_KEY=dummy
+    - LLM_OPENAI_BASE_URL=http://localhost:11434/v1
+    - DERIVER_MODEL_CONFIG__MODEL=llama3.2:3b
+    - SUMMARY_MODEL_CONFIG__MODEL=llama3.2:3b
+    - DREAM_DEDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+    - DREAM_INDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+    - DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL=qwen3:8b
+    # Embeddings can't ride the LLM_OPENAI_BASE_URL override (the embedding
+    # client only reads EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL). The
+    # schema's vector columns are 1536-dim, so we use qwen3-embedding:4b
+    # (2560 native, MRL) with DIMENSIONS_MODE=always so Ollama truncates to
+    # 1536. Keeps embeddings fully local; GEMINI_API_KEY in .env is
+    # kenbun-encrypted (enc:) and unusable by Honcho anyway.
+    - EMBEDDING_MODEL_CONFIG__MODEL=qwen3-embedding:4b
+    - EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://localhost:11434/v1
+    - EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE=always
     - PORT=8006
     - EMBED_MESSAGES=false
     restart: unless-stopped
@@ -242,8 +261,26 @@ services:
     - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@localhost:5432/postgres
     - CACHE_URL=redis://localhost:6379/0?suppress=true
     - CACHE_ENABLED=true
-    - DEFAULT_LLM_PROVIDER=ollama
-    - OLLAMA_BASE_URL=http://localhost:11434
+    - LLM_OPENAI_API_KEY=dummy
+    - LLM_OPENAI_BASE_URL=http://localhost:11434/v1
+    - DERIVER_MODEL_CONFIG__MODEL=llama3.2:3b
+    - SUMMARY_MODEL_CONFIG__MODEL=llama3.2:3b
+    - DREAM_DEDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+    - DREAM_INDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+    - DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL=qwen3:8b
+    - DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL=qwen3:8b
+    # Process representation work immediately instead of waiting for a session
+    # to accumulate 1024 tokens (REPRESENTATION_BATCH_MAX_TOKENS) — Kenbun's
+    # ingests are often small and drip-fed and were queueing forever.
+    - DERIVER_FLUSH_ENABLED=true
+    # See honcho_api: embeddings are configured separately from the chat
+    # transport; conclusion writes embed locally via qwen3-embedding:4b @1536.
+    - EMBEDDING_MODEL_CONFIG__MODEL=qwen3-embedding:4b
+    - EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://localhost:11434/v1
+    - EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE=always
     - EMBED_MESSAGES=false
     restart: unless-stopped
     network_mode: container:tailscale
