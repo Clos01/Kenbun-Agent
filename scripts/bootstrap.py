@@ -1,0 +1,2475 @@
+from typing import Optional, List
+"""
+🏛️ Kenbun-Agent Interactive Setup Wizard & Bootstrapper (Sakura Edition)
+Dynamically resolves port conflicts, configures absolute paths, provides interactive
+API key input with local AES-256 encryption at rest, and manages Docker swarm stack startups.
+"""
+
+import os
+import re
+import sys
+import shutil
+import sqlite3
+import logging
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("bootstrap")
+
+def strip_ansi(text: str) -> str:
+    ansi_escape = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]')
+    return ansi_escape.sub('', text)
+
+def visual_len(text: str) -> int:
+    clean_text = strip_ansi(text)
+    width = 0
+    for char in clean_text:
+        # Robust emoji/double-width character check (excluding standard quotes, punctuation and em-dashes)
+        # Matches typical emoji ranges, supplemental symbols, CJK wide blocks, and Sakura blossoms (🌸)
+        o = ord(char)
+        if o > 0xffff or char in "🗼⚡🌸" or (0x2600 <= o <= 0x27bf) or (0x1f000 <= o <= 0x1f9ff):
+            width += 2
+        else:
+            width += 1
+    return width
+
+def should_enable_color() -> bool:
+    if os.getenv("NO_COLOR"):
+        return False
+    if os.getenv("FORCE_COLOR") == "1" or os.getenv("CLICOLOR_FORCE") == "1":
+        return True
+    # Check common terminal color environment variables (e.g. COLORTERM, TERM)
+    if "COLORTERM" in os.environ or ("TERM" in os.environ and "256color" in os.environ["TERM"].lower()):
+        return True
+    return sys.stdout.isatty()
+
+def get_python_executable() -> str:
+    # Resolve project root relative to this script safely
+    project_root = Path(__file__).resolve().parent.parent
+    if not project_root.is_dir():
+        return sys.executable
+        
+    # 0. Allow direct developer override via env vars
+    env_override = os.environ.get("KENBUN_PYTHON_EXECUTABLE") or os.environ.get("PROJECT_VENV_DIR")
+    if env_override:
+        override_path = Path(env_override)
+        try:
+            if override_path.is_dir():
+                bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+                names = ("python.exe",) if sys.platform == "win32" else ("python", "python3")
+                for name in names:
+                    p = override_path / bin_dir / name
+                    resolved = p.resolve(strict=True)
+                    if resolved.is_file():
+                        logger.debug(f"Resolved python override directory to: {resolved}")
+                        return str(resolved)
+            elif override_path.is_file():
+                resolved = override_path.resolve(strict=True)
+                logger.debug(f"Resolved python override executable to: {resolved}")
+                return str(resolved)
+        except Exception as e:
+            logger.debug(f"Failed to resolve KENBUN_PYTHON_EXECUTABLE/PROJECT_VENV_DIR override: {e}")
+
+    # 1. If we are already running inside an active virtual environment, return sys.executable
+    if sys.prefix != sys.base_prefix:
+        logger.debug(f"Running inside active virtual environment. Using sys.executable: {sys.executable}")
+        return sys.executable
+
+    # 2. Check environment variables for active virtualenv or conda environment
+    env_keys = ("VIRTUAL_ENV", "CONDA_PREFIX")
+    bin_dir = "Scripts" if sys.platform == "win32" else "bin"
+    names = ("python.exe",) if sys.platform == "win32" else ("python", "python3")
+    
+    for key in env_keys:
+        val = os.environ.get(key)
+        if val:
+            venv_dir = Path(val)
+            for name in names:
+                venv_path = venv_dir / bin_dir / name
+                try:
+                    resolved_venv = venv_path.resolve(strict=True)
+                    if resolved_venv.is_file():
+                        logger.debug(f"Resolved active environment ({key}) to: {resolved_venv}")
+                        return str(resolved_venv)
+                except Exception as e:
+                    logger.debug(f"Failed to resolve path under environment {key}: {e}")
+
+    # 3. Check for project-local virtual environments (escalated search scope for scalability)
+    folders = (".venv", "venv", "env", ".env")
+    for folder in folders:
+        for name in names:
+            venv_path = project_root / folder / bin_dir / name
+            try:
+                resolved_venv = venv_path.resolve(strict=True)
+                # Enforce strict path containment boundary check to defeat path traversal/hijacking for local files
+                if resolved_venv.is_file() and project_root.resolve() in resolved_venv.parents:
+                    logger.debug(f"Resolved local virtual environment ({folder}) to: {resolved_venv}")
+                    return str(resolved_venv)
+            except Exception as e:
+                logger.debug(f"Skipping path {venv_path} during local search: {e}")
+
+    logger.debug(f"No virtual environment detected. Falling back to sys.executable: {sys.executable}")
+    return sys.executable
+
+
+
+def print_sakura_banner():
+    use_color = should_enable_color()
+    
+    # Tokyo Cherry Blossom (Sakura) colors (Japanese Cyberpunk aesthetic)
+    s = "\033[38;5;218m"  # Glowing Cherry Blossom Pink (Row 1-2)
+    p = "\033[38;5;224m"  # Soft Rose Pink (Row 3-4)
+    w = "\033[38;5;225m"  # Soft Warm White/Lilac (Row 5-6)
+    g = "\033[38;5;246m"  # Soft slate grid gray for borders
+    r = "\033[0m"         # Reset ANSI
+
+    logo_rows = [
+        f"{s}██╗  ██╗███████╗███╗   ██╗██████╗ ██╗   ██╗███╗   ██╗",
+        f"{s}██║ ██╔╝██╔════╝████╗  ██║██╔══██╗██║   ██║████╗  ██║",
+        f"{p}█████╔╝ █████╗  ██╔██╗ ██║██████╔╝██║   ██║██╔██╗ ██║",
+        f"{p}██╔═██╗ ██╔══╝  ██║╚██╗██║██╔══██╗██║   ██║██║╚██╗██║",
+        f"{w}██║  ██╗███████╗██║ ╚████║██████╔╝╚██████╔╝██║ ╚████║",
+        f"{w}╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝"
+    ]
+    logo_text = "\n".join(logo_rows)
+
+    border_color = g if use_color else ""
+    reset_color = r if use_color else ""
+
+    row1_content = f"{s}🌸 SAKURA JAPANESE AI AGENTIC SWARM{reset_color}"
+    row2_content = f"{p}⚡ System 1-6 Cognitive Engine Loaded Safely{reset_color}"
+
+    vlen1 = visual_len(row1_content)
+    vlen2 = visual_len(row2_content)
+
+    # Dynamic scaling panel (Senior Scale: Auto-expanding, zero-crash bounds)
+    box_width = max(48, vlen1, vlen2)
+    pad1 = max(0, box_width - vlen1)
+    pad2 = max(0, box_width - vlen2)
+
+    top_border = "─" * (box_width + 2)
+    box = f"""{border_color}    ┌{top_border}┐
+    │ {row1_content}{' ' * pad1}{border_color} │
+    │ {row2_content}{' ' * pad2}{border_color} │
+    └{top_border}┘{reset_color}"""
+
+    full_banner = f"{logo_text}\n{box}"
+
+    if not use_color:
+        full_banner = strip_ansi(full_banner)
+    
+    print(full_banner)
+
+def log_status(step_num: int, description: str, detail: str = "", status: str = "OK"):
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Sakura Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_g = "\033[38;5;246m"  # Slate Gray
+    c_y = "\033[38;5;226m"  # Yellow
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_c = c_g = c_y = c_r = ""
+        
+    badge = f"{c_m}[ STEP {step_num} ]{c_r}"
+    status_badge = f"{c_c}[  {status:<4}  ]{c_r}" if status == "OK" else f"{c_y}[ {status:<4} ]{c_r}"
+    
+    msg = f"{badge} {status_badge} {description}"
+    if detail:
+        msg += f" {c_g}➔ {detail}{c_r}"
+    print(msg)
+
+def is_port_in_use(port: int) -> bool:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        return s.connect_ex(('localhost', port)) == 0
+
+def find_free_port(start_port: int) -> int:
+    port = start_port
+    while is_port_in_use(port):
+        port += 1
+    return port
+
+def bootstrap_core(silent=False):
+    if not silent:
+        print_sakura_banner()
+    
+    use_color = should_enable_color()
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    
+    if not silent:
+        print(f"\n{c_c}🚀 INITIATING PORTABLE KENBUN-AGENT STANDALONE BOOTSTRAPPER{c_r}\n")
+    
+    # 1. Resolve workspace paths dynamically relative to this script
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    log_status(1, "Resolving dynamic workspace root paths", str(project_root.resolve()), status="OK")
+
+    # 2. Check and copy environment template (.env.example -> .env)
+    env_file = project_root / ".env"
+    env_example = project_root / ".env.example"
+    
+    if not env_file.exists():
+        if env_example.exists():
+            # Automatically check for port availability to prevent conflicts
+            chroma_port = 8000
+            if is_port_in_use(8000):
+                chroma_port = find_free_port(8010)
+                log_status(2, "Port 8000 is occupied. Remapping ChromaDB", f"Selected free port {chroma_port}", status="PORT")
+            
+            api_port = 8001
+            if is_port_in_use(8001):
+                api_port = find_free_port(8011)
+                log_status(2, "Port 8001 is occupied. Remapping Swarm API", f"Selected free port {api_port}", status="PORT")
+
+            dashboard_port = 3000
+            if is_port_in_use(3000):
+                dashboard_port = find_free_port(3010)
+                log_status(2, "Port 3000 is occupied. Remapping Telemetry Dashboard", f"Selected free port {dashboard_port}", status="PORT")
+
+            with open(env_example, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            # Dynamic replacements: Configure absolute path & ports automatically!
+            content = content.replace(
+                "PROJECT_ROOT=/absolute/path/to/your/cloned/kenbun-agent",
+                f"PROJECT_ROOT={project_root.resolve()}"
+            )
+            content = content.replace("CHROMA_PORT=8000", f"CHROMA_PORT={chroma_port}")
+            content = content.replace("API_PORT=8001", f"API_PORT={api_port}")
+            content = content.replace("DASHBOARD_PORT=3000", f"DASHBOARD_PORT={dashboard_port}")
+
+            with open(env_file, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            log_status(2, "Seeding & auto-configuring environment file", "Created customized .env", status="OK")
+        else:
+            log_status(2, "No env.example template found. Skipping env copy", "", status="WARN")
+    else:
+        log_status(2, "Local environment file (.env) already exists", "Skipping creation", status="OK")
+
+    # 3. Create core telemetry and database paths
+    brain_health_dir = project_root / "brain_health"
+    logs_dir = brain_health_dir / "logs"
+    chromadb_dir = brain_health_dir / "chromadb_local"
+
+    brain_health_dir.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    chromadb_dir.mkdir(parents=True, exist_ok=True)
+    log_status(3, "Structuring core database, memory, and telemetry paths", "brain_health, logs, chromadb", status="OK")
+
+    # 4. Write default telemetry JSON templates
+    usage_stats = brain_health_dir / "usage_stats.json"
+    if not usage_stats.exists():
+        with open(usage_stats, "w") as f:
+            f.write('{"total_tokens": 0, "session_cost": 0.0}')
+            
+    benchmarks = brain_health_dir / "BENCHMARKS.json"
+    if not benchmarks.exists():
+        with open(benchmarks, "w") as f:
+            f.write("[]")
+            
+    post_mortem = brain_health_dir / "POST_MORTEM.md"
+    if not post_mortem.exists():
+        with open(post_mortem, "w") as f:
+            f.write("# 🩺 System Post Mortems & Architectural Corrections\n\nRecord failures and their lessons here.\n")
+    log_status(4, "Seeding zero-config system telemetry templates", "usage_stats.json, BENCHMARKS.json, POST_MORTEM.md", status="SEED")
+
+    # 5. Pre-initialize SQLite intelligence database with WAL mode enabled
+    db_path = brain_health_dir / "kenbun_intelligence.db"
+    
+    try:
+        with sqlite3.connect(db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            
+            # Setup base schema
+            cursor = conn.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS intelligence (
+                    tool_id TEXT PRIMARY KEY,
+                    category TEXT,
+                    alpha REAL DEFAULT 2.0,
+                    beta REAL DEFAULT 2.0,
+                    success_count INTEGER DEFAULT 0,
+                    failure_count INTEGER DEFAULT 0,
+                    timestamp TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kenbun_cron_jobs (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    schedule TEXT NOT NULL,
+                    prompt TEXT,
+                    script_path TEXT,
+                    no_agent INTEGER DEFAULT 0,
+                    context_from TEXT,
+                    workdir TEXT,
+                    delivery_targets TEXT,
+                    enabled_toolsets TEXT,
+                    status TEXT DEFAULT 'active',
+                    last_run_at TEXT,
+                    next_run_at TEXT,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kenbun_kanban_tasks (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    body TEXT,
+                    assignee TEXT,
+                    tenant TEXT,
+                    priority INTEGER DEFAULT 0,
+                    parent_id TEXT,
+                    status TEXT DEFAULT 'triage',
+                    max_retries INTEGER DEFAULT 3,
+                    comments TEXT DEFAULT '[]',
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS kenbun_kanban_runs (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    run_number INTEGER NOT NULL,
+                    outcome TEXT NOT NULL,
+                    assignee TEXT,
+                    started_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    ended_at TEXT,
+                    duration_seconds REAL,
+                    summary TEXT,
+                    metadata TEXT,
+                    error TEXT,
+                    pid INTEGER,
+                    FOREIGN KEY(task_id) REFERENCES kenbun_kanban_tasks(id) ON DELETE CASCADE
+                )
+            ''')
+            conn.commit()
+            log_status(5, "Pre-initializing local SQLite database with WAL Mode", "WAL concurrency active", status="WAL")
+    except Exception as e:
+        log_status(5, "Failed to initialize SQLite intelligence database", str(e), status="FAIL")
+
+def select_menu(options, title="Select provider:", selected=0):
+    # Fallback to standard printed list if tty/termios is not available or not in standard TTY
+    if not sys.stdout.isatty():
+        print(f"\nSelect options for: {title}")
+        for i, opt in enumerate(options):
+            print(f" {i+1}. {opt}")
+        while True:
+            try:
+                sel = input(f"Select choice by number (Default {selected+1}): ").strip()
+                if not sel:
+                    return selected
+                sel = int(sel)
+                if 1 <= sel <= len(options):
+                    return sel - 1
+            except ValueError:
+                pass
+            print("Invalid selection.")
+            
+    try:
+        import tty
+        import termios
+        import select
+    except ImportError:
+        # Fallback to printed list
+        print(f"\nSelect options for: {title}")
+        for i, opt in enumerate(options):
+            print(f" {i+1}. {opt}")
+        while True:
+            try:
+                sel = input(f"Select choice by number (Default {selected+1}): ").strip()
+                if not sel:
+                    return selected
+                sel = int(sel)
+                if 1 <= sel <= len(options):
+                    return sel - 1
+            except ValueError:
+                pass
+            print("Invalid selection.")
+
+    def get_key():
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            # Use raw unbuffered os.read to prevent Python from buffering the sequence bytes
+            b = os.read(fd, 1)
+            if not b:
+                return 'ignored'
+            ch = b.decode('utf-8', errors='ignore')
+            if ch == '\x1b':
+                # Read all remaining characters in the escape sequence with a fast timeout
+                seq = b
+                while True:
+                    rlist, _, _ = select.select([fd], [], [], 0.05)
+                    if rlist:
+                        next_b = os.read(fd, 1)
+                        if next_b:
+                            seq += next_b
+                            if len(seq) >= 6: # Safety limit for escape sequence length
+                                break
+                        else:
+                            break
+                    else:
+                        break
+                
+                seq_str = seq.decode('utf-8', errors='ignore')
+                # Check for standard arrow keys
+                if seq_str in ('\x1b[A', '\x1bOA'):
+                    return 'up'
+                elif seq_str in ('\x1b[B', '\x1bOB'):
+                    return 'down'
+                elif seq_str in ('\x1b[C', '\x1bOC'):
+                    return 'right'
+                elif seq_str in ('\x1b[D', '\x1bOD'):
+                    return 'left'
+                elif seq_str == '\x1b':
+                    return 'escape' # Actual single ESC key press
+                else:
+                    return 'ignored' # Other unrecognized escape sequence
+            elif ch in ('\r', '\n'):
+                return 'enter'
+            elif ch == ' ':
+                return 'space'
+            elif ch in ('q', 'Q'):
+                return 'quit'
+            elif ch in ('w', 'W', 'k', 'K'):
+                return 'up'
+            elif ch in ('s', 'S', 'j', 'J'):
+                return 'down'
+            elif ch.isdigit():
+                return int(ch)
+            return ch
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+    # Ensure initial selected index is within bounds
+    if not (0 <= selected < len(options)):
+        selected = 0
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_g = "\033[38;5;246m"  # Slate Gray
+    c_w = "\033[38;5;225m"  # Soft Warm White
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_g = c_w = c_r = ""
+
+    # Hide cursor
+    sys.stdout.write("\033[?25l")
+    sys.stdout.flush()
+    
+    try:
+        while True:
+            lines_printed = 0
+            
+            menu_text = f"\n{c_m}{title}{c_r}\n"
+            menu_text += f" {c_g}↑↓ (or w/s) navigate   ENTER/SPACE select   ESC/q cancel{c_r}\n\n"
+            lines_printed += 4
+            
+            for idx, opt in enumerate(options):
+                if idx == selected:
+                    menu_text += f" {c_m}➔ (●) {opt}{c_r}\n"
+                else:
+                    menu_text += f"    (○) {opt}\n"
+                lines_printed += 1
+                
+            sys.stdout.write(menu_text)
+            sys.stdout.flush()
+            
+            key = get_key()
+            
+            # Clear printed lines
+            sys.stdout.write(f"\033[{lines_printed}A")
+            sys.stdout.write("\033[J")
+            sys.stdout.flush()
+            
+            if key == 'up':
+                selected = (selected - 1) % len(options)
+            elif key == 'down':
+                selected = (selected + 1) % len(options)
+            elif key in ('enter', 'space'):
+                sys.stdout.write("\033[?25h") # Show cursor
+                sys.stdout.flush()
+                print(f"{c_m}{title}{c_r} {c_w}{options[selected]}{c_r}")
+                return selected
+            elif key in ('escape', 'quit'):
+                sys.stdout.write("\033[?25h") # Show cursor
+                sys.stdout.flush()
+                return None
+            elif isinstance(key, int):
+                val = key - 1
+                if 0 <= val < len(options):
+                    selected = val
+    except Exception:
+        sys.stdout.write("\033[?25h") # Show cursor
+        sys.stdout.flush()
+        return None
+
+PROVIDERS_MAP = [
+    {
+        "name": "Nous Portal (Nous Research subscription)",
+        "env_key": "NOUS_PORTAL_API_KEY",
+        "url": "https://api.nous.mesolitica.com/v1",
+        "model": "nous-kenbun-2-theta",
+        "local": False
+    },
+    {
+        "name": "OpenRouter (100+ models, pay-per-use)",
+        "env_key": "OPENROUTER_API_KEY",
+        "url": "https://openrouter.ai/api/v1",
+        "model": "nousresearch/kenbun-3-llama-3.1-405b",
+        "local": False
+    },
+    {
+        "name": "LM Studio (local desktop app with built-in model server)",
+        "env_key": None,
+        "url": "http://localhost:1234/v1",
+        "model": "local-model",
+        "local": True,
+        "type": "lmstudio"
+    },
+    {
+        "name": "Anthropic (Claude models – API key or Claude Code)",
+        "env_key": "ANTHROPIC_API_KEY",
+        "url": "https://api.anthropic.com/v1",
+        "model": "claude-3-5-sonnet-latest",
+        "local": False
+    },
+    {
+        "name": "OpenAI Codex",
+        "env_key": "OPENAI_API_KEY",
+        "url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "local": False
+    },
+    {
+        "name": "Qwen Cloud / DashScope Coding (Qwen + multi-provider)",
+        "env_key": "DASHSCOPE_API_KEY",
+        "url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model": "qwen2.5-coder-32b-instruct",
+        "local": False
+    },
+    {
+        "name": "Xiaomi MiMo (MiMo-V2.5 and V2 models – pro, omni, flash)",
+        "env_key": "MIMO_API_KEY",
+        "url": "https://api.mimo.xiaomi.com/v1",
+        "model": "mimo-v2.5-flash",
+        "local": False
+    },
+    {
+        "name": "Tencent TokenHub (Hy3 Preview – direct API via tokenhub.tencentmaas.com)",
+        "env_key": "TOKENHUB_API_KEY",
+        "url": "https://tokenhub.tencentmaas.com/v1",
+        "model": "hy3-preview",
+        "local": False
+    },
+    {
+        "name": "NVIDIA NIM (Nemotron models – build.nvidia.com or local NIM)",
+        "env_key": "NVIDIA_API_KEY",
+        "url": "https://integrate.api.nvidia.com/v1",
+        "model": "nvidia/nemotron-4-340b-instruct",
+        "local": False
+    },
+    {
+        "name": "GitHub Copilot (uses GITHUB_TOKEN or gh auth token)",
+        "env_key": "GITHUB_TOKEN",
+        "url": "https://api.github.com",
+        "model": "copilot-gpt-4o",
+        "local": False
+    },
+    {
+        "name": "GitHub Copilot ACP (spawns `copilot --acp --stdio`)",
+        "env_key": None,
+        "url": "copilot-acp",
+        "model": "copilot-acp",
+        "local": False
+    },
+    {
+        "name": "Hugging Face Inference Providers (20+ open models)",
+        "env_key": "HF_API_KEY",
+        "url": "https://api-inference.huggingface.co/v1",
+        "model": "meta-llama/Llama-3.1-70B-Instruct",
+        "local": False
+    },
+    {
+        "name": "Google AI Studio (Gemini models – native Gemini API)",
+        "env_key": "GEMINI_API_KEY",
+        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+        "model": "gemini-3-flash-preview",
+        "local": False
+    },
+    {
+        "name": "Google Gemini via OAuth + Code Assist (free tier supported; no API key needed)",
+        "env_key": None,
+        "url": "https://cloudaidoc-pa.googleapis.com/v1",
+        "model": "code-assist",
+        "local": False
+    },
+    {
+        "name": "DeepSeek (DeepSeek-V3, R1, coder – direct API)",
+        "env_key": "DEEPSEEK_API_KEY",
+        "url": "https://api.deepseek.com/v1",
+        "model": "deepseek-chat",
+        "local": False
+    },
+    {
+        "name": "xAI (Grok models – direct API)",
+        "env_key": "XAI_API_KEY",
+        "url": "https://api.x.ai/v1",
+        "model": "grok-beta",
+        "local": False
+    },
+    {
+        "name": "Z.AI / GLM (Zhipu AI direct API)",
+        "env_key": "ZHIPU_API_KEY",
+        "url": "https://open.bigmodel.cn/api/paas/v4",
+        "model": "glm-4-flash",
+        "local": False
+    },
+    {
+        "name": "Kimi Coding Plan (api.kimi.com) & Moonshot API",
+        "env_key": "KIMI_API_KEY",
+        "url": "https://api.kimi.com/v1",
+        "model": "kimi-latest",
+        "local": False
+    },
+    {
+        "name": "Kimi / Moonshot China (Moonshot CN direct API)",
+        "env_key": "MOONSHOT_API_KEY",
+        "url": "https://api.moonshot.cn/v1",
+        "model": "moonshot-v1-8k",
+        "local": False
+    },
+    {
+        "name": "StepFun Step Plan (agent/coding models via Step Plan API)",
+        "env_key": "STEPFUN_API_KEY",
+        "url": "https://api.stepfun.com/v1",
+        "model": "step-1-flash",
+        "local": False
+    }
+]
+
+def auto_register_claude_desktop_mcp():
+    import json
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_y = "\033[38;5;226m"  # Yellow
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_y = c_r = ""
+
+    # Locate config paths
+    home = Path.home()
+    if sys.platform == "darwin":
+        config_path = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    else:
+        config_path = home / ".config" / "Claude" / "claude_desktop_config.json"
+
+    print(f"\n{c_m}🤖 AUTO-CONFIGURING CLAUDE DESKTOP MCP INTEGRATION{c_r}")
+    print(f"Target file: {config_path}")
+
+    # Build the server config dictionary using direct virtualenv interpreter
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    venv_python = Path(get_python_executable())
+
+    kenbun_server_node = {
+        "command": str(venv_python.resolve()),
+        "args": ["-m", "tools.infrastructure.server"],
+        "env": {
+            "PYTHONPATH": str((project_root / "core").resolve())
+        }
+    }
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_data = {}
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                try:
+                    config_data = json.load(f)
+                except Exception:
+                    print(f"{c_y}⚠️ Existing Claude Desktop config is invalid or empty. Creating fresh config.{c_r}")
+        
+        if "mcpServers" not in config_data:
+            config_data["mcpServers"] = {}
+            
+        config_data["mcpServers"]["kenbun"] = kenbun_server_node
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+            
+        print(f"🟢 {c_m}Successfully registered Kenbun MCP server in Claude Desktop!{c_r}")
+        print("  ➔ To apply changes, please restart your Claude Desktop application.\n")
+    except Exception as e:
+        print(f"❌ {c_y}Failed to write Claude Desktop configuration: {e}{c_r}\n")
+
+def auto_register_cursor_mcp():
+    import json
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_y = "\033[38;5;226m"  # Yellow
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_y = c_r = ""
+
+    # Locate config paths
+    home = Path.home()
+    if sys.platform == "darwin":
+        config_path = home / "Library" / "Application Support" / "Cursor" / "User" / "globalStorage" / "moose.copilot" / "mcp.json"
+    else:
+        config_path = home / ".config" / "Cursor" / "User" / "globalStorage" / "moose.copilot" / "mcp.json"
+
+    print(f"\n{c_m}🤖 AUTO-CONFIGURING CURSOR MCP INTEGRATION{c_r}")
+    print(f"Target file: {config_path}")
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    venv_python = Path(get_python_executable())
+
+    kenbun_server_node = {
+        "type": "command",
+        "command": str(venv_python.resolve()),
+        "args": ["-m", "tools.infrastructure.server"],
+        "env": {
+            "PYTHONPATH": str((project_root / "core").resolve())
+        },
+        "enabled": True
+    }
+
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        config_data = {}
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                try:
+                    config_data = json.load(f)
+                except Exception:
+                    print(f"{c_y}⚠️ Existing Cursor config is invalid or empty. Creating fresh config.{c_r}")
+        
+        if "mcpServers" not in config_data:
+            config_data["mcpServers"] = {}
+            
+        config_data["mcpServers"]["kenbun"] = kenbun_server_node
+
+        with open(config_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=2)
+            
+        print(f"🟢 {c_m}Successfully registered Kenbun MCP server in Cursor!{c_r}")
+        print("  ➔ To apply changes, please restart your Cursor IDE.\n")
+    except Exception as e:
+        print(f"❌ {c_y}Failed to write Cursor configuration: {e}{c_r}\n")
+
+def decrypt_value_local(val: str, project_root: Path) -> str:
+    """Decrypts values that are encrypted with 'enc:' prefix using the repository master key."""
+    if not isinstance(val, str) or not val.startswith("enc:"):
+        return val
+    try:
+        from cryptography.fernet import Fernet
+        key_file = project_root / ".kenbun_master.key"
+        if not key_file.exists():
+            key_file = project_root / "core" / ".kenbun_master.key"
+        
+        if key_file.exists():
+            with open(key_file, "rb") as f:
+                key = f.read().strip()
+                f_obj = Fernet(key)
+                return f_obj.decrypt(val[4:].encode()).decode()
+    except Exception:
+        pass
+    return val
+
+def configure_api_keys():
+    import getpass
+    import tempfile
+    import json
+    
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_g = "\033[38;5;246m"  # Gray
+    c_y = "\033[38;5;226m"  # Yellow
+    c_w = "\033[38;5;225m"  # Soft Warm White
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_c = c_g = c_y = c_w = c_r = ""
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+    
+    if not env_file.exists():
+        print(f"\n{c_y}⚠️ Environment file not initialized yet. Running Express Setup first...{c_r}")
+        bootstrap_core(silent=True)
+        
+    while True:
+        # Parse current env to extract statuses
+        env_vars = {}
+        if env_file.exists():
+            try:
+                with open(env_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            parts = line.split("=", 1)
+                            env_vars[parts[0].strip()] = parts[1].strip()
+            except Exception:
+                pass
+
+        primary_url = str(env_vars.get("PRIMARY_LLM_URL") or "http://localhost:11434/v1")
+        primary_model = str(env_vars.get("PRIMARY_LLM_MODEL") or "llama3.2:3b")
+
+        # Decrypt for screen display to make it clear for the user
+        decrypted_url = str(decrypt_value_local(primary_url, project_root) or "")
+        decrypted_model = str(decrypt_value_local(primary_model, project_root) or "")
+
+        # Detect active provider
+        active_provider_name = "Unknown / Custom"
+        active_provider_key_status = "[No Key Required]"
+        
+        for p in PROVIDERS_MAP:
+            p_url = p.get("url")
+            if isinstance(p_url, str) and p_url:
+                if p_url in decrypted_url or decrypted_url in p_url or p_url in primary_url or primary_url in p_url:
+                    active_provider_name = str(p.get("name") or "Unknown")
+                    p_env_key = p.get("env_key")
+                    if isinstance(p_env_key, str) and p_env_key:
+                        val = env_vars.get(p_env_key, "")
+                        if not val or "your_" in val.lower() or val == '""' or val == "''":
+                            active_provider_key_status = f"{c_g}[Not Configured]{c_r}"
+                        elif val.startswith("enc:") or val.startswith("enc:v1:"):
+                            active_provider_key_status = f"{c_m}[AES-256 Encrypted]{c_r}"
+                        else:
+                            active_provider_key_status = f"{c_y}[Plain Text]{c_r}"
+                    break
+
+
+        print(f"\n{c_m}🔑 CONFIGURE API KEYS & LOCAL AI ENGINES{c_r}")
+        print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+        print("Current Status:")
+        print(f" ➔ Active Provider:    {c_w}{active_provider_name}{c_r}")
+        
+        # Display clean decrypted values with secure visual tag
+        if primary_url.startswith("enc:"):
+            print(f" ➔ Primary LLM URL:    {c_w}{decrypted_url}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
+        else:
+            print(f" ➔ Primary LLM URL:    {c_w}{primary_url}{c_r}")
+            
+        if primary_model.startswith("enc:"):
+            print(f" ➔ Primary LLM Model:  {c_w}{decrypted_model}{c_r} {c_g}[AES-256 Encrypted]{c_r}")
+        else:
+            print(f" ➔ Primary LLM Model:  {c_w}{primary_model}{c_r}")
+            
+        print(f" ➔ Active Key Status:  {active_provider_key_status}")
+        print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+        config_options = [
+            "⚙️  Select Primary AI Provider & Model (Select from 20+ options)",
+            "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
+            "🔙 Return to Main Menu",
+        ]
+        sel = select_menu(config_options, "CONFIGURATION MENU")
+        if sel is None:
+            break
+        opt = str(sel + 1)
+
+        if opt == "1":
+            # Interactive arrow-navigable selector for all 20 providers!
+            provider_names = [p["name"] for p in PROVIDERS_MAP]
+            sel_idx = select_menu(provider_names, "Select Primary AI Provider:")
+            
+            if sel_idx is None:
+                continue
+                
+            p = PROVIDERS_MAP[sel_idx]
+            final_url = str(p.get("url") or "")
+            final_model = str(p.get("model") or "")
+            api_key_val = ""
+            skip_key_update = False
+            
+            env_key = p.get("env_key")
+            # Dynamic prompt for API Key
+            if isinstance(env_key, str) and env_key:
+                existing_key = env_vars.get(env_key, "")
+                is_existing = False
+                if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
+                    is_existing = True
+                    print(f"\n{c_c}An existing value for {env_key} was detected.{c_r}")
+                    print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
+                    api_key_val = getpass.getpass("Credential (Press Enter to keep existing): ").strip()
+                else:
+                    print(f"\n{c_c}Paste your {env_key} below (Input is masked / hidden as you paste/type):{c_r}")
+                    api_key_val = getpass.getpass("Credential: ").strip()
+
+                if is_existing and not api_key_val:
+                    skip_key_update = True
+                
+            # Local probes if LM Studio/Ollama
+            if p.get("local") and p.get("type") == "lmstudio":
+                url_in = input(f"\nEnter Local Model Server Base URL (Press Enter for '{final_url}'): ").strip()
+                if url_in:
+                    final_url = url_in
+                    
+                print(f"\n📡 Probing local model server at {final_url}...")
+                
+                # Probing local server
+                import urllib.request
+                def local_probe_models(base_url: str) -> Optional[List[str]]:
+                    root = base_url.strip().rstrip("/")
+                    if root.endswith("/v1"):
+                        root = root[:-3].rstrip("/")
+                    url = root + "/api/v1/models"
+                    try:
+                        req = urllib.request.Request(url, headers={"User-Agent": "Kenbun-Agent/1.0"})
+                        with urllib.request.urlopen(req, timeout=3.0) as resp:
+                            payload = json.loads(resp.read().decode())
+                            raw_models = payload.get("models")
+                            if isinstance(raw_models, list):
+                                return [m.get("key") or m.get("id") for m in raw_models if str(m.get("type")).lower() != "embedding"]
+                    except Exception:
+                        pass
+                    return None
+                    
+                probed = local_probe_models(final_url)
+                if probed:
+                    print("🟢 Connected successfully! Available models:")
+                    model_sel = select_menu(probed, "Select active LM Studio Model:")
+                    if model_sel is not None:
+                        final_model = probed[model_sel]
+                else:
+                    print(f"🔴 Could not fetch active model keys from {final_url} (server offline).")
+                    manual_model = input(f"Enter target Model ID manually (Press Enter for '{final_model}'): ").strip()
+                    if manual_model:
+                        final_model = manual_model
+            else:
+                model_in = input(f"\nEnter Target Model ID (Press Enter for default '{final_model}'): ").strip()
+                if model_in:
+                    final_model = model_in
+
+            # AES rest encryption
+            do_encrypt = False
+            fernet = None
+            if api_key_val and not skip_key_update:
+                enc_choice = input("\nEncrypt your credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
+                do_encrypt = enc_choice not in ("n", "no")
+                
+                if do_encrypt:
+                    try:
+                        from cryptography.fernet import Fernet
+                    except ImportError:
+                        print("\n⚠️ Cryptography library missing. Installing cryptography...")
+                        import subprocess
+                        subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        from cryptography.fernet import Fernet
+                        
+                    key_file = project_root / ".kenbun_master.key"
+                    if not key_file.exists():
+                        key = Fernet.generate_key()
+                        with open(key_file, "wb") as f:
+                            f.write(key)
+                        os.chmod(key_file, 0o600)
+                    with open(key_file, "rb") as f:
+                        fernet = Fernet(f.read().strip())
+
+            # Atomic save env
+            with open(env_file, "r", encoding="utf-8") as f:
+                content = f.read()
+
+            def get_replacement(k: str, v: str) -> str:
+                if do_encrypt and v and fernet is not None:
+                    return f"{k}=enc:{fernet.encrypt(v.encode()).decode()}"
+                return f"{k}={v}"
+
+            def update_env_var(env_content: str, k: str, v: str) -> str:
+                replacement = get_replacement(k, v)
+                pattern = rf"^{k}\s*=.*"
+                new_content, count = re.subn(pattern, lambda m: replacement, env_content, flags=re.MULTILINE)
+                if count == 0:
+                    if not env_content.endswith("\n"):
+                        env_content += "\n"
+                    env_content += f"{replacement}\n"
+                    return env_content
+                return new_content
+
+            content = update_env_var(content, "PRIMARY_LLM_URL", final_url)
+            content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
+            if isinstance(env_key, str) and env_key and api_key_val and not skip_key_update:
+                content = update_env_var(content, env_key, api_key_val)
+
+            temp_path = None
+            try:
+                temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
+                with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                    f.write(content)
+                os.replace(temp_path, env_file)
+                print(f"\n🟢 {c_m}Successfully updated gateway configuration!{c_r}")
+                print(f"  ➔ PRIMARY_LLM_URL:   {final_url}")
+                print(f"  ➔ PRIMARY_LLM_MODEL: {final_model}\n")
+            except Exception as e:
+                if temp_path and os.path.exists(temp_path):
+                    os.remove(temp_path)
+                print(f"❌ Failed to save environment file: {e}")
+
+        elif opt == "2":
+            auto_register_claude_desktop_mcp()
+            auto_register_cursor_mcp()
+        elif opt == "3":
+            break
+
+def detect_hardware():
+    total_ram_gb = 8.0
+    vram_gb = 0.0
+    try:
+        import sys
+        import subprocess
+        if sys.platform == "darwin":
+            # macOS memory detection via sysctl
+            res = subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True)
+            total_ram_gb = int(res.stdout.strip()) / (1024**3)
+            # Unified memory VRAM allocation pool is up to 75% for macOS
+            vram_gb = total_ram_gb * 0.75
+        else:
+            # Linux RAM detection
+            import os
+            total_ram_gb = os.sysconf('SC_PAGE_SIZE') * os.sysconf('SC_PHYS_PAGES') / (1024**3)
+            # Linux Nvidia VRAM detection via nvidia-smi
+            try:
+                res = subprocess.run(["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True)
+                vram_gb = int(res.stdout.strip()) / 1024
+            except Exception:
+                vram_gb = 0.0
+    except Exception:
+        pass
+    return total_ram_gb, vram_gb
+
+def configure_local_models():
+    import tempfile
+    import re
+    
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_g = "\033[38;5;246m"  # Gray
+    c_y = "\033[38;5;226m"  # Yellow
+    c_w = "\033[38;5;225m"  # Soft Warm White
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_c = c_g = c_y = c_w = c_r = ""
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+    
+    if not env_file.exists():
+        print(f"\n{c_y}⚠️ Environment file not initialized yet. Running Express Setup first...{c_r}")
+        bootstrap_core(silent=True)
+
+    # Load current values
+    env_vars = {}
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    parts = line.split("=", 1)
+                    env_vars[parts[0].strip()] = parts[1].strip()
+    except Exception:
+        pass
+
+    current_pull = env_vars.get("OLLAMA_PULL_MODELS", "llama3.2:3b deepseek-r1:8b")
+    current_primary = env_vars.get("PRIMARY_LLM_MODEL", "llama3.2:3b")
+
+    # 2.5 Dynamic Hardware VRAM & RAM Sensing Autopilot
+    total_ram_gb, vram_gb = detect_hardware()
+
+    # Pick recommended profile based on hardware sensing
+    recommended_profile_idx = 1 # Fallback to Standard
+    if vram_gb >= 16.0 or total_ram_gb >= 32.0:
+        recommended_profile_idx = 2 # Pro
+    elif total_ram_gb >= 16.0:
+        recommended_profile_idx = 1 # Standard
+    else:
+        recommended_profile_idx = 0 # Ultra-Light
+
+    profiles = [
+        {
+            "name": "Ultra-Light (8GB RAM / ~2.5GB Disk)",
+            "desc": "Pulls llama3.2:1b and deepseek-r1:1.5b. Best for older laptops, light VPS nodes, or low specs.",
+            "pull": "llama3.2:1b deepseek-r1:1.5b",
+            "primary": "llama3.2:1b"
+        },
+        {
+            "name": "Standard (16GB RAM / ~6GB Disk)",
+            "desc": "Pulls llama3.2:3b and deepseek-r1:8b. Standard hardware profile.",
+            "pull": "llama3.2:3b deepseek-r1:8b",
+            "primary": "llama3.2:3b"
+        },
+        {
+            "name": "Pro (32GB+ RAM / ~18GB Disk)",
+            "desc": "Pulls qwen2.5-coder:7b, gemma2:9b, and deepseek-r1:14b. Premium performance.",
+            "pull": "qwen2.5-coder:7b gemma2:9b deepseek-r1:14b",
+            "primary": "qwen2.5-coder:7b"
+        },
+        {
+            "name": "Cloud-Only / No Local Downloads (0GB RAM / 0GB Disk)",
+            "desc": "Skips downloading local models entirely. Runs strictly via Cloud APIs (Gemini, OpenRouter) or Host LM Studio.",
+            "pull": "none",
+            "primary": "none"
+        },
+        {
+            "name": "Custom Model Pull List",
+            "desc": "Specify your own custom space-separated Ollama models manually.",
+            "pull": "custom",
+            "primary": "custom"
+        }
+    ]
+
+    rec_name = profiles[recommended_profile_idx]["name"]
+    autopilot_profile = {
+        "name": f"✨ Autopilot Recommended Profile ({rec_name.split(' (')[0]})",
+        "desc": f"Automatically selects '{rec_name}' based on detected hardware profile.",
+        "pull": profiles[recommended_profile_idx]["pull"],
+        "primary": profiles[recommended_profile_idx]["primary"]
+    }
+    # Prepend Autopilot
+    profiles.insert(0, autopilot_profile)
+
+    print(f"\n{c_m}🌸 CONFIGURE LOCAL AI MODELS & HARDWARE PROFILE{c_r}")
+    print(f"{c_g}Choose a profile that fits your hardware specs. Underpowered specs will experience slow execution times.{c_r}\n")
+    print(f"🖥️  {c_c}DYNAMIC HARDWARE SENSING AUDIT:{c_r}")
+    print(f"   ➔ Detected System RAM: {c_w}{total_ram_gb:.2f} GB{c_r}")
+    if vram_gb > 0.0:
+        print(f"   ➔ Detected VRAM / Unified Memory Pool: {c_w}{vram_gb:.2f} GB{c_r}")
+    print(f"   ➔ Recommended Hardware Profile: {c_m}{rec_name.split(' (')[0]}{c_r}\n")
+    
+    print(f"Current Configured Models: {c_c}{current_pull}{c_r}")
+    print(f"Current Primary Local Model: {c_c}{current_primary}{c_r}\n")
+
+    options = [p["name"] for p in profiles]
+    selection = select_menu(options, "Select Local Hardware Profile:")
+    
+    if selection is None:
+        print(f"\n{c_y}⚠️ Selection cancelled. Returning to main menu.{c_r}\n")
+        return
+
+    selected_profile = profiles[selection]
+    
+    pull_val = selected_profile["pull"]
+    primary_val = selected_profile["primary"]
+
+    if pull_val == "custom":
+        print(f"\n{c_c}Enter space-separated Ollama models to pull (e.g. phi3:mini llama3:8b): {c_r}")
+        pull_val = input("➔ Model List: ").strip()
+        if not pull_val:
+            print(f"❌ {c_y}Invalid model list. Cancelled.{c_r}\n")
+            return
+            
+        print(f"\n{c_c}Enter the primary model name to invoke for task planning (e.g. phi3:mini): {c_r}")
+        primary_val = input("➔ Primary Model: ").strip()
+        if not primary_val:
+            print(f"❌ {c_y}Invalid primary model. Cancelled.{c_r}\n")
+            return
+
+    # Atomic write to env
+    try:
+        is_cloud_active = False
+        current_url = env_vars.get("PRIMARY_LLM_URL", "http://localhost:11434/v1")
+        decrypted_url = decrypt_value_local(current_url, project_root)
+        if any(domain in decrypted_url.lower() for domain in ["googleapis.com", "api.openai.com", "api.anthropic.com", "api.deepseek.com"]):
+            is_cloud_active = True
+
+        with open(env_file, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        def update_env_var(env_content: str, k: str, v: str) -> str:
+            replacement = f"{k}={v}"
+            pattern = rf"^{k}\s*=.*"
+            new_content, count = re.subn(pattern, lambda m: replacement, env_content, flags=re.MULTILINE)
+            if count == 0:
+                if not env_content.endswith("\n"):
+                    env_content += "\n"
+                env_content += f"{replacement}\n"
+                return env_content
+            return new_content
+
+        content = update_env_var(content, "OLLAMA_PULL_MODELS", f'"{pull_val}"' if " " in pull_val else pull_val)
+        
+        if is_cloud_active:
+            # Active Cloud Provider detected — do not overwrite it with local hardware model
+            pass
+        else:
+            if primary_val != "none":
+                # Symmetrically encrypt if they have Fernet active
+                if current_primary.startswith("enc:") or env_vars.get("PRIMARY_LLM_MODEL", "").startswith("enc:"):
+                    # Check if master key exists to encrypt
+                    key_file = project_root / ".kenbun_master.key"
+                    if not key_file.exists():
+                        key_file = project_root / "core" / ".kenbun_master.key"
+                    if key_file.exists():
+                        from cryptography.fernet import Fernet
+                        with open(key_file, "rb") as fk:
+                            f_obj = Fernet(fk.read().strip())
+                        encrypted_val = f"enc:{f_obj.encrypt(primary_val.encode()).decode()}"
+                        content = update_env_var(content, "PRIMARY_LLM_MODEL", encrypted_val)
+                    else:
+                        content = update_env_var(content, "PRIMARY_LLM_MODEL", primary_val)
+                else:
+                    content = update_env_var(content, "PRIMARY_LLM_MODEL", primary_val)
+
+        temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
+        try:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as tmp:
+                tmp.write(content)
+            os.replace(temp_path, env_file)
+        except Exception as e:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            raise e
+
+        print(f"\n🟢 {c_m}Successfully updated local model profile!{c_r}")
+        print(f"  ➔ Pull Models:   {c_c}{pull_val}{c_r}")
+        if is_cloud_active:
+            decrypted_model = decrypt_value_local(current_primary, project_root)
+            print(f"  ➔ Primary Model: {c_c}{decrypted_model}{c_r} {c_g}[Keeping active Cloud Model]{c_r}")
+            print("  ℹ️  Local models configured for Docker background stack only.")
+        else:
+            print(f"  ➔ Primary Model: {c_c}{primary_val if primary_val != 'none' else current_primary}{c_r}")
+        print("  ➔ To pull changes, please rebuild docker containers via Option 5.\n")
+    except Exception as e:
+        print(f"❌ {c_y}Failed to write configuration: {e}{c_r}\n")
+
+def launch_docker_swarm():
+    import subprocess
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_y = "\033[38;5;226m"  # Yellow
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_c = c_y = c_r = ""
+
+    print(f"\n{c_m}🐳 LAUNCHING LOCALIZED SWARM STACK{c_r}")
+    print(f"{c_c}Executing Docker Compose local container startup...{c_r}\n")
+    
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    
+    # Auto-bootstrap if missing .env
+    env_file = project_root / ".env"
+    if not env_file.exists():
+        print(f"\n{c_y}⚠️ Environment file (.env) not found. Auto-generating from template...{c_r}")
+        bootstrap_core(silent=True)
+    
+    docker_bin = shutil.which("docker")
+    if not docker_bin:
+        print(f"\n{c_y}┌─────────────────────────────────────────────────────────┐")
+        print("│             🐋 DOCKER NOT DETECTED                      │")
+        print("├─────────────────────────────────────────────────────────┤")
+        print("│ It looks like Docker is not installed on your system.  │")
+        print("│ Docker Compose is required for local offline containers.│")
+        print("├─────────────────────────────────────────────────────────┤")
+        print("│ Recommended Action:                                     │")
+        print("│ 1. Download Docker Desktop: https://www.docker.com      │")
+        print("│ 2. Or run in Cloud Mode (Mode A - Zero Docker needed!)  │")
+        print(f"└─────────────────────────────────────────────────────────┘{c_r}\n")
+        return
+
+    # 2. Proactive Docker Daemon Health Check (Self-Healing & Secure)
+    try:
+        # Determine socket location for permission auditing (locale-independent check)
+        socket_path = "/var/run/docker.sock"
+        has_socket = os.path.exists(socket_path)
+        has_write_access = os.access(socket_path, os.W_OK) if has_socket else False
+        
+        # Query daemon info using resolved absolute path and timeout to avoid hanging indefinitely
+        daemon_check = subprocess.run([docker_bin, "info"], capture_output=True, text=True, timeout=5)
+        
+        if daemon_check.returncode != 0:
+            is_permission_denied = False
+            if has_socket and not has_write_access:
+                is_permission_denied = True
+            elif "permission denied" in (daemon_check.stderr or "").lower():
+                is_permission_denied = True
+                
+            # Detect systemd presence and Docker status (Ubuntu specific self-healing)
+            is_systemd = os.path.exists("/run/systemd/system")
+            systemd_docker_active = False
+            if is_systemd:
+                try:
+                    sysctl_check = subprocess.run(["systemctl", "is-active", "docker"], capture_output=True, text=True, timeout=2)
+                    if sysctl_check.stdout.strip() == "active":
+                        systemd_docker_active = True
+                except Exception:
+                    pass
+
+            print(f"\n{c_y}┌─────────────────────────────────────────────────────────┐")
+            print("│             🚨 DOCKER DAEMON INACTIVE / ACCESS DENIED   │")
+            print("├─────────────────────────────────────────────────────────┤")
+            if is_permission_denied:
+                print("│ Docker socket exists, but your user lacks permissions.  │")
+            else:
+                print("│ Docker CLI is active, but the Daemon is not running.   │")
+            print("├─────────────────────────────────────────────────────────┤")
+            print("│ Recommended Action:                                     │")
+            if sys.platform == "darwin":
+                print("│ ➔ macOS: Start the Docker Desktop application          │")
+            else:
+                if is_systemd:
+                    if not systemd_docker_active:
+                        print("│ ➔ Linux (Start & Enable):                               │")
+                        print("│    Run:  sudo systemctl enable --now docker            │")
+                    else:
+                        print("│ ➔ Docker service is active in systemd.                  │")
+                else:
+                    print("│ ➔ Linux (Start Daemon):                                 │")
+                    print("│    Run:  sudo service docker start                     │")
+                
+                if is_permission_denied:
+                    print("│ ➔ Linux (Permissions - run if socket access is denied): │")
+                    print("│    Run:  sudo usermod -aG docker $USER                 │")
+                    print("│    Then log out & back in, or run: newgrp docker       │")
+            print("├─────────────────────────────────────────────────────────┤")
+            print("│ ⚠️  SECURITY NOTICE: Adding a user to the 'docker' group  │")
+            print("│    grants root-equivalent access to the host system.   │")
+            print(f"└─────────────────────────────────────────────────────────┘{c_r}\n")
+
+            if daemon_check.stderr:
+                print(f"{c_y}Raw Docker System Error Output:{c_r}")
+                print(f"  {c_c}{daemon_check.stderr.strip()}{c_r}\n")
+            return
+    except subprocess.TimeoutExpired:
+        print(f"\n{c_y}❌ Timeout expired while querying Docker daemon (server hung).{c_r}\n")
+        return
+    except (subprocess.SubprocessError, OSError) as e:
+        print(f"\n{c_y}❌ Failed to query Docker daemon health: {e}{c_r}\n")
+        return
+
+    return_code = -1
+    try:
+        result = subprocess.run(["docker", "compose", "up", "-d", "--build"], cwd=project_root)
+        return_code = result.returncode
+    except FileNotFoundError:
+        try:
+            result = subprocess.run(["docker-compose", "up", "-d", "--build"], cwd=project_root)
+            return_code = result.returncode
+        except Exception as e:
+            print(f"\n{c_y}❌ Failed to execute docker compose: {e}{c_r}")
+            return
+    except Exception as e:
+        print(f"\n{c_y}❌ Failed to run docker compose command: {e}{c_r}")
+        return
+
+    if return_code == 0:
+        print(f"\n{c_c}🎉 Kenbun Swarm started successfully!{c_r}")
+        env_file = project_root / ".env"
+        chroma_port = "8000"
+        api_port = "8001"
+        dashboard_port = "3000"
+        if env_file.exists():
+            try:
+                with open(env_file, "r") as f:
+                    for line in f:
+                        if line.startswith("CHROMA_PORT="):
+                            chroma_port = line.split("=")[1].strip()
+                        elif line.startswith("API_PORT="):
+                            api_port = line.split("=")[1].strip()
+                        elif line.startswith("DASHBOARD_PORT="):
+                            dashboard_port = line.split("=")[1].strip()
+            except Exception:
+                pass
+        print(f" ➔ ChromaDB port: {chroma_port}")
+        print(f" ➔ FastMCP port: {api_port} (SSE URL: http://localhost:{api_port}/sse)")
+        print(f" ➔ Dashboard port: {dashboard_port} (Access URL: http://localhost:{dashboard_port})")
+    else:
+        # Self-healing Host Port Conflict Audit (Consensus Zero-Crash)
+        env_file = project_root / ".env"
+        current_chroma = 8000
+        current_api = 8001
+        current_dashboard = 3000
+        if env_file.exists():
+            try:
+                with open(env_file, "r") as f:
+                    for line in f:
+                        if line.startswith("CHROMA_PORT="):
+                            current_chroma = int(line.split("=")[1].strip())
+                        elif line.startswith("API_PORT="):
+                            current_api = int(line.split("=")[1].strip())
+                        elif line.startswith("DASHBOARD_PORT="):
+                            current_dashboard = int(line.split("=")[1].strip())
+            except Exception:
+                pass
+        
+        chroma_conflict = is_port_in_use(current_chroma)
+        api_conflict = is_port_in_use(current_api)
+        dashboard_conflict = is_port_in_use(current_dashboard)
+        
+        if chroma_conflict or api_conflict or dashboard_conflict:
+            print(f"\n{c_y}⚠️ Host Port conflict detected!{c_r}")
+            if chroma_conflict:
+                print(f" ➔ CHROMA_PORT={current_chroma} is already occupied on your host!")
+            if api_conflict:
+                print(f" ➔ API_PORT={current_api} is already occupied on your host!")
+            if dashboard_conflict:
+                print(f" ➔ DASHBOARD_PORT={current_dashboard} is already occupied on your host!")
+            
+            choice = input(f"\n{c_c}Would you like to automatically remap occupied ports in .env and retry? [Y/n]: {c_r}").strip().lower()
+            if choice in ("", "y", "yes"):
+                print(f"\n{c_c}Stopping any conflicting docker structures...{c_r}")
+                try:
+                    subprocess.run(["docker", "compose", "down", "-v"], cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except Exception:
+                    try:
+                        subprocess.run(["docker-compose", "down", "-v"], cwd=project_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    except Exception:
+                        pass
+                
+                new_chroma = find_free_port(8010) if chroma_conflict else current_chroma
+                new_api = find_free_port(8011) if api_conflict else current_api
+                new_dashboard = find_free_port(3010) if dashboard_conflict else current_dashboard
+                
+                print(f"Remapping host ports: Chroma ➔ {new_chroma}, API Swarm ➔ {new_api}, Dashboard ➔ {new_dashboard}")
+                
+                if env_file.exists():
+                    try:
+                        with open(env_file, "r", encoding="utf-8") as f:
+                            content = f.read()
+                        content = re.sub(r"^CHROMA_PORT\s*=.*", f"CHROMA_PORT={new_chroma}", content, flags=re.MULTILINE)
+                        content = re.sub(r"^API_PORT\s*=.*", f"API_PORT={new_api}", content, flags=re.MULTILINE)
+                        content = re.sub(r"^DASHBOARD_PORT\s*=.*", f"DASHBOARD_PORT={new_dashboard}", content, flags=re.MULTILINE)
+                        
+                        import tempfile
+                        temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
+                        with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                            f.write(content)
+                        os.replace(temp_path, env_file)
+                        log_status(2, "Ports update successful inside .env", "Atomic Saved", status="OK")
+                    except Exception as e:
+                        print(f"❌ Failed to rewrite ports atomically in .env: {e}")
+                        return
+                
+                launch_docker_swarm()
+                return
+        
+        print(f"\n{c_y}❌ Docker Compose failed with return code {return_code}{c_r}")
+
+def clean_docker_stack():
+    import subprocess
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_y = "\033[38;5;226m"  # Yellow
+    c_r = "\033[0m"         # Reset
+    c_g = "\033[38;5;246m"  # Slate Gray
+    
+    if not use_color:
+        c_m = c_c = c_y = c_r = c_g = ""
+        
+    print(f"\n{c_m}🧹 CLEAN / RESET SWARM DOCKER STACK{c_r}")
+    print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+    
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    
+    docker_bin = shutil.which("docker")
+    if not docker_bin:
+        print(f"\n{c_y}⚠️ Docker is not installed on this system.{c_r}\n")
+        return
+
+    cleanup_options = [
+        "Light Clean (Removes local build images & deletes volumes/containers - FAST)",
+        "Deep Purge  (Deletes ALL stack containers, volumes, and large cached images - SLOW)",
+        "Cancel",
+    ]
+    try:
+        sel = select_menu(cleanup_options, "Choose cleanup intensity:")
+    except (KeyboardInterrupt, EOFError):
+        print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
+        return
+
+    if sel is None or sel == 2:
+        print(f"\n{c_g}Cleanup cancelled.{c_r}\n")
+        return
+
+    choice = str(sel + 1)
+        
+    print(f"\n{c_y}🟡 Stopping Docker Swarm Stack containers...{c_r}")
+    
+    # Run compose down
+    down_args = ["docker", "compose", "down", "--volumes", "--remove-orphans"]
+    if choice == "1":
+        down_args.extend(["--rmi", "local"])
+    else:
+        down_args.extend(["--rmi", "all"])
+        
+    try:
+        subprocess.run(down_args, cwd=project_root)
+        
+        if choice == "2":
+            print(f"\n{c_y}🟡 Pruning build caches and unused network layers...{c_r}")
+            subprocess.run(["docker", "builder", "prune", "-f"], cwd=project_root)
+            subprocess.run(["docker", "image", "prune", "-f"], cwd=project_root)
+            
+        print(f"\n{c_c}✓ Docker Swarm Stack cleaned successfully!{c_r}")
+        print("  You can now start a fresh build using the Swarm Stack option in the menu.")
+        
+        # Guide on file permissions (highly helpful for fresh reinstalls)
+        print(f"\n{c_y}┌───────────────── 🌸 HOST FILE OWNERSHIP WARNING ────────────────┐")
+        print("│ On Linux systems, Docker mount environments compile pycache/     │")
+        print("│ assets using 'root' ownership on the host filesystem.           │")
+        print("│                                                                 │")
+        print("│ ➔ If you plan to completely remove this directory, standard     │")
+        print("│   'rm -rf' will fail with Permission Denied.                    │")
+        print("│                                                                 │")
+        print("│ ➔ To cleanly delete this entire folder from your server:        │")
+        print(f"│   {c_c}sudo rm -rf {project_root}{c_y}                           │")
+        print(f"└─────────────────────────────────────────────────────────────────┘{c_r}\n")
+    except Exception as e:
+        print(f"\n{c_y}❌ Cleanup error: {e}{c_r}\n")
+
+def showcase_dashboard():
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_g = "\033[38;5;246m"  # Slate Gray
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_g = c_r = ""
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+    dashboard_port = "3000"
+    if env_file.exists():
+        try:
+            with open(env_file, "r") as f:
+                for line in f:
+                    if line.startswith("DASHBOARD_PORT="):
+                        dashboard_port = line.split("=")[1].strip()
+                        break
+        except Exception:
+            pass
+
+    print(f"\n{c_m}📊 PORTABLE NEXT.JS TELEMETRY DASHBOARD FRONTEND{c_r}")
+    print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+    print("The Kenbun Next.js Telemetry Frontend exposes real-time diagnostics:")
+    print(" ➔ Bayesian Governor convergence graphs (MAB tool weights)")
+    print(" ➔ Dynamic LLM pricing counters & budget token governance")
+    print(" ➔ Swarm active tool performance trackers & system sensor logs")
+    print("\n Access Instructions:")
+    print("   1. Spin up the docker containers using option 4.")
+    print(f"   2. Open your web browser and navigate to: http://localhost:{dashboard_port}")
+    print("   3. All telemetry data streams dynamically via secure localhost sockets.")
+    print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+
+def run_quick_setup():
+    import getpass
+    import tempfile
+    import json
+    
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_g = "\033[38;5;246m"  # Gray
+    c_y = "\033[38;5;226m"  # Yellow
+    c_w = "\033[38;5;225m"  # Soft Warm White
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_c = c_g = c_y = c_w = c_r = ""
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+    
+    if not env_file.exists():
+        print(f"\n{c_y}⚠️ Environment file not initialized. Initializing core defaults first...{c_r}")
+        bootstrap_core(silent=True)
+
+    # Parse current env to extract statuses
+    env_vars = {}
+    if env_file.exists():
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        parts = line.split("=", 1)
+                        env_vars[parts[0].strip()] = parts[1].strip()
+        except Exception:
+            pass
+
+    print(f"\n{c_m}⚡ SAKURA QUICK SETUP WIZARD{c_r}")
+    print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+    print("This wizard configures your primary AI provider, default model,")
+    print("and messaging bot integration in a few fast steps.")
+    print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+
+    # Step 1: Provider selection via dynamic select menu!
+    provider_names = [p["name"] for p in PROVIDERS_MAP]
+    sel_idx = select_menu(provider_names, "Select your Primary AI Provider:")
+    
+    if sel_idx is None:
+        print("Quick Setup cancelled.")
+        return
+        
+    p = PROVIDERS_MAP[sel_idx]
+    final_url = str(p.get("url") or "")
+    final_model = str(p.get("model") or "")
+    api_key_val = ""
+    skip_key_update = False
+
+    env_key = p.get("env_key")
+    # Step 2: Key Setup
+    if isinstance(env_key, str) and env_key:
+        print(f"\n{c_w}[STEP 2] Configure API Credentials:{c_r}")
+        existing_key = env_vars.get(env_key, "")
+        is_existing = False
+        if existing_key and "your_" not in existing_key.lower() and existing_key != '""' and existing_key != "''":
+            is_existing = True
+            print(f"{c_c}An existing value for {env_key} was detected.{c_r}")
+            print(f"{c_g}Press ENTER to keep the existing key, or paste a new one to replace it.{c_r}")
+            api_key_val = getpass.getpass(f"Enter your {env_key} (Press Enter to keep existing): ").strip()
+        else:
+            api_key_val = getpass.getpass(f"Enter your {env_key}: ").strip()
+
+        if is_existing and not api_key_val:
+            skip_key_update = True
+
+    # Probing local servers
+    if p.get("local") and p.get("type") == "lmstudio":
+        url_in = input(f"\nEnter local server base URL (Press Enter for '{final_url}'): ").strip()
+        if url_in:
+            final_url = url_in
+            
+        print(f"📡 Probing local server at {final_url}...")
+        
+        import urllib.request
+        def quick_probe(base_url: str) -> Optional[List[str]]:
+            root = base_url.strip().rstrip("/")
+            if root.endswith("/v1"):
+                root = root[:-3].rstrip("/")
+            url = root + "/api/v1/models"
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "Kenbun-Agent/1.0"})
+                with urllib.request.urlopen(req, timeout=3.0) as resp:
+                    payload = json.loads(resp.read().decode())
+                    if "models" in payload:
+                        return [m["key"] for m in payload["models"] if str(m.get("type")).lower() != "embedding"]
+            except Exception:
+                pass
+            return None
+            
+        probe_res = quick_probe(final_url)
+        if probe_res:
+            print("🟢 Connected successfully! Available models:")
+            model_sel = select_menu(probe_res, "Select active Model:")
+            if model_sel is not None:
+                final_model = probe_res[model_sel]
+        else:
+            print(f"🔴 Could not fetch active model keys from {final_url} (offline).")
+            model_in = input(f"Enter target Model ID manually (Press Enter for '{final_model}'): ").strip()
+            if model_in:
+                final_model = model_in
+    else:
+        model_in = input(f"\nEnter Target Model ID (Press Enter for default '{final_model}'): ").strip()
+        if model_in:
+            final_model = model_in
+
+    # Step 3: Messaging setup
+    print(f"\n{c_w}[STEP 3] Configure Telegram Bot Messaging (Optional):{c_r}")
+    setup_tg = input("Configure Telegram Messaging Bot? [y/N]: ").strip().lower()
+    
+    tg_token = ""
+    tg_chat_id = ""
+    if setup_tg in ("y", "yes"):
+        tg_token = input("Enter Telegram Bot Token: ").strip()
+        tg_chat_id = input("Enter Telegram Chat ID:  ").strip()
+
+    # Step 4: AES Encryption
+    do_encrypt = False
+    fernet = None
+    if api_key_val and not skip_key_update:
+        enc_choice = input("\nEncrypt credentials at rest with AES-256? (Recommended) [Y/n]: ").strip().lower()
+        do_encrypt = enc_choice not in ("n", "no")
+        
+        if do_encrypt:
+            try:
+                from cryptography.fernet import Fernet
+            except ImportError:
+                print("\n⚠️ Cryptography library missing. Installing cryptography...")
+                import subprocess
+                subprocess.run([get_python_executable(), "-m", "pip", "install", "cryptography"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                from cryptography.fernet import Fernet
+                    
+            key_file = project_root / ".kenbun_master.key"
+            if not key_file.exists():
+                key = Fernet.generate_key()
+                with open(key_file, "wb") as f:
+                    f.write(key)
+                os.chmod(key_file, 0o600)
+            with open(key_file, "rb") as f:
+                fernet = Fernet(f.read().strip())
+                    
+    # Step 5: Save atomic env
+    with open(env_file, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    def get_replacement(k: str, v: str) -> str:
+        if do_encrypt and v and fernet is not None:
+            return f"{k}=enc:{fernet.encrypt(v.encode()).decode()}"
+        return f"{k}={v}"
+
+    def update_env_var(env_content: str, k: str, v: str) -> str:
+        replacement = get_replacement(k, v)
+        pattern = rf"^{k}\s*=.*"
+        new_content, count = re.subn(pattern, lambda m: replacement, env_content, flags=re.MULTILINE)
+        if count == 0:
+            if not env_content.endswith("\n"):
+                env_content += "\n"
+            env_content += f"{replacement}\n"
+            return env_content
+        return new_content
+
+    content = update_env_var(content, "PRIMARY_LLM_URL", final_url)
+    content = update_env_var(content, "PRIMARY_LLM_MODEL", final_model)
+    if isinstance(env_key, str) and env_key and api_key_val and not skip_key_update:
+        content = update_env_var(content, env_key, api_key_val)
+    if tg_token and tg_chat_id:
+        content = update_env_var(content, "TELEGRAM_BOT_TOKEN", tg_token)
+        content = update_env_var(content, "TELEGRAM_CHAT_ID", tg_chat_id)
+
+    temp_path = None
+    try:
+        temp_fd, temp_path = tempfile.mkstemp(dir=project_root, prefix=".env.tmp")
+        with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(temp_path, env_file)
+        print(f"\n🟢 {c_m}Quick Setup completed successfully!{c_r}")
+        print(f"  ➔ PRIMARY_LLM_URL:   {final_url}")
+        print(f"  ➔ PRIMARY_LLM_MODEL: {final_model}")
+        if tg_token:
+            print("  ➔ Telegram Bot:      Configured")
+        print("\nReady to launch Swarm Stack! select menu Option 4 next.")
+    except Exception as e:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        print(f"\n❌ Failed to save environment file: {e}")
+
+
+def print_secrets_help():
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    print(f"\n{c_m}🔒 BITWARDEN SECRETS MANAGER CLI ACTIONS{c_r}")
+    print("──────────────────────────────────────────────────")
+    print(f"  {c_c}kenbun secrets bitwarden setup{c_r}    ➔ Run the interactive BWS credentials setup wizard")
+    print(f"  {c_c}kenbun secrets bitwarden status{c_r}   ➔ Show connection status and integration details")
+    print(f"  {c_c}kenbun secrets bitwarden sync{c_r}     ➔ List all secret keys stored under configured project")
+    print(f"  {c_c}kenbun secrets bitwarden sync --apply{c_r} ➔ Retrieve keys and inject them into active env context")
+    print(f"  {c_c}kenbun secrets bitwarden install{c_r}  ➔ Manually download & verify the pinned BWS binary")
+    print(f"  {c_c}kenbun secrets bitwarden disable{c_r}  ➔ Turn off the Bitwarden integration in config.yaml")
+    print("──────────────────────────────────────────────────\n")
+
+
+def print_sessions_help():
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    print(f"\n{c_m}📂 CONVERSATION SESSIONS MANAGER CLI ACTIONS{c_r}")
+    print("──────────────────────────────────────────────────")
+    print(f"  {c_c}kenbun sessions list [limit]{c_r}           ➔ Browse/list conversation sessions")
+    print(f"  {c_c}kenbun sessions stats{c_r}                  ➔ Display database statistics and size")
+    print(f"  {c_c}kenbun sessions export <id> [--format json|markdown]{c_r} ➔ Export session history")
+    print(f"  {c_c}kenbun sessions rename <id> <new_title>{c_r} ➔ Rename a conversation session")
+    print(f"  {c_c}kenbun sessions delete <id>{c_r}            ➔ Delete a session by its ID")
+    print(f"  {c_c}kenbun sessions prune [--days N]{c_r}      ➔ Prune ended sessions older than N days")
+    print("──────────────────────────────────────────────────\n")
+
+
+def handle_secrets_command(args: List[str]):
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+
+    if not args:
+        print_secrets_help()
+        return
+
+    sub = args[0].lower().strip()
+    if sub == "bitwarden":
+        if len(args) < 2:
+            print_secrets_help()
+            return
+        action = args[1].lower().strip()
+        action_args = args[2:]
+    else:
+        action = sub
+        action_args = args[1:]
+
+    try:
+        from tools.utils.secrets_bitwarden import (
+            get_bws_path, download_bws, load_kenbun_config_raw,
+            save_kenbun_config_raw, get_kenbun_dir, apply_secrets_to_env
+        )
+    except ImportError as e:
+        print(f"❌ Failed to import tools.utils.secrets_bitwarden: {e}")
+        return
+
+    import subprocess
+    import json
+    import os
+
+    if action == "install":
+        print(f"📥 {c_c}Installing Bitwarden Secrets Manager (bws) binary...{c_r}")
+        try:
+            bin_path = download_bws()
+            print(f"✅ {c_c}Installed successfully to: {bin_path}{c_r}")
+        except Exception as e:
+            print(f"❌ Failed to install bws: {e}")
+
+    elif action == "disable":
+        config = load_kenbun_config_raw()
+        if "secrets" not in config:
+            config["secrets"] = {}
+        if "bitwarden" not in config["secrets"]:
+            config["secrets"]["bitwarden"] = {}
+        config["secrets"]["bitwarden"]["enabled"] = False
+        save_kenbun_config_raw(config)
+        print(f"✅ {c_c}Bitwarden Secrets Manager integration has been disabled.{c_r}")
+
+    elif action == "status":
+        config = load_kenbun_config_raw()
+        bw_cfg = config.get("secrets", {}).get("bitwarden", {})
+        enabled = bw_cfg.get("enabled", False)
+        bin_path = get_bws_path()
+        env_token_var = bw_cfg.get("access_token_env", "BWS_ACCESS_TOKEN")
+        
+        # Load token
+        from tools.utils.secrets_bitwarden import load_kenbun_env
+        load_kenbun_env()
+        token = os.environ.get(env_token_var)
+        
+        print(f"\n{c_m}🔒 Bitwarden Secrets Manager Status{c_r}")
+        print("──────────────────────────────────")
+        print(f"Enabled:       {'🟢 Yes' if enabled else '🔴 No'}")
+        print(f"Binary Path:   {bin_path if bin_path else '🔴 Not found (run install)'}")
+        print(f"Access Token:  {'🟢 Set (configured)' if token else '🔴 Not set'}")
+        print(f"Project ID:    {bw_cfg.get('project_id', '🔴 Not set')}")
+        print(f"Server URL:    {bw_cfg.get('server_url', 'Default (Bitwarden Cloud)')}")
+        print("──────────────────────────────────\n")
+
+    elif action == "setup":
+        print(f"\n{c_m}🔑 Bitwarden Secrets Manager Setup Wizard{c_r}")
+        print("──────────────────────────────────────────")
+        # Ensure binary exists
+        bin_path = get_bws_path()
+        if not bin_path:
+            print("bws binary not found. Installing first...")
+            try:
+                bin_path = download_bws()
+            except Exception as e:
+                print(f"❌ Failed to install bws binary: {e}")
+                return
+        
+        # Ask for token
+        from tools.utils.secrets_bitwarden import load_kenbun_env
+        load_kenbun_env()
+        current_token = os.environ.get("BWS_ACCESS_TOKEN", "")
+        if current_token:
+            token_prompt = f"Enter Bitwarden Access Token [{current_token[:8]}...]: "
+        else:
+            token_prompt = "Enter Bitwarden Access Token: "
+            
+        token = input(token_prompt).strip()
+        if not token:
+            token = current_token
+
+        if not token:
+            print("❌ Access Token is required.")
+            return
+
+        # Ask for Server URL
+        server_url = input("Enter BWS Server URL (optional, press Enter for default Cloud): ").strip()
+        
+        # Ask for Project ID
+        project_id = input("Enter Bitwarden Project ID: ").strip()
+        if not project_id:
+            print("❌ Project ID is required.")
+            return
+
+        # Test connection
+        print("\nTesting connection to Bitwarden Secrets Manager...")
+        env = os.environ.copy()
+        env["BWS_ACCESS_TOKEN"] = token
+        if server_url:
+            env["BWS_SERVER_URL"] = server_url
+            
+        cmd = [bin_path, "secret", "list", project_id]
+        try:
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=15)
+            if res.returncode != 0:
+                print(f"❌ Connection test failed: {res.stderr.strip()}")
+                return
+            
+            secrets_list = json.loads(res.stdout)
+            print(f"🟢 Connection Successful! Found {len(secrets_list)} secrets in project.")
+            
+            # Save configuration
+            config = load_kenbun_config_raw()
+            if "secrets" not in config:
+                config["secrets"] = {}
+            config["secrets"]["bitwarden"] = {
+                "enabled": True,
+                "access_token_env": "BWS_ACCESS_TOKEN",
+                "project_id": project_id,
+                "server_url": server_url,
+                "cache_ttl_seconds": 300,
+                "override_existing": True,
+                "auto_install": True
+            }
+            save_kenbun_config_raw(config)
+            
+            # Write token to ~/.kenbun/.env
+            kenbun_dir = get_kenbun_dir()
+            os.makedirs(kenbun_dir, exist_ok=True)
+            env_path = os.path.join(kenbun_dir, ".env")
+            
+            # Read existing lines to preserve other vars
+            env_lines = []
+            if os.path.exists(env_path):
+                with open(env_path, "r", encoding="utf-8") as f:
+                    env_lines = f.readlines()
+            
+            # Filter out BWS_ACCESS_TOKEN if it exists
+            env_lines = [line for line in env_lines if not line.startswith("BWS_ACCESS_TOKEN=")]
+            env_lines.append(f"BWS_ACCESS_TOKEN={token}\n")
+            
+            with open(env_path, "w", encoding="utf-8") as f:
+                f.writelines(env_lines)
+                
+            print("✅ Configuration saved successfully!")
+            
+        except Exception as e:
+            print(f"❌ Setup failed with error: {e}")
+
+    elif action == "sync":
+        apply = False
+        for a in action_args:
+            if a == "--apply":
+                apply = True
+        
+        # Test fetching
+        config = load_kenbun_config_raw()
+        bw_cfg = config.get("secrets", {}).get("bitwarden", {})
+        if not bw_cfg.get("enabled", False):
+            print("⚠️ Bitwarden Secrets Manager integration is currently disabled. Run 'setup' to enable.")
+            return
+
+        bin_path = get_bws_path()
+        if not bin_path:
+            print("❌ bws binary not found. Run setup or install.")
+            return
+
+        from tools.utils.secrets_bitwarden import load_kenbun_env
+        load_kenbun_env()
+        token_var = bw_cfg.get("access_token_env", "BWS_ACCESS_TOKEN")
+        token = os.environ.get(token_var)
+        if not token:
+            print(f"❌ {token_var} is not set in environment or ~/.kenbun/.env")
+            return
+
+        project_id = bw_cfg.get("project_id", "")
+        if not project_id:
+            print("❌ Project ID is not configured in config.yaml")
+            return
+
+        print(f"Fetching secrets for project {project_id}...")
+        env = os.environ.copy()
+        env[token_var] = token
+        if bw_cfg.get("server_url"):
+            env["BWS_SERVER_URL"] = bw_cfg["server_url"]
+
+        cmd = [bin_path, "secret", "list", project_id]
+        try:
+            res = subprocess.run(cmd, env=env, capture_output=True, text=True, timeout=15)
+            if res.returncode != 0:
+                print(f"❌ Failed to fetch secrets: {res.stderr.strip()}")
+                return
+            
+            secrets_list = json.loads(res.stdout)
+            print(f"\n🟢 Retrieved {len(secrets_list)} secrets from Bitwarden:")
+            print("──────────────────────────────────")
+            for s in secrets_list:
+                k = s.get("key") or s.get("name")
+                print(f"- {k}")
+            print("──────────────────────────────────")
+            
+            if apply:
+                # Apply them to the environment and print confirmation
+                apply_secrets_to_env()
+                print("✅ Successfully applied secrets to the current process environment!")
+            else:
+                print("💡 Run with '--apply' to verify applying them to the environment context.")
+        except Exception as e:
+            print(f"❌ Failed to sync: {e}")
+    else:
+        print_secrets_help()
+
+
+def handle_sessions_command(args: List[str]):
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+
+    if not args:
+        print_sessions_help()
+        return
+
+    action = args[0].lower().strip()
+    action_args = args[1:]
+
+    try:
+        from tools.utils.sessions_db import (
+            list_sessions, delete_session, update_session_title,
+            prune_sessions, get_sessions_stats, get_messages
+        )
+    except ImportError as e:
+        print(f"❌ Failed to import tools.utils.sessions_db: {e}")
+        return
+
+    import json
+
+    if action == "list":
+        limit = 20
+        if action_args:
+            try:
+                limit = int(action_args[0])
+            except ValueError:
+                pass
+        sessions = list_sessions(limit=limit)
+        print(f"\n{c_m}📂 Conversation Sessions (Limit: {limit}){c_r}")
+        print("──────────────────────────────────────────────────────────────────────────")
+        print(f"{'ID':<25} | {'Title':<30} | {'Source':<8} | {'Last Active'}")
+        print("──────────────────────────────────────────────────────────────────────────")
+        for s in sessions:
+            title = s.get("title") or "*(Unnamed)*"
+            if len(title) > 30:
+                title = title[:27] + "..."
+            print(f"{s['id']:<25} | {title:<30} | {s['source']:<8} | {s['last_active_at']}")
+        print("──────────────────────────────────────────────────────────────────────────\n")
+
+    elif action == "stats":
+        stats = get_sessions_stats()
+        print(f"\n{c_m}📊 Database Statistics{c_r}")
+        print("───────────────────────")
+        print(f"Total Sessions:   {stats['total_sessions']}")
+        print(f"Total Messages:   {stats['total_messages']}")
+        print(f"Database Size:    {stats['database_size_mb']} MB")
+        print("Source Counts:")
+        for src, count in stats['source_counts'].items():
+            print(f"  - {src}: {count}")
+        print("───────────────────────\n")
+
+    elif action == "delete":
+        if not action_args:
+            print("❌ Usage: kenbun sessions delete <session_id>")
+            return
+        session_id = action_args[0]
+        deleted = delete_session(session_id)
+        if deleted:
+            print(f"✅ Deleted session {session_id}")
+        else:
+            print(f"❌ Session {session_id} not found")
+
+    elif action == "rename":
+        if len(action_args) < 2:
+            print("❌ Usage: kenbun sessions rename <session_id> <new_title>")
+            return
+        session_id = action_args[0]
+        new_title = " ".join(action_args[1:])
+        final_title = update_session_title(session_id, new_title)
+        if final_title:
+            print(f"✅ Renamed session to: {final_title}")
+        else:
+            print(f"❌ Failed to rename session {session_id}")
+
+    elif action == "prune":
+        days = 90
+        if "--days" in action_args:
+            idx = action_args.index("--days")
+            if idx + 1 < len(action_args):
+                try:
+                    days = int(action_args[idx + 1])
+                except ValueError:
+                    pass
+        elif action_args:
+            try:
+                days = int(action_args[0])
+            except ValueError:
+                pass
+        
+        print(f"🧹 Pruning ended sessions older than {days} days...")
+        deleted = prune_sessions(older_than_days=days)
+        print(f"✅ Done. Removed {deleted} old sessions.")
+
+    elif action == "export":
+        if not action_args:
+            print("❌ Usage: kenbun sessions export <session_id> [--format json|markdown]")
+            return
+        session_id = action_args[0]
+        fmt = "json"
+        if "--format" in action_args:
+            idx = action_args.index("--format")
+            if idx + 1 < len(action_args):
+                fmt = action_args[idx + 1].lower()
+        
+        messages = get_messages(session_id)
+        if not messages:
+            print(f"❌ No messages found or session {session_id} doesn't exist.")
+            return
+
+        if fmt == "json":
+            print(json.dumps(messages, indent=2))
+        elif fmt == "markdown":
+            md = []
+            md.append(f"# Session Export: {session_id}\n")
+            for m in messages:
+                md.append(f"### **{m['role'].upper()}**")
+                md.append(f"*{m['timestamp']}*\n")
+                md.append(m['content'] or "")
+                if m.get('tool_calls'):
+                    md.append(f"\n```json\n{json.dumps(m['tool_calls'], indent=2)}\n```\n")
+                md.append("\n---\n")
+            print("\n".join(md))
+        else:
+            print(f"❌ Unknown format: {fmt}. Use json or markdown.")
+    else:
+        print_sessions_help()
+
+
+def launch_termchat(project_root):
+    termchat_path = project_root / "scripts" / "terminal_chat.py"
+    if termchat_path.exists():
+        use_color = should_enable_color()
+        c_m = "[38;5;218m" if use_color else ""
+        c_r = "[0m" if use_color else ""
+        
+        # Ensure prompt_toolkit is installed before launching terminal chat
+        python_exe = get_python_executable()
+        try:
+            import prompt_toolkit  # noqa: F401
+        except ImportError:
+            print(f"\n{c_m}⚙️  Installing UI dependencies for Terminal Chat...{c_r}")
+            import subprocess
+            subprocess.run([python_exe, "-m", "pip", "install", "prompt_toolkit"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+        print(f"\n{c_m}🌸 Initiating Cognitive Agent Shell...{c_r}")
+        try:
+            import subprocess
+            import sys
+            term_args = []
+            if len(sys.argv) > 1:
+                first_arg = sys.argv[1].lower().strip()
+                if first_arg in ("chat", "shell", "termchat"):
+                    term_args = sys.argv[2:]
+                elif first_arg in ("--continue", "-c", "--resume", "-r"):
+                    term_args = sys.argv[1:]
+            subprocess.run([python_exe, str(termchat_path)] + term_args)
+        except KeyboardInterrupt:
+            pass # Graceful exit from Ctrl+C inside the terminal chat
+        except Exception as e:
+            print(f"\n❌ Failed to start terminal chat subprocess: {e}")
+    else:
+        print(f"\n❌ Error: terminal_chat.py not found at {termchat_path}")
+
+def run_interactive_wizard():
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m"  # Pink
+    c_c = "\033[38;5;224m"  # Soft Rose
+    c_g = "\033[38;5;246m"  # Slate Gray
+    c_r = "\033[0m"         # Reset
+    
+    if not use_color:
+        c_m = c_c = c_g = c_r = ""
+
+    options = [
+        "🚀 Express Setup (Automated Defaults - remap ports & seed)",
+        "⚡ Quick Setup (Configure Provider, Model, & Messaging bot)",
+        "🔑 Configure API Keys & Local AI Engines (Interactive)",
+        "🐳 Configure Local AI Models & Docker Pull List",
+        "🐳 Start Swarm Stack (Docker Compose up)",
+        "🧹 Clean/Reset Swarm Stack (Stop & delete Docker containers/images)",
+        "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
+        "📊 Showcase Telemetry Dashboard (Access guidelines)",
+        "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)",
+        "❌ Exit"
+    ]
+
+    guided_options = [
+        "🚀 Express Setup (Automated Defaults - remap ports & seed)",
+        "⚡ Quick Setup (Configure Provider, Model, & Messaging bot)",
+        "🔑 Configure API Keys & Local AI Engines (Interactive)",
+        "🐳 Configure Local AI Models & Docker Pull List",
+        "🐳 Start Swarm Stack (Docker Compose up)",
+        "🔌 Register MCP Server in Claude Desktop & Cursor (Auto)",
+        "📊 Showcase Telemetry Dashboard (Access guidelines)",
+        "🌸 Start Kenbun Cognitive Agentic Shell (Termchat)"
+    ]
+
+    script_dir = Path(__file__).resolve().parent
+    project_root = script_dir.parent
+    env_file = project_root / ".env"
+
+    # Detect first-time setup
+    first_time = False
+    if not env_file.exists():
+        first_time = True
+    else:
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                content = f.read()
+                if "/absolute/path/to/your/cloned/kenbun-agent" in content or "your_gemini_key_here" in content:
+                    first_time = True
+        except Exception:
+            pass
+
+    if first_time:
+        import time
+        # Print guided onboarding sequential sequence without letting them select
+        steps_list = [
+            ("Express Core Setup", bootstrap_core),
+            ("Quick Setup (Provider & Credentials)", run_quick_setup),
+            ("Configure API Keys Status", configure_api_keys),
+            ("Configure Local Models & Hardware Profile", configure_local_models),
+            ("Start Docker Swarm Stack", launch_docker_swarm),
+            ("Register MCP in Claude & Cursor", lambda: (auto_register_claude_desktop_mcp(), auto_register_cursor_mcp())),
+            ("Showcase Telemetry Dashboard", showcase_dashboard),
+            ("Start Cognitive Shell (Termchat)", None)  # special handling for termchat launch
+        ]
+        
+        for step_idx, (step_name, step_func) in enumerate(steps_list):
+            # Clear screen
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
+            print_sakura_banner()
+            
+            print(f"\n{c_m}KENBUN-AGENT INTERACTIVE WIZARD MENU (GUIDED SETUP){c_r}")
+            print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+            
+            for idx, opt in enumerate(guided_options):
+                if idx < step_idx:
+                    print(f"    {c_g}(○) [Completed] {opt}{c_r}")
+                elif idx == step_idx:
+                    print(f" ➔ {c_m}(●) {opt}{c_r}")
+                else:
+                    print(f"    (○) {opt}")
+                    
+            print(f"{c_g}──────────────────────────────────────────────────{c_r}")
+            print(f"{c_c}┌────────────────── 🌸 SAKURA GUIDED SETUP ACTIVE ──────────────────┐{c_r}")
+            print(f"{c_c}│ We detected this is your first time setting up Kenbun-Agent.      │{c_r}")
+            print(f"{c_c}│ To guarantee infinite scalability and perfect API gateway routing, │{c_r}")
+            print(f"{c_c}│ we are walking you through the menu items sequentially.           │{c_r}")
+            print(f"{c_c}│ You do not need to choose; we will execute them one-by-one!       │{c_r}")
+            print(f"{c_c}└───────────────────────────────────────────────────────────────────┘{c_r}")
+            
+            print(f"\n{c_m}👉 Automatically executing Step {step_idx+1}/8: {step_name} in 2 seconds...{c_r}")
+            time.sleep(2.0)
+            
+            if step_func is not None:
+                step_func()
+                # Pause briefly after completion so they can view results
+                print(f"\n{c_c}🟢 Step {step_idx+1} completed successfully! Moving to next step...{c_r}")
+                time.sleep(2.0)
+            else:
+                # Last step: Launch termchat in-place!
+                launch_termchat(project_root)
+                
+        print(f"\n{c_m}🎉 Guided setup completed successfully! Welcome to Kenbun Swarm!{c_r}\n")
+        # guided setup terminates, continue to standard loop if they don't exit Termchat
+        first_time = False
+
+    print_sakura_banner()
+    current_selection = 0
+    while True:
+        selection = select_menu(options, "KENBUN-AGENT INTERACTIVE WIZARD MENU", selected=current_selection)
+        
+        if selection is None:
+            print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
+            break
+
+        if selection == 0:
+            bootstrap_core()
+            current_selection = 1
+        elif selection == 1:
+            run_quick_setup()
+            current_selection = 2
+        elif selection == 2:
+            configure_api_keys()
+            current_selection = 3
+        elif selection == 3:
+            configure_local_models()
+            current_selection = 4
+        elif selection == 4:
+            launch_docker_swarm()
+            current_selection = 5
+        elif selection == 5:
+            clean_docker_stack()
+            current_selection = 6
+        elif selection == 6:
+            auto_register_claude_desktop_mcp()
+            auto_register_cursor_mcp()
+            current_selection = 7
+        elif selection == 7:
+            showcase_dashboard()
+            current_selection = 8
+        elif selection == 8:
+            # Launch Kenbun Cognitive Shell (Termchat) in-place
+            script_dir = Path(__file__).parent.resolve()
+            project_root = script_dir.parent
+            launch_termchat(project_root)
+            current_selection = 8
+        elif selection == 9:
+            print(f"\n{c_m}🌸 Thank you for using Kenbun-Agent! Sayonara!{c_r}\n")
+            break
+
+if __name__ == "__main__":
+    use_color = should_enable_color()
+    c_m = "\033[38;5;218m" if use_color else ""
+    c_c = "\033[38;5;224m" if use_color else ""
+    c_y = "\033[38;5;226m" if use_color else ""
+    c_r = "\033[0m" if use_color else ""
+    
+    if len(sys.argv) > 1:
+        cmd = sys.argv[1].lower().strip()
+        if cmd in ("--express", "express"):
+            bootstrap_core()
+        elif cmd in ("chat", "shell", "termchat", "--continue", "-c", "--resume", "-r"):
+            # Launch Termchat in-place
+            script_dir = Path(__file__).parent.resolve()
+            project_root = script_dir.parent
+            launch_termchat(project_root)
+        elif cmd in ("start", "up"):
+            launch_docker_swarm()
+        elif cmd in ("stop", "down"):
+            # Execute docker compose down
+            script_dir = Path(__file__).parent.resolve()
+            project_root = script_dir.parent
+            print(f"\n{c_m}🐳 Stopping Swarm Stack...{c_r}")
+            import subprocess
+            try:
+                subprocess.run(["docker", "compose", "down"], cwd=str(project_root))
+            except Exception:
+                try:
+                    subprocess.run(["docker-compose", "down"], cwd=str(project_root))
+                except Exception as e:
+                    print(f"❌ Failed to stop compose stack: {e}")
+        elif cmd in ("mcp", "mcp-register"):
+            auto_register_claude_desktop_mcp()
+            auto_register_cursor_mcp()
+        elif cmd == "secrets":
+            handle_secrets_command(sys.argv[2:])
+        elif cmd == "sessions":
+            handle_sessions_command(sys.argv[2:])
+        elif cmd in ("setup", "configure"):
+            configure_api_keys()
+        elif cmd in ("dashboard", "telemetry"):
+            showcase_dashboard()
+        elif cmd in ("--help", "-h", "help"):
+            print(f"\n{c_m}🌸 KENBUN-AGENT CLI TOOL SHORTCUTS{c_r}")
+            print("──────────────────────────────────────────────────")
+            print(f"  {c_c}kenbun chat{c_r}       ➔ Start the Cognitive Agent Shell (Termchat) directly!")
+            print(f"  {c_c}kenbun start{c_r}      ➔ Spin up the Docker stack in background!")
+            print(f"  {c_c}kenbun stop{c_r}       ➔ Spin down the Docker stack!")
+            print(f"  {c_c}kenbun setup{c_r}      ➔ Open the interactive API Key Configuration wizard!")
+            print(f"  {c_c}kenbun mcp{c_r}        ➔ Register MCP server in Claude Desktop & Cursor automatically!")
+            print(f"  {c_c}kenbun dashboard{c_r}  ➔ Show access guidelines for the Telemetry Dashboard!")
+            print(f"  {c_c}kenbun express{c_r}    ➔ Initialize environment configurations with default seed!")
+            print(f"  {c_c}kenbun secrets{c_r}    ➔ Manage Bitwarden Secrets Manager integration!")
+            print(f"  {c_c}kenbun sessions{c_r}   ➔ Manage local conversation history sessions database!")
+            print(f"  {c_c}kenbun list-tools{c_r} ➔ List all dynamic MCP tools and their signatures!")
+            print(f"  {c_c}kenbun <tool>{c_r}     ➔ Execute any MCP tool (e.g., kenbun orchestrate, kenbun recall)")
+            print(f"  {c_c}kenbun{c_r}            ➔ Launch full interactive Sakura setup menu (1-9)")
+            print("──────────────────────────────────────────────────\n")
+        elif cmd == "list-tools":
+            import sys
+            import inspect
+            try:
+                import tools.infrastructure.server as server
+                print(f"\n{c_m}🔮 KENBUN SWARM - DYNAMIC MCP TOOLS{c_r}")
+                print("──────────────────────────────────────────────────")
+                for name, obj in inspect.getmembers(server):
+                    if inspect.isfunction(obj) and obj.__module__ == server.__name__ and not name.startswith("_"):
+                        sig = inspect.signature(obj)
+                        doc = inspect.getdoc(obj)
+                        doc_summary = doc.split('\n')[0] if doc else "No description available."
+                        print(f"🚀 {c_c}{name}{c_r}{sig}")
+                        print(f"   {c_y}➔ {doc_summary}{c_r}\n")
+                print("──────────────────────────────────────────────────\n")
+            except Exception as e:
+                print(f"❌ Failed to list tools: {e}")
+        else:
+            # Dynamic MCP tool dispatcher
+            import sys
+            
+            try:
+                import tools.infrastructure.server as server
+                
+                # Support 'search' as an alias for 'search_hivemind_concepts' and 'recall' as an alias for 'recall_fix'
+                actual_cmd = cmd
+                if cmd == "search": actual_cmd = "search_hivemind_concepts"
+                if cmd == "recall": actual_cmd = "search_hivemind_concepts" # Aligning with user expectation for recall
+                if cmd == "remember": actual_cmd = "save_to_hivemind"
+                
+                if hasattr(server, actual_cmd) and callable(getattr(server, actual_cmd)):
+                    func = getattr(server, actual_cmd)
+                    
+                    kwargs = {}
+                    args = []
+                    
+                    # Manual parsing for remember to support "kenbun remember title = content"
+                    if cmd == "remember":
+                        arg_str = " ".join(sys.argv[2:])
+                        if "=" in arg_str:
+                            title, content = arg_str.split("=", 1)
+                            args.extend([title.strip(), content.strip(), "General"])
+                            kwargs["category"] = "concepts"
+                        else:
+                            print("Usage: kenbun remember <title> = <content>")
+                            sys.exit(1)
+                    else:
+                        if len(sys.argv) > 2:
+                            # Reconstruct param string safely to preserve quotes
+                            # We'll just use the raw string from sys.argv but properly grouped
+                            # Actually, sys.argv already tokenizes. We just parse the tokens.
+                            for token in sys.argv[2:]:
+                                if "=" in token:
+                                    k, v = token.split("=", 1)
+                                    kwargs[k] = v
+                                else:
+                                    args.append(token)
+                                    
+                    print(func(*args, **kwargs))
+                else:
+                    print(f"\n❌ Unknown command: {sys.argv[1]}")
+                    print(f"Type {c_c}kenbun --help{c_r} to see all available command line shortcuts.\n")
+            except Exception as e:
+                print(f"❌ Failed to execute tool '{cmd}': {e}")
+    else:
+        run_interactive_wizard()

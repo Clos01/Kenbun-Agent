@@ -1,0 +1,39 @@
+{
+    "categories": {
+        "logic": {
+            "bug_fix_pipeline": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "remember_result": {
+                "alpha": 1.0,
+                "beta": 4.0
+            },
+            "recall_fix": {
+                "alpha": 1.0,
+                "beta": 4.0
+            }
+        },
+        "research": {
+            "recall_fix": {
+                "alpha": 1.0,
+                "beta": 3.0
+            }
+        }
+    },
+    "global": {
+        "bug_fix_pipeline": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "recall_fix": {
+            "alpha": 1.0,
+            "beta": 3.0
+        },
+        "remember_result": {
+            "alpha": 1.0,
+            "beta": 3.0
+        }
+    },
+    "last_updated": 1782016303.765913
+}

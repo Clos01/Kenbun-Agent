@@ -1,0 +1,31 @@
+version: '3.8'
+
+# ────────────────────────────────────────────────────────────────────
+# Kenbun Safe Local AI Stack (macOS Hardened Version)
+#
+# - chromadb        : Vector memory store (Low CPU, safe for macOS Docker)
+#
+# Heavy LLM services (Ollama) have been removed from this file to prevent
+# accidental CPU overload on macOS. Native Ollama should be used instead.
+# ────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── The Memory (ChromaDB - Lightweight Vector Store) ──────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: system3_memory
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+volumes:
+  chroma_data:

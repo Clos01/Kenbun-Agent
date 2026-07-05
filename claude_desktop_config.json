@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "kenbun": {
+      "command": "/path/to/Kenbun/core/.venv/bin/python",
+      "args": [
+        "-m",
+        "tools.infrastructure.server"
+      ],
+      "env": {
+        "PYTHONPATH": "/path/to/Kenbun/core",
+        "PROJECT_ROOT": "/path/to/Kenbun"
+      }
+    }
+  }
+}

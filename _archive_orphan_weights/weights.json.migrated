@@ -1,0 +1,365 @@
+{
+    "categories": {
+        "logic": {
+            "linter_auto_fix": {
+                "alpha": 4.0,
+                "beta": 5.0
+            },
+            "sandbox_execution": {
+                "alpha": 1.0,
+                "beta": 6.0
+            },
+            "safe_file_checkpoint": {
+                "alpha": 1.0,
+                "beta": 6.0
+            },
+            "preflight_linter": {
+                "alpha": 1.0,
+                "beta": 6.0
+            },
+            "safe_file_operations": {
+                "alpha": 1.0,
+                "beta": 5.0
+            },
+            "pre_flight_linter": {
+                "alpha": 3.0,
+                "beta": 5.0
+            },
+            "safe_file_checkpointing": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "gemini_code_review": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "black_linter": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "file_system_manager": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "memory_persistence": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "docker_sandbox": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "gemini_audit": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "save_lesson": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "orchestrate_lifecycle": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "persistence_sync_layer": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "LLM_ROUTER": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "SUPERVISOR_AGENT": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "recall_fix": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "orchestrator_watchdog": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "remember_fix": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "orchestrator_bug_fix": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "orchestrator_validation": {
+                "alpha": 1.0,
+                "beta": 3.0
+            },
+            "executive_supervisor_gate": {
+                "alpha": 3.0,
+                "beta": 1.0
+            }
+        },
+        "research": {
+            "sandbox_execution": {
+                "alpha": 3.0,
+                "beta": 2.0
+            },
+            "error_memory_recall": {
+                "alpha": 5.0,
+                "beta": 1.0
+            },
+            "memory_recall_engine": {
+                "alpha": 3.0,
+                "beta": 1.0
+            },
+            "repo_scanner": {
+                "alpha": 3.0,
+                "beta": 1.0
+            }
+        },
+        "security": {
+            "System 2c: Continuous Guardrail Audit": {
+                "alpha": 1.0,
+                "beta": 3.0
+            }
+        }
+    },
+    "global": {
+        "linter_auto_fix": {
+            "alpha": 4.0,
+            "beta": 4.0
+        },
+        "sandbox_execution": {
+            "alpha": 2.0,
+            "beta": 5.0
+        },
+        "safe_file_checkpoint": {
+            "alpha": 1.0,
+            "beta": 5.0
+        },
+        "preflight_linter": {
+            "alpha": 1.0,
+            "beta": 5.0
+        },
+        "safe_file_operations": {
+            "alpha": 1.0,
+            "beta": 4.0
+        },
+        "pre_flight_linter": {
+            "alpha": 3.0,
+            "beta": 4.0
+        },
+        "safe_file_checkpointing": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "error_memory_recall": {
+            "alpha": 4.0,
+            "beta": 1.0
+        },
+        "memory_recall_engine": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "gemini_code_review": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "black_linter": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "file_system_manager": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "memory_persistence": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "docker_sandbox": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "repo_scanner": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "gemini_audit": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "save_lesson": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "orchestrate_lifecycle": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "persistence_sync_layer": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "LLM_ROUTER": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "SUPERVISOR_AGENT": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "recall_fix": {
+            "alpha": 453.0,
+            "beta": 50.0
+        },
+        "orchestrator_watchdog": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "remember_fix": {
+            "alpha": 449.0,
+            "beta": 54.0
+        },
+        "orchestrator_bug_fix": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "scan_repo": {
+            "alpha": 471.0,
+            "beta": 31.0
+        },
+        "autofix_linter": {
+            "alpha": 412.0,
+            "beta": 90.0
+        },
+        "index_codebase": {
+            "alpha": 447.0,
+            "beta": 55.0
+        },
+        "delete_from_hivemind": {
+            "alpha": 444.0,
+            "beta": 58.0
+        },
+        "get_brain_health": {
+            "alpha": 492.0,
+            "beta": 10.0
+        },
+        "audit_package_safety": {
+            "alpha": 440.0,
+            "beta": 62.0
+        },
+        "save_to_hivemind": {
+            "alpha": 443.0,
+            "beta": 59.0
+        },
+        "search_hivemind_concepts": {
+            "alpha": 449.0,
+            "beta": 53.0
+        },
+        "search_codebase": {
+            "alpha": 451.0,
+            "beta": 51.0
+        },
+        "think_about_tools": {
+            "alpha": 447.0,
+            "beta": 55.0
+        },
+        "patch_hivemind_concept": {
+            "alpha": 454.0,
+            "beta": 48.0
+        },
+        "ingest_knowledge_from_pdf": {
+            "alpha": 455.0,
+            "beta": 47.0
+        },
+        "prune_hivemind": {
+            "alpha": 436.0,
+            "beta": 66.0
+        },
+        "get_intelligence_stats": {
+            "alpha": 451.0,
+            "beta": 51.0
+        },
+        "reflect_on_task": {
+            "alpha": 425.0,
+            "beta": 77.0
+        },
+        "save_checkpoint": {
+            "alpha": 441.0,
+            "beta": 61.0
+        },
+        "consult_supervisor": {
+            "alpha": 451.0,
+            "beta": 51.0
+        },
+        "audit_guardrail": {
+            "alpha": 446.0,
+            "beta": 56.0
+        },
+        "research_official_docs": {
+            "alpha": 461.0,
+            "beta": 41.0
+        },
+        "ask_architect": {
+            "alpha": 447.0,
+            "beta": 55.0
+        },
+        "ask_ui_expert": {
+            "alpha": 449.0,
+            "beta": 53.0
+        },
+        "get_design_tokens": {
+            "alpha": 453.0,
+            "beta": 49.0
+        },
+        "review_code_with_gemini": {
+            "alpha": 452.0,
+            "beta": 50.0
+        },
+        "research_with_gemini": {
+            "alpha": 425.0,
+            "beta": 77.0
+        },
+        "run_code_safely": {
+            "alpha": 415.0,
+            "beta": 87.0
+        },
+        "restore_checkpoint": {
+            "alpha": 442.0,
+            "beta": 60.0
+        },
+        "list_checkpoints": {
+            "alpha": 497.0,
+            "beta": 5.0
+        },
+        "orchestrate": {
+            "alpha": 476.0,
+            "beta": 26.0
+        },
+        "token_governor": {
+            "alpha": 455.0,
+            "beta": 47.0
+        },
+        "telemetry_pulse": {
+            "alpha": 494.0,
+            "beta": 8.0
+        },
+        "bayesian_governor": {
+            "alpha": 496.0,
+            "beta": 6.0
+        },
+        "orchestrator_validation": {
+            "alpha": 1.0,
+            "beta": 2.0
+        },
+        "executive_supervisor_gate": {
+            "alpha": 2.0,
+            "beta": 1.0
+        },
+        "System 2c: Continuous Guardrail Audit": {
+            "alpha": 1.0,
+            "beta": 2.0
+        }
+    },
+    "last_updated": 1781999672.4293308
+}

@@ -1,0 +1,126 @@
+# Kenbun Gitignore - Calibrated for Secure Monorepos
+# Created by Senior CTO & Architect (Approved by System 2 Audit)
+
+# --- Security, Secrets & Private Keys ---
+.antigravity_master.key
+.kenbun_master.key
+*.pem
+*.crt
+*.cer
+*.pfx
+*.p12
+id_rsa
+id_ecdsa
+id_ed25519
+.env
+.env.*
+!.env.example
+secrets/
+.gitsecret/
+
+# NOTE: Lockfiles (package-lock.json, pnpm-lock.yaml)
+# MUST be committed to ensure reproducible builds in CI/CD pipelines.
+
+# --- Poetry (Excluded for Kenbun-Agent) ---
+poetry.lock
+pyproject.toml
+
+# --- Databases & Local Storage ---
+*.db
+*.sqlite
+*.sqlite3
+*.localstorage
+brain_health/
+scratch/
+scratch_bench/
+
+# --- Python Build Artifacts ---
+*.egg-info/
+core/artifacts/
+
+
+
+# --- OS Junk ---
+.DS_Store
+Thumbs.db
+*.lnk
+*.sys
+*.tmp
+
+# --- IDEs & Editors ---
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# --- Package Manager & Build Directories ---
+node_modules/
+jspm_packages/
+bower_components/
+.npm/
+.yarn/
+.pnpm/
+
+# --- Next.js, Monorepos & Frontend Builds ---
+.next/
+dashboard/.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+.vercel/
+.eslintcache
+
+# --- Python Caches & Virtual Environments ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+.benchmarks/
+.coverage
+htmlcov/
+.mypy_cache/
+.ipynb_checkpoints/
+pip-log.txt
+
+# --- Temporary Files & Logs ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+mcp_debug.log
+dashboard.log
+dashboard/*.log
+tmp/
+temp/
+
+# --- External Dependencies / Third-Party Repos ---
+core/external/
+
+# --- Claude Code worktrees (per-session; never commit) ---
+.claude/worktrees/
+
+# --- Sub-agent scratch state (per-session; never commit) ---
+.agents/
+
+# --- Explicit security re-affirmations (defense-in-depth) ---
+# .env, .env.*, and *.log are already covered above, but we re-list them
+# here so a future reader scanning the bottom of this file cannot miss
+# the intent: secrets and runtime logs must never be committed.
+.env
+*.log
+
+# --- Package manager caches & local editor state ---
+.pnpm-store/
+.obsidian/

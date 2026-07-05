@@ -1,0 +1,8 @@
+#!/bin/sh
+# Block commits that would leak personal / private-infrastructure data into
+# this public repo. Enable once with:  git config core.hooksPath .githooks
+python3 scripts/dev/scrub_sensitive.py --check || {
+  echo ""
+  echo "commit blocked: run  python3 scripts/dev/scrub_sensitive.py --fix"
+  exit 1
+}

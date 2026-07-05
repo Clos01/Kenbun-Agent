@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  # 1. Standalone Vector Database (ChromaDB)
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: portable_chroma
+    ports:
+      - "127.0.0.1:${CHROMA_PORT:-8000}:8000"
+    volumes:
+      - chroma_data:/chroma_data
+    environment:
+      - CHROMA_DB_IMPL=sqlite
+      - PERSIST_DIRECTORY=/chroma_data
+    restart: unless-stopped
+
+  # 2. Local AI Inference Engine (Ollama)
+  ollama_server:
+    image: ollama/ollama:latest
+    container_name: portable_ollama
+    ports:
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/root/kenbun_training
+    restart: unless-stopped
+
+  # 3. Model Initializer (Dynamic Loop & Bypass State)
+  ollama_init:
+    image: ollama/ollama:latest
+    container_name: portable_ollama_init
+    depends_on:
+      - ollama_server
+    environment:
+      - OLLAMA_HOST=ollama_server:11434
+      - OLLAMA_PULL_MODELS=${OLLAMA_PULL_MODELS:-qwen2.5:1.5b}
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      if [ \"$$OLLAMA_PULL_MODELS\" != \"none\" ]; then
+        for model in $$OLLAMA_PULL_MODELS; do
+          echo \"📡 [OLLAMA_INIT] Fetching local model: $$model\";
+          ollama pull $$model;
+        done;
+        echo \"✓ [OLLAMA_INIT] All local models successfully provisioned!\";
+      else
+        echo \"💡 [OLLAMA_INIT] Cloud-Only or Host-Only profile. Skipping pull.\";
+      fi
+      "
+
+
+  # 4. Portable FastMCP Swarm Server
+  fastmcp_server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: portable_fastmcp
+    user: root
+    ports:
+      - "${API_PORT:-8001}:8001"
+      - "${MONITOR_PORT:-8002}:8002"
+    volumes:
+      - ${PROJECT_ROOT:-.}:/app
+      - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
+      - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/app/kenbun_training
+      - /var/run/docker.sock:/var/run/docker.sock
+    env_file:
+      - .env
+    environment:
+      - PROJECT_ROOT=/app
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - SWARM_PC_IP=ollama_server
+      # PRIMARY_LLM_URL intentionally NOT overridden here — inherit from .env so
+      # the container can target a Tailscale / host-side LM Studio endpoint.
+      # Set to http://ollama_server:11434/v1 in .env if you want the in-compose
+      # Ollama service to be the primary instead.
+      - OLLAMA_URL=http://ollama_server:11434/api/generate
+    depends_on:
+      - chromadb
+    restart: unless-stopped
+
+  # 6. Relational Database (PostgreSQL)
+  postgres:
+    image: postgres:16-alpine
+    container_name: portable_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kenbun}
+      POSTGRES_DB: ${POSTGRES_DB:-kenbun_intelligence}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-kenbun_intelligence}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 5. Container Log Viewer (Dozzle)
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: portable_dozzle
+    ports:
+      - "${DOZZLE_PORT:-8888}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+volumes:
+  chroma_data:
+  ollama_data:
+  postgres_data:

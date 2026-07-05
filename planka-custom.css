@@ -1,0 +1,125 @@
+/* Apply premium system typography stack (Zero external latency/tracking) */
+body, button, input, select, textarea, span, div, h1, h2, h3, h4, h5, h6, a, p, label {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+/* ==============================================================================
+   🏛️ SYSTEM THEME OVERRIDES (Targeting Planka's .g-root framework)
+   ============================================================================== */
+.g-root, .g-root_theme_dark, :root, body {
+    /* Backgrounds */
+    --g-color-base-background: #090b0f !important;
+    --g-color-base-float: #11151c !important;
+    --g-color-base-float-heavy: #181d26 !important;
+    --g-color-base-float-hover: #222936 !important;
+    --g-color-base-generic: #1f2733 !important;
+    --g-color-base-generic-hover: #2a3445 !important;
+    --g-color-base-simple-hover: rgba(255, 255, 255, 0.06) !important;
+    
+    /* Fonts family variables in the framework */
+    --g-font-family-sans: 'Outfit', sans-serif !important;
+    --g-text-body-font-family: 'Outfit', sans-serif !important;
+    
+    /* Brand Accent Colors (Heritage Emerald) */
+    --g-color-base-brand: #10b981 !important;
+    --g-color-base-brand-hover: #059669 !important;
+    --g-color-line-brand: #10b981 !important;
+    
+    /* Text Color Scheme */
+    --g-color-text-primary: #f3f4f6 !important;
+    --g-color-text-secondary: #9ca3af !important;
+    --g-color-text-light-primary: #ffffff !important;
+    --g-color-text-brand-contrast: #ffffff !important;
+    
+    /* Borders & Shadows */
+    --g-color-line-border: #1e2633 !important;
+    --g-color-line-generic: #1e2633 !important;
+    --g-color-sfx-shadow: rgba(0, 0, 0, 0.6) !important;
+    --g-border-radius-m: 10px !important;
+    --g-border-radius-s: 6px !important;
+}
+
+/* Force body and root background */
+body, html, .g-root {
+    background-color: #090b0f !important;
+    background: #090b0f !important;
+}
+
+/* ==============================================================================
+   🎨 COMPONENT STYLING (Glassmorphism & Micro-interactions)
+   ============================================================================== */
+
+/* Glassmorphic Columns/Lists */
+div[class*="list_"] {
+    background: rgba(17, 21, 28, 0.65) !important;
+    border: 1px solid rgba(255, 255, 255, 0.04) !important;
+    backdrop-filter: blur(8px) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3) !important;
+    padding: 12px !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Rounded Cards with Dynamic Hover Glow */
+div[class*="card_"] {
+    background: #171d27 !important;
+    border: 1px solid rgba(255, 255, 255, 0.02) !important;
+    border-radius: 10px !important;
+    padding: 12px !important;
+    margin-bottom: 8px !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+div[class*="card_"]:hover {
+    transform: translateY(-2px) !important;
+    border-color: rgba(16, 185, 129, 0.4) !important;
+    box-shadow: 0 12px 24px -6px rgba(0, 0, 0, 0.5), 0 0 10px 0 rgba(16, 185, 129, 0.25) !important;
+}
+
+/* Header and Navigation Bar Glassmorphism */
+header, div[class*="header_"] {
+    background: rgba(9, 11, 15, 0.8) !important;
+    backdrop-filter: blur(12px) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Brand Logo Replacement (Robust Text / SVG removal) */
+*[class*="logoWrapper_"], *[class*="logo_"] {
+    font-size: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+}
+
+*[class*="logoWrapper_"] *, *[class*="logo_"] * {
+    display: none !important;
+}
+
+*[class*="logoWrapper_"]::after, *[class*="logo_"]::after {
+    content: "🏛️ SWARM BOARD" !important;
+    font-size: 18px !important;
+    font-weight: 800 !important;
+    letter-spacing: 0.15em !important;
+    color: #10b981 !important;
+    text-shadow: 0 0 8px rgba(16, 185, 129, 0.4) !important;
+    display: inline-block !important;
+}
+
+/* Make Scrollbars Custom & Minimal */
+::-webkit-scrollbar {
+    width: 6px !important;
+    height: 6px !important;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1) !important;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 10px !important;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(16, 185, 129, 0.5) !important;
+}

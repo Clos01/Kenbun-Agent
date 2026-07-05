@@ -1,0 +1,54 @@
+# --- Environment Variables ---
+.env
+.env.local
+.env.*.local
+*.env
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+*.cover
+*.pyo
+.python-version
+
+# --- Virtual Environments ---
+venv/
+.venv/
+env/
+.env/
+bin/
+lib/
+include/
+share/
+
+# --- OS Specific ---
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# --- Logs and Databases ---
+*.log
+*.sqlite
+*.db
+
+# --- Kenbun Specific ---
+.antigravity_master.key
+.kenbun_master.key
+# Backups created by watcher.py
+*._backup
+*.temp_check.py
+
+# --- Audit cleanup (2026-05-04) ---
+.audit_backup/
+# Generated benchmark dump (50k+ LOC, do not commit)
+brain_health/STRATEGY_BENCHMARK.py

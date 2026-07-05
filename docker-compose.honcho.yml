@@ -1,0 +1,160 @@
+# ─────────────────────────────────────────────────────────────────────
+# 🏛️ HONCHO OVERLAY — Persistent Theory-of-Mind Memory Layer
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.honcho.yml up -d
+#
+# This overlay adds 4 services to the base kenbun-agent stack:
+#   - honcho_api:      FastAPI memory server (port 8006)
+#   - honcho_deriver:  Background knowledge derivation worker
+#   - honcho_database: PostgreSQL with pgvector (port 5432)
+#   - honcho_redis:    Redis cache (port 6379)
+#
+# All services join the base stack's default bridge network.
+# ─────────────────────────────────────────────────────────────────────
+services:
+  # Override fastmcp_server to inject Honcho connection
+  fastmcp_server:
+    environment:
+      - HONCHO_BASE_URL=http://honcho_api:8000
+      - HONCHO_ENABLED=true
+    depends_on:
+      honcho_api:
+        condition: service_healthy
+
+  # --- Honcho AI Memory API ---
+  honcho_api:
+    build:
+      context: ./external/honcho
+      dockerfile: Dockerfile
+    container_name: portable_honcho_api
+    entrypoint: ["sh", "docker/entrypoint.sh"]
+    depends_on:
+      honcho_database:
+        condition: service_healthy
+      honcho_redis:
+        condition: service_healthy
+      ollama_server:
+        condition: service_healthy
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HONCHO_PORT:-8006}:8000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/app/.venv/bin/python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2).read()",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@honcho_database:5432/postgres
+      - CACHE_URL=redis://honcho_redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      # Honcho does not read DEFAULT_LLM_PROVIDER/OLLAMA_BASE_URL (pydantic
+      # extra="ignore" drops them silently). Use its real env scheme: a global
+      # OpenAI-compatible client pointed at Ollama, plus per-agent model picks.
+      - LLM_OPENAI_API_KEY=dummy
+      - LLM_OPENAI_BASE_URL=http://ollama_server:11434/v1
+      - DERIVER_MODEL_CONFIG__MODEL=llama3.2:3b
+      - SUMMARY_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_DEDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_INDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL=qwen3:8b
+      # Embeddings do NOT inherit LLM_OPENAI_BASE_URL; vector columns are
+      # 1536-dim, so use an MRL embedding model truncated by Ollama.
+      - EMBEDDING_MODEL_CONFIG__MODEL=qwen3-embedding:4b
+      - EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://ollama_server:11434/v1
+      - EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE=always
+      - EMBED_MESSAGES=false
+    restart: unless-stopped
+
+  # --- Honcho Deriver (Background Knowledge Worker) ---
+  honcho_deriver:
+    build:
+      context: ./external/honcho
+      dockerfile: Dockerfile
+    container_name: portable_honcho_deriver
+    entrypoint: ["/app/.venv/bin/python", "-m", "src.deriver"]
+    depends_on:
+      honcho_api:
+        condition: service_healthy
+      honcho_database:
+        condition: service_healthy
+      honcho_redis:
+        condition: service_healthy
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@honcho_database:5432/postgres
+      - CACHE_URL=redis://honcho_redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      # See honcho_api for why these exact env names are required.
+      - LLM_OPENAI_API_KEY=dummy
+      - LLM_OPENAI_BASE_URL=http://ollama_server:11434/v1
+      - DERIVER_MODEL_CONFIG__MODEL=llama3.2:3b
+      - SUMMARY_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_DEDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_INDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL=qwen3:8b
+      # Embeddings do NOT inherit LLM_OPENAI_BASE_URL; vector columns are
+      # 1536-dim, so use an MRL embedding model truncated by Ollama.
+      - EMBEDDING_MODEL_CONFIG__MODEL=qwen3-embedding:4b
+      - EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://ollama_server:11434/v1
+      - EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE=always
+      - EMBED_MESSAGES=false
+      # Derive small ingests immediately instead of gating on a 1024-token
+      # session batch (REPRESENTATION_BATCH_MAX_TOKENS).
+      - DERIVER_FLUSH_ENABLED=true
+    restart: unless-stopped
+
+  # --- Honcho PostgreSQL Database (with pgvector) ---
+  honcho_database:
+    image: pgvector/pgvector:pg15
+    container_name: portable_honcho_database
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HONCHO_DB_PORT:-5432}:5432"
+    command: ["postgres", "-c", "max_connections=200"]
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - ./external/honcho/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - honcho_pgdata:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # --- Honcho Redis Cache ---
+  honcho_redis:
+    image: redis:8.2
+    container_name: portable_honcho_redis
+    restart: unless-stopped
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${HONCHO_REDIS_PORT:-6379}:6379"
+    volumes:
+      - honcho_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  honcho_pgdata:
+  honcho_redis_data:
