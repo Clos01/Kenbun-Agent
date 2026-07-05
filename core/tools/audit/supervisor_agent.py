@@ -150,8 +150,9 @@ async def _fetch_digested_rules() -> str:
         collection = get_project_collection("digested_rules")
         if not collection:
             return ""
-        # Get the 3 most recent rules
-        results = collection.get(limit=3, include=['documents'])
+        # Fetch ALL curated guardrails (collection is now pruned to ~20 quality rules)
+        total = collection.count()
+        results = collection.get(limit=max(total, 50), include=['documents'])
         if results and results.get('documents'):
             return "\n\n".join(results['documents'])
     except Exception as e:
@@ -174,36 +175,102 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
         
     context = f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}{rules_context}"
     
-    system_prompt = (
-        "You are the Supreme Evaluator (Tier 2). Review the following code proposal strictly against "
-        "the provided Context and DIGESTED_RULES. "
-        "Return a valid JSON object matching this schema:\n"
-        '{"status": "APPROVED" | "REJECTED" | "REVIEW_NEEDED", "critique": "Detailed reasoning here"}'
+    # --- TWO-PASS LOCAL AUDIT (defeats attention saturation) ---
+    AUDIT_MODEL = "qwen2.5-coder:7b"
+    
+    pass_1_prompt = (
+        "You are a code security auditor. Perform a QUICK initial scan of the code.\n"
+        "Find the MOST CRITICAL security violation. Be concise.\n"
+        "Return JSON: {\"status\": \"APPROVED\" | \"REJECTED\", \"critique\": \"One-line finding\"}"
     )
-    user_message = f"CONTEXT:\n{context}\n\nCODE:\n{code_snippet}"
+    
+    pass_2_prompt_template = (
+        "You are a code security auditor performing a SECOND PASS review.\n"
+        "A previous reviewer already found this issue:\n"
+        "<ALREADY_FOUND>\n{pass_1_finding}\n</ALREADY_FOUND>\n\n"
+        "IGNORE the issue above — it is already documented.\n"
+        "Now scan the ENTIRE code for OTHER violations NOT listed above.\n"
+        "CHECKLIST — check every item:\n"
+        "- [ ] SQL injection (f-strings in queries)\n"
+        "- [ ] Shell injection (shell=True)\n"
+        "- [ ] eval/exec/compile on input\n"
+        "- [ ] Hardcoded secrets/API keys\n"
+        "- [ ] Missing HTTP timeouts on requests/httpx/aiohttp\n"
+        "- [ ] Disabled TLS (verify=False OR ssl=False)\n"
+        "- [ ] Bare except clauses\n"
+        "- [ ] PII/sensitive data in log output\n"
+        "- [ ] print() instead of logging\n"
+        "- [ ] Missing type hints on public functions\n"
+        "- [ ] Hardcoded hostnames/ports\n"
+        "Return JSON: {{\"status\": \"APPROVED\" | \"REJECTED\", "
+        "\"critique\": \"Finding 1: ... Finding 2: ... (list ALL new violations, or state CLEAN)\"}}"
+    )
     
     try:
         from tools.utils.llm_router import call_llm_gateway
-        # The llm_router will naturally route to DeepSeek if configured, or the default fallback
-        result = call_llm_gateway(system_prompt, user_message)
         
-        if result:
-            res_obj = extract_json(result)
-            if res_obj:
-                # Consensus logic
-                if local_verdict and "status" in res_obj:
-                    print(f"🤝 [SYSTEM 2] Consensus Check: Supreme({res_obj['status']}) vs Local({local_verdict})")
-                    if res_obj["status"] == "REJECTED" and local_verdict == "APPROVED":
-                         print("⚖️ [SYSTEM 2] Conflict Detected. Supreme REJECTED what Local APPROVED. Prioritizing Security (REJECTED).")
-                         res_obj["status"] = "REJECTED"
-                         res_obj["critique"] += "\n[CONSENSUS OVERRIDE]: Security priority rejection."
-                
-                if res_obj.get("status") == "REVIEW_NEEDED":
-                    explanation = await _synthesize_review_reason_locally(res_obj.get("critique", ""), user_proposal)
-                    res_obj["critique"] = explanation
-                
-                res_obj["tier"] = "Tier 2: Supreme Evaluator (DeepSeek)"
-                return res_obj
+        # ── PASS 1: Quick critical scan ──
+        print("🔍 [SYSTEM 2] Pass 1: Quick critical scan...")
+        user_message = f"CONTEXT:\n{context}\n\nCODE:\n{code_snippet}"
+        pass_1_raw = call_llm_gateway(
+            pass_1_prompt, user_message, max_tokens=2000,
+            model_override=AUDIT_MODEL
+        )
+        
+        pass_1_obj = extract_json(pass_1_raw) if pass_1_raw else None
+        pass_1_critique = ""
+        pass_1_status = "APPROVED"
+        
+        if pass_1_obj:
+            pass_1_critique = pass_1_obj.get("critique", "")
+            pass_1_status = pass_1_obj.get("status", "APPROVED")
+            print(f"🔍 [SYSTEM 2] Pass 1 result: {pass_1_status} — {pass_1_critique[:100]}")
+        
+        # ── PASS 2: Deep scan excluding Pass 1 findings ──
+        print("🔍 [SYSTEM 2] Pass 2: Deep scan (excluding Pass 1 findings)...")
+        pass_2_system = pass_2_prompt_template.format(
+            pass_1_finding=pass_1_critique or "No critical issues found in Pass 1."
+        )
+        pass_2_raw = call_llm_gateway(
+            pass_2_system, user_message, max_tokens=4000,
+            model_override=AUDIT_MODEL
+        )
+        
+        pass_2_obj = extract_json(pass_2_raw) if pass_2_raw else None
+        pass_2_critique = ""
+        pass_2_status = "APPROVED"
+        
+        if pass_2_obj:
+            pass_2_critique = pass_2_obj.get("critique", "")
+            pass_2_status = pass_2_obj.get("status", "APPROVED")
+            print(f"🔍 [SYSTEM 2] Pass 2 result: {pass_2_status} — {pass_2_critique[:100]}")
+        
+        # ── MERGE: Combine both passes ──
+        final_status = "REJECTED" if "REJECTED" in (pass_1_status, pass_2_status) else "APPROVED"
+        
+        merged_critiques = []
+        if pass_1_critique:
+            merged_critiques.append(f"[Pass 1] {pass_1_critique}")
+        if pass_2_critique and pass_2_critique.lower() not in ("clean", "code is clean", "no violations found"):
+            merged_critiques.append(f"[Pass 2] {pass_2_critique}")
+        
+        final_critique = "\n\n".join(merged_critiques) if merged_critiques else "Code passed all checks."
+        
+        res_obj = {"status": final_status, "critique": final_critique}
+        
+        # Consensus logic
+        if local_verdict and "status" in res_obj:
+            print(f"🤝 [SYSTEM 2] Consensus Check: Supreme({res_obj['status']}) vs Local({local_verdict})")
+            if res_obj["status"] == "REJECTED" and local_verdict == "APPROVED":
+                 print("⚖️ [SYSTEM 2] Conflict Detected. Supreme REJECTED what Local APPROVED. Prioritizing Security (REJECTED).")
+                 res_obj["critique"] += "\n[CONSENSUS OVERRIDE]: Security priority rejection."
+        
+        if res_obj.get("status") == "REVIEW_NEEDED":
+            explanation = await _synthesize_review_reason_locally(res_obj.get("critique", ""), user_proposal)
+            res_obj["critique"] = explanation
+        
+        res_obj["tier"] = "Tier 2: Supreme Evaluator (Local Two-Pass)"
+        return res_obj
                 
     except Exception as e:
         print(f"⚠️ [SYSTEM 2] Supreme Evaluator failed: {e}")
@@ -504,7 +571,11 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     # Parallelize Tier 1a (Adversarial LLM Court) and Tier 1 (Local Ensemble)
     court_task = None
     if adversarial_court:
-        court_task = asyncio.create_task(asyncio.wait_for(adversarial_court.run_trial(user_proposal, code_snippet), timeout=60.0))
+        # 300s: the trial is 3 LLM calls (2 briefs + judge) that serialize on
+        # Ollama (OLLAMA_NUM_PARALLEL=1), plus a possible cold model load for
+        # the 8B court model; the judge additionally reasons with thinking
+        # enabled. 60s starved it into constant timeout-failures.
+        court_task = asyncio.create_task(asyncio.wait_for(adversarial_court.run_trial(user_proposal, code_snippet), timeout=300.0))
         
     ensemble_task = asyncio.create_task(asyncio.wait_for(_tier_1_local(user_proposal, code_snippet), timeout=60.0))
     

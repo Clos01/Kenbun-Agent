@@ -239,6 +239,11 @@ class KenbunSettings(BaseSettings):
     OLLAMA_PULL_MODELS: str = "qwen2.5:1.5b"
     PRIMARY_LLM_URL: Optional[str] = None
     PRIMARY_LLM_MODEL: str = "qwen2.5:1.5b"
+    # Adversarial Court judgment model. The court's verdict short-circuits the
+    # whole supervisor, so it needs a model strong enough not to hallucinate
+    # vulnerabilities; small primaries (1.5b-3b) reject safe code with invented
+    # RCE claims. Falls back to PRIMARY_LLM_MODEL when unset.
+    COURT_LLM_MODEL: Optional[str] = None
     OLLAMA_PORT: int = 11434
     FALLBACK_LLM_URL: Optional[str] = None
     OPENAI_RUNTIME: str = Field(default="auto")
