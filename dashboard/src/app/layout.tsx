@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Space_Grotesk, Public_Sans } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
+import { TenantProvider } from "@/context/TenantContext";
 import Script from "next/script";
 
 const spaceGrotesk = Space_Grotesk({
@@ -64,9 +65,12 @@ export default function RootLayout({
       </head>
       <body suppressHydrationWarning className="min-h-full font-sans">
         <ThemeProvider>
-          {children}
+          <TenantProvider>
+            {children}
+          </TenantProvider>
         </ThemeProvider>
       </body>
     </html>
   );
 }
+

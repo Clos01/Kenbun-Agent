@@ -1561,11 +1561,11 @@ export default function HeritageObservatory() {
                           const parsed = JSON.parse(log);
                           messageStr = parsed.message || messageStr;
                           timestampVal = parsed.timestamp;
-                        } catch (e) {}
+                        } catch {}
                       }
                     } else if (log && typeof log === 'object') {
-                      const logObj = log as Record<string, any>;
-                      messageStr = logObj.message || logObj.content || JSON.stringify(log);
+                      const logObj = log as Record<string, string | number | undefined>;
+                      messageStr = String(logObj.message || logObj.content || JSON.stringify(log));
                       timestampVal = logObj.timestamp;
                     }
 
@@ -1577,7 +1577,7 @@ export default function HeritageObservatory() {
                         timeDisplay = !isNaN(parsedTs)
                           ? new Date(parsedTs * 1000).toLocaleTimeString()
                           : new Date(timestampVal as string).toLocaleTimeString();
-                      } catch (e) {
+                      } catch {
                         timeDisplay = String(timestampVal);
                       }
                     } else {

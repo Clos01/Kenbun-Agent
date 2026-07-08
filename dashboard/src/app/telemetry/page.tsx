@@ -1160,7 +1160,7 @@ export default function IntelStream() {
                           </div>
                           {selectedTool.history_trend && selectedTool.history_trend.length > 0 ? (
                             <div className="p-2 border border-border bg-background rounded-sm">
-                              <LinearTrend data={selectedTool.history_trend.map((h: TelemetryTrendPoint) => h.accuracy)} />
+                              <LinearTrend data={(selectedTool.history_trend as TelemetryTrendPoint[]).map((h: TelemetryTrendPoint) => h.accuracy)} />
                             </div>
                           ) : (
                             <div className="h-32 flex items-center justify-center border border-dashed border-border opacity-20 text-[9px] font-mono uppercase">

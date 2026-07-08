@@ -225,7 +225,7 @@ export default function FleetCommand() {
             { tool_id: "intelligence_engine", success_rate: 0.822, confidence: "HIGH", delta: 0.0, entropy: 0.0, alpha: 32, beta: 7, mom_delta: 0.0, history_trend: [] }
           ];
 
-      const validatedTools = liveTools.map((t: any) => validateToolStat(t));
+      const validatedTools = liveTools.map((t: unknown) => validateToolStat(t));
       setTools(validatedTools.sort((a: ToolStat, b: ToolStat) => b.success_rate - a.success_rate));
 
       // Extract budget

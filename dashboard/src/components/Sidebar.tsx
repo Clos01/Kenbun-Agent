@@ -19,11 +19,13 @@ import {
   Layers
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
+import { useTenant } from "@/context/TenantContext";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const { theme, toggleTheme, mounted } = useTheme();
+  const { tenantId, setTenantId, tenants } = useTenant();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const navItems = [
@@ -31,6 +33,7 @@ export default function Sidebar() {
     { name: "Fleet", href: "/fleet", icon: LayoutGrid },
     { name: "Board", href: "/board", icon: Columns },
     { name: "Apps", href: "/apps", icon: Layers },
+    { name: "Leads", href: "/leads", icon: Layers },
     { name: "Intel", href: "/telemetry", icon: Activity },
     { name: "Supervisor", href: "/supervisor", icon: ShieldCheck },
     { name: "Hivemind", href: "/hivemind", icon: Database },
@@ -113,6 +116,27 @@ export default function Sidebar() {
             );
           })}
         </nav>
+
+        {/* TENANT SELECTOR */}
+        {!isCollapsed && (
+          <div className="px-8 py-4 border-t border-border-muted flex flex-col gap-2 shrink-0">
+            <label className="text-[8px] font-black uppercase tracking-[0.2em] opacity-40">Active Tenant</label>
+            <select
+              value={tenantId}
+              onChange={(e) => setTenantId(e.target.value)}
+              className="bg-card border border-border text-[10px] py-1.5 px-2 rounded-sm text-primary focus:outline-none focus:ring-1 focus:ring-gold w-full cursor-pointer"
+            >
+              {tenants.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            <div className="text-[7px] font-mono opacity-30 truncate" title={tenantId}>
+              {tenantId}
+            </div>
+          </div>
+        )}
 
         {/* FOOTER UTILITY - Simplified */}
         <div className={`p-8 border-t border-border-muted transition-all duration-500 shrink-0`}>

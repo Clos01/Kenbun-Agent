@@ -1,8 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useId } from "react";
+import React, { useState, useEffect, useId, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Server, Key, Folder, CheckCircle, Activity, Settings as SettingsIcon, X, Network, DollarSign } from "lucide-react";
+import { Server, Key, Activity, Settings as SettingsIcon, X, Network, DollarSign } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { CONFIG } from "@/lib/config";
 
@@ -69,16 +69,16 @@ export default function Settings() {
   const [activeSection, setActiveSection] = useState<number | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
 
-  const checkStatus = async () => {
+  const checkStatus = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/stats`, { cache: 'no-store' });
       setIsOnline(res.ok);
     } catch {
       setIsOnline(false);
     }
-  };
+  }, [API_BASE]);
 
-  const fetchConfig = async () => {
+  const fetchConfig = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/config`);
       const data = await res.json();
@@ -90,16 +90,18 @@ export default function Settings() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [API_BASE]);
 
   useEffect(() => {
-    fetchConfig();
-    checkStatus();
+    setTimeout(() => {
+      fetchConfig();
+      checkStatus();
+    }, 0);
     const interval = setInterval(checkStatus, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [checkStatus, fetchConfig]);
 
-  const triggerManualSave = async () => {
+  const triggerManualSave = useCallback(async () => {
     setIsSaving(true);
     try {
       const res = await fetch(`${API_BASE}/api/v1/config`, {
@@ -120,7 +122,7 @@ export default function Settings() {
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [API_BASE, config]);
 
   // Auto-Save Effect
   useEffect(() => {
@@ -131,7 +133,7 @@ export default function Settings() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [config, isLoading]);
+  }, [config, isLoading, triggerManualSave]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();

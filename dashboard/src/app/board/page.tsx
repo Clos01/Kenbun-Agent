@@ -10,9 +10,7 @@ import {
   Trash2, 
   MessageSquare, 
   Clock, 
-  Sparkles,
   ChevronRight,
-  MoveRight,
   Maximize2,
   Check,
   Calendar,
@@ -22,8 +20,7 @@ import {
   MapPin,
   Tag,
   AlertTriangle,
-  RefreshCw,
-  Filter
+  RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -67,6 +64,14 @@ interface Comment {
   userId: string;
   text: string;
   createdAt: string;
+}
+
+interface BoardComment {
+  id: string;
+  cardName: string;
+  createdAt: string;
+  text: string;
+  cardId: string;
 }
 
 interface KenbunMetadata {
@@ -133,7 +138,7 @@ export default function BoardPage() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
   // Board comments feed state
-  const [boardComments, setBoardComments] = useState<any[]>([]);
+  const [boardComments, setBoardComments] = useState<BoardComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [feedCommentText, setFeedCommentText] = useState("");
   const [feedSelectedCardId, setFeedSelectedCardId] = useState("");
@@ -179,15 +184,16 @@ export default function BoardPage() {
       const boards = included.boards || [];
       
       // Associate boards to projects
-      const formattedProjects = items.map((proj: any) => ({
+      const formattedProjects = items.map((proj: { id: string; [key: string]: unknown }) => ({
         ...proj,
-        boards: boards.filter((b: any) => b.projectId === proj.id)
+        boards: boards.filter((b: { projectId: string; [key: string]: unknown }) => b.projectId === proj.id)
       }));
       
       setProjects(formattedProjects);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to connect to Planka backend");
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || "Failed to connect to Planka backend");
     } finally {
       setLoading(false);
     }
@@ -206,19 +212,20 @@ export default function BoardPage() {
       
       // Sort lists
       const activeLists = (included.lists || [])
-        .filter((l: any) => l.type === "active" && !l.isClosed)
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+        .filter((l: { type: string; isClosed: boolean; [key: string]: unknown }) => l.type === "active" && !l.isClosed)
+        .sort((a: { position?: number }, b: { position?: number }) => (a.position || 0) - (b.position || 0));
         
       // Sort cards
       const activeCards = (included.cards || [])
-        .filter((c: any) => !c.isClosed)
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+        .filter((c: { isClosed: boolean; [key: string]: unknown }) => !c.isClosed)
+        .sort((a: { position?: number }, b: { position?: number }) => (a.position || 0) - (b.position || 0));
 
       setLists(activeLists);
       setCards(activeCards);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(`Failed to sync board: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to sync board: ${message}`);
     } finally {
       setSyncing(false);
     }
@@ -231,7 +238,7 @@ export default function BoardPage() {
       if (!res.ok) throw new Error("Failed to load comments");
       const data = await res.json();
       const commentsList = (data.items || []).sort(
-        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a: { createdAt: string }, b: { createdAt: string }) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setComments(commentsList);
     } catch (err) {
@@ -249,7 +256,7 @@ export default function BoardPage() {
           const res = await fetch(`${API_BASE}/api/v1/planka/cards/${card.id}/comments`, { cache: "no-store" });
           if (!res.ok) return [];
           const data = await res.json();
-          return (data.items || []).map((c: any) => ({
+          return (data.items || []).map((c: Record<string, string | number | boolean | null | undefined>) => ({
             ...c,
             cardName: card.name,
             cardId: card.id,
@@ -259,10 +266,10 @@ export default function BoardPage() {
         }
       });
       const results = await Promise.all(allCommentsPromises);
-      const aggregated = results.flat().sort(
+      const aggregated = (results.flat() as { createdAt: string }[]).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      setBoardComments(aggregated);
+      setBoardComments(aggregated as BoardComment[]);
     } catch (err) {
       console.error("Error loading board feed:", err);
     } finally {
@@ -288,12 +295,16 @@ export default function BoardPage() {
 
   // Lifecycle
   useEffect(() => {
-    fetchStructure();
+    setTimeout(() => {
+      fetchStructure();
+    }, 0);
   }, [fetchStructure]);
 
   useEffect(() => {
     if (selectedBoard) {
-      fetchBoardDetails(selectedBoard.id);
+      setTimeout(() => {
+        fetchBoardDetails(selectedBoard.id);
+      }, 0);
       
       // Setup polling for live updates
       const timer = setInterval(() => {
@@ -306,7 +317,9 @@ export default function BoardPage() {
   // Fetch comments feed on feed tab activation
   useEffect(() => {
     if (activeTab === "messaging" && selectedBoard) {
-      fetchBoardComments();
+      setTimeout(() => {
+        fetchBoardComments();
+      }, 0);
     }
   }, [activeTab, selectedBoard, fetchBoardComments]);
 
@@ -1836,7 +1849,7 @@ export default function BoardPage() {
                     <select
                       id="card_recur"
                       value={cardRecurrence}
-                      onChange={(e) => setCardRecurrence(e.target.value as any)}
+                      onChange={(e) => setCardRecurrence(e.target.value as "none" | "daily" | "weekly" | "monthly")}
                       className="w-full bg-card border border-border rounded p-2 text-xs text-primary focus:outline-none focus:border-tertiary outline-none cursor-pointer"
                     >
                       <option value="none">None</option>

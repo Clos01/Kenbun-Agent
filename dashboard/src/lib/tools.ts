@@ -22,7 +22,7 @@ export interface ToolStat {
   entropy: number;
   success_count?: number;
   failure_count?: number;
-  history_trend?: any[];
+  history_trend?: unknown[];
 }
 
 export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
@@ -296,8 +296,8 @@ export function getToolDescription(id: string | undefined): ToolDescription {
  * Strict runtime schema validator and parser for ToolStat objects.
  * Insulates the frontend layout from malformed or incomplete API payloads.
  */
-export function validateToolStat(data: any): ToolStat {
-  const d = data || {};
+export function validateToolStat(data: unknown): ToolStat {
+  const d = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
   return {
     tool_id: String(d["tool_id"] || "unknown_tool"),
     success_rate: typeof d["success_rate"] === "number" && isFinite(d["success_rate"]) ? d["success_rate"] : 0,

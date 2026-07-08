@@ -33,13 +33,14 @@ export default function GalaxyMap() {
   const [showLabels, setShowLabels] = useState(true);
 
   const [activeJobs, setActiveJobs] = useState<Record<string, ActiveJob>>({});
-  const activeIntervalsRef = useRef<Record<string, any>>({});
+  const activeIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
 
   useEffect(() => {
+    const activeIntervals = activeIntervalsRef.current;
     return () => {
       // Clear all active intervals on unmount
-      if (activeIntervalsRef.current) {
-        Object.values(activeIntervalsRef.current).forEach(clearInterval);
+      if (activeIntervals) {
+        Object.values(activeIntervals).forEach(clearInterval);
       }
     };
   }, []);
@@ -1067,8 +1068,12 @@ export default function GalaxyMap() {
             const rh = textHeight + 4;
             const radiusRad = 3;
             
-            if ('roundRect' in ctx && typeof (ctx as any).roundRect === 'function') {
-              (ctx as any).roundRect(rx, ry, rw, rh, radiusRad);
+            type ContextWithRoundRect = CanvasRenderingContext2D & {
+              roundRect?: (x: number, y: number, w: number, h: number, radii: number) => void;
+            };
+            const ctxWithRoundRect = ctx as ContextWithRoundRect;
+            if (typeof ctxWithRoundRect.roundRect === 'function') {
+              ctxWithRoundRect.roundRect(rx, ry, rw, rh, radiusRad);
             } else {
               ctx.rect(rx, ry, rw, rh);
             }

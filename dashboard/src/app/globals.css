@@ -30,19 +30,19 @@
 }
 
 :root {
-  --primary: #0F2537;       /* Deep Oceanic Blue (Midnight) */
-  --secondary: rgba(15, 37, 55, 0.65); /* Translucent ink instead of slate gray */
-  --tertiary: #00885F;      /* Planhat Premium Emerald Green */
+  --primary: #1A1C1E;       /* Dark Charcoal */
+  --secondary: #6C7278;     /* Slate Gray */
+  --tertiary: #B8422E;      /* Boston Clay */
   --accent: #B8422E;        /* Boston Clay Interactive Accent */
-  --neutral: #FFFFFF;       /* Pure white backdrop */
+  --neutral: #F7F5F2;       /* Matte paper */
   
   --background: var(--neutral);
   --foreground: var(--primary);
   
-  --border: rgba(15, 37, 55, 0.08); /* Ultra-thin minimalist borders */
-  --border-muted: rgba(15, 37, 55, 0.04);
+  --border: rgba(26, 28, 30, 0.08); /* Ultra-thin minimalist borders */
+  --border-muted: rgba(26, 28, 30, 0.04);
   --card: #FFFFFF;
-  --sand: rgba(0, 136, 95, 0.04);   /* Soft emerald interactive hover wash */
+  --sand: rgba(184, 66, 46, 0.04);   /* Soft Boston Clay interactive hover wash */
   --grain-opacity: 0.00;            /* Zero texture for absolute vector clarity */
   
   /* Backward-compatibility mappings */
@@ -50,19 +50,19 @@
 }
 
 .light {
-  --primary: #0F2537;
-  --secondary: rgba(15, 37, 55, 0.65);
-  --tertiary: #00885F;
+  --primary: #1A1C1E;
+  --secondary: #6C7278;
+  --tertiary: #B8422E;
   --accent: #B8422E;
-  --neutral: #FFFFFF;
+  --neutral: #F7F5F2;
   
   --background: var(--neutral);
   --foreground: var(--primary);
   
-  --border: rgba(15, 37, 55, 0.08);
-  --border-muted: rgba(15, 37, 55, 0.04);
+  --border: rgba(26, 28, 30, 0.08);
+  --border-muted: rgba(26, 28, 30, 0.04);
   --card: #FFFFFF;
-  --sand: rgba(0, 136, 95, 0.04);
+  --sand: rgba(184, 66, 46, 0.04);
   --grain-opacity: 0.00;
   
   /* Backward-compatibility mappings */

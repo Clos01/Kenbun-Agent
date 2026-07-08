@@ -5,7 +5,6 @@ import Sidebar from "@/components/Sidebar";
 import { 
   Database,
   Search,
-  Cpu,
   RefreshCw,
   Clock,
   CheckCircle,
@@ -13,8 +12,7 @@ import {
   AlertCircle,
   Tag,
   ArrowUpRight,
-  Sliders,
-  ChevronRight
+  Sliders
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -45,7 +43,7 @@ export default function HivemindMemory() {
     lastIndexTime: "14 mins ago",
     searchLatency: "1.4ms"
   });
-  const [error, setError] = useState(false);
+  const [, setError] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
 
   // Sync index process interval simulator
@@ -63,11 +61,12 @@ export default function HivemindMemory() {
       
       const statsData = await statsRes.json();
       
-      let conceptsData: any = null;
+      let conceptsData: unknown = null;
       if (conceptsRes.ok) {
         conceptsData = await conceptsRes.json();
-        if (conceptsData?.concepts?.length > 0) {
-          setConcepts(conceptsData.concepts);
+        const parsed = conceptsData as { concepts?: Concept[] };
+        if (parsed?.concepts && parsed.concepts.length > 0) {
+          setConcepts(parsed.concepts);
         }
       }
       
@@ -76,7 +75,7 @@ export default function HivemindMemory() {
         setStats(prev => ({
           ...prev,
           totalVectors: statsData.telemetry.memory.capacity || prev.totalVectors,
-          indexedFiles: statsData.telemetry.memory.files || (conceptsRes.ok && conceptsData ? conceptsData.concepts?.length : prev.indexedFiles),
+          indexedFiles: statsData.telemetry.memory.files || (conceptsRes.ok && conceptsData ? (conceptsData as { concepts?: Concept[] }).concepts?.length : prev.indexedFiles),
           searchLatency: statsData.telemetry.latency || prev.searchLatency
         }));
       }
@@ -89,7 +88,9 @@ export default function HivemindMemory() {
   }, [API_BASE]);
 
   useEffect(() => {
-    fetchHivemindData();
+    setTimeout(() => {
+      fetchHivemindData();
+    }, 0);
     const interval = setInterval(fetchHivemindData, 5000);
     return () => clearInterval(interval);
   }, [fetchHivemindData]);

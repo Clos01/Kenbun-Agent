@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import { Send, Terminal, Cpu, CheckCircle, Plus, Trash2, MessageSquare, ChevronDown, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -51,78 +51,8 @@ export default function KenbunChat() {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  // 1. Fetch Sessions List on Mount
-  const fetchSessions = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions`);
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data);
-        if (data.length > 0) {
-          setActiveSessionId(data[0].id);
-        } else {
-          // If no sessions, automatically instantiate a new one
-          handleCreateSession();
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch chat sessions:", err);
-    }
-  };
-
-  // 2. Fetch Full History for the Active Session
-  const loadSessionDetails = async (id: string) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions/${id}`);
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(data.messages);
-      }
-    } catch (err) {
-      console.error("Failed to load chat messages:", err);
-    }
-  };
-
-  const fetchActiveModel = async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/active-model`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.model) {
-          setActiveModel(data.model);
-        } else {
-          setActiveModel("Ollama Llama3.2");
-        }
-      }
-    } catch {
-      setActiveModel("Offline Node");
-    }
-  };
-
-  useEffect(() => {
-    fetchSessions();
-    fetchActiveModel();
-  }, []);
-
-  useEffect(() => {
-    if (activeSessionId) {
-      loadSessionDetails(activeSessionId);
-    }
-  }, [activeSessionId]);
-
-  // Close the workflow dropdown on outside click
-  useEffect(() => {
-    const onClick = (e: MouseEvent) => {
-      if (wfRef.current && !wfRef.current.contains(e.target as Node)) {
-        setWfOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, []);
-
   // 3. Create a New Session
-  const handleCreateSession = async () => {
+  const handleCreateSession = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/chat/sessions`, {
         method: "POST",
@@ -148,7 +78,81 @@ export default function KenbunChat() {
     } catch (err) {
       console.error("Failed to instantiate chat session:", err);
     }
-  };
+  }, [API_BASE]);
+
+  // 1. Fetch Sessions List on Mount
+  const fetchSessions = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/chat/sessions`);
+      if (res.ok) {
+        const data = await res.json();
+        setSessions(data);
+        if (data.length > 0) {
+          setActiveSessionId(data[0].id);
+        } else {
+          // If no sessions, automatically instantiate a new one
+          handleCreateSession();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch chat sessions:", err);
+    }
+  }, [API_BASE, handleCreateSession]);
+
+  // 2. Fetch Full History for the Active Session
+  const loadSessionDetails = useCallback(async (id: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/chat/sessions/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages);
+      }
+    } catch (err) {
+      console.error("Failed to load chat messages:", err);
+    }
+  }, [API_BASE]);
+
+  const fetchActiveModel = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/active-model`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.model) {
+          setActiveModel(data.model);
+        } else {
+          setActiveModel("Ollama Llama3.2");
+        }
+      }
+    } catch {
+      setActiveModel("Offline Node");
+    }
+  }, [API_BASE]);
+
+  useEffect(() => {
+    setTimeout(() => {
+      fetchSessions();
+      fetchActiveModel();
+    }, 0);
+  }, [fetchSessions, fetchActiveModel]);
+
+  useEffect(() => {
+    if (activeSessionId) {
+      setTimeout(() => {
+        loadSessionDetails(activeSessionId);
+      }, 0);
+    }
+  }, [activeSessionId, loadSessionDetails]);
+
+  // Close the workflow dropdown on outside click
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (wfRef.current && !wfRef.current.contains(e.target as Node)) {
+        setWfOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
 
   // 4. Delete an Existing Session
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
@@ -300,7 +304,7 @@ export default function KenbunChat() {
         }
         return s;
       }));
-    } catch (error) {
+    } catch {
       setMessages(prev => [...prev, {
         id: "error-" + Date.now(),
         sender: "kenbun",

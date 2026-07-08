@@ -5,7 +5,6 @@ import Sidebar from "@/components/Sidebar";
 import { 
   ShieldCheck,
   ShieldAlert,
-  Zap,
   Lock,
   GitCommit,
   PlusCircle,
@@ -70,7 +69,7 @@ export default function SupervisorDashboard() {
       if (!res.ok) return;
       const data = await res.json();
       if (data.status === "success" && Array.isArray(data.data)) {
-        const mapped = data.data.map((cp: any, i: number) => ({
+        const mapped = data.data.map((cp: { label?: string; timestamp: string; original_path?: string; checkpoint_path?: string }, i: number) => ({
           id: `cp_${i}`,
           name: cp.label || "Unnamed",
           timestamp: new Date(cp.timestamp).toLocaleString(),
@@ -120,9 +119,11 @@ export default function SupervisorDashboard() {
   }, [API_BASE]);
 
   useEffect(() => {
-    fetchCheckpoints();
-    fetchGuardrails();
-    fetchSupervisorStats();
+    setTimeout(() => {
+      fetchCheckpoints();
+      fetchGuardrails();
+      fetchSupervisorStats();
+    }, 0);
     const interval = setInterval(fetchSupervisorStats, 10000);
     return () => clearInterval(interval);
   }, [fetchCheckpoints, fetchGuardrails, fetchSupervisorStats]);
