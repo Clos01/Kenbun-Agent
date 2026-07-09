@@ -838,6 +838,59 @@ def delete_from_hivemind(concept_id: str, category: str = "concepts") -> str:
 
 
 # ============================================================
+# GLOBAL WORKSPACE (Swarm Working Memory — J-space analogue)
+# ============================================================
+
+@sovereign_tool()
+def workspace_post(concept: str, salience: float = 0.5, agent_id: str = "unknown") -> str:
+    """
+    Put a concept on the swarm's shared working memory ("what I'm thinking about
+    right now"). Post concepts, not chatter — most traffic should bypass this.
+    Watchlist matches are flagged for supervisor review before action.
+    """
+    import json as _json
+    with silence_stdout():
+        from tools.memory.global_workspace import post_concept
+        return _json.dumps(post_concept(concept, salience=salience, agent_id=agent_id))
+
+
+@sovereign_tool()
+def workspace_read(limit: int = 48) -> str:
+    """
+    Answer "what is the swarm thinking right now?" — returns current workspace
+    slots ordered by salience (flagged alerts first). Salience decays over time.
+    """
+    import json as _json
+    with silence_stdout():
+        from tools.memory.global_workspace import read_workspace
+        return _json.dumps(read_workspace(limit=limit))
+
+
+@sovereign_tool()
+def workspace_inject(concept: str, salience: float = 0.9) -> str:
+    """
+    Operator/supervisor steering: inject or boost a concept in the swarm's
+    working memory so downstream agents pick it up.
+    """
+    import json as _json
+    with silence_stdout():
+        from tools.memory.global_workspace import inject_concept
+        return _json.dumps(inject_concept(concept, salience=salience))
+
+
+@sovereign_tool()
+def workspace_resolve_alert(concept: str) -> str:
+    """
+    Supervisor acknowledges a flagged workspace concept after review; the slot
+    resumes normal salience decay.
+    """
+    import json as _json
+    with silence_stdout():
+        from tools.memory.global_workspace import resolve_alert
+        return _json.dumps(resolve_alert(concept))
+
+
+# ============================================================
 # CODEBASE VECTORIZATION (Semantic Code Understanding)
 # ============================================================
 
