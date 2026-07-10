@@ -10,9 +10,7 @@ import {
   Trash2, 
   MessageSquare, 
   Clock, 
-  Sparkles,
   ChevronRight,
-  MoveRight,
   Maximize2,
   Check,
   Calendar,
@@ -22,11 +20,11 @@ import {
   MapPin,
   Tag,
   AlertTriangle,
-  RefreshCw,
-  Filter
+  RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 // Types
 interface Board {
@@ -59,6 +57,7 @@ interface Card {
   position: number;
   isClosed: boolean;
   dueDate?: string;
+  listChangedAt?: string;
 }
 
 interface Comment {
@@ -67,6 +66,14 @@ interface Comment {
   userId: string;
   text: string;
   createdAt: string;
+}
+
+interface BoardComment {
+  id: string;
+  cardName: string;
+  createdAt: string;
+  text: string;
+  cardId: string;
 }
 
 interface KenbunMetadata {
@@ -131,9 +138,11 @@ export default function BoardPage() {
   // Calendar View Month/Year navigation
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  // Calendar: which day's completed-work popover is open (key = "y-m-d")
+  const [expandedDoneKey, setExpandedDoneKey] = useState<string | null>(null);
 
   // Board comments feed state
-  const [boardComments, setBoardComments] = useState<any[]>([]);
+  const [boardComments, setBoardComments] = useState<BoardComment[]>([]);
   const [loadingComments, setLoadingComments] = useState(false);
   const [feedCommentText, setFeedCommentText] = useState("");
   const [feedSelectedCardId, setFeedSelectedCardId] = useState("");
@@ -168,7 +177,7 @@ export default function BoardPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`${API_BASE}/api/v1/planka/structure`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/structure`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`HTTP Error ${res.status}: Failed to retrieve Planka structure`);
       }
@@ -179,15 +188,16 @@ export default function BoardPage() {
       const boards = included.boards || [];
       
       // Associate boards to projects
-      const formattedProjects = items.map((proj: any) => ({
+      const formattedProjects = items.map((proj: { id: string; [key: string]: unknown }) => ({
         ...proj,
-        boards: boards.filter((b: any) => b.projectId === proj.id)
+        boards: boards.filter((b: { projectId: string; [key: string]: unknown }) => b.projectId === proj.id)
       }));
       
       setProjects(formattedProjects);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Failed to connect to Planka backend");
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message || "Failed to connect to Planka backend");
     } finally {
       setLoading(false);
     }
@@ -197,7 +207,7 @@ export default function BoardPage() {
   const fetchBoardDetails = useCallback(async (boardId: string) => {
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/board/${boardId}`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/board/${boardId}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`Failed to load board details: ${res.status}`);
       }
@@ -206,19 +216,20 @@ export default function BoardPage() {
       
       // Sort lists
       const activeLists = (included.lists || [])
-        .filter((l: any) => l.type === "active" && !l.isClosed)
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+        .filter((l: { type: string; isClosed: boolean; [key: string]: unknown }) => l.type === "active" && !l.isClosed)
+        .sort((a: { position?: number }, b: { position?: number }) => (a.position || 0) - (b.position || 0));
         
       // Sort cards
       const activeCards = (included.cards || [])
-        .filter((c: any) => !c.isClosed)
-        .sort((a: any, b: any) => (a.position || 0) - (b.position || 0));
+        .filter((c: { isClosed: boolean; [key: string]: unknown }) => !c.isClosed)
+        .sort((a: { position?: number }, b: { position?: number }) => (a.position || 0) - (b.position || 0));
 
       setLists(activeLists);
       setCards(activeCards);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(`Failed to sync board: ${err.message}`);
+      const message = err instanceof Error ? err.message : String(err);
+      setError(`Failed to sync board: ${message}`);
     } finally {
       setSyncing(false);
     }
@@ -227,11 +238,11 @@ export default function BoardPage() {
   // Fetch comments for a specific card
   const fetchComments = useCallback(async (cardId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${cardId}/comments`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}/comments`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load comments");
       const data = await res.json();
       const commentsList = (data.items || []).sort(
-        (a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        (a: { createdAt: string }, b: { createdAt: string }) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
       setComments(commentsList);
     } catch (err) {
@@ -240,16 +251,16 @@ export default function BoardPage() {
   }, [API_BASE]);
 
   // Fetch comments for all cards on the board to aggregate in feed
-  const fetchBoardComments = useCallback(async () => {
+  const fetchBoardComments = useCallback(async (silent = false) => {
     if (!selectedBoard || cards.length === 0) return;
-    setLoadingComments(true);
+    if (!silent) setLoadingComments(true);
     try {
       const allCommentsPromises = cards.map(async (card) => {
         try {
-          const res = await fetch(`${API_BASE}/api/v1/planka/cards/${card.id}/comments`, { cache: "no-store" });
+          const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${card.id}/comments`, { cache: "no-store" });
           if (!res.ok) return [];
           const data = await res.json();
-          return (data.items || []).map((c: any) => ({
+          return (data.items || []).map((c: Record<string, string | number | boolean | null | undefined>) => ({
             ...c,
             cardName: card.name,
             cardId: card.id,
@@ -259,14 +270,14 @@ export default function BoardPage() {
         }
       });
       const results = await Promise.all(allCommentsPromises);
-      const aggregated = results.flat().sort(
+      const aggregated = (results.flat() as { createdAt: string }[]).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      setBoardComments(aggregated);
+      setBoardComments(aggregated as BoardComment[]);
     } catch (err) {
       console.error("Error loading board feed:", err);
     } finally {
-      setLoadingComments(false);
+      if (!silent) setLoadingComments(false);
     }
   }, [API_BASE, selectedBoard, cards]);
 
@@ -288,12 +299,16 @@ export default function BoardPage() {
 
   // Lifecycle
   useEffect(() => {
-    fetchStructure();
+    setTimeout(() => {
+      fetchStructure();
+    }, 0);
   }, [fetchStructure]);
 
   useEffect(() => {
     if (selectedBoard) {
-      fetchBoardDetails(selectedBoard.id);
+      setTimeout(() => {
+        fetchBoardDetails(selectedBoard.id);
+      }, 0);
       
       // Setup polling for live updates
       const timer = setInterval(() => {
@@ -306,7 +321,14 @@ export default function BoardPage() {
   // Fetch comments feed on feed tab activation
   useEffect(() => {
     if (activeTab === "messaging" && selectedBoard) {
-      fetchBoardComments();
+      setTimeout(() => {
+        fetchBoardComments();
+      }, 0);
+      // Live signal feed: silently re-poll comments on the board's cadence
+      const timer = setInterval(() => {
+        fetchBoardComments(true);
+      }, 7000);
+      return () => clearInterval(timer);
     }
   }, [activeTab, selectedBoard, fetchBoardComments]);
 
@@ -316,7 +338,7 @@ export default function BoardPage() {
     if (!newProjectName.trim()) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/projects`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newProjectName.trim(), type: "private" })
@@ -338,7 +360,7 @@ export default function BoardPage() {
     if (!newBoardName.trim() || !selectedProjectIdForBoard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/projects/${selectedProjectIdForBoard}/boards`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/projects/${selectedProjectIdForBoard}/boards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newBoardName.trim() })
@@ -360,7 +382,7 @@ export default function BoardPage() {
     if (!selectedBoard || !editBoardName.trim()) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: editBoardName.trim() })
@@ -382,7 +404,7 @@ export default function BoardPage() {
     if (!selectedBoard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -403,7 +425,7 @@ export default function BoardPage() {
     if (!newListName.trim() || !selectedBoard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}/lists`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}/lists`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newListName.trim() })
@@ -424,7 +446,7 @@ export default function BoardPage() {
     if (!newCardName.trim()) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listId, name: newCardName.trim() })
@@ -447,7 +469,7 @@ export default function BoardPage() {
       // Optimistic update
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, listId: newListId } : c));
       
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listId: newListId })
@@ -489,7 +511,7 @@ export default function BoardPage() {
         formattedDueDate = d.toISOString();
       }
 
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -521,7 +543,7 @@ export default function BoardPage() {
   const handleCloseCard = async (cardId: string) => {
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isClosed: true })
@@ -544,7 +566,7 @@ export default function BoardPage() {
     if (!newCommentText.trim() || !selectedCard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}/comments`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: newCommentText.trim() })
@@ -565,7 +587,7 @@ export default function BoardPage() {
     if (!feedCommentText.trim() || !feedSelectedCardId) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${feedSelectedCardId}/comments`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${feedSelectedCardId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: feedCommentText.trim() })
@@ -630,6 +652,19 @@ export default function BoardPage() {
       return metadata.collections || [];
     })
   ));
+
+  // Completed work detection: cards sitting in a done-type list count as
+  // completions, dated by listChangedAt (when Planka moved them there) —
+  // no manual due-date entry needed.
+  const doneListIds = new Set(
+    lists.filter(l => /complet|done|finish|ship/i.test(l.name)).map(l => l.id)
+  );
+  const isDoneCard = (c: Card) => doneListIds.has(c.listId) && !!c.listChangedAt;
+  const completedThisMonth = filteredCards.filter(c => {
+    if (!isDoneCard(c)) return false;
+    const d = new Date(c.listChangedAt!);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  }).length;
 
   // Calendar Math
   const getDaysInMonth = (month: number, year: number) => {
@@ -1311,9 +1346,26 @@ export default function BoardPage() {
                         </button>
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono text-secondary uppercase tracking-[0.2em]">
-                      {filteredCards.filter(c => c.dueDate).length} Active Targets
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="font-data font-semibold text-[13px] tabular-nums text-primary leading-none">
+                          {filteredCards.filter(c => c.dueDate).length}
+                        </span>
+                        <span className="text-[8px] font-mono text-secondary/80 uppercase tracking-[0.18em]">
+                          Active Targets
+                        </span>
+                      </span>
+                      <span aria-hidden="true" className="w-px h-3 bg-primary/10" />
+                      <span className="flex items-baseline gap-1.5">
+                        <span aria-hidden="true" className="self-center w-1.5 h-1.5 rounded-full bg-tertiary/60" />
+                        <span className="font-data font-semibold text-[13px] tabular-nums text-primary leading-none">
+                          {completedThisMonth}
+                        </span>
+                        <span className="text-[8px] font-mono text-secondary/80 uppercase tracking-[0.18em]">
+                          Completed
+                        </span>
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-mono text-secondary uppercase tracking-widest border-b border-primary/5 pb-2">
@@ -1326,18 +1378,28 @@ export default function BoardPage() {
                     <div>Sat</div>
                   </div>
 
+                  {expandedDoneKey && (
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setExpandedDoneKey(null)}
+                    />
+                  )}
+
                   <div className="grid grid-cols-7 gap-2 min-h-[420px]">
                     {generateCalendarCells().map((cell, idx) => {
                       const cellCards = filteredCards.filter(c => c.dueDate && isSameDay(c.dueDate, cell));
+                      const completedCards = filteredCards.filter(c => isDoneCard(c) && isSameDay(c.listChangedAt!, cell));
                       const today = new Date();
                       const isToday = today.getDate() === cell.day && today.getMonth() === cell.month && today.getFullYear() === cell.year;
-                      
+                      const doneKey = `${cell.year}-${cell.month}-${cell.day}`;
+                      const isDoneExpanded = expandedDoneKey === doneKey;
+
                       return (
-                        <div 
+                        <div
                           key={idx}
-                          className={`min-h-[95px] p-2 border border-primary/5 rounded-md flex flex-col justify-between transition-colors ${
+                          className={`relative min-h-[95px] p-2 border border-primary/5 rounded-md flex flex-col transition-colors ${
                             cell.isCurrentMonth ? "bg-neutral/45" : "bg-neutral/10 opacity-30"
-                          } ${isToday ? "border-tertiary/40 bg-tertiary/[0.02]" : ""}`}
+                          } ${isToday ? "border-tertiary/40 bg-tertiary/[0.02]" : ""} ${isDoneExpanded ? "z-40 opacity-100" : ""}`}
                         >
                           <div className="flex justify-between items-center">
                             <span className={`text-[10px] font-mono ${isToday ? "text-tertiary font-bold" : "text-secondary"}`}>
@@ -1353,7 +1415,7 @@ export default function BoardPage() {
                               const { metadata } = parseCardMetadata(card.description || "");
                               const isRecurring = metadata.recurring && metadata.recurring !== "none";
                               return (
-                                <div 
+                                <div
                                   key={card.id}
                                   onClick={() => handleOpenCard(card)}
                                   className="p-1 px-1.5 bg-card hover:bg-sand border border-border hover:border-tertiary/30 rounded text-[9px] font-semibold text-primary truncate cursor-pointer transition-all flex items-center justify-between gap-1"
@@ -1366,6 +1428,128 @@ export default function BoardPage() {
                               );
                             })}
                           </div>
+
+                          {/* Compact completed-work indicator — one dot per completion, click to expand */}
+                          {completedCards.length > 0 && (
+                            <button
+                              onClick={() => setExpandedDoneKey(isDoneExpanded ? null : doneKey)}
+                              aria-expanded={isDoneExpanded}
+                              aria-label={`${completedCards.length} completed by Kenbun — view details`}
+                              title={`${completedCards.length} completed by Kenbun`}
+                              className="group mt-1.5 self-start flex items-center gap-1 h-[18px] px-2 rounded-full border border-tertiary/15 bg-tertiary/[0.06] hover:border-tertiary/35 hover:bg-tertiary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
+                            >
+                              {completedCards.slice(0, 4).map(c => (
+                                <span
+                                  key={c.id}
+                                  className="w-[5px] h-[5px] rounded-full bg-tertiary/60 group-hover:bg-tertiary transition-colors duration-200"
+                                />
+                              ))}
+                              {completedCards.length > 4 && (
+                                <span className="pl-0.5 text-[8px] font-mono leading-none tabular-nums text-tertiary/70 group-hover:text-tertiary transition-colors duration-200">
+                                  +{completedCards.length - 4}
+                                </span>
+                              )}
+                            </button>
+                          )}
+
+                          <AnimatePresence>
+                            {isDoneExpanded && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.96, y: Math.floor(idx / 7) < 2 ? -6 : 6 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.98, y: Math.floor(idx / 7) < 2 ? -4 : 4 }}
+                                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                                className={`absolute z-50 w-[310px] bg-card/90 backdrop-blur-xl border border-primary/5 ring-1 ring-primary/5 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
+                                  Math.floor(idx / 7) < 2 ? "top-full mt-1.5" : "bottom-8 mb-1"
+                                } ${idx % 7 >= 4 ? "right-0" : "left-0"}`}
+                              >
+                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-primary/5">
+                                  <div className="min-w-0">
+                                    <span className="block font-serif italic font-bold text-primary text-[13px] leading-tight">
+                                      Completed Tasks
+                                    </span>
+                                    <span className="block mt-1 text-[8px] font-mono text-secondary uppercase tracking-[0.2em]">
+                                      {new Date(cell.year, cell.month, cell.day).toLocaleDateString([], { month: "short", day: "numeric" })} · {completedCards.length} {completedCards.length === 1 ? "node" : "nodes"}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => setExpandedDoneKey(null)}
+                                    aria-label="Close"
+                                    className="shrink-0 -mr-1 -mt-0.5 p-1 rounded-md text-secondary hover:text-primary hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-colors"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <div className="p-2 space-y-1 max-h-72 overflow-y-auto custom-scrollbar">
+                                  {completedCards.map((card, cardIdx) => {
+                                    const { cleanDescription } = parseCardMetadata(card.description || "");
+                                    const isBug = card.name.toLowerCase().startsWith("bug:") || card.name.toLowerCase().startsWith("fix:");
+                                    const isFeat = card.name.toLowerCase().startsWith("feat:") || card.name.toLowerCase().startsWith("new:");
+                                    
+                                    let cleanName = card.name;
+                                    if (isBug) cleanName = cleanName.replace(/^(bug|fix):\s*/i, "");
+                                    if (isFeat) cleanName = cleanName.replace(/^(feat|new):\s*/i, "");
+
+                                    return (
+                                      <button
+                                        key={card.id}
+                                        onClick={() => {
+                                          setExpandedDoneKey(null);
+                                          handleOpenCard(card);
+                                        }}
+                                        className="group w-full text-left relative flex items-start gap-3.5 px-3 py-2.5 rounded-lg hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
+                                      >
+                                        {/* Timeline connector line */}
+                                        {cardIdx < completedCards.length - 1 && (
+                                          <span className="absolute left-[21px] top-8 bottom-0 w-[1px] bg-border" />
+                                        )}
+
+                                        {/* Timeline check node */}
+                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110 ${
+                                          isBug 
+                                            ? "bg-tertiary/10 border border-tertiary/30 text-tertiary group-hover:bg-tertiary/20" 
+                                            : isFeat 
+                                              ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 group-hover:bg-emerald-500/20" 
+                                              : "bg-primary/5 border border-primary/15 text-secondary group-hover:bg-primary/10"
+                                        }`}>
+                                          <Check className="w-2.5 h-2.5" />
+                                        </span>
+
+                                        <span className="min-w-0 flex-1">
+                                          <span className="flex items-center gap-1.5 mb-1">
+                                            {isBug && (
+                                              <span className="text-[7px] font-mono font-bold uppercase tracking-wider bg-tertiary/10 text-tertiary px-1 py-0.5 rounded-sm">
+                                                Bug
+                                              </span>
+                                            )}
+                                            {isFeat && (
+                                              <span className="text-[7px] font-mono font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 px-1 py-0.5 rounded-sm">
+                                                Feat
+                                              </span>
+                                            )}
+                                            <span className="text-[8px] font-mono tabular-nums text-secondary/60">
+                                              {new Date(card.listChangedAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                            </span>
+                                          </span>
+
+                                          <span className="block text-[11px] font-semibold text-primary leading-snug group-hover:text-tertiary transition-colors line-clamp-2">
+                                            {cleanName}
+                                          </span>
+
+                                          {cleanDescription && (
+                                            <span className="block mt-1 text-[9px] text-secondary/70 line-clamp-2 font-normal leading-relaxed">
+                                              {cleanDescription}
+                                            </span>
+                                          )}
+                                        </span>
+                                        <ChevronRight className="w-3.5 h-3.5 text-secondary/40 shrink-0 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200 self-center" />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       );
                     })}
@@ -1388,7 +1572,7 @@ export default function BoardPage() {
                         <h3 className="font-serif italic font-bold text-primary text-base">Board Signal Feed</h3>
                       </div>
                       <button 
-                        onClick={fetchBoardComments}
+                        onClick={() => fetchBoardComments()}
                         disabled={loadingComments}
                         className="px-2.5 py-1 border border-border bg-card hover:bg-sand rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
                       >
@@ -1836,7 +2020,7 @@ export default function BoardPage() {
                     <select
                       id="card_recur"
                       value={cardRecurrence}
-                      onChange={(e) => setCardRecurrence(e.target.value as any)}
+                      onChange={(e) => setCardRecurrence(e.target.value as "none" | "daily" | "weekly" | "monthly")}
                       className="w-full bg-card border border-border rounded p-2 text-xs text-primary focus:outline-none focus:border-tertiary outline-none cursor-pointer"
                     >
                       <option value="none">None</option>
