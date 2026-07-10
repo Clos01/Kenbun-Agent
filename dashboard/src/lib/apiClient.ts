@@ -1,4 +1,5 @@
 "use client";
+import { useCallback } from "react";
 
 import { useTenant } from "@/context/TenantContext";
 import { CONFIG } from "./config";
@@ -6,7 +7,7 @@ import { CONFIG } from "./config";
 export function useApiClient() {
   const { tenantId } = useTenant();
 
-  const request = async (path: string, options: RequestInit = {}) => {
+  const request = useCallback(async (path: string, options: RequestInit = {}) => {
     // Determine the full URL.
     // If the path is already fully qualified or absolute (starts with '/' or 'http'), use it.
     // Otherwise, prepend the API_BASE.
@@ -32,7 +33,7 @@ export function useApiClient() {
     });
 
     return response;
-  };
+  }, [tenantId]);
 
   return {
     request,

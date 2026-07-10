@@ -2,18 +2,9 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   transpilePackages: ["gsap", "@gsap/react"],
-  // Dynamic origins to avoid hardcoded IPs (Technical Debt resolved)
+  // Hardcode the tailscale IP so HMR websocket works across the VPN without relying on missing ENV vars
   allowedDevOrigins: [
-    ...(process.env.TAILSCALE_IP ? [
-      process.env.TAILSCALE_IP,
-      `${process.env.TAILSCALE_IP}:3000`,
-      `http://${process.env.TAILSCALE_IP}:3000`
-    ] : []),
-    ...(process.env.PC_IP_ADDRESS ? [
-      process.env.PC_IP_ADDRESS,
-      `${process.env.PC_IP_ADDRESS}:3000`,
-      `http://${process.env.PC_IP_ADDRESS}:3000`
-    ] : [])
+    "100.100.199.127"
   ],
 };
 

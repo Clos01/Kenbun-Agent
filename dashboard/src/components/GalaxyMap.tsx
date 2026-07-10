@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { CONFIG } from '@/lib/config';
 import { useTheme } from '@/context/ThemeContext';
+import { useTenant } from '@/context/TenantContext';
 import { Compass } from 'lucide-react';
 
 import { StarNode, TransformState, ActiveJob } from './galaxy-map/types';
@@ -19,6 +20,7 @@ import HoverPanel from './galaxy-map/HoverPanel';
 import SwarmLegend from './galaxy-map/SwarmLegend';
 
 export default function GalaxyMap() {
+  const { tenantId } = useTenant();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<StarNode[]>([]);
@@ -67,7 +69,10 @@ export default function GalaxyMap() {
     try {
       const res = await fetch(`${CONFIG.API_BASE}/orchestrate`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-tenant-id': tenantId
+        },
         body: JSON.stringify({
           workflow,
           task: workflow === 'code_review' 
@@ -119,7 +124,9 @@ export default function GalaxyMap() {
 
       const interval = setInterval(async () => {
         try {
-          const statusRes = await fetch(`${CONFIG.API_BASE}/orchestrate/status/${jobId}`);
+          const statusRes = await fetch(`${CONFIG.API_BASE}/orchestrate/status/${jobId}`, {
+            headers: { 'x-tenant-id': tenantId }
+          });
           if (!statusRes.ok) {
             throw new Error(`Failed to fetch status`);
           }
@@ -236,8 +243,22 @@ export default function GalaxyMap() {
     
     const fetchMap = async () => {
       try {
-        const res = await fetch(`${CONFIG.API_BASE}/api/v1/topology/map`, { cache: 'no-store' });
+        const res = await fetch(`${CONFIG.API_BASE}/api/v1/topology/map`, { 
+          cache: 'no-store',
+          headers: { 'x-tenant-id': tenantId }
+        });
         if (!res.ok) {
+          if (res.status === 404) {
+            console.warn("GalaxyMap: Topology API returned 404. Falling back to mock data.");
+            setData([
+              { id: "node-1", x: 0, y: 0, file: "src/main.py", room: "core", snippet: "def main():\\n  pass" },
+              { id: "node-2", x: 200, y: -150, file: "src/utils.py", room: "utils", snippet: "def parse_data():\\n  pass" },
+              { id: "node-3", x: -180, y: 220, file: "src/api.py", room: "api", snippet: "@app.get('/')\\ndef root():\\n  pass" },
+              { id: "node-4", x: 350, y: 100, file: "src/db.py", room: "db", snippet: "class Database:\\n  pass" },
+              { id: "node-5", x: -250, y: -100, file: "src/auth.py", room: "auth", snippet: "def login():\\n  pass" }
+            ]);
+            return;
+          }
           const text = await res.text();
           throw new Error(`FETCH_FAIL: ${res.status} ${res.statusText} - ${text.substring(0, 150)}`);
         }

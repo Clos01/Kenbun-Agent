@@ -1291,7 +1291,7 @@ export default function HeritageObservatory() {
                                </div>
                                <div className="space-y-2">
                                  <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Temporal Stamp</span>
-                                 <p className="text-sm font-bold text-primary">{new Date(selectedDecision.timestamp).toLocaleString()}</p>
+                                 <p className="text-sm font-bold text-primary" suppressHydrationWarning>{new Date(selectedDecision.timestamp).toLocaleString()}</p>
                                </div>
                             </div>
                           </div>

@@ -32,9 +32,9 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${publicSans.variable} h-full antialiased`}
     >
       <head>
-        <Script
+        <script
           id="theme-script"
-          strategy="beforeInteractive"
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: `
               (function() {

@@ -56,6 +56,7 @@ interface Card {
   position: number;
   isClosed: boolean;
   dueDate?: string;
+  listChangedAt?: string;
 }
 
 interface Comment {
@@ -136,6 +137,8 @@ export default function BoardPage() {
   // Calendar View Month/Year navigation
   const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  // Calendar: which day's completed-work popover is open (key = "y-m-d")
+  const [expandedDoneKey, setExpandedDoneKey] = useState<string | null>(null);
 
   // Board comments feed state
   const [boardComments, setBoardComments] = useState<BoardComment[]>([]);
@@ -247,9 +250,9 @@ export default function BoardPage() {
   }, [API_BASE]);
 
   // Fetch comments for all cards on the board to aggregate in feed
-  const fetchBoardComments = useCallback(async () => {
+  const fetchBoardComments = useCallback(async (silent = false) => {
     if (!selectedBoard || cards.length === 0) return;
-    setLoadingComments(true);
+    if (!silent) setLoadingComments(true);
     try {
       const allCommentsPromises = cards.map(async (card) => {
         try {
@@ -273,7 +276,7 @@ export default function BoardPage() {
     } catch (err) {
       console.error("Error loading board feed:", err);
     } finally {
-      setLoadingComments(false);
+      if (!silent) setLoadingComments(false);
     }
   }, [API_BASE, selectedBoard, cards]);
 
@@ -320,6 +323,11 @@ export default function BoardPage() {
       setTimeout(() => {
         fetchBoardComments();
       }, 0);
+      // Live signal feed: silently re-poll comments on the board's cadence
+      const timer = setInterval(() => {
+        fetchBoardComments(true);
+      }, 7000);
+      return () => clearInterval(timer);
     }
   }, [activeTab, selectedBoard, fetchBoardComments]);
 
@@ -643,6 +651,19 @@ export default function BoardPage() {
       return metadata.collections || [];
     })
   ));
+
+  // Completed work detection: cards sitting in a done-type list count as
+  // completions, dated by listChangedAt (when Planka moved them there) —
+  // no manual due-date entry needed.
+  const doneListIds = new Set(
+    lists.filter(l => /complet|done|finish|ship/i.test(l.name)).map(l => l.id)
+  );
+  const isDoneCard = (c: Card) => doneListIds.has(c.listId) && !!c.listChangedAt;
+  const completedThisMonth = filteredCards.filter(c => {
+    if (!isDoneCard(c)) return false;
+    const d = new Date(c.listChangedAt!);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  }).length;
 
   // Calendar Math
   const getDaysInMonth = (month: number, year: number) => {
@@ -1324,9 +1345,26 @@ export default function BoardPage() {
                         </button>
                       </div>
                     </div>
-                    <span className="text-[10px] font-mono text-secondary uppercase tracking-[0.2em]">
-                      {filteredCards.filter(c => c.dueDate).length} Active Targets
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="font-data font-semibold text-[13px] tabular-nums text-primary leading-none">
+                          {filteredCards.filter(c => c.dueDate).length}
+                        </span>
+                        <span className="text-[8px] font-mono text-secondary/80 uppercase tracking-[0.18em]">
+                          Active Targets
+                        </span>
+                      </span>
+                      <span aria-hidden="true" className="w-px h-3 bg-primary/10" />
+                      <span className="flex items-baseline gap-1.5">
+                        <span aria-hidden="true" className="self-center w-1.5 h-1.5 rounded-full bg-tertiary/60" />
+                        <span className="font-data font-semibold text-[13px] tabular-nums text-primary leading-none">
+                          {completedThisMonth}
+                        </span>
+                        <span className="text-[8px] font-mono text-secondary/80 uppercase tracking-[0.18em]">
+                          Completed
+                        </span>
+                      </span>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-7 gap-2 text-center text-[10px] font-mono text-secondary uppercase tracking-widest border-b border-primary/5 pb-2">
@@ -1339,18 +1377,28 @@ export default function BoardPage() {
                     <div>Sat</div>
                   </div>
 
+                  {expandedDoneKey && (
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setExpandedDoneKey(null)}
+                    />
+                  )}
+
                   <div className="grid grid-cols-7 gap-2 min-h-[420px]">
                     {generateCalendarCells().map((cell, idx) => {
                       const cellCards = filteredCards.filter(c => c.dueDate && isSameDay(c.dueDate, cell));
+                      const completedCards = filteredCards.filter(c => isDoneCard(c) && isSameDay(c.listChangedAt!, cell));
                       const today = new Date();
                       const isToday = today.getDate() === cell.day && today.getMonth() === cell.month && today.getFullYear() === cell.year;
-                      
+                      const doneKey = `${cell.year}-${cell.month}-${cell.day}`;
+                      const isDoneExpanded = expandedDoneKey === doneKey;
+
                       return (
-                        <div 
+                        <div
                           key={idx}
-                          className={`min-h-[95px] p-2 border border-primary/5 rounded-md flex flex-col justify-between transition-colors ${
+                          className={`relative min-h-[95px] p-2 border border-primary/5 rounded-md flex flex-col transition-colors ${
                             cell.isCurrentMonth ? "bg-neutral/45" : "bg-neutral/10 opacity-30"
-                          } ${isToday ? "border-tertiary/40 bg-tertiary/[0.02]" : ""}`}
+                          } ${isToday ? "border-tertiary/40 bg-tertiary/[0.02]" : ""} ${isDoneExpanded ? "z-40 opacity-100" : ""}`}
                         >
                           <div className="flex justify-between items-center">
                             <span className={`text-[10px] font-mono ${isToday ? "text-tertiary font-bold" : "text-secondary"}`}>
@@ -1366,7 +1414,7 @@ export default function BoardPage() {
                               const { metadata } = parseCardMetadata(card.description || "");
                               const isRecurring = metadata.recurring && metadata.recurring !== "none";
                               return (
-                                <div 
+                                <div
                                   key={card.id}
                                   onClick={() => handleOpenCard(card)}
                                   className="p-1 px-1.5 bg-card hover:bg-sand border border-border hover:border-tertiary/30 rounded text-[9px] font-semibold text-primary truncate cursor-pointer transition-all flex items-center justify-between gap-1"
@@ -1379,6 +1427,86 @@ export default function BoardPage() {
                               );
                             })}
                           </div>
+
+                          {/* Compact completed-work indicator — one dot per completion, click to expand */}
+                          {completedCards.length > 0 && (
+                            <button
+                              onClick={() => setExpandedDoneKey(isDoneExpanded ? null : doneKey)}
+                              aria-expanded={isDoneExpanded}
+                              aria-label={`${completedCards.length} completed by Kenbun — view details`}
+                              title={`${completedCards.length} completed by Kenbun`}
+                              className="group mt-1.5 self-start flex items-center gap-1 h-[18px] px-2 rounded-full border border-tertiary/15 bg-tertiary/[0.06] hover:border-tertiary/35 hover:bg-tertiary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
+                            >
+                              {completedCards.slice(0, 4).map(c => (
+                                <span
+                                  key={c.id}
+                                  className="w-[5px] h-[5px] rounded-full bg-tertiary/60 group-hover:bg-tertiary transition-colors duration-200"
+                                />
+                              ))}
+                              {completedCards.length > 4 && (
+                                <span className="pl-0.5 text-[8px] font-mono leading-none tabular-nums text-tertiary/70 group-hover:text-tertiary transition-colors duration-200">
+                                  +{completedCards.length - 4}
+                                </span>
+                              )}
+                            </button>
+                          )}
+
+                          <AnimatePresence>
+                            {isDoneExpanded && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.96, y: Math.floor(idx / 7) < 2 ? -6 : 6 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.98, y: Math.floor(idx / 7) < 2 ? -4 : 4 }}
+                                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                                className={`absolute z-50 w-64 bg-card/90 backdrop-blur-xl border border-primary/5 ring-1 ring-primary/5 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
+                                  Math.floor(idx / 7) < 2 ? "top-full mt-1.5" : "bottom-8 mb-1"
+                                } ${idx % 7 >= 4 ? "right-0" : "left-0"}`}
+                              >
+                                <div className="flex items-start justify-between gap-2 px-3.5 pt-3 pb-2.5 border-b border-primary/5">
+                                  <div className="min-w-0">
+                                    <span className="block font-serif italic font-bold text-primary text-[13px] leading-tight">
+                                      Completed
+                                    </span>
+                                    <span className="block mt-1 text-[8px] font-mono text-secondary uppercase tracking-[0.2em]">
+                                      {new Date(cell.year, cell.month, cell.day).toLocaleDateString([], { month: "short", day: "numeric" })} · {completedCards.length} {completedCards.length === 1 ? "task" : "tasks"}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => setExpandedDoneKey(null)}
+                                    aria-label="Close"
+                                    className="shrink-0 -mr-1 -mt-0.5 p-1 rounded-md text-secondary hover:text-primary hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-colors"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <div className="p-1.5 space-y-0.5 max-h-52 overflow-y-auto custom-scrollbar">
+                                  {completedCards.map(card => (
+                                    <button
+                                      key={card.id}
+                                      onClick={() => {
+                                        setExpandedDoneKey(null);
+                                        handleOpenCard(card);
+                                      }}
+                                      className="group w-full text-left flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-colors"
+                                    >
+                                      <span className="w-5 h-5 rounded-full bg-tertiary/10 border border-tertiary/20 flex items-center justify-center shrink-0">
+                                        <Check className="w-2.5 h-2.5 text-tertiary" />
+                                      </span>
+                                      <span className="min-w-0 flex-1">
+                                        <span className="block text-[11px] font-medium text-primary leading-snug line-clamp-2">
+                                          {card.name}
+                                        </span>
+                                        <span className="block mt-0.5 text-[9px] font-mono tabular-nums text-secondary/70">
+                                          {new Date(card.listChangedAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                        </span>
+                                      </span>
+                                      <ChevronRight className="w-3 h-3 text-secondary shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
+                                    </button>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       );
                     })}
@@ -1401,7 +1529,7 @@ export default function BoardPage() {
                         <h3 className="font-serif italic font-bold text-primary text-base">Board Signal Feed</h3>
                       </div>
                       <button 
-                        onClick={fetchBoardComments}
+                        onClick={() => fetchBoardComments()}
                         disabled={loadingComments}
                         className="px-2.5 py-1 border border-border bg-card hover:bg-sand rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-colors flex items-center gap-1 cursor-pointer"
                       >
