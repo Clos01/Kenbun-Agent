@@ -1,0 +1,8 @@
+{
+  "name": "kenbun-dashboard-smoke",
+  "private": true,
+  "description": "Standalone deps for smoke.mjs — kept separate so the app's package.json/lockfile (and the container's pnpm install) are untouched.",
+  "dependencies": {
+    "playwright-core": "^1.61.1"
+  }
+}

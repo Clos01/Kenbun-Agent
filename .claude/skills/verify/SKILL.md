@@ -87,3 +87,24 @@ scp docker-compose.remote.yml lg2025:/home/carlos/Kenbun/
 ssh lg2025 'cd /home/carlos/Kenbun && docker compose -f docker-compose.remote.yml up -d honcho_api honcho_deriver'
 # verify env landed: docker exec portable_honcho_deriver env | grep EMBEDDING
 ```
+
+## Dashboard hydration smoke (MANDATORY after any dashboard/ change, ~90s)
+
+HTTP 200 and clean console do NOT prove the dashboard works: on 2026-07-09 a
+wrong IP in `allowedDevOrigins` (next.config.ts) made Turbopack reject the
+real origin — every page served valid SSR HTML but never hydrated (dead UI,
+zero data, zero errors). Only a real browser catches this class of failure.
+
+```bash
+cd dashboard/scripts && npm i --silent && node smoke.mjs
+# or against a different host: node smoke.mjs http://<ip>:3000
+```
+
+Per route (/observatory /board /supervisor /chat) it asserts: HTTP 200, the
+client actually issues /api_proxy requests (= hydration happened), no API
+response >= 400 (= tenant headers present — the proxy rejects requests without
+x-tenant-id; legacy pages must use `src/lib/tenantFetch`), no JS page errors.
+Needs a Chromium: uses the playwright browser cache or system Chrome; override
+with KENBUN_SMOKE_BROWSER=/path/to/chrome.
+
+Never scp dashboard files to lg2025 without running this afterwards.

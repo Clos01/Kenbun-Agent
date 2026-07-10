@@ -33,7 +33,6 @@ export default function Sidebar() {
     { name: "Fleet", href: "/fleet", icon: LayoutGrid },
     { name: "Board", href: "/board", icon: Columns },
     { name: "Apps", href: "/apps", icon: Layers },
-    { name: "Leads", href: "/leads", icon: Layers },
     { name: "Intel", href: "/telemetry", icon: Activity },
     { name: "Supervisor", href: "/supervisor", icon: ShieldCheck },
     { name: "Hivemind", href: "/hivemind", icon: Database },

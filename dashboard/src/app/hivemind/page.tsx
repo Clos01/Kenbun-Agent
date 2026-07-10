@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 interface Concept {
   id: string;
@@ -53,8 +54,8 @@ export default function HivemindMemory() {
   const fetchHivemindData = useCallback(async () => {
     try {
       const [statsRes, conceptsRes] = await Promise.all([
-        fetch(`${API_BASE}/stats`, { cache: "no-store" }),
-        fetch(`${API_BASE}/api/v1/hivemind/concepts`, { cache: "no-store" })
+        tenantFetch(`${API_BASE}/stats`, { cache: "no-store" }),
+        tenantFetch(`${API_BASE}/api/v1/hivemind/concepts`, { cache: "no-store" })
       ]);
       
       if (!statsRes.ok) throw new Error("API_ERROR");

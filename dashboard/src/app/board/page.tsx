@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 // Types
 interface Board {
@@ -176,7 +177,7 @@ export default function BoardPage() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch(`${API_BASE}/api/v1/planka/structure`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/structure`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`HTTP Error ${res.status}: Failed to retrieve Planka structure`);
       }
@@ -206,7 +207,7 @@ export default function BoardPage() {
   const fetchBoardDetails = useCallback(async (boardId: string) => {
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/board/${boardId}`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/board/${boardId}`, { cache: "no-store" });
       if (!res.ok) {
         throw new Error(`Failed to load board details: ${res.status}`);
       }
@@ -237,7 +238,7 @@ export default function BoardPage() {
   // Fetch comments for a specific card
   const fetchComments = useCallback(async (cardId: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${cardId}/comments`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}/comments`, { cache: "no-store" });
       if (!res.ok) throw new Error("Failed to load comments");
       const data = await res.json();
       const commentsList = (data.items || []).sort(
@@ -256,7 +257,7 @@ export default function BoardPage() {
     try {
       const allCommentsPromises = cards.map(async (card) => {
         try {
-          const res = await fetch(`${API_BASE}/api/v1/planka/cards/${card.id}/comments`, { cache: "no-store" });
+          const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${card.id}/comments`, { cache: "no-store" });
           if (!res.ok) return [];
           const data = await res.json();
           return (data.items || []).map((c: Record<string, string | number | boolean | null | undefined>) => ({
@@ -337,7 +338,7 @@ export default function BoardPage() {
     if (!newProjectName.trim()) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/projects`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/projects`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newProjectName.trim(), type: "private" })
@@ -359,7 +360,7 @@ export default function BoardPage() {
     if (!newBoardName.trim() || !selectedProjectIdForBoard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/projects/${selectedProjectIdForBoard}/boards`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/projects/${selectedProjectIdForBoard}/boards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newBoardName.trim() })
@@ -381,7 +382,7 @@ export default function BoardPage() {
     if (!selectedBoard || !editBoardName.trim()) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: editBoardName.trim() })
@@ -403,7 +404,7 @@ export default function BoardPage() {
     if (!selectedBoard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -424,7 +425,7 @@ export default function BoardPage() {
     if (!newListName.trim() || !selectedBoard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}/lists`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/boards/${selectedBoard.id}/lists`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newListName.trim() })
@@ -445,7 +446,7 @@ export default function BoardPage() {
     if (!newCardName.trim()) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listId, name: newCardName.trim() })
@@ -468,7 +469,7 @@ export default function BoardPage() {
       // Optimistic update
       setCards(prev => prev.map(c => c.id === cardId ? { ...c, listId: newListId } : c));
       
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ listId: newListId })
@@ -510,7 +511,7 @@ export default function BoardPage() {
         formattedDueDate = d.toISOString();
       }
 
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -542,7 +543,7 @@ export default function BoardPage() {
   const handleCloseCard = async (cardId: string) => {
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isClosed: true })
@@ -565,7 +566,7 @@ export default function BoardPage() {
     if (!newCommentText.trim() || !selectedCard) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}/comments`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${selectedCard.id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: newCommentText.trim() })
@@ -586,7 +587,7 @@ export default function BoardPage() {
     if (!feedCommentText.trim() || !feedSelectedCardId) return;
     try {
       setSyncing(true);
-      const res = await fetch(`${API_BASE}/api/v1/planka/cards/${feedSelectedCardId}/comments`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${feedSelectedCardId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: feedCommentText.trim() })

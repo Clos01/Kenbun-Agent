@@ -5,6 +5,7 @@ import Sidebar from "@/components/Sidebar";
 import { Send, Terminal, Cpu, CheckCircle, Plus, Trash2, MessageSquare, ChevronDown, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 interface ChatMessage {
   id: string;
@@ -54,7 +55,7 @@ export default function KenbunChat() {
   // 3. Create a New Session
   const handleCreateSession = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/chat/sessions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -83,7 +84,7 @@ export default function KenbunChat() {
   // 1. Fetch Sessions List on Mount
   const fetchSessions = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions`);
+      const res = await tenantFetch(`${API_BASE}/api/v1/chat/sessions`);
       if (res.ok) {
         const data = await res.json();
         setSessions(data);
@@ -102,7 +103,7 @@ export default function KenbunChat() {
   // 2. Fetch Full History for the Active Session
   const loadSessionDetails = useCallback(async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions/${id}`);
+      const res = await tenantFetch(`${API_BASE}/api/v1/chat/sessions/${id}`);
       if (res.ok) {
         const data = await res.json();
         setMessages(data.messages);
@@ -114,7 +115,7 @@ export default function KenbunChat() {
 
   const fetchActiveModel = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/active-model`);
+      const res = await tenantFetch(`${API_BASE}/api/v1/active-model`);
       if (res.ok) {
         const data = await res.json();
         if (data.model) {
@@ -158,7 +159,7 @@ export default function KenbunChat() {
   const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Avoid switching to the session we are deleting
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions/${id}`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/chat/sessions/${id}`, {
         method: "DELETE"
       });
       if (res.ok) {
@@ -192,7 +193,7 @@ export default function KenbunChat() {
     const tick = async () => {
       attempts++;
       try {
-        const res = await fetch(`${API_BASE}/orchestrate/status/${jobId}`);
+        const res = await tenantFetch(`${API_BASE}/orchestrate/status/${jobId}`);
         if (res.ok) {
           const data = await res.json();
           if (data.status === "completed") {
@@ -240,7 +241,7 @@ export default function KenbunChat() {
     if (workflow !== "chat") {
       const msgId = "orch-" + Date.now();
       try {
-        const res = await fetch(`${API_BASE}/orchestrate`, {
+        const res = await tenantFetch(`${API_BASE}/orchestrate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ workflow, task: userMessageContent })
@@ -278,7 +279,7 @@ export default function KenbunChat() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/sessions/${activeSessionId}/message`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/chat/sessions/${activeSessionId}/message`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"

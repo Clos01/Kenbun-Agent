@@ -16,6 +16,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { ToolStat, validateToolStat } from "@/lib/tools";
 import ToolDetailPanel from "@/components/ToolDetailPanel";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 interface BudgetData {
   daily_limit: number;
@@ -203,7 +204,7 @@ export default function FleetCommand() {
 
   const fetchData = useCallback(async () => {
     try {
-      const statsRes = await fetch(`${API_BASE}/stats`, { cache: 'no-store' });
+      const statsRes = await tenantFetch(`${API_BASE}/stats`, { cache: 'no-store' });
       if (!statsRes.ok) throw new Error("API_ERROR");
       const statsData = await statsRes.json();
       

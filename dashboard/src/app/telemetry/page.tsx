@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { ToolStat } from "@/lib/tools";
 import { useLogStream, LogRecord } from "./useLogStream";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 interface TelemetryTrendPoint {
   accuracy: number;
@@ -591,7 +592,7 @@ export default function IntelStream() {
 
     // Fetch Stats & Telemetry (Logs are now streamed separately via EventSource)
     try {
-      const statsRes = await fetch(`${API_BASE}/stats`, { 
+      const statsRes = await tenantFetch(`${API_BASE}/stats`, { 
         cache: 'no-store',
         signal: controller.signal
       });

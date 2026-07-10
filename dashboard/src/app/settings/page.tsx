@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Server, Key, Activity, Settings as SettingsIcon, X, Network, DollarSign } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { CONFIG } from "@/lib/config";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 interface CalibrationCardProps {
   section: {
@@ -71,7 +72,7 @@ export default function Settings() {
 
   const checkStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/stats`, { cache: 'no-store' });
+      const res = await tenantFetch(`${API_BASE}/stats`, { cache: 'no-store' });
       setIsOnline(res.ok);
     } catch {
       setIsOnline(false);
@@ -80,7 +81,7 @@ export default function Settings() {
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/config`);
+      const res = await tenantFetch(`${API_BASE}/api/v1/config`);
       const data = await res.json();
       if (data.status === "success") {
         setConfig(data.config);
@@ -104,7 +105,7 @@ export default function Settings() {
   const triggerManualSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/api/v1/config`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/config`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { tenantFetch } from "@/lib/tenantFetch";
 
 interface Checkpoint {
   id: string;
@@ -65,7 +66,7 @@ export default function SupervisorDashboard() {
 
   const fetchCheckpoints = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/supervisor/checkpoints`);
+      const res = await tenantFetch(`${API_BASE}/api/v1/supervisor/checkpoints`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.status === "success" && Array.isArray(data.data)) {
@@ -86,7 +87,7 @@ export default function SupervisorDashboard() {
 
   const fetchGuardrails = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/supervisor/guardrails`);
+      const res = await tenantFetch(`${API_BASE}/api/v1/supervisor/guardrails`);
       if (!res.ok) return;
       const data = await res.json();
       if (data.status === "success" && Array.isArray(data.data)) {
@@ -99,7 +100,7 @@ export default function SupervisorDashboard() {
 
   const fetchSupervisorStats = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/supervisor/stats`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/supervisor/stats`, { cache: "no-store" });
       if (!res.ok) throw new Error("API_ERROR");
       const data = await res.json();
       
@@ -136,7 +137,7 @@ export default function SupervisorDashboard() {
     setIsSavingCheckpoint(true);
     
     try {
-      const res = await fetch(`${API_BASE}/api/v1/supervisor/checkpoints`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/supervisor/checkpoints`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer KenbunSwarm" },
         body: JSON.stringify({ name: newCheckpointName.trim(), description: newCheckpointDesc.trim() })
@@ -156,7 +157,7 @@ export default function SupervisorDashboard() {
   const handleRestoreCheckpoint = async (hash: string, name: string) => {
     if (!window.confirm(`Are you sure you want to restore to checkpoint [${hash}]: ${name}? This will overwrite current files.`)) return;
     try {
-      const res = await fetch(`${API_BASE}/api/v1/supervisor/checkpoints/${hash}/restore`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/supervisor/checkpoints/${hash}/restore`, {
         method: "POST",
         headers: { "Authorization": "Bearer KenbunSwarm" }
       });
@@ -180,7 +181,7 @@ export default function SupervisorDashboard() {
     setAuditReport(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/supervisor/audit`, {
+      const res = await tenantFetch(`${API_BASE}/api/v1/supervisor/audit`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer KenbunSwarm" },
         body: JSON.stringify({ 
