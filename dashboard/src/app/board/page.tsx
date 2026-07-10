@@ -1459,17 +1459,17 @@ export default function BoardPage() {
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.98, y: Math.floor(idx / 7) < 2 ? -4 : 4 }}
                                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                                className={`absolute z-50 w-64 bg-card/90 backdrop-blur-xl border border-primary/5 ring-1 ring-primary/5 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
+                                className={`absolute z-50 w-[310px] bg-card/90 backdrop-blur-xl border border-primary/5 ring-1 ring-primary/5 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
                                   Math.floor(idx / 7) < 2 ? "top-full mt-1.5" : "bottom-8 mb-1"
                                 } ${idx % 7 >= 4 ? "right-0" : "left-0"}`}
                               >
-                                <div className="flex items-start justify-between gap-2 px-3.5 pt-3 pb-2.5 border-b border-primary/5">
+                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-primary/5">
                                   <div className="min-w-0">
                                     <span className="block font-serif italic font-bold text-primary text-[13px] leading-tight">
-                                      Completed
+                                      Completed Tasks
                                     </span>
                                     <span className="block mt-1 text-[8px] font-mono text-secondary uppercase tracking-[0.2em]">
-                                      {new Date(cell.year, cell.month, cell.day).toLocaleDateString([], { month: "short", day: "numeric" })} · {completedCards.length} {completedCards.length === 1 ? "task" : "tasks"}
+                                      {new Date(cell.year, cell.month, cell.day).toLocaleDateString([], { month: "short", day: "numeric" })} · {completedCards.length} {completedCards.length === 1 ? "node" : "nodes"}
                                     </span>
                                   </div>
                                   <button
@@ -1480,30 +1480,72 @@ export default function BoardPage() {
                                     <X className="w-3 h-3" />
                                   </button>
                                 </div>
-                                <div className="p-1.5 space-y-0.5 max-h-52 overflow-y-auto custom-scrollbar">
-                                  {completedCards.map(card => (
-                                    <button
-                                      key={card.id}
-                                      onClick={() => {
-                                        setExpandedDoneKey(null);
-                                        handleOpenCard(card);
-                                      }}
-                                      className="group w-full text-left flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-colors"
-                                    >
-                                      <span className="w-5 h-5 rounded-full bg-tertiary/10 border border-tertiary/20 flex items-center justify-center shrink-0">
-                                        <Check className="w-2.5 h-2.5 text-tertiary" />
-                                      </span>
-                                      <span className="min-w-0 flex-1">
-                                        <span className="block text-[11px] font-medium text-primary leading-snug line-clamp-2">
-                                          {card.name}
+                                <div className="p-2 space-y-1 max-h-72 overflow-y-auto custom-scrollbar">
+                                  {completedCards.map((card, cardIdx) => {
+                                    const { cleanDescription } = parseCardMetadata(card.description || "");
+                                    const isBug = card.name.toLowerCase().startsWith("bug:") || card.name.toLowerCase().startsWith("fix:");
+                                    const isFeat = card.name.toLowerCase().startsWith("feat:") || card.name.toLowerCase().startsWith("new:");
+                                    
+                                    let cleanName = card.name;
+                                    if (isBug) cleanName = cleanName.replace(/^(bug|fix):\s*/i, "");
+                                    if (isFeat) cleanName = cleanName.replace(/^(feat|new):\s*/i, "");
+
+                                    return (
+                                      <button
+                                        key={card.id}
+                                        onClick={() => {
+                                          setExpandedDoneKey(null);
+                                          handleOpenCard(card);
+                                        }}
+                                        className="group w-full text-left relative flex items-start gap-3.5 px-3 py-2.5 rounded-lg hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
+                                      >
+                                        {/* Timeline connector line */}
+                                        {cardIdx < completedCards.length - 1 && (
+                                          <span className="absolute left-[21px] top-8 bottom-0 w-[1px] bg-border" />
+                                        )}
+
+                                        {/* Timeline check node */}
+                                        <span className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110 ${
+                                          isBug 
+                                            ? "bg-tertiary/10 border border-tertiary/30 text-tertiary group-hover:bg-tertiary/20" 
+                                            : isFeat 
+                                              ? "bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 group-hover:bg-emerald-500/20" 
+                                              : "bg-primary/5 border border-primary/15 text-secondary group-hover:bg-primary/10"
+                                        }`}>
+                                          <Check className="w-2.5 h-2.5" />
                                         </span>
-                                        <span className="block mt-0.5 text-[9px] font-mono tabular-nums text-secondary/70">
-                                          {new Date(card.listChangedAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+
+                                        <span className="min-w-0 flex-1">
+                                          <span className="flex items-center gap-1.5 mb-1">
+                                            {isBug && (
+                                              <span className="text-[7px] font-mono font-bold uppercase tracking-wider bg-tertiary/10 text-tertiary px-1 py-0.5 rounded-sm">
+                                                Bug
+                                              </span>
+                                            )}
+                                            {isFeat && (
+                                              <span className="text-[7px] font-mono font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 px-1 py-0.5 rounded-sm">
+                                                Feat
+                                              </span>
+                                            )}
+                                            <span className="text-[8px] font-mono tabular-nums text-secondary/60">
+                                              {new Date(card.listChangedAt!).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                            </span>
+                                          </span>
+
+                                          <span className="block text-[11px] font-semibold text-primary leading-snug group-hover:text-tertiary transition-colors line-clamp-2">
+                                            {cleanName}
+                                          </span>
+
+                                          {cleanDescription && (
+                                            <span className="block mt-1 text-[9px] text-secondary/70 line-clamp-2 font-normal leading-relaxed">
+                                              {cleanDescription}
+                                            </span>
+                                          )}
                                         </span>
-                                      </span>
-                                      <ChevronRight className="w-3 h-3 text-secondary shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
-                                    </button>
-                                  ))}
+                                        <ChevronRight className="w-3.5 h-3.5 text-secondary/40 shrink-0 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200 self-center" />
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </motion.div>
                             )}
