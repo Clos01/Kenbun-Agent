@@ -24,7 +24,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { theme, toggleTheme, mounted } = useTheme();
+  const { theme, preset, setPreset, toggleTheme, mounted } = useTheme();
   const { tenantId, setTenantId, tenants } = useTenant();
   const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -137,17 +137,52 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* FOOTER UTILITY - Simplified */}
-        <div className={`p-8 border-t border-border-muted transition-all duration-500 shrink-0`}>
-          <button 
-            onClick={toggleTheme}
-            className="w-full flex items-center gap-4 text-primary hover:text-gold transition-all group opacity-40 hover:opacity-100"
-          >
-            <div className="w-8 h-8 border border-border flex items-center justify-center group-hover:border-gold transition-colors shrink-0 text-primary">
-              {!mounted || theme === "dark" ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+        {/* FOOTER UTILITY - Themed */}
+        <div className="p-6 border-t border-border-muted flex flex-col gap-3 shrink-0">
+          {!isCollapsed && (
+            <div className="flex flex-col gap-1.5 px-2">
+              <label className="text-[8px] font-black uppercase tracking-[0.2em] opacity-40">Visual Theme</label>
+              <div className="flex items-center gap-2">
+                {[
+                  { id: "limestone", color: "#B8422E", bg: "#F7F5F2", border: "rgba(26, 28, 30, 0.2)", name: "Limestone" },
+                  { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", border: "rgba(255, 255, 255, 0.2)", name: "Obsidian" },
+                  { id: "forest", color: "#2E8B57", bg: "#F0F4F1", border: "rgba(27, 42, 30, 0.2)", name: "Forest" },
+                  { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", border: "rgba(26, 35, 50, 0.2)", name: "Cobalt" }
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => setPreset(item.id as any)}
+                    title={item.name}
+                    className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all ${
+                      preset === item.id 
+                        ? "border-gold scale-110 shadow-sm" 
+                        : "border-border hover:scale-105 opacity-60 hover:opacity-100"
+                    }`}
+                    style={{ backgroundColor: item.bg }}
+                  >
+                    <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                  </button>
+                ))}
+              </div>
             </div>
-            {!isCollapsed && <span className="ind-header text-[8px] tracking-[0.4em] text-primary">{!mounted || theme === "dark" ? "Dawn" : "Dusk"}</span>}
-          </button>
+          )}
+          
+          {isCollapsed && (
+            <button 
+              onClick={() => {
+                const list: ("limestone"|"obsidian"|"forest"|"cobalt")[] = ["limestone", "obsidian", "forest", "cobalt"];
+                const idx = list.indexOf(preset);
+                const next = list[(idx + 1) % list.length];
+                setPreset(next);
+              }}
+              className="w-full flex items-center justify-center text-primary hover:text-gold transition-all group opacity-40 hover:opacity-100"
+              title="Cycle Theme"
+            >
+              <div className="w-8 h-8 border border-border flex items-center justify-center group-hover:border-gold transition-colors shrink-0 text-primary">
+                <Sun className="w-3.5 h-3.5" />
+              </div>
+            </button>
+          )}
         </div>
       </motion.aside>
 
@@ -177,10 +212,15 @@ export default function Sidebar() {
           );
         })}
         <button 
-          onClick={toggleTheme}
+          onClick={() => {
+            const list: ("limestone"|"obsidian"|"forest"|"cobalt")[] = ["limestone", "obsidian", "forest", "cobalt"];
+            const idx = list.indexOf(preset);
+            const next = list[(idx + 1) % list.length];
+            setPreset(next);
+          }}
           className="w-16 border-l border-border-muted flex items-center justify-center text-primary"
         >
-          {!mounted || theme === "dark" ? <Sun className="w-4 h-4 opacity-40" /> : <Moon className="w-4 h-4 opacity-40" />}
+          <Sun className="w-4 h-4 opacity-40" />
         </button>
       </nav>
     </>

@@ -39,6 +39,13 @@ import os
 import re
 import sqlite3
 import sys
+import urllib.request
+import urllib.error
+
+try:
+    import psycopg
+except ImportError:
+    psycopg = None
 
 DEFAULT_BRAIN_DIR = os.path.expanduser("~/.gemini/antigravity/brain")
 TRANSCRIPT_REL = ".system_generated/logs/transcript.jsonl"
@@ -105,6 +112,11 @@ def extract_trajectory(trajectory_id, transcript_path):
             content = rec.get("thinking") or ""
         if not content.strip() and not rec.get("tool_calls"):
             continue
+            
+        # Truncate large code bodies to avoid database bloat and stay within embedding context limits
+        if len(content) > 1200 and ("import " in content or "def " in content or "class " in content or "const " in content or "{" in content):
+            content = content[:500] + "\n... [TRUNCATED CODE BLOCKS FOR SEMANTIC SEARCH] ...\n" + content[-500:]
+            
         if title is None and role == "user" and content.strip():
             first_line = content.strip().splitlines()[0]
             title = first_line[:TITLE_MAX].strip()
@@ -196,7 +208,136 @@ def default_db_path():
     return os.path.join(kenbun_dir, "state.db")
 
 
+def get_embedding(text, model="qwen3-embedding:4b"):
+    # Avoid generating embeddings for empty prompts
+    if not text or not text.strip():
+        text = "empty"
+    payload = json.dumps({
+        "model": model,
+        "prompt": text
+    }).encode("utf-8")
+    
+    ollama_url = os.environ.get("OLLAMA_URL") or "http://100.92.127.1:11434/api/generate"
+    embeddings_url = ollama_url.replace("/api/generate", "/api/embeddings")
+    if "/api/embeddings" not in embeddings_url:
+        embeddings_url = "http://100.92.127.1:11434/api/embeddings"
+        
+    req = urllib.request.Request(
+        embeddings_url,
+        data=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as res:
+            resp = json.loads(res.read().decode("utf-8"))
+            return resp.get("embedding")
+    except Exception as e:
+        sys.stderr.write(f"Embedding generation failed: {e}\n")
+        return None
+
 def cmd_apply(args):
+    pg_host = os.environ.get("POSTGRES_HOST")
+    if pg_host and psycopg is not None:
+        # If running inside docker container network, route via localhost loopback
+        if os.path.exists("/.dockerenv") or pg_host in ["100.104.211.61", "100.92.127.1"]:
+            pg_host = "localhost"
+            
+        sys.stderr.write(f"Connecting to PostgreSQL database at {pg_host}...\n")
+        pg_port = os.environ.get("POSTGRES_PORT", "5432")
+        pg_user = os.environ.get("POSTGRES_USER", "postgres")
+        pg_password = os.environ.get("POSTGRES_PASSWORD", "kenbun")
+        pg_db = os.environ.get("POSTGRES_DB", "kenbun_intelligence")
+        
+        conn = psycopg.connect(
+            host=pg_host,
+            port=pg_port,
+            user=pg_user,
+            password=pg_password,
+            dbname=pg_db
+        )
+        
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS session_embeddings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    trajectory_id VARCHAR(255) NOT NULL,
+                    step_index INTEGER NOT NULL,
+                    summary TEXT,
+                    embedding vector(2560),
+                    raw_log_url VARCHAR(512),
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS ag_sync_state (
+                    trajectory_id VARCHAR(255) PRIMARY KEY,
+                    last_step_index INTEGER NOT NULL DEFAULT -1,
+                    synced_at TIMESTAMP WITH TIME ZONE
+                );
+            """)
+        conn.commit()
+        
+        watermarks = {}
+        with conn.cursor() as cur:
+            cur.execute("SELECT trajectory_id, last_step_index FROM ag_sync_state")
+            for tid, lsi in cur.fetchall():
+                watermarks[tid] = lsi
+                
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        n_new_sessions = n_new_messages = n_skipped = 0
+        
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                n_skipped += 1
+                continue
+                
+            if rec.get("kind") == "session":
+                n_new_sessions += 1
+                
+            elif rec.get("kind") == "message":
+                tid = rec["trajectory_id"]
+                step = rec.get("step_index", -1)
+                if step <= watermarks.get(tid, -1):
+                    continue
+                
+                content = rec.get("content") or ""
+                summary = content[:600]
+                if rec.get("tool_calls"):
+                    summary += f" [Tool Calls: {json.dumps(rec['tool_calls'])}]"
+                
+                embedding = get_embedding(summary)
+                if embedding:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """INSERT INTO session_embeddings
+                               (trajectory_id, step_index, summary, embedding)
+                               VALUES (%s, %s, %s, %s)""",
+                            (tid, step, summary, embedding)
+                        )
+                        cur.execute(
+                            """INSERT INTO ag_sync_state (trajectory_id, last_step_index, synced_at)
+                               VALUES (%s, %s, %s)
+                               ON CONFLICT(trajectory_id) DO UPDATE SET
+                                 last_step_index = GREATEST(ag_sync_state.last_step_index, excluded.last_step_index),
+                                 synced_at = excluded.synced_at""",
+                            (tid, step, now)
+                        )
+                    n_new_messages += 1
+                else:
+                    n_skipped += 1
+                    
+        conn.commit()
+        conn.close()
+        print("apply (Postgres): %d new sessions, %d new embedded messages, %d skipped/failed records"
+              % (n_new_sessions, n_new_messages, n_skipped))
+        return
+
+    # SQLite fallback
     db_path = args.db or default_db_path()
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode=WAL;")
@@ -258,7 +399,7 @@ def cmd_apply(args):
 
     conn.commit()
     conn.close()
-    print("apply: %d new sessions, %d new messages, %d skipped records (db: %s)"
+    print("apply (SQLite): %d new sessions, %d new messages, %d skipped records (db: %s)"
           % (n_new_sessions, n_new_messages, n_skipped, db_path))
 
 

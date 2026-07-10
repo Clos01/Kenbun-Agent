@@ -2,10 +2,59 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+export type ThemePreset = "limestone" | "obsidian" | "forest" | "cobalt";
+
+export const THEME_PRESETS = {
+  limestone: {
+    name: "Limestone",
+    primary: "#1A1C1E",
+    secondary: "#6C7278",
+    tertiary: "#B8422E",
+    neutral: "#F7F5F2",
+    card: "#FFFFFF",
+    border: "rgba(26, 28, 30, 0.08)",
+    borderMuted: "rgba(26, 28, 30, 0.04)",
+    sand: "rgba(184, 66, 46, 0.04)"
+  },
+  obsidian: {
+    name: "Obsidian",
+    primary: "#F7F5F2",
+    secondary: "#9EA4AC",
+    tertiary: "#FF6B4A",
+    neutral: "#0F1011",
+    card: "#181A1C",
+    border: "rgba(247, 245, 242, 0.08)",
+    borderMuted: "rgba(247, 245, 242, 0.04)",
+    sand: "rgba(255, 107, 74, 0.04)"
+  },
+  forest: {
+    name: "Forest",
+    primary: "#1B2A1E",
+    secondary: "#788A7D",
+    tertiary: "#2E8B57",
+    neutral: "#F0F4F1",
+    card: "#FFFFFF",
+    border: "rgba(27, 42, 30, 0.08)",
+    borderMuted: "rgba(27, 42, 30, 0.04)",
+    sand: "rgba(46, 139, 87, 0.04)"
+  },
+  cobalt: {
+    name: "Cobalt",
+    primary: "#1A2332",
+    secondary: "#6C7D93",
+    tertiary: "#2F6FEB",
+    neutral: "#F0F4F8",
+    card: "#FFFFFF",
+    border: "rgba(26, 35, 50, 0.08)",
+    borderMuted: "rgba(26, 35, 50, 0.04)",
+    sand: "rgba(47, 111, 235, 0.04)"
+  }
+};
 
 interface ThemeContextType {
-  theme: Theme;
+  theme: "light" | "dark";
+  preset: ThemePreset;
+  setPreset: (preset: ThemePreset) => void;
   toggleTheme: () => void;
   mounted: boolean;
 }
@@ -13,96 +62,63 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [preset, setPresetState] = useState<ThemePreset>("obsidian");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => {
-      setMounted(true);
-    }, 0);
-    
-    // 1. Permanently remove legacy localStorage entries to break any persistent light-mode locks asynchronously
-    const cleanupTimer = setTimeout(() => {
-      try {
-        localStorage.removeItem("theme");
-        localStorage.removeItem("ag_theme");
-      } catch {}
-    }, 0);
-
-    // 2. Synchronize React state with the class applied by the blocking head script
-    setTimeout(() => {
-      try {
-        const hasLightClass = document.documentElement.classList.contains("light");
-        setTheme(hasLightClass ? "light" : "dark");
-      } catch {}
-    }, 0);
-
-    // 3. Add transition-colors class dynamically after load to avoid transition jitter (respects prefers-reduced-motion)
-    const transitionTimer = setTimeout(() => {
-      try {
-        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        if (!prefersReducedMotion) {
-          document.body.classList.add("transition-colors", "duration-300");
-        }
-      } catch {}
-    }, 100);
-
-    // 4. Listen to OS system preference changes dynamically
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleSystemChange = (e: MediaQueryListEvent) => {
-      try {
-        if (!localStorage.getItem("ag_theme_v2")) {
-          const newTheme = e.matches ? "dark" : "light";
-          setTheme(newTheme);
-          document.documentElement.classList.toggle("light", !e.matches);
-        }
-      } catch {
-        // Fallback for private browsing
-        const newTheme = e.matches ? "dark" : "light";
-        setTheme(newTheme);
-        document.documentElement.classList.toggle("light", !e.matches);
-      }
-    };
-
-    if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener("change", handleSystemChange);
-    } else {
-      mediaQuery.addListener(handleSystemChange);
-    }
-
-    // 5. Cross-tab synchronization for versioned theme key
-    const handleStorageSync = (e: StorageEvent) => {
-      if (e.key === "ag_theme_v2") {
-        const newTheme = e.newValue as Theme || "dark";
-        setTheme(newTheme);
-        document.documentElement.classList.toggle("light", newTheme === "light");
-      }
-    };
-    window.addEventListener("storage", handleStorageSync);
-
-    return () => {
-      clearTimeout(cleanupTimer);
-      clearTimeout(transitionTimer);
-      if (mediaQuery.removeEventListener) {
-        mediaQuery.removeEventListener("change", handleSystemChange);
+    try {
+      const stored = localStorage.getItem("kenbun_theme_preset") as ThemePreset;
+      if (stored && THEME_PRESETS[stored]) {
+        setPresetState(stored);
       } else {
-        mediaQuery.removeListener(handleSystemChange);
+        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        setPresetState(isDark ? "obsidian" : "limestone");
       }
-      window.removeEventListener("storage", handleStorageSync);
-    };
+    } catch {}
+    setMounted(true);
   }, []);
 
-  const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
+  useEffect(() => {
+    if (!preset) return;
     try {
-      localStorage.setItem("ag_theme_v2", newTheme);
+      localStorage.setItem("kenbun_theme_preset", preset);
     } catch {}
-    document.documentElement.classList.toggle("light", newTheme === "light");
+
+    const root = document.documentElement;
+    const p = THEME_PRESETS[preset];
+    if (p) {
+      root.style.setProperty("--primary", p.primary);
+      root.style.setProperty("--secondary", p.secondary);
+      root.style.setProperty("--tertiary", p.tertiary);
+      root.style.setProperty("--accent", p.tertiary);
+      root.style.setProperty("--neutral", p.neutral);
+      root.style.setProperty("--background", p.neutral);
+      root.style.setProperty("--foreground", p.primary);
+      root.style.setProperty("--card", p.card);
+      root.style.setProperty("--border", p.border);
+      root.style.setProperty("--border-muted", p.borderMuted);
+      root.style.setProperty("--sand", p.sand);
+      root.style.setProperty("--gold", p.tertiary);
+
+      const isObsidian = preset === "obsidian";
+      root.classList.toggle("light", !isObsidian);
+    }
+  }, [preset]);
+
+  const setPreset = (newPreset: ThemePreset) => {
+    if (THEME_PRESETS[newPreset]) {
+      setPresetState(newPreset);
+    }
   };
 
+  const toggleTheme = () => {
+    setPresetState((prev) => (prev === "obsidian" ? "limestone" : "obsidian"));
+  };
+
+  const theme = preset === "obsidian" ? "dark" : "light";
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, mounted }}>
+    <ThemeContext.Provider value={{ theme, preset, setPreset, toggleTheme, mounted }}>
       {children}
     </ThemeContext.Provider>
   );
