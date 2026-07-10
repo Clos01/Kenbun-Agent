@@ -100,6 +100,7 @@ services:
     - CHROMA_HOST=localhost
     - CHROMA_PORT=8000
     - ASSEMBLY_PC_IP=localhost
+    - POSTGRES_HOST=localhost
     # PRIMARY_LLM_URL intentionally NOT overridden here — inherit from .env so
     # it respects the dynamic token governor and Tailscale configs.
     - OLLAMA_URL=http://localhost:11434/api/generate
