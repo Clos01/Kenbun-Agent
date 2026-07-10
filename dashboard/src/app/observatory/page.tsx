@@ -19,6 +19,7 @@ import GalaxyMap from "@/components/GalaxyMap";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { TOOL_EQUATIONS } from "@/lib/equations";
+import { useTenant } from "@/context/TenantContext";
 
 type TabId = "overview" | "intelligence" | "memory" | "feed";
 
@@ -302,6 +303,7 @@ export function serializeSvgPaths(
 }
 
 export default function HeritageObservatory() {
+  const { tenantId } = useTenant();
   const API_BASE = CONFIG.API_BASE;
   const [stats, setStats] = useState<IntelligenceTool[]>([]);
   const [logs, setLogs] = useState<(string | SystemLog)[]>([]);
@@ -419,8 +421,15 @@ export default function HeritageObservatory() {
   const fetchData = useCallback(async () => {
     if (isPausedRef.current) return;
 
+    const requestOptions = {
+      cache: 'no-store' as const,
+      headers: {
+        'x-tenant-id': tenantId
+      }
+    };
+
     // 1. Fetch Stats (Telemetry, Tools, Budget, Pulse)
-    fetch(`${API_BASE}/stats`, { cache: 'no-store' })
+    fetch(`${API_BASE}/stats`, requestOptions)
       .then(res => {
         if (!res.ok) throw new Error("Stats fetch failed");
         return res.json();
@@ -456,7 +465,7 @@ export default function HeritageObservatory() {
       });
 
     // 2. Fetch Logs
-    fetch(`${API_BASE}/logs`, { cache: 'no-store' })
+    fetch(`${API_BASE}/logs`, requestOptions)
       .then(res => {
         if (!res.ok) throw new Error("Logs fetch failed");
         return res.json();
@@ -465,7 +474,7 @@ export default function HeritageObservatory() {
       .catch(err => console.warn("BRIDGE_LOGS_FETCH_ERROR:", err));
 
     // 3. Fetch Kanban
-    fetch(`${API_BASE}/kanban`, { cache: 'no-store' })
+    fetch(`${API_BASE}/kanban`, requestOptions)
       .then(res => {
         if (!res.ok) throw new Error("Kanban fetch failed");
         return res.json();
@@ -474,7 +483,7 @@ export default function HeritageObservatory() {
       .catch(err => console.warn("BRIDGE_KANBAN_FETCH_ERROR:", err));
 
     // 4. Fetch Build Status
-    fetch(`${API_BASE}/api/v1/build/status`, { cache: 'no-store' })
+    fetch(`${API_BASE}/api/v1/build/status`, requestOptions)
       .then(res => {
         if (!res.ok) throw new Error("Build status fetch failed");
         return res.json();
@@ -483,7 +492,7 @@ export default function HeritageObservatory() {
       .catch(err => console.warn("BRIDGE_BUILD_FETCH_ERROR:", err));
 
     // 5. Fetch Memory Signals
-    fetch(`${API_BASE}/api/v1/memory/signals`, { cache: 'no-store' })
+    fetch(`${API_BASE}/api/v1/memory/signals`, requestOptions)
       .then(res => {
         if (!res.ok) throw new Error("Memory signals fetch failed");
         return res.json();
@@ -492,7 +501,7 @@ export default function HeritageObservatory() {
       .catch(err => console.warn("BRIDGE_MEMORY_FETCH_ERROR:", err));
 
     // 6. Fetch Intelligence History
-    fetch(`${API_BASE}/api/v1/intelligence/history`, { cache: 'no-store' })
+    fetch(`${API_BASE}/api/v1/intelligence/history`, requestOptions)
       .then(res => {
         if (!res.ok) throw new Error("History fetch failed");
         return res.json();
@@ -500,7 +509,7 @@ export default function HeritageObservatory() {
       .then(historyData => setIntelligenceHistory(historyData.history || []))
       .catch(err => console.warn("BRIDGE_HISTORY_FETCH_ERROR:", err));
 
-  }, [API_BASE]);
+  }, [API_BASE, tenantId]);
 
   const handleReconnect = useCallback(() => {
     setError(false);
