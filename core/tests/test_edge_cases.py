@@ -70,18 +70,24 @@ class TestEdgeCases:
         alpha, beta, s, f = gov.get_tool_stats("token_governor")
         assert alpha == 2.0
         assert beta == 2.0
+        assert s == 0
+        assert f == 0
         
         # Update intelligence with a success
         gov.update_intelligence("token_governor", "Strategy", success=True)
         alpha, beta, s, f = gov.get_tool_stats("token_governor")
         assert alpha == 3.0
         assert beta == 2.0
+        assert s == 1
+        assert f == 0
         
         # Update intelligence with a failure
         gov.update_intelligence("token_governor", "Strategy", success=False)
         alpha, beta, s, f = gov.get_tool_stats("token_governor")
         assert alpha == 3.0
         assert beta == 3.0
+        assert s == 1
+        assert f == 1
 
     def test_bayesian_governor_sample_strategy(self, tmp_path, monkeypatch):
         """Verify Thompson Sampling picks the best tool based on weights."""
@@ -94,8 +100,8 @@ class TestEdgeCases:
         # Clean table and insert isolated custom tools to prevent discovery dependency noise
         cursor = gov.local_conn.cursor()
         cursor.execute("DELETE FROM intelligence")
-        cursor.execute("INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count) VALUES ('tool_a', 'Strategy', 100.0, 1.0, 0, 0)")
-        cursor.execute("INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count) VALUES ('tool_b', 'Sensory', 1.0, 100.0, 0, 0)")
+        cursor.execute("INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count) VALUES ('tool_a', 'global', 100.0, 1.0, 0, 0)")
+        cursor.execute("INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count) VALUES ('tool_b', 'global', 1.0, 100.0, 0, 0)")
         gov.local_conn.commit()
         gov.get_tool_stats.cache_clear()
         
@@ -141,6 +147,86 @@ class TestEdgeCases:
         
         pulse = gov.get_telemetry_pulse()
         assert pulse.status == PulseStatus.CRITICAL
+
+    def test_bayesian_governor_postgres_operations(self, monkeypatch):
+        """Verify get_tool_stats, update_intelligence and tune_swarm with PostgreSQL mocking."""
+        gov = BayesianGovernor()
+        gov.use_local = False
+        gov._ensure_db = lambda: None
+        
+        mock_cursor = MagicMock()
+        mock_conn = MagicMock()
+        mock_conn.__enter__.return_value = mock_conn
+        mock_conn.cursor.return_value.__enter__.return_value = mock_cursor
+        
+        # Mock get_connection
+        mock_get_connection = MagicMock(return_value=mock_conn)
+        monkeypatch.setattr("tools.memory.postgres_client.get_connection", mock_get_connection, raising=False)
+        monkeypatch.setattr("tools.utils.bayesian.get_connection", mock_get_connection, raising=False)
+        
+        # Test get_tool_stats when row exists
+        mock_cursor.fetchone.return_value = {
+            "alpha": 3.5,
+            "beta": 1.2,
+            "success_count": 5,
+            "failure_count": 2
+        }
+        
+        # We need to clear lru_cache since get_tool_stats is cached
+        gov.get_tool_stats.cache_clear()
+        alpha, beta, s, f = gov.get_tool_stats("mock_tool")
+        assert alpha == 3.5
+        assert beta == 1.2
+        assert s == 5
+        assert f == 2
+        
+        # Verify query was correct
+        mock_cursor.execute.assert_called_with(
+            "SELECT alpha, beta, success_count, failure_count FROM bayesian_weights WHERE tool_id = %s AND category = %s",
+            ("mock_tool", "global")
+        )
+        
+        # Test update_intelligence remote PostgreSQL update
+        # Clear cache first
+        gov.get_tool_stats.cache_clear()
+        gov.update_intelligence("mock_tool", "Strategy", success=True)
+        # It updates both 'global' and 'Strategy'. Let's inspect the INSERT/UPDATE query execution args for category-specific row.
+        called_args = mock_cursor.execute.call_args_list[-1][0]
+        query = called_args[0]
+        params = called_args[1]
+        
+        assert "INSERT INTO bayesian_weights" in query
+        assert "success_count = bayesian_weights.success_count + EXCLUDED.success_count" in query
+        assert params[0] == "mock_tool"
+        assert params[1] == "Strategy"
+        assert params[2] == 2.0 # alpha_inc + 1.0
+        assert params[3] == 1.0 # beta_inc + 1.0
+        assert params[4] == 1   # s_inc
+        assert params[5] == 0   # f_inc
+        
+        # Test tune_swarm remote PostgreSQL update
+        from tools.utils.bayesian import tune_swarm
+        tune_swarm("mock_tool", success=True, category="Strategy")
+        
+        # Verify last query execution args in tune_swarm
+        # It does:
+        # 1. Update global (Insert global weight/counts)
+        # 2. Category-specific: insert category record seeding from global
+        # 3. Category-specific: update category record
+        
+        # Let's check the update query execution args
+        update_call = mock_cursor.execute.call_args_list[-1][0]
+        update_query = update_call[0]
+        update_params = update_call[1]
+        
+        assert "UPDATE bayesian_weights" in update_query
+        assert "success_count = success_count + %s" in update_query
+        assert update_params[0] == 1.0 # alpha inc
+        assert update_params[1] == 0.0 # beta inc
+        assert update_params[2] == 1   # s inc
+        assert update_params[3] == 0   # f inc
+        assert update_params[4] == "mock_tool"
+        assert update_params[5] == "Strategy"
 
     # ==========================================
     # 2. iMESSAGE TOOLS EDGE CASES

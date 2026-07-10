@@ -19,6 +19,7 @@ import {
   Database
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { createPortal } from "react-dom";
 import { CONFIG } from "@/lib/config";
 
 // Interface for Web Apps
@@ -520,14 +521,18 @@ export default function AppsPortal() {
           )}
         </div>
 
-        {/* EMBEDDED IFRAME SHELL DRAWER */}
+
+      </main>
+
+      {/* EMBEDDED IFRAME SHELL DRAWER - Rendered via Portal to escape all stacking contexts */}
+      {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {activeIframeUrl && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-neutral/65 backdrop-blur-md z-50 flex flex-col p-4 lg:p-8"
+              className="fixed inset-0 bg-neutral/65 backdrop-blur-md z-[9999] flex flex-col p-4 lg:p-8"
             >
               <div className="bg-card border border-primary/10 rounded-lg flex-1 flex flex-col shadow-2xl relative overflow-hidden">
                 {/* Iframe Header */}
@@ -591,8 +596,9 @@ export default function AppsPortal() {
               </div>
             </motion.div>
           )}
-        </AnimatePresence>
-      </main>
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
 }

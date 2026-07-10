@@ -34,49 +34,109 @@ def tune_swarm(tool_id: str, success: bool, category: str = "global"):
     Updates the Bayesian weights for a specific tool natively in Postgres.
     Uses Beta distribution logic: Alpha (successes) and Beta (failures).
     """
+    alpha_inc = 1.0 if success else 0.0
+    beta_inc = 0.0 if success else 1.0
+    s_inc = 1 if success else 0
+    f_inc = 0 if success else 1
+
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # 1. Update Global
+                # 1. Ensure 'global' exists
                 cur.execute("""
-                    INSERT INTO bayesian_weights (tool_id, category, alpha, beta)
-                    VALUES (%s, 'global', %s, %s)
-                    ON CONFLICT (tool_id, category) DO UPDATE 
-                    SET alpha = bayesian_weights.alpha + %s,
-                        beta = bayesian_weights.beta + %s,
-                        last_updated = CURRENT_TIMESTAMP
-                """, (
-                    tool_id,
-                    1.0 if success else 0.0, 
-                    0.0 if success else 1.0,
-                    1.0 if success else 0.0,
-                    0.0 if success else 1.0
-                ))
+                    INSERT INTO bayesian_weights (tool_id, category, alpha, beta, success_count, failure_count)
+                    VALUES (%s, 'global', 1.0, 1.0, 0, 0)
+                    ON CONFLICT (tool_id, category) DO NOTHING
+                """, (tool_id,))
 
-                # 2. Update Category-specific (if not global)
+                # 2. Ensure category-specific exists
                 if category != "global":
-                    # If category record doesn't exist, we must seed it from the current global value first.
                     cur.execute("""
-                        INSERT INTO bayesian_weights (tool_id, category, alpha, beta)
-                        SELECT %s, %s, alpha, beta FROM bayesian_weights WHERE tool_id = %s AND category = 'global'
+                        INSERT INTO bayesian_weights (tool_id, category, alpha, beta, success_count, failure_count)
+                        SELECT %s, %s, alpha, beta, success_count, failure_count FROM bayesian_weights
+                        WHERE tool_id = %s AND category = 'global'
                         ON CONFLICT (tool_id, category) DO NOTHING
                     """, (tool_id, category, tool_id))
 
+                # 3. Update global
+                cur.execute("""
+                    UPDATE bayesian_weights
+                    SET alpha = alpha + %s,
+                        beta = beta + %s,
+                        success_count = success_count + %s,
+                        failure_count = failure_count + %s,
+                        last_updated = CURRENT_TIMESTAMP
+                    WHERE tool_id = %s AND category = 'global'
+                """, (alpha_inc, beta_inc, s_inc, f_inc, tool_id))
+
+                # 4. Update category-specific
+                if category != "global":
                     cur.execute("""
                         UPDATE bayesian_weights
                         SET alpha = alpha + %s,
                             beta = beta + %s,
+                            success_count = success_count + %s,
+                            failure_count = failure_count + %s,
                             last_updated = CURRENT_TIMESTAMP
                         WHERE tool_id = %s AND category = %s
-                    """, (
-                        1.0 if success else 0.0,
-                        0.0 if success else 1.0,
-                        tool_id, category
-                    ))
+                    """, (alpha_inc, beta_inc, s_inc, f_inc, tool_id, category))
+
                 conn.commit()
     except Exception as e:
-        logger.error(f"❌ DB tuning error: {e}")
-        return f"❌ Tuning failed: {e}"
+        logger.error(f"❌ DB tuning error: {e}. Falling back to SQLite...")
+        try:
+            import sqlite3
+            from tools.infrastructure.config import settings
+            conn = sqlite3.connect(settings.INTELLIGENCE_DB_PATH)
+            try:
+                conn.execute("PRAGMA journal_mode=WAL;")
+                cur = conn.cursor()
+                # 1. Ensure 'global' exists in local SQLite
+                cur.execute("""
+                    INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count)
+                    VALUES (?, 'global', 1.0, 1.0, 0, 0)
+                    ON CONFLICT (tool_id, category) DO NOTHING
+                """, (tool_id,))
+
+                # 2. Ensure category-specific exists in local SQLite
+                if category != "global":
+                    cur.execute("""
+                        INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count)
+                        SELECT ?, ?, alpha, beta, success_count, failure_count FROM intelligence
+                        WHERE tool_id = ? AND category = 'global'
+                        ON CONFLICT (tool_id, category) DO NOTHING
+                    """, (tool_id, category, tool_id))
+
+                # 3. Update global in local SQLite
+                timestamp = str(time.time())
+                cur.execute("""
+                    UPDATE intelligence
+                    SET alpha = alpha + ?,
+                        beta = beta + ?,
+                        success_count = success_count + ?,
+                        failure_count = failure_count + ?,
+                        timestamp = ?
+                    WHERE tool_id = ? AND category = 'global'
+                """, (alpha_inc, beta_inc, s_inc, f_inc, timestamp, tool_id))
+
+                # 4. Update category-specific in local SQLite
+                if category != "global":
+                    cur.execute("""
+                        UPDATE intelligence
+                        SET alpha = alpha + ?,
+                            beta = beta + ?,
+                            success_count = success_count + ?,
+                            failure_count = failure_count + ?,
+                            timestamp = ?
+                        WHERE tool_id = ? AND category = ?
+                    """, (alpha_inc, beta_inc, s_inc, f_inc, timestamp, tool_id, category))
+
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as sqlite_err:
+            logger.error(f"❌ SQLite fallback tuning error: {sqlite_err}")
+            return f"❌ Tuning failed: {e} (SQLite fallback also failed: {sqlite_err})"
 
     return f"✅ Synaptic Weight Tuned: {tool_id} ({category}) -> {'SUCCESS' if success else 'FAILURE'}"
 
@@ -94,10 +154,32 @@ def get_confidence(tool_id: str, category: str = "global"):
                     row = cur.fetchone()
                 
                 if row:
-                    alpha, beta = row["alpha"], row["beta"]
+                    alpha, beta = float(row["alpha"]), float(row["beta"])
+                    if alpha + beta == 0:
+                        return 0.5
                     return alpha / (alpha + beta)
     except Exception as e:
         logger.error(f"❌ Error getting confidence: {e}")
+        try:
+            import sqlite3
+            from tools.infrastructure.config import settings
+            conn = sqlite3.connect(settings.INTELLIGENCE_DB_PATH)
+            try:
+                cur = conn.cursor()
+                cur.execute("SELECT alpha, beta FROM intelligence WHERE tool_id = ? AND category = ?", (tool_id, category))
+                row = cur.fetchone()
+                if not row and category != 'global':
+                    cur.execute("SELECT alpha, beta FROM intelligence WHERE tool_id = ? AND category = 'global'", (tool_id,))
+                    row = cur.fetchone()
+                if row:
+                    alpha, beta = float(row[0]), float(row[1])
+                    if alpha + beta == 0:
+                        return 0.5
+                    return alpha / (alpha + beta)
+            finally:
+                conn.close()
+        except Exception as sqlite_err:
+            logger.error(f"❌ SQLite fallback confidence error: {sqlite_err}")
     
     # Default fallback
     return 0.5
