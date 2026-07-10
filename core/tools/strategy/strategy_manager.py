@@ -184,19 +184,51 @@ class BayesianGovernor:
             self.local_conn = sqlite3.connect(LOCAL_DB_PATH, check_same_thread=False)
             self.local_conn.execute("PRAGMA journal_mode=WAL;")
             print(f"✅ Bayesian Governor: Connected to {LOCAL_DB_PATH} in WAL mode")
+
+            # Migration check
+            cursor = self.local_conn.cursor()
+            cursor.execute("PRAGMA table_info(intelligence)")
+            columns = cursor.fetchall()
+            if columns:
+                pk_cols = [col[1] for col in columns if col[5] > 0]
+                if pk_cols == ["tool_id"]:
+                    print("🔄 Running self-healing migration for intelligence table schema...")
+                    cursor.execute("ALTER TABLE intelligence RENAME TO intelligence_old")
+                    cursor.execute('''
+                        CREATE TABLE intelligence (
+                            tool_id TEXT,
+                            category TEXT DEFAULT 'global',
+                            alpha REAL DEFAULT 2.0,
+                            beta REAL DEFAULT 2.0,
+                            success_count INTEGER DEFAULT 0,
+                            failure_count INTEGER DEFAULT 0,
+                            timestamp TEXT,
+                            PRIMARY KEY (tool_id, category)
+                        )
+                    ''')
+                    cursor.execute('''
+                        INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
+                        SELECT tool_id, COALESCE(category, 'global'), alpha, beta, success_count, failure_count, timestamp
+                        FROM intelligence_old
+                    ''')
+                    cursor.execute("DROP TABLE intelligence_old")
+                    self.local_conn.commit()
+                    print("✅ Self-healing migration completed.")
         except Exception as e:
-            print(f"❌ Bayesian Governor: Failed to connect to DB at {LOCAL_DB_PATH}: {e}")
+            print(f"❌ Bayesian Governor: Failed to connect or migrate DB at {LOCAL_DB_PATH}: {e}")
             return
+
         cursor = self.local_conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS intelligence (
-                tool_id TEXT PRIMARY KEY,
-                category TEXT,
+                tool_id TEXT,
+                category TEXT DEFAULT 'global',
                 alpha REAL DEFAULT 2.0,
                 beta REAL DEFAULT 2.0,
                 success_count INTEGER DEFAULT 0,
                 failure_count INTEGER DEFAULT 0,
-                timestamp TEXT
+                timestamp TEXT,
+                PRIMARY KEY (tool_id, category)
             )
         ''')
         self.local_conn.commit()
@@ -210,47 +242,62 @@ class BayesianGovernor:
                 cursor.executemany('''
                     INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
                     VALUES (?, ?, 2.0, 2.0, 0, 0, ?)
-                ''', [(t[0], t[1], timestamp) for t in default_tools])
+                ''', [(t[0], t[1] or 'global', timestamp) for t in default_tools])
                 self.local_conn.commit()
                 print(f"✅ Bayesian Governor: Bootstrapped {len(default_tools)} default tools in SQLite.")
         except Exception as e:
             print(f"⚠️ Bayesian Governor: Bootstrapping default tools failed: {e}")
 
     @lru_cache(maxsize=128)
-    def get_tool_stats(self, tool_id: str):
+    def get_tool_stats(self, tool_id: str, category: str = 'global'):
         """Retrieves weights from PostgreSQL or local SQLite."""
         self._ensure_db()
         if self.use_local and self.local_conn:
             try:
                 with self._lock:
                     cursor = self.local_conn.cursor()
-                    cursor.execute("SELECT alpha, beta FROM intelligence WHERE tool_id = ?", (tool_id,))
+                    cursor.execute("SELECT alpha, beta, success_count, failure_count FROM intelligence WHERE tool_id = ? AND category = ?", (tool_id, category))
                     row = cursor.fetchone()
                     if row:
-                        return float(row[0]), float(row[1]), 0, 0
+                        return float(row[0]), float(row[1]), int(row[2]), int(row[3])
+                    elif category != 'global':
+                        cursor.execute("SELECT alpha, beta, success_count, failure_count FROM intelligence WHERE tool_id = ? AND category = 'global'", (tool_id,))
+                        row = cursor.fetchone()
+                        if row:
+                            return float(row[0]), float(row[1]), int(row[2]), int(row[3])
             except Exception as e:
-                print(f"Debug: Error getting local stats for {tool_id}: {e}")
+                print(f"Debug: Error getting local stats for {tool_id} ({category}): {e}")
             return 2.0, 2.0, 0, 0
 
         try:
             from tools.memory.postgres_client import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT alpha, beta FROM bayesian_weights WHERE tool_id = %s", (tool_id,))
+                    cur.execute("SELECT alpha, beta, success_count, failure_count FROM bayesian_weights WHERE tool_id = %s AND category = %s", (tool_id, category))
                     row = cur.fetchone()
                     if row:
-                        return float(row["alpha"]), float(row["beta"]), 0, 0
+                        return float(row["alpha"]), float(row["beta"]), int(row["success_count"]), int(row["failure_count"])
+                    elif category != 'global':
+                        cur.execute("SELECT alpha, beta, success_count, failure_count FROM bayesian_weights WHERE tool_id = %s AND category = 'global'", (tool_id,))
+                        row = cur.fetchone()
+                        if row:
+                            return float(row["alpha"]), float(row["beta"]), int(row["success_count"]), int(row["failure_count"])
         except Exception as e:
-            print(f"Debug: Error getting remote stats for {tool_id}: {e}")
+            print(f"Debug: Error getting remote stats for {tool_id} ({category}): {e}")
             # Fallback to local SQLite if remote query fails
             if self.local_conn:
                 try:
                     with self._lock:
                         cursor = self.local_conn.cursor()
-                        cursor.execute("SELECT alpha, beta FROM intelligence WHERE tool_id = ?", (tool_id,))
+                        cursor.execute("SELECT alpha, beta, success_count, failure_count FROM intelligence WHERE tool_id = ? AND category = ?", (tool_id, category))
                         row = cursor.fetchone()
                         if row:
-                            return float(row[0]), float(row[1]), 0, 0
+                            return float(row[0]), float(row[1]), int(row[2]), int(row[3])
+                        elif category != 'global':
+                            cursor.execute("SELECT alpha, beta, success_count, failure_count FROM intelligence WHERE tool_id = ? AND category = 'global'", (tool_id,))
+                            row = cursor.fetchone()
+                            if row:
+                                return float(row[0]), float(row[1]), int(row[2]), int(row[3])
                 except Exception as local_err:
                     print(f"Debug: Fallback to local stats also failed: {local_err}")
         return 2.0, 2.0, 0, 0
@@ -261,37 +308,51 @@ class BayesianGovernor:
         # Clear the lru_cache to reflect new learning
         self.get_tool_stats.cache_clear()
         
-        alpha, beta, s, f = self.get_tool_stats(tool_id)
+        # In update_intelligence(), call get_tool_stats(tool_id, category=category).
+        _, _, _, _ = self.get_tool_stats(tool_id, category=category)
         
-        if success:
-            alpha += 1
-            s += 1
-        else:
-            beta += 1
-            f += 1
-            
+        alpha_inc = 1.0 if success else 0.0
+        beta_inc = 0.0 if success else 1.0
+        s_inc = 1 if success else 0
+        f_inc = 0 if success else 1
         timestamp = str(time.time())
+
+        # Determine if we need to update category-specific row too
+        category = category or 'global'
 
         if self.use_local and self.local_conn:
             try:
                 with self._lock:
                     cursor = self.local_conn.cursor()
+                    # 1. Update global row
                     cursor.execute('''
-                    INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(tool_id) DO UPDATE SET
-                        category=excluded.category,
-                        alpha=excluded.alpha,
-                        beta=excluded.beta,
-                        success_count=excluded.success_count,
-                        failure_count=excluded.failure_count,
-                        timestamp=excluded.timestamp
-                ''', (tool_id, category, alpha, beta, s, f, timestamp))
+                        INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
+                        VALUES (?, 'global', ?, ?, ?, ?, ?)
+                        ON CONFLICT(tool_id, category) DO UPDATE SET
+                            alpha = alpha + ?,
+                            beta = beta + ?,
+                            success_count = success_count + ?,
+                            failure_count = failure_count + ?,
+                            timestamp = excluded.timestamp
+                    ''', (tool_id, 2.0 + alpha_inc, 2.0 + beta_inc, s_inc, f_inc, timestamp, alpha_inc, beta_inc, s_inc, f_inc))
+                    
+                    # 2. Update category row if not global
+                    if category != 'global':
+                        cursor.execute('''
+                            INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ON CONFLICT(tool_id, category) DO UPDATE SET
+                                alpha = alpha + ?,
+                                beta = beta + ?,
+                                success_count = success_count + ?,
+                                failure_count = failure_count + ?,
+                                timestamp = excluded.timestamp
+                        ''', (tool_id, category, 2.0 + alpha_inc, 2.0 + beta_inc, s_inc, f_inc, timestamp, alpha_inc, beta_inc, s_inc, f_inc))
                     self.local_conn.commit()
-                    # Clear cache for this tool
-                    self.get_tool_stats.cache_clear()
             except Exception as e:
                 print(f"Debug: Error updating local stats for {tool_id}: {e}")
+            finally:
+                self.get_tool_stats.cache_clear()
             return
 
         # Remote update to PostgreSQL
@@ -299,14 +360,30 @@ class BayesianGovernor:
             from tools.memory.postgres_client import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
+                    # 1. Update global row
                     cur.execute('''
-                        INSERT INTO bayesian_weights (tool_id, category, alpha, beta, last_updated)
-                        VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        INSERT INTO bayesian_weights (tool_id, category, alpha, beta, success_count, failure_count, last_updated)
+                        VALUES (%s, 'global', %s, %s, %s, %s, CURRENT_TIMESTAMP)
                         ON CONFLICT (tool_id, category) DO UPDATE SET
-                            alpha = EXCLUDED.alpha,
-                            beta = EXCLUDED.beta,
+                            alpha = bayesian_weights.alpha + EXCLUDED.alpha - 1.0,
+                            beta = bayesian_weights.beta + EXCLUDED.beta - 1.0,
+                            success_count = bayesian_weights.success_count + EXCLUDED.success_count,
+                            failure_count = bayesian_weights.failure_count + EXCLUDED.failure_count,
                             last_updated = CURRENT_TIMESTAMP
-                    ''', (tool_id, category or 'global', alpha, beta))
+                    ''', (tool_id, 1.0 + alpha_inc, 1.0 + beta_inc, s_inc, f_inc))
+                    
+                    # 2. Update category row if not global
+                    if category != 'global':
+                        cur.execute('''
+                            INSERT INTO bayesian_weights (tool_id, category, alpha, beta, success_count, failure_count, last_updated)
+                            VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                            ON CONFLICT (tool_id, category) DO UPDATE SET
+                                alpha = bayesian_weights.alpha + EXCLUDED.alpha - 1.0,
+                                beta = bayesian_weights.beta + EXCLUDED.beta - 1.0,
+                                success_count = bayesian_weights.success_count + EXCLUDED.success_count,
+                                failure_count = bayesian_weights.failure_count + EXCLUDED.failure_count,
+                                last_updated = CURRENT_TIMESTAMP
+                        ''', (tool_id, category, 1.0 + alpha_inc, 1.0 + beta_inc, s_inc, f_inc))
                     conn.commit()
         except Exception as e:
             print(f"Debug: Error updating remote stats for {tool_id}: {e}")
@@ -315,21 +392,35 @@ class BayesianGovernor:
                 try:
                     with self._lock:
                         cursor = self.local_conn.cursor()
+                        # 1. Update global row
                         cursor.execute('''
-                        INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(tool_id) DO UPDATE SET
-                            category=excluded.category,
-                            alpha=excluded.alpha,
-                            beta=excluded.beta,
-                            success_count=excluded.success_count,
-                            failure_count=excluded.failure_count,
-                            timestamp=excluded.timestamp
-                    ''', (tool_id, category, alpha, beta, s, f, timestamp))
+                            INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
+                            VALUES (?, 'global', ?, ?, ?, ?, ?)
+                            ON CONFLICT(tool_id, category) DO UPDATE SET
+                                alpha = alpha + ?,
+                                beta = beta + ?,
+                                success_count = success_count + ?,
+                                failure_count = failure_count + ?,
+                                timestamp = excluded.timestamp
+                        ''', (tool_id, 2.0 + alpha_inc, 2.0 + beta_inc, s_inc, f_inc, timestamp, alpha_inc, beta_inc, s_inc, f_inc))
+                        
+                        # 2. Update category row if not global
+                        if category != 'global':
+                            cursor.execute('''
+                                INSERT INTO intelligence (tool_id, category, alpha, beta, success_count, failure_count, timestamp)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                ON CONFLICT(tool_id, category) DO UPDATE SET
+                                    alpha = alpha + ?,
+                                    beta = beta + ?,
+                                    success_count = success_count + ?,
+                                    failure_count = failure_count + ?,
+                                    timestamp = excluded.timestamp
+                            ''', (tool_id, category, 2.0 + alpha_inc, 2.0 + beta_inc, s_inc, f_inc, timestamp, alpha_inc, beta_inc, s_inc, f_inc))
                         self.local_conn.commit()
-                        self.get_tool_stats.cache_clear()
                 except Exception as local_err:
                     print(f"Debug: Fallback local update also failed: {local_err}")
+        finally:
+            self.get_tool_stats.cache_clear()
 
     def get_all_stats(self):
         """Returns all tool stats with temporal decay applied (Bridge Version) using PostgreSQL or local SQLite."""
@@ -362,12 +453,14 @@ class BayesianGovernor:
             tool_data = {}
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT tool_id, category, alpha, beta, last_updated FROM bayesian_weights")
+                    cur.execute("SELECT tool_id, category, alpha, beta, success_count, failure_count, last_updated FROM bayesian_weights")
                     for row in cur:
                         t_id = row["tool_id"]
                         cat = row["category"]
                         alpha = row["alpha"]
                         beta = row["beta"]
+                        s = row["success_count"]
+                        f = row["failure_count"]
                         ts = row["last_updated"]
 
                         # We have 'global' and specific categories. Prefer specific categories over 'global'.
@@ -377,8 +470,8 @@ class BayesianGovernor:
                                 "category": cat,
                                 "alpha": round(float(alpha), 2),
                                 "beta": round(float(beta), 2),
-                                "success_count": 0,
-                                "failure_count": 0,
+                                "success_count": int(s),
+                                "failure_count": int(f),
                                 "timestamp": str(ts)
                             }
             return list(tool_data.values())
@@ -424,6 +517,8 @@ class BayesianGovernor:
     def get_tool_confidence(self, tool_id: str) -> float:
         """Returns the mean of the distribution (Success Probability)."""
         alpha, beta, _, _ = self.get_tool_stats(tool_id)
+        if alpha + beta == 0:
+            return 0.5
         return alpha / (alpha + beta)
 
     def get_avg_success_rate(self) -> float:

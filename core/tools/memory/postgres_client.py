@@ -22,9 +22,16 @@ def init_db():
                         category VARCHAR(255) NOT NULL DEFAULT 'global',
                         alpha FLOAT NOT NULL DEFAULT 1.0,
                         beta FLOAT NOT NULL DEFAULT 1.0,
+                        success_count INTEGER NOT NULL DEFAULT 0,
+                        failure_count INTEGER NOT NULL DEFAULT 0,
                         last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         PRIMARY KEY (tool_id, category)
                     );
+                """)
+                cur.execute("""
+                    ALTER TABLE bayesian_weights 
+                    ADD COLUMN IF NOT EXISTS success_count INTEGER NOT NULL DEFAULT 0, 
+                    ADD COLUMN IF NOT EXISTS failure_count INTEGER NOT NULL DEFAULT 0;
                 """)
                 
                 # 2. keyword_weights
