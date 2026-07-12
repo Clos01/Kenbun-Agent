@@ -84,9 +84,10 @@ const DEFAULT_APPS: WebApp[] = [
   {
     id: "n8n",
     name: "n8n",
-    description: "Workflow automation and node-based pipeline management.",
+    description: "Workflow automation and node-based pipeline management — runs on p330.",
     defaultPort: 5678,
-    hostType: "host",
+    // n8n is deployed on p330, not lg2025 — pin both display and ping there.
+    urlOverride: "http://100.100.199.127:5678/",
     icon: Network
   },
   {
