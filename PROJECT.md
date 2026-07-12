@@ -1,35 +1,22 @@
-# Project: Aura Lead OS Frontend Upgrade for CRG Backoffice SaaS
+# Project: Kenbun Telemetry Expansion
 
 ## Architecture
-- **Tenant Context (`TenantContext`)**: Injected via React Context at the root of the app. Components consume it to isolate data by tenant and prevent cross-tenant leakage.
-- **Frontend Fetching (`apiClient`)**: API request utilities that read from the `TenantContext` to secure all calls.
-- **Validation Layer (`MetadataSchema`)**: Built with Zod to sanitize and strip malicious keys from incoming lead metadata at the frontend boundary.
-- **Normalization Layer (`MetadataTransformer`)**: Processes raw metadata keys, maps them to human-readable labels, and determines their visual ordering.
-- **Component Registry**: Automatically maps normalized data types (e.g., date, currency, boolean) to custom-styled React components conforming to Heritage design tokens.
+- **PostgreSQL Database**: Stores `bayesian_weights` which track the weights for various tools. Now needs to track `success_count` and `failure_count`.
+- **SQLite Database**: Used locally or in certain contexts, which also needs tool stats querying.
+- **postgres_client.py**: Standard DB interface containing `init_db()`.
+- **strategy_manager.py**: High-level manager orchestrating intelligence updates and statistics retrieval.
+- **bayesian.py**: Utility adjusting/tuning weights based on tool performance.
+- **telemetry dashboard**: Shows metrics, queries stats via `/stats` endpoint.
 
 ## Milestones
-
-### Implementation Track
 | # | Name | Scope | Dependencies | Status | Conversation ID |
 |---|------|-------|-------------|--------|-----------------|
-| M1 | Tenant Context & Refactoring | Refactor data fetching and state to use UUIDs, inject `tenant_id` via secure React Context. | None | DONE | b04c4944-b936-4925-8c72-a37159eff02d |
-| M2 | Zod Metadata Validation | Define and enforce Zod schemas at the boundary, stripping malicious payload keys. | M1 | DONE | 0a726816-f2db-4744-afe3-ca9db3e4ddbd |
-| M3 | Normalization & Component Registry | Implement `MetadataTransformer` and React Component Registry for generic metadata. | M2 | DONE | 0a726816-f2db-4744-afe3-ca9db3e4ddbd |
-| M4 | Heritage Styling Enforcement | Apply Heritage Design System tokens to all metadata elements. | M3 | DONE | 0a726816-f2db-4744-afe3-ca9db3e4ddbd |
-| M5 | Final E2E Integration & Verification | Pass 100% of E2E tests, resolve Architectural AI Review, run Forensic Audit. | M4, T_ALL | DONE | 0a726816-f2db-4744-afe3-ca9db3e4ddbd |
-
-### E2E Testing Track
-| # | Name | Scope | Dependencies | Status | Conversation ID |
-|---|------|-------|-------------|--------|-----------------|
-| T1 | E2E Test Infra Setup | Design and establish testing framework/harness. | None | DONE | 37f41beb-ae3a-4a63-9a6b-31172942b5fd |
-| T2 | Tier 1 & 2 Test Suite | Feature coverage, boundary, and corner cases tests. | T1 | DONE | 37f41beb-ae3a-4a63-9a6b-31172942b5fd |
-| T3 | Tier 3 & 4 Test Suite | Cross-feature combinations and real-world workloads, publishing `TEST_READY.md`. | T2 | DONE | 37f41beb-ae3a-4a63-9a6b-31172942b5fd |
+| M1 | Exploration | Analyze codebase files and DB schemas | None | DONE | 3f6353dd-558e-4e8e-b540-e55e62d76ec4 |
+| M2 | Migration & Implementation | Modify database schema and python codebase | M1 | DONE | faa8c5ba-5627-43f3-87d8-380602b29f51 |
+| M3 | Testing & Review | Code review, verification using telemetry stats command | M2 | DONE | f896b5de-ed57-41a3-8c6b-dc7af4d3bcbc, 2073f9b5-ed31-4754-9108-01385b7d3e30, fad61af2-b3ac-472a-bee3-38c99c8f8824, ac555f49-051f-4855-a3aa-1950802bb125, feff1bb8-1d55-43e8-8fdd-3f6e5ccf7b33 |
+| M4 | Forensic Audit & Sync | Integrity audit, portable_fastmcp verification, and remote sync | M3 | DONE | b5bc2233-7cef-42eb-b4ef-82d6d9d934b9, b312fae3-c7f1-452b-ab99-e31fc4d032fd |
 
 ## Interface Contracts
-### Client ↔ API Gateway
-- All requests must authenticate and include a valid `x-tenant-id` header (or context parameter).
-- Core lead IDs must be UUID string format.
-- Metadata must be a key-value JSON dictionary structure inside `metadata`.
-
-### Components ↔ Context
-- Components requiring `tenant_id` must call `useTenant()` hook instead of receiving props.
+- `bayesian_weights` schema: includes `success_count` (int) and `failure_count` (int) with default 0.
+- `strategy_manager.py`: `get_tool_stats()`, `update_intelligence()`, and `get_all_stats()` must correctly compute, update, and return success/failure counts.
+- `bayesian.py`: `tune_swarm()` must update success/failure counts in PostgreSQL.

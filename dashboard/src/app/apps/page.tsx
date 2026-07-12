@@ -16,7 +16,8 @@ import {
   FileText,
   Sliders,
   Terminal,
-  Database
+  Database,
+  Network
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
@@ -81,6 +82,14 @@ const DEFAULT_APPS: WebApp[] = [
     icon: Layout
   },
   {
+    id: "n8n",
+    name: "n8n",
+    description: "Workflow automation and node-based pipeline management.",
+    defaultPort: 5678,
+    hostType: "host",
+    icon: Network
+  },
+  {
     id: "dozzle",
     name: "Dozzle",
     description: "Real-time log viewer for monitoring active Docker containers.",
@@ -117,6 +126,7 @@ export default function AppsPortal() {
   // tailscaleHost is empty during SSR so server + first client render match.
   // After mount it is set to window.location.hostname (e.g. 100.92.127.1).
   const [tailscaleHost, setTailscaleHost] = useState<string>("");
+  const [config, setConfig] = useState<Record<string, string>>({});
   const [customApps, setCustomApps] = useState<Array<{ id: string; name: string; description: string; url: string }>>([]);
   const [statuses, setStatuses] = useState<Record<string, "checking" | "online" | "offline">>({});
   const [activeIframeUrl, setActiveIframeUrl] = useState<string | null>(null);
@@ -134,6 +144,7 @@ export default function AppsPortal() {
       if (!res.ok) throw new Error("API failed");
       const data = await res.json();
       if (data.status === "success" && data.config) {
+        setConfig(data.config);
         const resolvedIp = data.config.PC_IP_ADDRESS || data.config.SWARM_PC_IP || "localhost";
         setIpAddress(resolvedIp);
       }
@@ -188,34 +199,41 @@ export default function AppsPortal() {
     return () => clearTimeout(t);
   }, [fetchConfig, loadCustomApps]);
 
+  // Dynamically resolve target ports from configuration variables if set
+  const getAppPort = useCallback((app: WebApp): number => {
+    if (app.id === "ollama" && config.OLLAMA_PORT) return parseInt(config.OLLAMA_PORT, 10);
+    if (app.id === "dozzle" && config.DOZZLE_PORT) return parseInt(config.DOZZLE_PORT, 10);
+    if (app.id === "gitea" && config.GITEA_PORT) return parseInt(config.GITEA_PORT, 10);
+    if (app.id === "planka" && config.PLANKA_PORT) return parseInt(config.PLANKA_PORT, 10);
+    if (app.id === "honcho" && config.HONCHO_PORT) return parseInt(config.HONCHO_PORT, 10);
+    if (app.id === "n8n" && config.N8N_PORT) return parseInt(config.N8N_PORT, 10);
+    return app.defaultPort;
+  }, [config]);
+
   // Construct URLs dynamically based on current configurations and browser context.
   // Uses tailscaleHost (empty on server, set after mount) so SSR and first client
   // render produce identical markup — eliminating the hydration mismatch.
   const getAppUrl = useCallback((app: WebApp): string => {
     if (app.urlOverride) return sanitizeUrl(app.urlOverride);
 
-    // tailscale containers: use browser hostname once mounted; fall back to ipAddress
-    // host-bound services: always use the machine IP from config
-    const host =
-      app.hostType === "tailscale" && tailscaleHost
-        ? tailscaleHost
-        : ipAddress;
+    // Prioritize the configured machine IP (PC_IP_ADDRESS) if it's set and not localhost.
+    // Otherwise, fall back to the browser's hostname (tailscaleHost) or localhost.
+    const host = ipAddress && ipAddress !== "localhost" ? ipAddress : (tailscaleHost || "localhost");
 
-    const url = `http://${host}:${app.defaultPort}${app.path || ""}`;
+    const port = getAppPort(app);
+    const url = `http://${host}:${port}${app.path || ""}`;
     return sanitizeUrl(url);
-  }, [ipAddress, tailscaleHost]);
+  }, [ipAddress, tailscaleHost, getAppPort]);
 
   // Build the URL used ONLY for the health-check ping.
   // Uses `pingPath` if defined, otherwise falls back to the display path.
   const getPingUrl = useCallback((app: WebApp): string => {
     if (app.urlOverride) return sanitizeUrl(app.urlOverride);
-    const host =
-      app.hostType === "tailscale" && tailscaleHost
-        ? tailscaleHost
-        : ipAddress;
+    const host = ipAddress && ipAddress !== "localhost" ? ipAddress : (tailscaleHost || "localhost");
+    const port = getAppPort(app);
     const pingPath = app.pingPath ?? app.path ?? "";
-    return sanitizeUrl(`http://${host}:${app.defaultPort}${pingPath}`);
-  }, [ipAddress, tailscaleHost]);
+    return sanitizeUrl(`http://${host}:${port}${pingPath}`);
+  }, [ipAddress, tailscaleHost, getAppPort]);
 
   // Merge default apps with custom ones (derived state — no effect needed)
   const apps = useMemo<WebApp[]>(() => [

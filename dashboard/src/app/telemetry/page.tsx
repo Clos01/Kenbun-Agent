@@ -991,83 +991,132 @@ export default function IntelStream() {
               </div>
             </div>
           </section>
-
           {/* MAIN GRAPHICS GRID (Financial, Allocation Breakdown, Temporal Entropy) */}
-          <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            {/* Financial Ledger (Available Capital + Model Allocation) */}
-            <div className="lg:col-span-5 flex flex-col gap-6">
-              
-              <div className="p-6 border-2 border-border bg-background/40 artisan-shadow space-y-6 flex-1 rounded-sm">
+          <div className="space-y-8">
+            {/* ROW 1: Financial & Telemetry Cost Chart */}
+            <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Financial Ledger (Available Capital) */}
+              <div className="lg:col-span-5 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm h-[360px] flex flex-col justify-between">
                 <div className="flex items-center gap-3 border-b border-border pb-3">
                   <Gauge className="w-4 h-4 text-gold" />
                   <span className="ind-header text-[10px]">Financial Intelligence</span>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1 my-auto">
                   <span className="text-[8px] opacity-40 uppercase font-bold tracking-widest">Available Reserve Capital</span>
                   <div className="text-5xl font-serif font-black tracking-tighter text-foreground leading-none">
                     ${budget?.remaining ? budget.remaining.toFixed(4) : "0.0000"}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
-                  <div className="space-y-1">
-                    <span className="text-[8px] opacity-40 uppercase font-bold tracking-wider">Daily Usage</span>
-                    <div className="text-base font-bold text-gold">${budget?.daily_usage?.toFixed(4) || "0.0000"}</div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4 pt-4 border-t border-border">
+                    <div className="space-y-1">
+                      <span className="text-[8px] opacity-40 uppercase font-bold tracking-wider">Daily Usage</span>
+                      <div className="text-base font-bold text-gold">${budget?.daily_usage?.toFixed(4) || "0.0000"}</div>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <span className="text-[8px] opacity-40 uppercase font-bold tracking-wider">Allocated Limit</span>
+                      <div className="text-base font-bold text-foreground/80">${budget?.daily_limit?.toFixed(2) || "0.00"}</div>
+                    </div>
                   </div>
-                  <div className="space-y-1 text-right">
-                    <span className="text-[8px] opacity-40 uppercase font-bold tracking-wider">Allocated Limit</span>
-                    <div className="text-base font-bold text-foreground/80">${budget?.daily_limit?.toFixed(2) || "0.00"}</div>
-                  </div>
+
+                  {budget && (
+                    <div className="space-y-2 pt-2">
+                      <div className="flex justify-between text-[8px] uppercase tracking-wider font-bold opacity-40">
+                        <span>Daily Burn Envelope</span>
+                        <span>{((budget.daily_usage / budget.daily_limit) * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="h-2 border border-border bg-background/60 p-[2px] rounded-sm overflow-hidden">
+                        <div 
+                          className={`h-full transition-all duration-1000 ${
+                            budget.status === "Green" ? 'bg-gold' : 'bg-gold/80'
+                          }`} 
+                          style={{ width: `${Math.min((budget.daily_usage / budget.daily_limit) * 100, 100)}%` }} 
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-
-                {budget && (
-                  <div className="space-y-2 pt-2">
-                    <div className="flex justify-between text-[8px] uppercase tracking-wider font-bold opacity-40">
-                      <span>Daily Burn Envelope</span>
-                      <span>{((budget.daily_usage / budget.daily_limit) * 100).toFixed(1)}%</span>
-                    </div>
-                    <div className="h-2 border border-border bg-background/60 p-[2px] rounded-sm overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-1000 ${
-                          budget.status === "Green" ? 'bg-gold' : 'bg-gold/80'
-                        }`} 
-                        style={{ width: `${Math.min((budget.daily_usage / budget.daily_limit) * 100, 100)}%` }} 
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Model Cognitive Ensemble Grid */}
-              <div className="p-6 border-2 border-border bg-background/40 artisan-shadow space-y-4 rounded-sm flex flex-col justify-between">
-                <ModelCognitiveEnsemble lmStudioOnline={telemetry?.lm_studio?.status === "Online"} />
-              </div>
-            </div>
-
-            {/* Cost Progression Curve */}
-            <div className="lg:col-span-7">
-              <div className="p-6 border-2 border-border bg-background/40 artisan-shadow h-full flex flex-col justify-between rounded-sm">
-                <div className="flex justify-between items-center mb-6">
+              {/* Temporal Entropy Index (Cost Chart) */}
+              <div className="lg:col-span-7 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm flex flex-col justify-between h-[360px]">
+                <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-3">
                     <BarChart3 className="w-4 h-4 text-gold" />
                     <span className="ind-header text-[10px]">Temporal Entropy Index</span>
                   </div>
                   <span className="text-[7px] font-mono tracking-widest opacity-30">LAST_24_CYCLES</span>
                 </div>
-                <div className="flex-1 min-h-[220px] flex items-center justify-center">
+                <div className="w-full h-60 relative mt-1 mb-2">
                   <SharpAreaChart data={budget?.history || Array(24).fill(0.0001)} />
                 </div>
-                <div className="flex justify-between text-[7px] font-mono opacity-30 mt-4 border-t border-border pt-4">
+                <div className="flex justify-between text-[7px] font-mono opacity-30 mt-3 border-t border-border pt-3">
                   <span>T-24 Hours</span>
                   <span>T-12 Hours</span>
                   <span>Real Time (Present)</span>
                 </div>
               </div>
-            </div>
-          </section>
+            </section>
 
-          {/* DUAL LAYER: BAYESIAN PROBABILITY MATRIX & DIAGNOSTIC DRAWER */}
+            {/* ROW 2: Cognitive Ensemble & Sovereign Diagnostics */}
+            <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Model Cognitive Ensemble Grid */}
+              <div className="lg:col-span-5 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm flex flex-col justify-between">
+                <ModelCognitiveEnsemble lmStudioOnline={telemetry?.lm_studio?.status === "Online"} />
+              </div>
+
+              {/* Autonomous Node Diagnostics */}
+              <div className="lg:col-span-7 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm flex flex-col gap-4">
+                <div className="flex items-center gap-3 border-b border-border pb-3">
+                  <Activity className="w-4 h-4 text-gold" />
+                  <span className="ind-header text-[10px]">Sovereign Node Diagnostics</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  {/* Widget 1: Link Status */}
+                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Telemetry Link</span>
+                    <div className="flex items-center gap-1.5 mt-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                      <span className="text-[8px] font-bold text-emerald-500 tracking-wider">SSE_FLOW // LIVE</span>
+                    </div>
+                  </div>
+
+                  {/* Widget 2: Batch Throttle */}
+                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Batch Throttle</span>
+                    <span className="text-[8px] font-bold text-foreground/80 mt-2">100ms BUFFER DELAY</span>
+                  </div>
+
+                  {/* Widget 3: Buffer Depth */}
+                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                    <div className="flex justify-between text-[7px] uppercase font-bold tracking-widest opacity-45">
+                      <span>Buffer Depth</span>
+                    </div>
+                    <div className="mt-2 space-y-1.5">
+                      <div className="text-[8px] text-gold font-bold">{logs.length} / 150</div>
+                      <div className="h-1 border border-border bg-foreground/5 rounded-sm p-[0.5px] overflow-hidden">
+                        <div 
+                          className="h-full bg-gold transition-all duration-300"
+                          style={{ width: `${(logs.length / 150) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Widget 4: Safety Seal */}
+                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Safety Seal</span>
+                    <div className="flex items-center gap-1.5 text-[8px] text-gold/80 font-bold mt-2">
+                      <span className="text-[7px]">🔒</span>
+                      <span>XSS_SHIELD // SECURE</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>          {/* DUAL LAYER: BAYESIAN PROBABILITY MATRIX & DIAGNOSTIC DRAWER */}
           <section className="space-y-6">
             <div className="flex items-center gap-3 border-b-2 border-border pb-3">
               <Zap className="w-4 h-4 text-gold" />

@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 
 /**
@@ -41,7 +41,8 @@ export const AccuracyGauge = ({ success, total, label = "Signals" }: { success: 
  * A True Linear Line Chart (No Fill)
  */
 export const LinearTrend = ({ data, color = "var(--gold)" }: { data: number[], color?: string }) => {
-  const max = Math.max(...data, 1);
+  const dataMax = Math.max(...data, 0);
+  const max = dataMax > 0 ? dataMax : 1;
   const points = data.map((val, i) => `${(i / (data.length - 1)) * 100},${100 - (val / max) * 100}`).join(" ");
 
   return (
@@ -155,22 +156,142 @@ export const ToolMatrix = ({ tools, onSelect, selectedId }: { tools: MatrixTool[
  * A Sharp Step Area Chart
  */
 export const SharpAreaChart = ({ data }: { data: number[] }) => {
-  const max = Math.max(...data, 1);
+  const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
+  const dataMax = Math.max(...data, 0);
+  const max = dataMax > 0 ? dataMax : 1;
+
+  // Build the SVG step path
+  const points: { x: number; y: number }[] = data.map((val, i) => {
+    const x = (i / (data.length - 1)) * 100;
+    const y = 100 - (val / max) * 90; // Leave 10% padding at top
+    return { x, y };
+  });
+
+  let linePath = "";
+  if (points.length > 0) {
+    linePath = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1];
+      const curr = points[i];
+      // Step: horizontal to current X, then vertical to current Y
+      linePath += ` H ${curr.x} V ${curr.y}`;
+    }
+  }
+
+  const areaPath = linePath 
+    ? `${linePath} L 100 100 L 0 100 Z` 
+    : "";
+
   return (
-    <div className="h-48 w-full relative border border-[var(--border)] bg-[var(--foreground)]/[0.02] overflow-hidden">
-      <div className="absolute inset-0 flex items-end">
-        {data.map((val, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center justify-end h-full">
-            <motion.div 
-              initial={{ height: 0 }}
-              animate={{ height: `${(val / max) * 100}%` }}
-              className="w-full bg-[var(--gold)]/20 border-t-2 border-[var(--gold)]"
-            />
-          </div>
-        ))}
+    <div 
+      className="h-full min-h-[140px] w-full relative border border-[var(--border)] bg-gradient-to-b from-[var(--background)]/10 to-[var(--background)]/40 overflow-hidden rounded-sm select-none group/chart"
+      onMouseLeave={() => {
+        setHoveredIdx(null);
+      }}
+    >
+      {/* Background Blueprint Grid (Vertical & Horizontal Matrix) */}
+      <div className="absolute inset-0 grid grid-cols-6 pointer-events-none opacity-[0.03]">
+        {[1, 2, 3, 4, 5].map(i => <div key={i} className="border-r border-foreground" />)}
       </div>
-      <div className="absolute inset-0 grid grid-cols-4 pointer-events-none opacity-[0.05]">
-        {[1, 2, 3].map(i => <div key={i} className="border-r border-[var(--border)]" />)}
+      <div className="absolute inset-0 grid grid-rows-6 pointer-events-none opacity-[0.03]">
+        {[1, 2, 3, 4, 5].map(i => <div key={i} className="border-b border-foreground" />)}
+      </div>
+
+      {/* SVG Step Chart */}
+      <svg 
+        className="absolute inset-0 w-full h-full p-2 pt-8 pb-1 overflow-visible"
+        viewBox="0 0 100 100" 
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient id="area-gradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--gold)" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="var(--gold)" stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+
+        {/* Filled Area */}
+        {areaPath && (
+          <motion.path
+            d={areaPath}
+            fill="url(#area-gradient)"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          />
+        )}
+
+        {/* Step Line */}
+        {linePath && (
+          <motion.path
+            d={linePath}
+            fill="none"
+            stroke="var(--gold)"
+            strokeWidth="1.2"
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+          />
+        )}
+
+        {/* Hover vertical tracking line */}
+        {hoveredIdx !== null && (
+          <line
+            x1={points[hoveredIdx].x}
+            y1={0}
+            x2={points[hoveredIdx].x}
+            y2={100}
+            stroke="var(--gold)"
+            strokeWidth="0.5"
+            strokeDasharray="2 2"
+            opacity="0.5"
+          />
+        )}
+
+        {/* Hover dot */}
+        {hoveredIdx !== null && (
+          <circle
+            cx={points[hoveredIdx].x}
+            cy={points[hoveredIdx].y}
+            r="1.5"
+            fill="var(--background)"
+            stroke="var(--gold)"
+            strokeWidth="0.8"
+          />
+        )}
+      </svg>
+
+      {/* Floating HUD Tooltip */}
+      <AnimatePresence>
+        {hoveredIdx !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-3 left-3 z-20 px-3 py-2 bg-zinc-950/95 backdrop-blur-md border-l-2 border-l-[var(--gold)] border-t border-r border-b border-white/5 rounded-sm font-mono text-[9px] flex flex-col gap-1 shadow-2xl pointer-events-none ring-1 ring-black/50"
+          >
+            <div className="flex justify-between items-center gap-6">
+              <span className="text-stone-400 text-[7px] uppercase font-bold tracking-wider">CYCLE OFFSET</span>
+              <span className="text-[var(--gold)] font-bold text-[9px]">T-{24 - hoveredIdx}H</span>
+            </div>
+            <div className="flex justify-between items-center gap-6">
+              <span className="text-stone-400 text-[7px] uppercase font-bold tracking-wider">COMPUTE COST</span>
+              <span className="font-bold text-stone-100 text-[9px]">${data[hoveredIdx].toFixed(6)}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hover Trigger Areas (Columns) */}
+      <div className="absolute inset-0 flex">
+        {data.map((_, i) => (
+          <div
+            key={i}
+            className="flex-1 h-full cursor-pointer z-10"
+            onMouseEnter={() => setHoveredIdx(i)}
+          />
+        ))}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
 import { 
   Columns, 
@@ -123,6 +123,37 @@ export default function BoardPage() {
   // Active view tab: kanban | calendar | messaging
   const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging">("kanban");
 
+  const hasRestoredBoard = useRef(false);
+
+  // Persistence helpers
+  const changeTab = (tab: "kanban" | "calendar" | "messaging") => {
+    setActiveTab(tab);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("board_active_tab", tab);
+    }
+  };
+
+  const selectBoard = (board: Board | null) => {
+    setSelectedBoard(board);
+    if (typeof window !== "undefined") {
+      if (board) {
+        localStorage.setItem("board_selected_board_id", board.id);
+      } else {
+        localStorage.removeItem("board_selected_board_id");
+      }
+    }
+  };
+
+  // Load saved tab from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedTab = localStorage.getItem("board_active_tab");
+      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging") {
+        setActiveTab(savedTab);
+      }
+    }
+  }, []);
+
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStartDate, setFilterStartDate] = useState("");
@@ -140,6 +171,8 @@ export default function BoardPage() {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   // Calendar: which day's completed-work popover is open (key = "y-m-d")
   const [expandedDoneKey, setExpandedDoneKey] = useState<string | null>(null);
+  // Calendar: which day's active-work popover is open (key = "y-m-d")
+  const [expandedActiveKey, setExpandedActiveKey] = useState<string | null>(null);
 
   // Board comments feed state
   const [boardComments, setBoardComments] = useState<BoardComment[]>([]);
@@ -194,6 +227,25 @@ export default function BoardPage() {
       }));
       
       setProjects(formattedProjects);
+
+      // Restore selected board from localStorage on initial load
+      if (typeof window !== "undefined" && !hasRestoredBoard.current) {
+        const savedBoardId = localStorage.getItem("board_selected_board_id");
+        if (savedBoardId) {
+          let foundBoard = null;
+          for (const proj of formattedProjects) {
+            const matched = proj.boards.find((b: { id: string }) => b.id === savedBoardId);
+            if (matched) {
+              foundBoard = matched;
+              break;
+            }
+          }
+          if (foundBoard) {
+            setSelectedBoard(foundBoard);
+            hasRestoredBoard.current = true;
+          }
+        }
+      }
     } catch (err: unknown) {
       console.error(err);
       const message = err instanceof Error ? err.message : String(err);
@@ -389,7 +441,7 @@ export default function BoardPage() {
       });
       if (res.ok) {
         const updated = { ...selectedBoard, name: editBoardName.trim() };
-        setSelectedBoard(updated);
+        selectBoard(updated);
         setIsSettingsOpen(false);
         fetchStructure();
       }
@@ -408,7 +460,7 @@ export default function BoardPage() {
         method: "DELETE"
       });
       if (res.ok) {
-        setSelectedBoard(null);
+        selectBoard(null);
         setIsSettingsOpen(false);
         setConfirmDeleteBoard(false);
         fetchStructure();
@@ -475,10 +527,12 @@ export default function BoardPage() {
         body: JSON.stringify({ listId: newListId })
       });
       if (!res.ok) {
+        setError(`Failed to move card (HTTP ${res.status})`);
         if (selectedBoard) fetchBoardDetails(selectedBoard.id);
       }
     } catch (err) {
       console.error(err);
+      setError("Failed to move card: network error");
       if (selectedBoard) fetchBoardDetails(selectedBoard.id);
     } finally {
       setSyncing(false);
@@ -522,19 +576,22 @@ export default function BoardPage() {
       });
 
       if (res.ok) {
-        const updated = { 
-          ...selectedCard, 
-          name: editingCardName, 
+        const updated = {
+          ...selectedCard,
+          name: editingCardName,
           description: fullDescription,
           dueDate: formattedDueDate || undefined
         };
-        setSelectedCard(updated);
         setCards(prev => prev.map(c => c.id === selectedCard.id ? updated : c));
         setEditingCardId(null);
+        setSelectedCard(null);
         if (selectedBoard) fetchBoardDetails(selectedBoard.id);
+      } else {
+        setError(`Failed to save card (HTTP ${res.status})`);
       }
     } catch (err) {
       console.error(err);
+      setError("Failed to save card: network error");
     } finally {
       setSyncing(false);
     }
@@ -544,18 +601,19 @@ export default function BoardPage() {
     try {
       setSyncing(true);
       const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isClosed: true })
+        method: "DELETE"
       });
       if (res.ok) {
         setCards(prev => prev.filter(c => c.id !== cardId));
         if (selectedCard?.id === cardId) {
           setSelectedCard(null);
         }
+      } else {
+        setError(`Failed to delete card (HTTP ${res.status})`);
       }
     } catch (err) {
       console.error(err);
+      setError("Failed to delete card: network error");
     } finally {
       setSyncing(false);
     }
@@ -757,8 +815,8 @@ export default function BoardPage() {
             {selectedBoard ? (
               <button 
                 onClick={() => {
-                  setSelectedBoard(null);
-                  setActiveTab("kanban");
+                  selectBoard(null);
+                  changeTab("kanban");
                 }}
                 className="p-2 border border-border bg-card hover:bg-sand text-secondary hover:text-primary transition-all rounded hover:border-tertiary/35 group flex items-center justify-center shrink-0 cursor-pointer"
                 aria-label="Back to projects"
@@ -841,7 +899,7 @@ export default function BoardPage() {
         {selectedBoard && (
           <div className="h-12 border-b border-primary/5 bg-card/25 backdrop-blur-xl flex items-center px-6 lg:px-10 gap-6 sticky top-20 lg:top-24 z-20 shrink-0">
             <button 
-              onClick={() => setActiveTab("kanban")}
+              onClick={() => changeTab("kanban")}
               className={`h-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 cursor-pointer transition-all ${
                 activeTab === "kanban" 
                   ? "border-tertiary text-tertiary" 
@@ -853,7 +911,7 @@ export default function BoardPage() {
             </button>
             
             <button 
-              onClick={() => setActiveTab("calendar")}
+              onClick={() => changeTab("calendar")}
               className={`h-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 cursor-pointer transition-all ${
                 activeTab === "calendar" 
                   ? "border-tertiary text-tertiary" 
@@ -865,7 +923,7 @@ export default function BoardPage() {
             </button>
 
             <button 
-              onClick={() => setActiveTab("messaging")}
+              onClick={() => changeTab("messaging")}
               className={`h-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-2 border-b-2 cursor-pointer transition-all ${
                 activeTab === "messaging" 
                   ? "border-tertiary text-tertiary" 
@@ -1052,7 +1110,7 @@ export default function BoardPage() {
                               {(proj.boards || []).map((board) => (
                                 <button
                                   key={board.id}
-                                  onClick={() => setSelectedBoard(board)}
+                                  onClick={() => selectBoard(board)}
                                   className="p-4 bg-card hover:bg-sand border border-border hover:border-tertiary/30 rounded-lg text-left transition-all duration-300 group/board cursor-pointer flex flex-col justify-between h-28 relative overflow-hidden shadow-sm"
                                 >
                                   <div className="space-y-1">
@@ -1349,7 +1407,7 @@ export default function BoardPage() {
                     <div className="flex items-center gap-3">
                       <span className="flex items-baseline gap-1.5">
                         <span className="font-data font-semibold text-[13px] tabular-nums text-primary leading-none">
-                          {filteredCards.filter(c => c.dueDate).length}
+                          {filteredCards.filter(c => c.dueDate && !isDoneCard(c)).length}
                         </span>
                         <span className="text-[8px] font-mono text-secondary/80 uppercase tracking-[0.18em]">
                           Active Targets
@@ -1378,28 +1436,32 @@ export default function BoardPage() {
                     <div>Sat</div>
                   </div>
 
-                  {expandedDoneKey && (
+                  {(expandedDoneKey || expandedActiveKey) && (
                     <div
                       className="fixed inset-0 z-30"
-                      onClick={() => setExpandedDoneKey(null)}
+                      onClick={() => {
+                        setExpandedDoneKey(null);
+                        setExpandedActiveKey(null);
+                      }}
                     />
                   )}
 
                   <div className="grid grid-cols-7 gap-2 min-h-[420px]">
                     {generateCalendarCells().map((cell, idx) => {
-                      const cellCards = filteredCards.filter(c => c.dueDate && isSameDay(c.dueDate, cell));
+                      const cellCards = filteredCards.filter(c => c.dueDate && !isDoneCard(c) && isSameDay(c.dueDate, cell));
                       const completedCards = filteredCards.filter(c => isDoneCard(c) && isSameDay(c.listChangedAt!, cell));
                       const today = new Date();
                       const isToday = today.getDate() === cell.day && today.getMonth() === cell.month && today.getFullYear() === cell.year;
                       const doneKey = `${cell.year}-${cell.month}-${cell.day}`;
                       const isDoneExpanded = expandedDoneKey === doneKey;
+                      const isActiveExpanded = expandedActiveKey === doneKey;
 
                       return (
                         <div
                           key={idx}
-                          className={`relative min-h-[95px] p-2 border border-primary/5 rounded-md flex flex-col transition-colors ${
+                          className={`relative min-h-[115px] p-2 border border-primary/5 rounded-md flex flex-col transition-colors ${
                             cell.isCurrentMonth ? "bg-neutral/45" : "bg-neutral/10 opacity-30"
-                          } ${isToday ? "border-tertiary/40 bg-tertiary/[0.02]" : ""} ${isDoneExpanded ? "z-40 opacity-100" : ""}`}
+                          } ${isToday ? "border-tertiary/40 bg-tertiary/[0.02]" : ""} ${isDoneExpanded || isActiveExpanded ? "z-40 opacity-100" : ""}`}
                         >
                           <div className="flex justify-between items-center">
                             <span className={`text-[10px] font-mono ${isToday ? "text-tertiary font-bold" : "text-secondary"}`}>
@@ -1410,24 +1472,28 @@ export default function BoardPage() {
                             )}
                           </div>
 
-                          <div className="flex-1 overflow-y-auto space-y-1 mt-1.5 max-h-[75px] custom-scrollbar">
-                            {cellCards.map(card => {
-                              const { metadata } = parseCardMetadata(card.description || "");
-                              const isRecurring = metadata.recurring && metadata.recurring !== "none";
-                              return (
-                                <div
-                                  key={card.id}
-                                  onClick={() => handleOpenCard(card)}
-                                  className="p-1 px-1.5 bg-card hover:bg-sand border border-border hover:border-tertiary/30 rounded text-[9px] font-semibold text-primary truncate cursor-pointer transition-all flex items-center justify-between gap-1"
-                                >
-                                  <span className="truncate">{card.name}</span>
-                                  {isRecurring && (
-                                    <RefreshCw className="w-2.5 h-2.5 text-tertiary shrink-0 animate-spin duration-[15s]" />
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
+                          {/* Compact active-work indicator — one dot per active target, click to expand */}
+                          {cellCards.length > 0 && (
+                            <button
+                              onClick={() => setExpandedActiveKey(isActiveExpanded ? null : doneKey)}
+                              aria-expanded={isActiveExpanded}
+                              aria-label={`${cellCards.length} active targets — view details`}
+                              title={`${cellCards.length} active targets`}
+                              className="group mt-1.5 self-start flex items-center gap-1 h-[18px] px-2 rounded-full border border-primary/15 bg-primary/[0.04] hover:border-primary/35 hover:bg-primary/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer transition-all duration-200"
+                            >
+                              {cellCards.slice(0, 4).map(c => (
+                                <span
+                                  key={c.id}
+                                  className="w-[5px] h-[5px] rounded-full bg-primary/60 group-hover:bg-primary transition-colors duration-200"
+                                />
+                              ))}
+                              {cellCards.length > 4 && (
+                                <span className="pl-0.5 text-[8px] font-mono leading-none tabular-nums text-primary/70 group-hover:text-primary transition-colors duration-200">
+                                  +{cellCards.length - 4}
+                                </span>
+                              )}
+                            </button>
+                          )}
 
                           {/* Compact completed-work indicator — one dot per completion, click to expand */}
                           {completedCards.length > 0 && (
@@ -1452,6 +1518,77 @@ export default function BoardPage() {
                             </button>
                           )}
 
+                          <AnimatePresence>
+                            {isActiveExpanded && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.96, y: Math.floor(idx / 7) < 2 ? -6 : 6 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.98, y: Math.floor(idx / 7) < 2 ? -4 : 4 }}
+                                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                                className={`absolute z-50 w-[310px] bg-card/95 backdrop-blur-xl border border-primary/5 ring-1 ring-primary/5 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
+                                  Math.floor(idx / 7) < 2 ? "top-full mt-1.5" : "bottom-8 mb-1"
+                                } ${idx % 7 >= 4 ? "right-0" : "left-0"}`}
+                              >
+                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-primary/5">
+                                  <div className="min-w-0">
+                                    <span className="block font-serif italic font-bold text-primary text-[13px] leading-tight">
+                                      Active Targets
+                                    </span>
+                                    <span className="block mt-1 text-[8px] font-mono text-secondary uppercase tracking-[0.2em]">
+                                      {new Date(cell.year, cell.month, cell.day).toLocaleDateString([], { month: "short", day: "numeric" })} · {cellCards.length} {cellCards.length === 1 ? "target" : "targets"}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => setExpandedActiveKey(null)}
+                                    aria-label="Close"
+                                    className="shrink-0 -mr-1 -mt-0.5 p-1 rounded-md text-secondary hover:text-primary hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-colors"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                                <div className="p-2 space-y-1 max-h-72 overflow-y-auto custom-scrollbar">
+                                  {cellCards.map((card, cardIdx) => {
+                                    const { cleanDescription } = parseCardMetadata(card.description || "");
+                                    const cleanName = card.name
+                                      .replace(/^🏆\s+Claude Corps:\s*/i, "🏆 ")
+                                      .replace(/^Claude Corps:\s*/i, "");
+
+                                    return (
+                                      <button
+                                        key={card.id}
+                                        onClick={() => {
+                                          setExpandedActiveKey(null);
+                                          handleOpenCard(card);
+                                        }}
+                                        className="group w-full text-left relative flex items-start gap-3.5 px-3 py-2.5 rounded-lg hover:bg-sand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
+                                      >
+                                        {cardIdx < cellCards.length - 1 && (
+                                          <span className="absolute left-[21px] top-8 bottom-0 w-[1px] bg-border" />
+                                        )}
+
+                                        <span className="w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 group-hover:scale-110 bg-primary/5 border border-primary/15 text-secondary group-hover:bg-primary/10">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
+                                        </span>
+
+                                        <span className="min-w-0 flex-1">
+                                          <span className="block text-[11px] font-semibold text-primary leading-snug group-hover:text-tertiary transition-colors line-clamp-2">
+                                            {cleanName}
+                                          </span>
+
+                                          {cleanDescription && (
+                                            <span className="block mt-1 text-[9px] text-secondary/70 line-clamp-2 font-normal leading-relaxed">
+                                              {cleanDescription}
+                                            </span>
+                                          )}
+                                        </span>
+                                        <ChevronRight className="w-3.5 h-3.5 text-secondary/40 shrink-0 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all duration-200 self-center" />
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                           <AnimatePresence>
                             {isDoneExpanded && (
                               <motion.div

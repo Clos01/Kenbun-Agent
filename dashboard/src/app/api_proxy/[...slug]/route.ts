@@ -22,6 +22,27 @@ export async function POST(
   return handleProxy(request, await params);
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string[] }> }
+) {
+  return handleProxy(request, await params);
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string[] }> }
+) {
+  return handleProxy(request, await params);
+}
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ slug: string[] }> }
+) {
+  return handleProxy(request, await params);
+}
+
 function sanitizeLog(str: string): string {
   return str.replace(/[^a-zA-Z0-9_\-\/]/g, "");
 }

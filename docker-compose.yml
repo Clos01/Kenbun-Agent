@@ -6,7 +6,7 @@ services:
     image: chromadb/chroma:latest
     container_name: portable_chroma
     ports:
-      - "127.0.0.1:${CHROMA_PORT:-8000}:8000"
+      - "${BIND_IP:-127.0.0.1}:${CHROMA_PORT:-8000}:8000"
     volumes:
       - chroma_data:/chroma_data
     environment:
@@ -19,10 +19,16 @@ services:
     image: ollama/ollama:latest
     container_name: portable_ollama
     ports:
-      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
+      - "${BIND_IP:-127.0.0.1}:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
       - ${KENBUN_TRAINING_PATH:-./kenbun_training}:/root/kenbun_training
+    healthcheck:
+      test: ["CMD", "ollama", "ps"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   # 3. Model Initializer (Dynamic Loop & Bypass State)
@@ -78,6 +84,12 @@ services:
       - OLLAMA_URL=http://ollama_server:11434/api/generate
     depends_on:
       - chromadb
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 45s
     restart: unless-stopped
 
   # 6. Relational Database (PostgreSQL)
@@ -93,11 +105,6 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-kenbun_intelligence}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
 
   # 5. Container Log Viewer (Dozzle)
   dozzle:
@@ -108,7 +115,156 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
+
+  # 6. Telemetry Next.js Dashboard
+  dashboard:
+    image: node:20-slim
+    container_name: portable_dashboard
+    working_dir: /app
+    volumes:
+      - ${PROJECT_ROOT:-.}/dashboard:/app
+      - dashboard_node_modules:/app/node_modules
+      - dashboard_next_cache:/app/.next
+      - ${BRAIN_HEALTH_PATH:-./brain_health}:/app/brain_health
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${DASHBOARD_PORT:-3080}:3000"
+    environment:
+      - NEXT_PUBLIC_API_PORT=${API_PORT:-8001}
+      - INTERNAL_API_URL=http://fastmcp_server:8001
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+    command: sh -c "npm install -g pnpm && if [ ! -d /app/node_modules ] || [ ! -f /app/node_modules/.pnpm-lock.yaml ] || [ /app/package.json -nt /app/node_modules/.pnpm-lock.yaml ]; then pnpm install && cp /app/pnpm-lock.yaml /app/node_modules/.pnpm-lock.yaml; fi && pnpm dev"
+    depends_on:
+      fastmcp_server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 7. Honcho Long-Term Memory API Server
+  honcho_api:
+    build:
+      context: ./external/honcho
+      dockerfile: Dockerfile
+    container_name: portable_honcho_api
+    entrypoint:
+      - sh
+      - docker/entrypoint.sh
+    depends_on:
+      honcho_database:
+        condition: service_healthy
+      honcho_redis:
+        condition: service_healthy
+      ollama_server:
+        condition: service_healthy
+    ports:
+      - "${BIND_IP:-127.0.0.1}:8006:8006"
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health', timeout=2).read()"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@honcho_database:5432/postgres
+      - CACHE_URL=redis://honcho_redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      - LLM_OPENAI_API_KEY=dummy
+      - LLM_OPENAI_BASE_URL=http://ollama_server:11434/v1
+      - DERIVER_MODEL_CONFIG__MODEL=llama3.2:3b
+      - SUMMARY_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_DEDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_INDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL=qwen3:8b
+      - EMBEDDING_MODEL_CONFIG__MODEL=qwen3-embedding:4b
+      - EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://ollama_server:11434/v1
+      - EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE=always
+      - PORT=8006
+      - EMBED_MESSAGES=false
+    restart: unless-stopped
+
+  # 8. Honcho Cognitive Processor (Deriver)
+  honcho_deriver:
+    build:
+      context: ./external/honcho
+      dockerfile: Dockerfile
+    container_name: portable_honcho_deriver
+    entrypoint:
+      - /app/.venv/bin/python
+      - -m
+      - src.deriver
+    depends_on:
+      honcho_api:
+        condition: service_healthy
+      honcho_database:
+        condition: service_healthy
+      honcho_redis:
+        condition: service_healthy
+    environment:
+      - DB_CONNECTION_URI=postgresql+psycopg://postgres:postgres@honcho_database:5432/postgres
+      - CACHE_URL=redis://honcho_redis:6379/0?suppress=true
+      - CACHE_ENABLED=true
+      - LLM_OPENAI_API_KEY=dummy
+      - LLM_OPENAI_BASE_URL=http://ollama_server:11434/v1
+      - DERIVER_MODEL_CONFIG__MODEL=llama3.2:3b
+      - SUMMARY_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_DEDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DREAM_INDUCTION_MODEL_CONFIG__MODEL=llama3.2:3b
+      - DIALECTIC_LEVELS__minimal__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__low__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__medium__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__high__MODEL_CONFIG__MODEL=qwen3:8b
+      - DIALECTIC_LEVELS__max__MODEL_CONFIG__MODEL=qwen3:8b
+      - DERIVER_FLUSH_ENABLED=true
+      - EMBEDDING_MODEL_CONFIG__MODEL=qwen3-embedding:4b
+      - EMBEDDING_MODEL_CONFIG__OVERRIDES__BASE_URL=http://ollama_server:11434/v1
+      - EMBEDDING_MODEL_CONFIG__DIMENSIONS_MODE=always
+      - EMBED_MESSAGES=false
+    restart: unless-stopped
+
+  # 9. Honcho Database (pgvector/pgvector)
+  honcho_database:
+    image: pgvector/pgvector:pg15
+    container_name: portable_honcho_database
+    restart: unless-stopped
+    command:
+      - postgres
+      - -c
+      - max_connections=200
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - ./external/honcho/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - honcho_pgdata:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 10. Honcho Redis Cache
+  honcho_redis:
+    image: redis:8.2
+    container_name: portable_honcho_redis
+    restart: unless-stopped
+    volumes:
+      - honcho_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
 volumes:
   chroma_data:
   ollama_data:
   postgres_data:
+  dashboard_node_modules:
+  dashboard_next_cache:
+  honcho_pgdata:
+  honcho_redis_data:
