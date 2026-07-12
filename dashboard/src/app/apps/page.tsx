@@ -201,7 +201,13 @@ export default function AppsPortal() {
 
   // Dynamically resolve target ports from configuration variables if set
   const getAppPort = useCallback((app: WebApp): number => {
-    if (app.id === "ollama" && config.OLLAMA_PORT) return parseInt(config.OLLAMA_PORT, 10);
+    if (app.id === "ollama") {
+      // OLLAMA_PORT has drifted from where Ollama actually listens; OLLAMA_URL
+      // is the wiring the swarm itself uses, so trust its port first.
+      const fromUrl = config.OLLAMA_URL?.match(/:(\d+)(\/|$)/)?.[1];
+      if (fromUrl) return parseInt(fromUrl, 10);
+      if (config.OLLAMA_PORT) return parseInt(config.OLLAMA_PORT, 10);
+    }
     if (app.id === "dozzle" && config.DOZZLE_PORT) return parseInt(config.DOZZLE_PORT, 10);
     if (app.id === "gitea" && config.GITEA_PORT) return parseInt(config.GITEA_PORT, 10);
     if (app.id === "planka" && config.PLANKA_PORT) return parseInt(config.PLANKA_PORT, 10);
@@ -210,30 +216,36 @@ export default function AppsPortal() {
     return app.defaultPort;
   }, [config]);
 
+  // Resolve the host per app. lg2025 exposes TWO tailnet identities: the
+  // Windows host (PC_IP_ADDRESS — Docker-published and native ports like
+  // Gitea/Planka) and the tailscale sidecar container (the address the
+  // browser is already on — the portable stack shares its network namespace,
+  // so Dozzle/Honcho/Ollama are ONLY reachable there). hostType picks which.
+  const resolveHost = useCallback((app: WebApp): string => {
+    if (app.hostType === "tailscale" && tailscaleHost) return tailscaleHost;
+    return ipAddress && ipAddress !== "localhost" ? ipAddress : (tailscaleHost || "localhost");
+  }, [ipAddress, tailscaleHost]);
+
   // Construct URLs dynamically based on current configurations and browser context.
   // Uses tailscaleHost (empty on server, set after mount) so SSR and first client
   // render produce identical markup — eliminating the hydration mismatch.
   const getAppUrl = useCallback((app: WebApp): string => {
     if (app.urlOverride) return sanitizeUrl(app.urlOverride);
-
-    // Prioritize the configured machine IP (PC_IP_ADDRESS) if it's set and not localhost.
-    // Otherwise, fall back to the browser's hostname (tailscaleHost) or localhost.
-    const host = ipAddress && ipAddress !== "localhost" ? ipAddress : (tailscaleHost || "localhost");
-
+    const host = resolveHost(app);
     const port = getAppPort(app);
     const url = `http://${host}:${port}${app.path || ""}`;
     return sanitizeUrl(url);
-  }, [ipAddress, tailscaleHost, getAppPort]);
+  }, [resolveHost, getAppPort]);
 
   // Build the URL used ONLY for the health-check ping.
   // Uses `pingPath` if defined, otherwise falls back to the display path.
   const getPingUrl = useCallback((app: WebApp): string => {
     if (app.urlOverride) return sanitizeUrl(app.urlOverride);
-    const host = ipAddress && ipAddress !== "localhost" ? ipAddress : (tailscaleHost || "localhost");
+    const host = resolveHost(app);
     const port = getAppPort(app);
     const pingPath = app.pingPath ?? app.path ?? "";
     return sanitizeUrl(`http://${host}:${port}${pingPath}`);
-  }, [ipAddress, tailscaleHost, getAppPort]);
+  }, [resolveHost, getAppPort]);
 
   // Merge default apps with custom ones (derived state — no effect needed)
   const apps = useMemo<WebApp[]>(() => [
