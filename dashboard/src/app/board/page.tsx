@@ -193,6 +193,8 @@ export default function BoardPage() {
 
   const [activeAddingListForBoard, setActiveAddingListForBoard] = useState(false);
   const [newListName, setNewListName] = useState("");
+  const [activeAddingBoardForProjectId, setActiveAddingBoardForProjectId] = useState<string | null>(null);
+  const [newBoardName, setNewBoardName] = useState("");
   const [activeAddingCardForListId, setActiveAddingCardForListId] = useState<string | null>(null);
   const [newCardName, setNewCardName] = useState("");
 
@@ -445,6 +447,30 @@ export default function BoardPage() {
       }
     } catch (err) {
       console.error(err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleCreateBoard = async (projectId: string) => {
+    if (!newBoardName.trim()) return;
+    try {
+      setSyncing(true);
+      const res = await tenantFetch(`${API_BASE}/api/v1/planka/projects/${projectId}/boards`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newBoardName.trim() })
+      });
+      if (res.ok) {
+        setNewBoardName("");
+        setActiveAddingBoardForProjectId(null);
+        fetchStructure();
+      } else {
+        setError(`Failed to create board (HTTP ${res.status})`);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to create board: network error");
     } finally {
       setSyncing(false);
     }
@@ -764,11 +790,18 @@ export default function BoardPage() {
 
   return (
     <div className="min-h-screen bg-neutral text-primary flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
+      {/* Heritage backdrop — static drafting grid, faded at the edges, with two matte washes */}
+      <div aria-hidden="true" className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] opacity-30 [mask-image:radial-gradient(ellipse_80%_80%_at_50%_30%,black_25%,transparent_100%)]" />
+        <div className="absolute top-[-25%] left-[-15%] w-[55vw] h-[55vw] bg-tertiary/[0.04] rounded-full blur-[140px]" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[45vw] h-[45vw] bg-[#B8422E]/[0.03] rounded-full blur-[120px]" />
+      </div>
+
       <Sidebar />
 
-      <main className="flex-1 relative flex flex-col min-w-0 overflow-x-hidden pb-20 lg:pb-0">
+      <main className="flex-1 relative z-10 flex flex-col min-w-0 overflow-x-hidden pb-20 lg:pb-0">
         {/* ============ HEADER — single calm row ============ */}
-        <header className="h-16 border-b border-primary/10 bg-neutral sticky top-0 z-30 shrink-0 flex items-center justify-between px-6 lg:px-10 gap-6">
+        <header className="h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-6 lg:px-10 gap-6">
           <div className="flex items-center gap-4 min-w-0">
             {selectedBoard ? (
               <button
@@ -881,7 +914,7 @@ export default function BoardPage() {
 
         {/* ============ FILTER STRIP — one quiet row ============ */}
         {selectedBoard && (
-          <div className="border-b border-primary/10 px-6 lg:px-10 py-2 flex flex-wrap items-center gap-x-5 gap-y-2 bg-neutral sticky top-16 z-20 shrink-0">
+          <div className="border-b border-primary/10 px-6 lg:px-10 py-2 flex flex-wrap items-center gap-x-5 gap-y-2 bg-neutral/85 backdrop-blur-sm sticky top-16 z-20 shrink-0">
             <div className="flex items-center gap-2 flex-1 min-w-[180px]">
               <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
               <input
@@ -1012,11 +1045,53 @@ export default function BoardPage() {
                         <section key={proj.id}>
                           <div className="flex items-baseline justify-between border-b border-primary/15 pb-2 mb-1">
                             <h2 className="font-serif italic font-bold text-primary text-xl">{proj.name}</h2>
-                            <span className={LABEL_CAPS}>
-                              {(proj.boards || []).length} {(proj.boards || []).length === 1 ? "board" : "boards"}
-                            </span>
+                            <div className="flex items-baseline gap-4">
+                              <span className={LABEL_CAPS}>
+                                {(proj.boards || []).length} {(proj.boards || []).length === 1 ? "board" : "boards"}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setActiveAddingBoardForProjectId(proj.id);
+                                  setNewBoardName("");
+                                }}
+                                className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-tertiary hover:underline cursor-pointer flex items-center gap-1"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Add Board
+                              </button>
+                            </div>
                           </div>
                           <div>
+                            {activeAddingBoardForProjectId === proj.id && (
+                              <div className="flex items-center gap-2 py-3 border-b border-primary/5">
+                                <Columns className="w-3.5 h-3.5 text-tertiary shrink-0" />
+                                <input
+                                  type="text"
+                                  placeholder="New board name…"
+                                  value={newBoardName}
+                                  onChange={(e) => setNewBoardName(e.target.value)}
+                                  className="flex-1 bg-transparent text-sm text-primary placeholder-secondary/50 focus:outline-none border-b border-border focus:border-tertiary py-1"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") handleCreateBoard(proj.id);
+                                    if (e.key === "Escape") setActiveAddingBoardForProjectId(null);
+                                  }}
+                                />
+                                <button
+                                  onClick={() => setActiveAddingBoardForProjectId(null)}
+                                  className="px-2 py-1 text-[10px] uppercase font-bold text-secondary hover:text-primary cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => handleCreateBoard(proj.id)}
+                                  disabled={!newBoardName.trim()}
+                                  className="px-3 py-1 bg-primary text-neutral hover:bg-primary/90 disabled:opacity-40 text-[10px] uppercase font-bold tracking-wider rounded cursor-pointer"
+                                >
+                                  Create
+                                </button>
+                              </div>
+                            )}
                             {(proj.boards || []).map((board) => (
                               <button
                                 key={board.id}
