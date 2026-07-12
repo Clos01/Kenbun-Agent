@@ -43,3 +43,36 @@ A partial migration left Kenbun in a state of "Dual-write / dual-read drift". `k
 
 ### Fix
 ChromaDB was formally deprecated and bypassed. A strict PostgreSQL/Honcho adapter was implemented as the sole source of truth for System 3. All writes and reads now flow exclusively through Honcho, eliminating the split-brain scenario.
+
+## 2026-07-12: Flexbox Centering Container Modal Squishing Bug
+
+### Symptoms
+When clicking the "New Project" or "New Board" button inside the Kanban page, the modal popup dialog card would appear squished to a narrow vertical strip (~30px width), wrapping text vertically and overlapping elements.
+
+### Root Cause
+The outer backdrop element used a centering flexbox (`flex items-center justify-center`). The inner modal card had `w-full max-w-md` but was missing a `min-w` boundary. Inside a flex container with centering alignment, children shrink to their contents' absolute minimum width if no minimum width boundary is defined, causing the card layout to collapse.
+
+### Fix
+Added explicit minimum width classes (`min-w-[320px] sm:min-w-[400px]`) to the modal card container class lists across the local `Kenbun` and remote `crg-backoffice` repositories.
+
+## 2026-07-12: n8n Docker OAuth Redirect URL Mismatch
+
+### Symptoms
+When setting up Google OAuth credentials in an n8n instance hosted behind a Cloudflare Tunnel (`n8n.rivasautomations.com`), the n8n UI generated an internal Tailscale IP callback URL (`http://100.100.199.127:5678/rest/oauth2-credential/callback`) instead of the public domain. This caused a "Redirect URI mismatch" error in Google Cloud because n8n ignored the browser's Host header.
+
+### Root Cause
+In the `docker-compose.yml` used to deploy the n8n container, the `WEBHOOK_URL` environment variable was hardcoded to the internal Tailscale IP (`http://100.100.199.127:5678`). When this variable is set, n8n forces all webhook and OAuth endpoints to use it exclusively, regardless of how the user accesses the dashboard.
+
+### Fix
+SSH'd into the host machine, updated the `docker-compose.yml` to set `WEBHOOK_URL=https://n8n.rivasautomations.com`, and recreated the container (`docker compose up -d`). This allowed n8n to generate the correct public callback URL to supply to Google Cloud.
+
+## 2026-07-12: n8n CLI User Management Reset
+
+### Symptoms
+The user forgot their n8n dashboard login credentials and was locked out of their `n8n.rivasautomations.com` workspace. Because n8n stores credentials as secure cryptographic hashes (bcrypt), password retrieval is mathematically impossible.
+
+### Root Cause
+Forgotten credentials on a self-hosted instance without an SMTP server configured for password resets.
+
+### Fix
+SSH'd into the server and ran `docker exec -i n8n-docker-n8n-1 n8n user-management:reset`. This command securely wiped the user lock state from the internal database. When the user refreshed the URL, they were greeted by the "Setup Owner" screen, allowing them to recreate their account with their original email and a new password without losing access to their existing workflows.
