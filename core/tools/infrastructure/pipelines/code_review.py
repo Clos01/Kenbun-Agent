@@ -1,5 +1,6 @@
 from tools.utils.orchestrator_helpers import build_context
 from tools.utils.ide_context import uses_external_review, log_ide_context
+from tools.utils.review_targets import load_review_target
 
 def build_code_review_pipeline(tools):
     """
@@ -29,16 +30,20 @@ def build_code_review_pipeline(tools):
             "output_key": "repo_map",
         },
         {
-            "id": "analyze_review_request",
-            "label": "🔬 Analyzing review request (LLM)",
-            "tool": tools.get("analyze_bug"),
+            # Materialize the ACTUAL code under review (real source or a diff)
+            # into code_snippet. Without this the reviewers below fall back to
+            # the signatures-only repo_map and sign off having seen no
+            # implementation. Runs whenever the caller didn't pre-supply code.
+            "id": "load_review_target",
+            "label": "📄 Loading source under review",
+            "tool": load_review_target,
             "input": lambda s: {
-                "task": s["task"],
                 "project_path": s.get("project_path", ""),
                 "file_path": s.get("file_path", ""),
-                "code_snippet": s.get("code_snippet", "")
+                "code_snippet": s.get("code_snippet", ""),
+                "task": s.get("task", ""),
             },
-            "skip_if": lambda s: bool(s.get("code_snippet") or s.get("repo_map")),
+            "skip_if": lambda s: bool(s.get("code_snippet")),
             "output_key": "code_snippet",
         },
     ]
