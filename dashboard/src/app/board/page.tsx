@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import { formatMarkdown } from "@/lib/markdown";
+import { computeWorkOrder } from "@/lib/prioritize";
 import {
   Columns,
   Plus,
@@ -711,6 +712,12 @@ export default function BoardPage() {
     }
   };
 
+  // Global work order: rank every open, actionable card by priority so each
+  // card can show where it sits in the "do this first, then next" sequence.
+  // Computed over ALL cards (not the search-filtered subset) so ranks stay
+  // stable while filtering. Scoring mirrors scripts/prioritize_board.py.
+  const workOrder = useMemo(() => computeWorkOrder(cards, lists), [cards, lists]);
+
   // Filter Cards Logic
   const filteredCards = cards.filter(card => {
     const { cleanDescription, metadata } = parseCardMetadata(card.description || "");
@@ -1247,6 +1254,7 @@ export default function BoardPage() {
                               const { metadata, cleanDescription } = parseCardMetadata(card.description || "");
                               const overdue = isOverdue(card);
                               const drill = parseDrillContent(cleanDescription);
+                              const rank = workOrder.rank.get(card.id);
                               return (
                                 <motion.div
                                   layoutId={`card-${card.id}`}
@@ -1259,9 +1267,28 @@ export default function BoardPage() {
                                   onClick={() => handleOpenCard(card)}
                                 >
                                   <div className="flex justify-between items-start gap-2">
-                                    <h4 className="font-semibold text-primary text-[13px] leading-snug">
-                                      {card.name}
-                                    </h4>
+                                    <div className="flex items-start gap-2 min-w-0">
+                                      {rank !== undefined && (
+                                        <span
+                                          className={`shrink-0 mt-px flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full font-mono font-bold text-[10px] tabular-nums ring-1 ${
+                                            rank <= 3
+                                              ? "bg-tertiary/15 text-tertiary ring-tertiary/40"
+                                              : "bg-neutral/60 text-secondary ring-border/40"
+                                          }`}
+                                          title={
+                                            rank === 1
+                                              ? `Work order #1 of ${workOrder.total} — do this first`
+                                              : `Work order #${rank} of ${workOrder.total} (priority score ${workOrder.score.get(card.id)})`
+                                          }
+                                          aria-label={`Priority rank ${rank} of ${workOrder.total}`}
+                                        >
+                                          {rank}
+                                        </span>
+                                      )}
+                                      <h4 className="font-semibold text-primary text-[13px] leading-snug">
+                                        {card.name}
+                                      </h4>
+                                    </div>
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
