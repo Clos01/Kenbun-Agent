@@ -55,8 +55,8 @@ builtins.print = mcp_safe_print
 # --- 2. IMPORTS (Hierarchical) ---
 # Hierarchical imports moved inside tool functions to prevent startup timeouts
 # Global Strategy Instances
-from tools.strategy.decision_logic import router
-from tools.strategy.strategy_manager import governor
+
+import tools.infrastructure.planka
 
 mcp = FastMCP("Kenbun Tools")
 
@@ -970,6 +970,7 @@ def think_about_tools(task: str) -> str:
     Think before you act — this planner knows all 15 tools and suggests the optimal strategy.
     """
     try:
+        from tools.strategy.decision_logic import router
         from tools.audit.gemini_reviewer import _call_gemini
 
         # 1. Decision Tree Routing
@@ -1099,6 +1100,7 @@ def get_intelligence_stats() -> str:
     governor fell back to SQLite all real telemetry data was invisible.
     """
     try:
+        from tools.strategy.strategy_manager import governor
         # Use governor's own get_all_stats() which handles both backends
         all_stats = governor.get_all_stats()
 
