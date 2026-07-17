@@ -357,3 +357,51 @@ async def api_semantic_search(req: SemanticSearchRequest):
     except Exception as e:
         logging.error(f"SEMANTIC_SEARCH_ERROR: {e}")
         return {"status": "error", "message": str(e), "results": []}
+
+
+# ── Global Workspace endpoints ──────────────────────────────────────────────
+
+class WorkspacePostRequest(BaseModel):
+    concept: str = Field(..., description="The concept to write to the global workspace")
+    salience: float = Field(0.5, description="Initial salience (between 0.0 and 1.0)")
+    agent_id: str = Field("unknown", description="The ID of the posting agent")
+
+class WorkspaceResolveRequest(BaseModel):
+    concept: str = Field(..., description="The concept to resolve from the watchlist")
+
+@router.get("/api/v1/workspace")
+async def get_workspace() -> dict:
+    """
+    Returns active workspace slots, sorted by priority (flagged alerts first).
+    """
+    try:
+        from tools.memory.global_workspace import read_workspace
+        res = read_workspace(limit=48)
+        return {"status": "success", "workspace": res}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@router.post("/api/v1/workspace")
+async def post_workspace(req: WorkspacePostRequest) -> dict:
+    """
+    Writes a new concept/alert to the Global Workspace slots.
+    """
+    try:
+        from tools.memory.global_workspace import post_concept
+        res = post_concept(concept=req.concept, salience=req.salience, agent_id=req.agent_id)
+        return {"status": "success", "result": res}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@router.post("/api/v1/workspace/resolve")
+async def resolve_workspace_alert(req: WorkspaceResolveRequest) -> dict:
+    """
+    Resolves a flagged watchlist alert on a workspace concept slot.
+    """
+    try:
+        from tools.memory.global_workspace import resolve_alert
+        res = resolve_alert(concept=req.concept)
+        return {"status": "success", "result": res}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
