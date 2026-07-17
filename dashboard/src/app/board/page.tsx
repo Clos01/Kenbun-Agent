@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
+import { formatMarkdown } from "@/lib/markdown";
 import {
   Columns,
   Plus,
@@ -142,99 +143,6 @@ function parseDrillContent(description: string) {
   };
 }
 
-function parseInlineMarkdown(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index} className="font-extrabold text-primary">{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={index} className="px-1.5 py-0.5 bg-neutral/80 border border-border/20 rounded font-mono text-[11px] text-tertiary">{part.slice(1, -1)}</code>;
-    }
-    return part;
-  });
-}
-
-function formatMarkdown(text: string): React.ReactNode {
-  if (!text) return "";
-
-  // Split by code blocks first to isolate them
-  const parts = text.split(/(```[a-z]*\n[\s\S]*?\n```)/g);
-
-  return parts.map((part, index) => {
-    if (part.startsWith("```")) {
-      const match = part.match(/```([a-z]*)\n([\s\S]*?)\n```/);
-      const code = match ? match[2] : part.slice(3, -3);
-
-      return (
-        <pre key={index} className="bg-neutral/40 border border-border/20 rounded-lg p-3.5 my-3.5 font-mono text-[11px] text-primary overflow-x-auto max-w-full">
-          <code className="block whitespace-pre">{code}</code>
-        </pre>
-      );
-    }
-
-    const lines = part.split("\n");
-    const elements: React.ReactNode[] = [];
-    let listItems: string[] = [];
-
-    const flushList = (keyPrefix: number) => {
-      if (listItems.length > 0) {
-        elements.push(
-          <ul key={`list-${keyPrefix}`} className="list-disc pl-5 my-2 flex flex-col gap-1">
-            {listItems.map((item, idx) => (
-              <li key={idx} className="text-sm text-primary/80 font-sans leading-relaxed">
-                {parseInlineMarkdown(item)}
-              </li>
-            ))}
-          </ul>
-        );
-        listItems = [];
-      }
-    };
-
-    lines.forEach((line, lineIdx) => {
-      const trimmed = line.trim();
-
-      if (trimmed.startsWith("### ")) {
-        flushList(lineIdx);
-        elements.push(
-          <h4 key={lineIdx} className="text-base font-normal italic text-tertiary mt-6 mb-2.5 font-heading">
-            {parseInlineMarkdown(trimmed.slice(4))}
-          </h4>
-        );
-      } else if (trimmed.startsWith("## ")) {
-        flushList(lineIdx);
-        elements.push(
-          <h3 key={lineIdx} className="text-xl font-semibold tracking-normal text-primary/95 mt-8 mb-3.5 font-heading">
-            {parseInlineMarkdown(trimmed.slice(3))}
-          </h3>
-        );
-      } else if (trimmed.startsWith("# ")) {
-        flushList(lineIdx);
-        elements.push(
-          <h2 key={lineIdx} className="text-2xl font-bold tracking-tight text-primary mt-9 mb-4 font-heading">
-            {parseInlineMarkdown(trimmed.slice(2))}
-          </h2>
-        );
-      } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
-        listItems.push(trimmed.slice(2));
-      } else if (trimmed === "") {
-        flushList(lineIdx);
-      } else {
-        flushList(lineIdx);
-        elements.push(
-          <p key={lineIdx} className="text-sm text-primary/85 leading-relaxed font-sans mb-2.5 last:mb-0">
-            {parseInlineMarkdown(line)}
-          </p>
-        );
-      }
-    });
-
-    flushList(lines.length);
-    return <React.Fragment key={index}>{elements}</React.Fragment>;
-  });
-}
-
 // Shared class fragments (Heritage: hairlines, matte surfaces, label-caps)
 const LABEL_CAPS = "text-[9px] font-mono text-secondary uppercase tracking-[0.2em] font-bold";
 const FIELD =
@@ -301,7 +209,7 @@ export default function BoardPage() {
     }));
   };
 
-  const [editingDescTab, setEditingDescTab] = useState<"write" | "preview">("write");
+  const [editingDescTab, setEditingDescTab] = useState<"write" | "preview">("preview");
 
   // Board Settings Drawer State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -481,7 +389,7 @@ export default function BoardPage() {
     // Parse metadata
     const { cleanDescription, metadata } = parseCardMetadata(card.description || "");
     setEditingCardDesc(cleanDescription);
-    setEditingDescTab("write");
+    setEditingDescTab("preview");
     setCardLocation(metadata.location || "");
     setCardCollections((metadata.collections || []).join(", "));
     setCardRecurrence(metadata.recurring || "none");
@@ -1956,7 +1864,7 @@ export default function BoardPage() {
                                   {new Date(comment.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} at {new Date(comment.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                 </span>
                               </div>
-                              <p className="text-xs text-primary leading-relaxed break-words">{comment.text}</p>
+                              <div className="text-xs text-primary leading-relaxed break-words markdown-content">{formatMarkdown(comment.text)}</div>
 
                               <div className="pt-1 flex justify-end">
                                 <button
@@ -2222,7 +2130,7 @@ export default function BoardPage() {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                className="w-full max-w-4xl max-h-[85vh] bg-neutral border border-primary/15 rounded-2xl flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
+                className="w-full max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl max-h-[90dvh] md:max-h-[85dvh] bg-neutral border border-primary/15 rounded-2xl flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
               >
                 {/* Panel header */}
                 <div className="px-6 pt-5 pb-4 border-b border-primary/10 shrink-0">
@@ -2474,7 +2382,7 @@ export default function BoardPage() {
                                       {new Date(comment.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} · {new Date(comment.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                                     </span>
                                   </div>
-                                  <p className="text-xs text-primary leading-relaxed border-l-2 border-primary/10 pl-3">{comment.text}</p>
+                                  <div className="text-xs text-primary leading-relaxed border-l-2 border-primary/10 pl-3 markdown-content">{formatMarkdown(comment.text)}</div>
                                 </div>
                               </div>
                             ))
