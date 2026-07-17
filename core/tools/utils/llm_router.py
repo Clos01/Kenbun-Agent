@@ -300,9 +300,21 @@ def _make_openai_compatible_call(
         }
         url = f"{base_url}/messages"
         response = requests.post(url, json=payload, headers=headers, timeout=settings.models.lm_studio_read_timeout)
+        if response.status_code == 400 and "temperature" in response.text:
+            # Claude 5 models reject the deprecated temperature param entirely
+            payload.pop("temperature", None)
+            response = requests.post(url, json=payload, headers=headers, timeout=settings.models.lm_studio_read_timeout)
         response.raise_for_status()
         res_json = response.json()
-        content = res_json["content"][0]["text"]
+        # Claude 5 responses may lead with a thinking block; take the first text block
+        content = next(
+            (b["text"] for b in res_json.get("content", []) if b.get("type") == "text"),
+            None,
+        )
+        if content is None:
+            raise RuntimeError(
+                f"Anthropic response contained no text block (stop_reason={res_json.get('stop_reason')})"
+            )
         
         # Dynamic Token Tracking (System 4)
         try:
