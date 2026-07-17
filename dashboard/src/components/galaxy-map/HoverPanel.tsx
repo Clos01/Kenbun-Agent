@@ -23,12 +23,12 @@ export default function HoverPanel({
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 15 }}
-      className={`absolute z-[120] pointer-events-none w-80 bg-[var(--background)]/90 border border-[var(--border)] backdrop-blur-xl p-5 artisan-shadow space-y-3 rounded-sm ${
+      className={`absolute z-[120] pointer-events-none w-80 bg-[var(--background)]/75 border border-[var(--border)]/45 backdrop-blur-xl p-5 shadow-2xl space-y-3 rounded-xl ${
         isFullscreen ? 'bottom-28 left-10' : 'top-24 left-10'
       }`}
     >
       <div className="flex items-center justify-between">
-        <span className={`text-[8px] font-mono uppercase tracking-widest px-2 py-0.5 border rounded-sm ${roomColorsMap[hovered.room]}`}>
+        <span className={`text-[8px] font-mono uppercase tracking-widest px-2.5 py-1 border border-[var(--border)]/40 rounded-md ${roomColorsMap[hovered.room]}`}>
           {hovered.room}
         </span>
         <span className="text-[7px] font-mono opacity-30">ID_{hovered.id.slice(0, 4)}</span>

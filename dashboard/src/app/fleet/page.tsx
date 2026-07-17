@@ -381,7 +381,7 @@ export default function FleetCommand() {
                   transition={{ delay: i * 0.1 }}
                   onClick={() => setSelectedWorker(worker)}
                   type="button"
-                  className="p-6 border border-[var(--border-muted)] bg-[var(--background)]/40 text-left w-full artisan-shadow space-y-5 group hover:border-[var(--gold)] hover:bg-[var(--sand)]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--gold)] rounded-sm"
+                  className="p-6 border border-[var(--border-muted)] bg-[var(--background)]/40 text-left w-full artisan-shadow space-y-5 group hover:border-[var(--gold)] hover:bg-[var(--sand)]/30 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--gold)] rounded-2xl"
                   aria-label={`Worker node ${worker.name}. Status: ${worker.status}. Role: ${worker.role}. Click for detailed profile.`}
                 >
                   <div className="flex items-center justify-between">
@@ -433,33 +433,33 @@ export default function FleetCommand() {
             return (
               <section className="space-y-3">
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
-                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2">
+                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2 rounded-xl">
                     <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-30">Today</div>
                     <div className={`text-xl font-serif font-black ${isExternalSource && !hasRealSpend ? 'text-[var(--foreground)]/40 text-sm' : ''}`}>{todayDisplay}</div>
                   </div>
-                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2">
+                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2 rounded-xl">
                     <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-30">Lifetime</div>
                     <div className={`text-xl font-serif font-black ${isExternalSource && !hasRealSpend ? 'text-[var(--foreground)]/40 text-sm' : ''}`}>{lifetimeDisplay}</div>
                   </div>
-                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2">
+                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2 rounded-xl">
                     <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-30">Daily Limit</div>
                     <div className="text-xl font-serif font-black text-emerald-400">{remainingDisplay}</div>
                   </div>
-                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2">
+                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2 rounded-xl">
                     <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-30">Burn Rate</div>
                     <div className="text-xl font-serif font-black text-[var(--gold)]">{burnDisplay}</div>
                   </div>
-                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2">
+                  <div className="p-5 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow space-y-2 rounded-xl">
                     <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-30">Avg Accuracy</div>
                     <div className="text-xl font-serif font-black">{avgSuccessRate}%</div>
                   </div>
-                  <div className="p-5 border border-[var(--border)] bg-[var(--background)] artisan-shadow space-y-2">
+                  <div className="p-5 border border-[var(--border)] bg-[var(--background)] artisan-shadow space-y-2 rounded-xl">
                     <div className="text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-30">Tools</div>
                     <div className="text-xl font-serif font-black">{tools.length}</div>
                   </div>
                 </div>
                 {isExternalSource && (
-                  <div className="flex items-center gap-3 px-4 py-2 border border-[var(--gold)]/20 bg-[var(--gold)]/5 rounded-sm">
+                  <div className="flex items-center gap-3 px-4 py-2 border border-[var(--gold)]/20 bg-[var(--gold)]/5 rounded-lg">
                     <div className="w-1.5 h-1.5 rounded-full bg-[var(--gold)] opacity-60 shrink-0" />
                     <p className="text-[10px] font-mono text-[var(--foreground)]/40 uppercase tracking-wider leading-relaxed">
                       {budget.note || 'Spend tracking covers only LLM calls routed through the Kenbun backend. External AI provider costs are not reflected here.'}
@@ -497,7 +497,7 @@ export default function FleetCommand() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Total Estimated/Actual Tokens */}
-                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded space-y-3">
+                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded-xl space-y-3">
                     <span className="text-[9px] font-bold opacity-30 font-mono">{hasRealTokens ? "ACTUAL VOLUME TODAY" : "ESTIMATED VOLUME TODAY"}</span>
                     <div className="text-3xl font-data font-black tracking-tight text-[var(--foreground)] select-all">
                       {totalTokens.toLocaleString()}
@@ -506,14 +506,14 @@ export default function FleetCommand() {
                   </div>
 
                   {/* Token Split (Prompt vs Completion) */}
-                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded space-y-3 flex flex-col justify-between">
+                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded-xl space-y-3 flex flex-col justify-between">
                     <span className="text-[9px] font-bold opacity-30 font-mono">TOKEN SYSTEM BALANCE</span>
                     <div className="space-y-1.5">
                       <div className="flex justify-between text-[10px] font-mono leading-none">
                         <span className="opacity-45">Prompt Input ({promptPct}%)</span>
                         <span className="text-[var(--gold)] font-bold select-all">{promptTokens.toLocaleString()}</span>
                       </div>
-                      <div className="h-1.5 border border-[var(--border-muted)] bg-background p-[1px] rounded-sm overflow-hidden">
+                      <div className="h-1.5 border border-[var(--border-muted)] bg-background p-[1px] rounded-full overflow-hidden">
                         <div className="h-full bg-[var(--gold)]" style={{ width: `${promptPct}%` }} />
                       </div>
                       <div className="flex justify-between text-[10px] font-mono leading-none">
@@ -524,7 +524,7 @@ export default function FleetCommand() {
                   </div>
 
                   {/* Compute Burn Rate & Efficiency */}
-                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded space-y-3">
+                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded-xl space-y-3">
                     <span className="text-[9px] font-bold opacity-30 font-mono">COMPUTE EFFICIENCY</span>
                     <div className="flex justify-between items-baseline">
                       <div className="text-xl font-data font-black text-[var(--gold)]">{efficiencyRatio}</div>
@@ -555,7 +555,7 @@ export default function FleetCommand() {
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: i * 0.03 }}
                   onClick={() => setSelectedTool(selectedTool?.tool_id === tool.tool_id ? null : tool)}
-                  className={`group p-5 border-2 text-left transition-all artisan-shadow ${
+                  className={`group p-5 border-2 text-left transition-all artisan-shadow rounded-xl ${
                     selectedTool?.tool_id === tool.tool_id
                       ? 'border-[var(--gold)] bg-[var(--sand)]'
                       : 'border-[var(--border-muted)] bg-[var(--background)]/40 hover:bg-[var(--sand)] hover:border-[var(--gold)]/40'
@@ -575,7 +575,7 @@ export default function FleetCommand() {
                   </div>
 
                   {/* Progress bar */}
-                  <div className="h-1.5 bg-[var(--foreground)]/5 border border-[var(--border-muted)] overflow-hidden mb-3">
+                  <div className="h-1.5 bg-[var(--foreground)]/5 border border-[var(--border-muted)] rounded-full overflow-hidden mb-3">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${tool.success_rate * 100}%` }}
@@ -760,7 +760,7 @@ export default function FleetCommand() {
               aria-modal="true"
               aria-labelledby="tool-telemetry-title"
               onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-4xl bg-[var(--background)] shadow-[0_0_50px_rgba(0,0,0,0.15)] rounded-[var(--radius-md)] border-2 border-[var(--gold)]/30 p-6 md:p-8 z-10 space-y-6 max-h-[90vh] lg:max-h-none overflow-y-auto lg:overflow-y-visible custom-scrollbar"
+              className="relative w-full max-w-4xl bg-[var(--background)] shadow-[0_0_50px_rgba(0,0,0,0.15)] rounded-2xl border-2 border-[var(--gold)]/30 p-6 md:p-8 z-10 space-y-6 max-h-[90vh] lg:max-h-none overflow-y-auto lg:overflow-y-visible custom-scrollbar"
             >
               <div className="flex items-center justify-between border-b border-[var(--border-muted)] pb-4">
                 <div className="space-y-1">
@@ -769,7 +769,7 @@ export default function FleetCommand() {
                 </div>
                 <button
                   onClick={() => setSelectedTool(null)}
-                  className="px-3 py-1.5 border border-[var(--border-muted)] text-[10px] font-mono font-bold hover:border-[var(--tertiary)] hover:text-[var(--tertiary)] transition-colors rounded-sm uppercase"
+                  className="px-3 py-1.5 border border-[var(--border-muted)] text-[10px] font-mono font-bold hover:border-[var(--tertiary)] hover:text-[var(--tertiary)] transition-colors rounded-lg uppercase"
                 >
                   CLOSE [ESC]
                 </button>
@@ -803,7 +803,7 @@ export default function FleetCommand() {
                 aria-modal="true"
                 aria-labelledby="worker-profile-title"
                 onClick={(e) => e.stopPropagation()}
-              className="relative w-full max-w-2xl bg-[var(--background)] shadow-[0_0_50px_rgba(0,0,0,0.15)] rounded-[var(--radius-md)] border-2 border-[var(--gold)]/30 p-6 md:p-8 z-10 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar"
+              className="relative w-full max-w-2xl bg-[var(--background)] shadow-[0_0_50px_rgba(0,0,0,0.15)] rounded-2xl border-2 border-[var(--gold)]/30 p-6 md:p-8 z-10 space-y-6 max-h-[90vh] overflow-y-auto custom-scrollbar"
               >
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-[var(--border-muted)] pb-4">
@@ -824,7 +824,7 @@ export default function FleetCommand() {
                   </div>
                   <button
                     onClick={() => setSelectedWorker(null)}
-                    className="px-3 py-1.5 border border-[var(--border-muted)] text-[10px] font-mono font-bold hover:border-[var(--tertiary)] hover:text-[var(--tertiary)] transition-colors rounded-sm uppercase"
+                    className="px-3 py-1.5 border border-[var(--border-muted)] text-[10px] font-mono font-bold hover:border-[var(--tertiary)] hover:text-[var(--tertiary)] transition-colors rounded-lg uppercase"
                   >
                     CLOSE [ESC]
                   </button>
@@ -835,18 +835,18 @@ export default function FleetCommand() {
                   <div className="space-y-6 text-xs font-mono">
                     {/* Hardware & Model */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-md">
+                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-xl">
                         <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Hardware Profile</span>
                         <p className="mt-1 font-serif font-black text-sm text-[var(--foreground)] leading-relaxed">{details.hardware}</p>
                       </div>
-                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-md">
+                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-xl">
                         <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Active Model</span>
                         <p className="mt-1 font-bold text-sm text-[var(--gold)] truncate" title={details.activeModel}>{details.activeModel}</p>
                       </div>
                     </div>
 
                     {/* Swarm Responsibilities */}
-                    <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-md space-y-2">
+                    <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-xl space-y-2">
                       <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Swarm Responsibilities</span>
                       <ul className="list-disc pl-4 space-y-1.5 opacity-80 leading-relaxed font-sans text-xs">
                         {details.responsibilities.map((resp, idx) => (
@@ -857,11 +857,11 @@ export default function FleetCommand() {
 
                     {/* Connection & Performance */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-md">
+                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-xl">
                         <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Connection Endpoint</span>
                         <p className="mt-1 opacity-70 select-all">{details.connection}</p>
                       </div>
-                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-md">
+                      <div className="p-4 border border-[var(--border-muted)] bg-[var(--background)]/25 rounded-xl">
                         <span className="text-[9px] font-bold uppercase tracking-wider opacity-40">Telemetry Performance</span>
                         <p className="mt-1 opacity-70">{details.performance}</p>
                       </div>

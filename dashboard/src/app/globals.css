@@ -1,11 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100..900;1,100..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:wght@400;700&display=swap');
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: var(--font-space-mono);
-  --font-heading: "Public Sans", sans-serif;
-  --font-data: "Space Grotesk", sans-serif;
+  --font-sans: var(--font-plus-jakarta), ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-space-mono), monospace;
+  --font-heading: var(--font-cormorant), serif;
+  --font-data: var(--font-plus-jakarta), sans-serif;
 
   --color-primary: var(--primary);
   --color-secondary: var(--secondary);
@@ -140,4 +139,15 @@ h1, h2, h3, .pub-title {
 ::-webkit-scrollbar-track { background: var(--background); }
 ::-webkit-scrollbar-thumb { background: rgba(26, 28, 30, 0.1); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 

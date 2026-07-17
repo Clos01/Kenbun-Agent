@@ -22,7 +22,7 @@ import {
   AccuracyGauge, 
   ToolMatrix 
 } from "@/components/Visuals";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useMotionTemplate } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { ToolStat } from "@/lib/tools";
 import { useLogStream, LogRecord } from "./useLogStream";
@@ -51,6 +51,22 @@ interface BudgetData {
   history?: number[];
   [key: string]: unknown;
 }
+
+export const SpotlightCard = ({ 
+  children, 
+  className = "" 
+}: { 
+  children: React.ReactNode; 
+  className?: string; 
+}) => {
+  return (
+    <div
+      className={`relative overflow-hidden border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl transition-all duration-300 ${className}`}
+    >
+      <div className="relative z-10 h-full w-full">{children}</div>
+    </div>
+  );
+};
 
 
 
@@ -111,79 +127,82 @@ const ModelCognitiveEnsemble = ({ lmStudioOnline }: { lmStudioOnline: boolean })
           initial={{ opacity: 0, x: -15 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: i * 0.1 }}
-          whileHover={{ x: 4, borderColor: "var(--gold)" }}
-          className={`p-4 border-2 rounded-sm bg-background/30 flex flex-col justify-between transition-all duration-300 relative overflow-hidden ${
-            model.isLocal 
-              ? model.isOnline 
-                ? "border-amber-600/30 shadow-[0_0_12px_rgba(212,163,89,0.04)]" 
-                : "border-red-500/20"
-              : "border-border hover:shadow-[0_0_12px_rgba(212,163,89,0.04)]"
-          }`}
+          className="w-full"
         >
-          {/* Left accent bar for active node */}
-          {model.isOnline && !model.isLocal && (
-            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gold" />
-          )}
-          {model.isOnline && model.isLocal && (
-            <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-500 animate-pulse" />
-          )}
+          <SpotlightCard
+            className={`p-5 border flex flex-col justify-between transition-all duration-300 relative overflow-hidden ${
+              model.isLocal 
+                ? model.isOnline 
+                  ? "border-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.02)]" 
+                  : "border-red-500/20 bg-red-500/[0.01]"
+                : "border-primary/5 hover:border-gold/30 bg-card/40 hover:bg-card/65"
+            }`}
+          >
+            {/* Left accent bar for active node */}
+            {model.isOnline && !model.isLocal && (
+              <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-gold" />
+            )}
+            {model.isOnline && model.isLocal && (
+              <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-500 animate-pulse" />
+            )}
 
-          {/* Background grid matrix lines */}
-          <div className="absolute inset-0 pointer-events-none select-none high-tech-grid bg-[size:10px_10px]" />
+            {/* Background grid matrix lines */}
+            <div className="absolute inset-0 pointer-events-none select-none high-tech-grid bg-[size:10px_10px] opacity-10" />
 
-          <div className="flex justify-between items-start gap-2 relative z-10">
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  model.isOnline 
-                    ? model.isLocal 
-                      ? 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.5)] animate-pulse' 
-                      : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)] animate-pulse'
-                    : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
-                }`} />
-                <span className="text-[8px] font-mono tracking-widest uppercase opacity-40">
-                  {model.isLocal ? "LOCAL NODE" : "CLOUD API"}
+            <div className="flex justify-between items-start gap-2 relative z-10">
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    model.isOnline 
+                      ? model.isLocal 
+                        ? 'bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.5)] animate-pulse' 
+                        : 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)] animate-pulse'
+                      : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+                  }`} />
+                  <span className="text-[8px] font-mono tracking-widest uppercase opacity-40">
+                    {model.isLocal ? "LOCAL NODE" : "CLOUD API"}
+                  </span>
+                </div>
+                <h4 className="font-serif font-black text-sm tracking-tight text-foreground truncate">
+                  {model.name}
+                </h4>
+                <span className="text-[8px] font-mono text-gold/80 block -mt-1 truncate">
+                  {model.version}
                 </span>
               </div>
-              <h4 className="font-serif font-black text-sm tracking-tight text-foreground truncate">
-                {model.name}
-              </h4>
-              <span className="text-[8px] font-mono text-gold/80 block -mt-1 truncate">
-                {model.version}
-              </span>
-            </div>
 
-            <div className="text-right shrink-0">
-              <span className="text-[7px] font-mono text-foreground/40 block">LATENCY</span>
-              <span className="text-[10px] font-mono font-bold text-foreground">
-                {model.isOnline ? model.latency : "OFFLINE"}
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/20 text-[9px] relative z-10">
-            <div>
-              <span className="opacity-30 font-mono block text-[7px] tracking-wider">ROLE</span>
-              <span className="font-mono font-bold text-foreground/70 truncate block">{model.role}</span>
-            </div>
-            <div className="text-right">
-              <span className="opacity-30 font-mono block text-[7px] tracking-wider">COMPUTE COST</span>
-              <span className={`font-mono font-bold ${model.isLocal ? 'text-emerald-500' : 'text-foreground/70'}`}>
-                {model.cost}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-3 relative z-10">
-            <span className="text-[7px] font-mono tracking-widest opacity-25 block mb-1">COGNITIVE_VECTORS</span>
-            <div className="flex flex-wrap gap-1">
-              {model.capabilities.slice(0, 2).map((cap, i) => (
-                <span key={i} className="text-[7px] font-mono uppercase bg-foreground/[0.02] border border-border/40 px-1 py-0.5 rounded text-foreground/50 truncate max-w-[120px]">
-                  {cap}
+              <div className="text-right shrink-0">
+                <span className="text-[7px] font-mono text-foreground/40 block">LATENCY</span>
+                <span className="text-[10px] font-mono font-bold text-foreground">
+                  {model.isOnline ? model.latency : "OFFLINE"}
                 </span>
-              ))}
+              </div>
             </div>
-          </div>
+
+            <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/20 text-[9px] relative z-10">
+              <div>
+                <span className="opacity-30 font-mono block text-[7px] tracking-wider">ROLE</span>
+                <span className="font-mono font-bold text-foreground/70 truncate block">{model.role}</span>
+              </div>
+              <div className="text-right">
+                <span className="opacity-30 font-mono block text-[7px] tracking-wider">COMPUTE COST</span>
+                <span className={`font-mono font-bold ${model.isLocal ? 'text-emerald-500' : 'text-foreground/70'}`}>
+                  {model.cost}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-3 relative z-10">
+              <span className="text-[7px] font-mono tracking-widest opacity-25 block mb-1">COGNITIVE_VECTORS</span>
+              <div className="flex flex-wrap gap-1">
+                {model.capabilities.slice(0, 2).map((cap, i) => (
+                  <span key={i} className="text-[7px] font-mono uppercase bg-foreground/[0.02] border border-border/40 px-1 py-0.5 rounded text-foreground/50 truncate max-w-[120px]">
+                    {cap}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </SpotlightCard>
         </motion.div>
       ))}
     </div>
@@ -346,12 +365,12 @@ const CognitiveFlowchart = ({ logs, activeCategory }: { logs: LogRecord[], activ
           scale: isActive ? 1.03 : 1
         }}
         transition={{ type: "spring", stiffness: 350, damping: 22 }}
-        className="w-full max-w-[250px] p-4 border border-[var(--border)] rounded-sm transition-all duration-300 bg-white/95 backdrop-blur-xl flex flex-col gap-2.5 artisan-shadow z-10 relative"
+        className="w-full max-w-[250px] p-4 border border-primary/10 rounded-xl transition-all duration-300 bg-card/90 backdrop-blur-2xl flex flex-col gap-2.5 artisan-shadow z-10 relative"
       >
         {/* Node Header */}
         <div className="flex justify-between items-center border-b border-border/40 pb-2">
           <div className="flex items-center gap-2 min-w-0">
-            <div className={`p-1.5 rounded-sm border shrink-0 bg-background/55 ${node.color}`}>
+            <div className={`p-1.5 rounded-md border shrink-0 bg-background/55 ${node.color}`}>
               {node.icon}
             </div>
             <div className="min-w-0">
@@ -372,7 +391,7 @@ const CognitiveFlowchart = ({ logs, activeCategory }: { logs: LogRecord[], activ
         <div className="flex-1 min-h-[52px] flex flex-col justify-between pt-1">
           {latestLog ? (
             <>
-              <p className="text-[10px] font-bold text-[var(--foreground)] font-mono leading-relaxed line-clamp-2 select-text shadow-sm bg-[var(--background)]/25 p-1.5 border border-[var(--border)] rounded-sm">
+              <p className="text-[10px] font-bold text-[var(--foreground)] font-mono leading-relaxed line-clamp-2 select-text shadow-sm bg-[var(--background)]/25 p-1.5 border border-[var(--border)] rounded-lg">
                 {latestLog.message}
               </p>
               <div className="flex justify-between items-center text-[7px] font-mono opacity-50 border-t border-border/20 pt-1.5 mt-1.5">
@@ -400,7 +419,7 @@ const CognitiveFlowchart = ({ logs, activeCategory }: { logs: LogRecord[], activ
   return (
     <div 
       ref={containerRef}
-      className="relative w-full min-h-[480px] md:h-[500px] border border-[var(--border)] bg-white/60 rounded-sm overflow-hidden select-none flex-1 flex flex-col"
+      className="relative w-full min-h-[480px] md:h-[500px] border border-primary/5 bg-card/25 rounded-2xl overflow-hidden select-none flex-1 flex flex-col"
     >
       {/* 2026 HUD Canvas elements: Corner Blueprint Crosshairs */}
       <div className="absolute top-3 left-3 text-[8px] font-mono text-border/30 pointer-events-none select-none">+ HUD_SYS_2026</div>
@@ -716,7 +735,7 @@ export default function IntelStream() {
   };
 
   const LogContent = (
-    <div className={`transition-all duration-500 border border-[var(--border)] bg-white/60 backdrop-blur-md p-6 overflow-hidden artisan-shadow relative group rounded-md flex flex-col ${
+    <div className={`transition-all duration-500 border border-primary/5 bg-card/60 backdrop-blur-xl p-6 overflow-hidden artisan-shadow relative group rounded-2xl flex flex-col ${
       isLogsExpanded ? 'w-full h-full max-h-[90vh]' : 'h-[640px]'
     }`}>
       {/* Absolute high-tech grid background overlay */}
@@ -730,10 +749,10 @@ export default function IntelStream() {
           <span className="ind-header text-[10px] uppercase tracking-wider font-bold mr-2 shrink-0">Neural Signal Log Streamer</span>
           
           {/* Dual-View Mode Selector Button Group */}
-          <div className="flex border border-border/60 rounded-sm overflow-hidden p-0.5 bg-background/55 shadow-[inset_0_1px_3px_rgba(0,0,0,0.2)]">
+          <div className="flex border border-border/60 rounded-lg overflow-hidden p-0.5 bg-background/55 shadow-[inset_0_1px_3px_rgba(0,0,0,0.2)]">
             <button 
               onClick={() => setViewMode('flowchart')}
-              className={`px-3 py-1 text-[7px] font-mono font-bold uppercase transition-all rounded-sm ${
+              className={`px-3 py-1 text-[7px] font-mono font-bold uppercase transition-all rounded-md ${
                 viewMode === 'flowchart' 
                   ? 'bg-gold text-black shadow-[0_0_8px_rgba(212,163,89,0.2)] font-black' 
                   : 'text-foreground/45 hover:text-foreground/80'
@@ -743,7 +762,7 @@ export default function IntelStream() {
             </button>
             <button 
               onClick={() => setViewMode('ledger')}
-              className={`px-3 py-1 text-[7px] font-mono font-bold uppercase transition-all rounded-sm ${
+              className={`px-3 py-1 text-[7px] font-mono font-bold uppercase transition-all rounded-md ${
                 viewMode === 'ledger' 
                   ? 'bg-gold text-black shadow-[0_0_8px_rgba(212,163,89,0.2)] font-black' 
                   : 'text-foreground/45 hover:text-foreground/80'
@@ -754,7 +773,7 @@ export default function IntelStream() {
           </div>
         </div>
         
-        <div className="flex flex-1 sm:max-w-xs items-center gap-2 border border-border/60 px-3 py-1.5 bg-background/55 rounded-sm">
+        <div className="flex flex-1 sm:max-w-xs items-center gap-2 border border-border/60 px-3 py-1.5 bg-background/55 rounded-lg">
           <Search className="w-3.5 h-3.5 opacity-30 shrink-0" />
           <input 
             type="text"
@@ -837,7 +856,7 @@ export default function IntelStream() {
                 <span>Buffer Depth</span>
                 <span className="text-gold font-bold">{logs.length} / 150</span>
               </div>
-              <div className="h-1.5 border border-border/60 bg-foreground/5 rounded-sm p-[1px] overflow-hidden">
+              <div className="h-1.5 border border-border/60 bg-foreground/5 rounded-full p-[1px] overflow-hidden">
                 <div 
                   className="h-full bg-gold transition-all duration-300"
                   style={{ width: `${(logs.length / 150) * 100}%` }}
@@ -885,7 +904,7 @@ export default function IntelStream() {
             <span className="font-serif italic text-lg lg:text-xl text-primary">Dynamic System Telemetry</span>
           </div>
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4 px-4 py-2 border border-border bg-background/40 artisan-shadow rounded-sm">
+            <div className="flex items-center gap-4 px-4 py-2 border border-border bg-background/40 artisan-shadow rounded-xl">
               <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest">Swarm Pulse</span>
               <span className={`text-xs font-mono font-bold flex items-center gap-2 ${error ? 'text-red-500' : 'text-gold'}`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
@@ -917,7 +936,7 @@ export default function IntelStream() {
           
           {/* SYSTEM HARDWARE & DATABASE TELEMETRY GRID */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="p-6 border border-border bg-background/40 artisan-shadow space-y-4 hover:border-gold/30 transition-all rounded">
+            <SpotlightCard className="p-6 space-y-4 hover:scale-[1.02] hover:border-gold/40 hover:bg-card/85 transition-all duration-300">
               <div className="flex justify-between items-center opacity-60">
                 <Cpu className="w-4 h-4 text-gold" />
                 <span className="text-[8px] font-mono tracking-wider">HOST_RESOURCE</span>
@@ -926,15 +945,15 @@ export default function IntelStream() {
                 <div className="text-3xl font-serif font-black tracking-tight">{telemetry?.load ? `${parseFloat(telemetry.load).toFixed(2)}` : "1.00"}</div>
                 <div className="text-[9px] opacity-40 uppercase tracking-wider font-bold mt-1">Host CPU Load Index</div>
               </div>
-              <div className="h-1 bg-border/20 overflow-hidden">
+              <div className="h-1 bg-border/20 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gold transition-all duration-1000" 
+                  className="h-full bg-gold transition-all duration-1000 rounded-full" 
                   style={{ width: `${Math.min((parseFloat(telemetry?.load || "1.0") / 8) * 100, 100)}%` }} 
                 />
               </div>
-            </div>
+            </SpotlightCard>
 
-            <div className="p-6 border border-border bg-background/40 artisan-shadow space-y-4 hover:border-gold/30 transition-all rounded">
+            <SpotlightCard className="p-6 space-y-4 hover:scale-[1.02] hover:border-gold/40 hover:bg-card/85 transition-all duration-300">
               <div className="flex justify-between items-center opacity-60">
                 <Clock className="w-4 h-4 text-gold" />
                 <span className="text-[8px] font-mono tracking-wider">PING_LATENCY</span>
@@ -943,15 +962,15 @@ export default function IntelStream() {
                 <div className="text-3xl font-serif font-black tracking-tight">{telemetry?.latency || "8.5ms"}</div>
                 <div className="text-[9px] opacity-40 uppercase tracking-wider font-bold mt-1">Telemetry Roundtrip API</div>
               </div>
-              <div className="h-1 bg-border/20 overflow-hidden">
+              <div className="h-1 bg-border/20 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gold transition-all duration-1000" 
+                  className="h-full bg-gold transition-all duration-1000 rounded-full" 
                   style={{ width: `${Math.min((parseFloat(telemetry?.latency || "10") / 200) * 100, 100)}%` }} 
                 />
               </div>
-            </div>
+            </SpotlightCard>
 
-            <div className="p-6 border border-border bg-background/40 artisan-shadow space-y-4 hover:border-gold/30 transition-all rounded">
+            <SpotlightCard className="p-6 space-y-4 hover:scale-[1.02] hover:border-gold/40 hover:bg-card/85 transition-all duration-300">
               <div className="flex justify-between items-center opacity-60">
                 <Database className="w-4 h-4 text-gold" />
                 <span className="text-[8px] font-mono tracking-wider">VECTOR_NODE</span>
@@ -962,15 +981,19 @@ export default function IntelStream() {
                 </div>
                 <div className="text-[9px] opacity-40 uppercase tracking-wider font-bold mt-1">Signals Indexed (ChromaDB)</div>
               </div>
-              <div className="h-1 bg-border/20 overflow-hidden">
+              <div className="h-1 bg-border/20 rounded-full overflow-hidden">
                 <div 
-                  className="h-full bg-gold transition-all duration-1000" 
+                  className="h-full bg-gold transition-all duration-1000 rounded-full" 
                   style={{ width: `${Math.min((telemetry?.memory?.capacity || 0) / 5000 * 100, 100)}%` }} 
                 />
               </div>
-            </div>
+            </SpotlightCard>
 
-            <div className={`p-6 border bg-background/40 artisan-shadow space-y-4 hover:border-gold/30 transition-all rounded ${telemetry?.lm_studio?.status === "Online" ? "border-border" : "border-red-500/10 hover:border-red-500/30"}`}>
+            <SpotlightCard className={`p-6 space-y-4 hover:scale-[1.02] hover:border-gold/40 hover:bg-card/85 transition-all duration-300 ${
+              telemetry?.lm_studio?.status === "Online" 
+                ? "" 
+                : "border-red-500/15 bg-red-500/[0.02]"
+            }`}>
               <div className="flex justify-between items-center opacity-60">
                 <ShieldCheck className={`w-4 h-4 ${telemetry?.lm_studio?.status === "Online" ? "text-gold" : "text-red-500/60 animate-pulse"}`} />
                 <span className="text-[8px] font-mono tracking-wider">LOCAL_COGNITION</span>
@@ -983,20 +1006,20 @@ export default function IntelStream() {
                   Local Supervisor Status: <span className={`font-bold ${telemetry?.lm_studio?.status === "Online" ? 'text-gold' : 'text-red-500/80'}`}>{telemetry?.lm_studio?.status || "Offline"}</span>
                 </div>
               </div>
-              <div className="h-1 bg-border/20 overflow-hidden">
+              <div className="h-1 bg-border/20 rounded-full overflow-hidden">
                 <div 
-                  className={`h-full transition-all duration-1000 ${telemetry?.lm_studio?.status === "Online" ? 'bg-gold' : 'bg-red-500/50'}`} 
+                  className={`h-full transition-all duration-1000 rounded-full ${telemetry?.lm_studio?.status === "Online" ? 'bg-gold' : 'bg-red-500/50'}`} 
                   style={{ width: telemetry?.lm_studio?.status === "Online" ? '100%' : '10%' }} 
                 />
               </div>
-            </div>
+            </SpotlightCard>
           </section>
           {/* MAIN GRAPHICS GRID (Financial, Allocation Breakdown, Temporal Entropy) */}
           <div className="space-y-8">
             {/* ROW 1: Financial & Telemetry Cost Chart */}
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               {/* Financial Ledger (Available Capital) */}
-              <div className="lg:col-span-5 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm h-[360px] flex flex-col justify-between">
+              <SpotlightCard className="lg:col-span-5 p-6 h-[360px] flex flex-col justify-between">
                 <div className="flex items-center gap-3 border-b border-border pb-3">
                   <Gauge className="w-4 h-4 text-gold" />
                   <span className="ind-header text-[10px]">Financial Intelligence</span>
@@ -1027,7 +1050,7 @@ export default function IntelStream() {
                         <span>Daily Burn Envelope</span>
                         <span>{((budget.daily_usage / budget.daily_limit) * 100).toFixed(1)}%</span>
                       </div>
-                      <div className="h-2 border border-border bg-background/60 p-[2px] rounded-sm overflow-hidden">
+                      <div className="h-2 border border-border bg-background/60 p-[2px] rounded-full overflow-hidden">
                         <div 
                           className={`h-full transition-all duration-1000 ${
                             budget.status === "Green" ? 'bg-gold' : 'bg-gold/80'
@@ -1038,10 +1061,10 @@ export default function IntelStream() {
                     </div>
                   )}
                 </div>
-              </div>
+              </SpotlightCard>
 
               {/* Temporal Entropy Index (Cost Chart) */}
-              <div className="lg:col-span-7 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm flex flex-col justify-between h-[360px]">
+              <SpotlightCard className="lg:col-span-7 p-6 flex flex-col justify-between h-[360px]">
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-3">
                     <BarChart3 className="w-4 h-4 text-gold" />
@@ -1057,64 +1080,64 @@ export default function IntelStream() {
                   <span>T-12 Hours</span>
                   <span>Real Time (Present)</span>
                 </div>
-              </div>
+              </SpotlightCard>
             </section>
 
             {/* ROW 2: Cognitive Ensemble & Sovereign Diagnostics */}
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
               {/* Model Cognitive Ensemble Grid */}
-              <div className="lg:col-span-5 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm flex flex-col justify-between">
+              <SpotlightCard className="lg:col-span-5 p-6 flex flex-col justify-between">
                 <ModelCognitiveEnsemble lmStudioOnline={telemetry?.lm_studio?.status === "Online"} />
-              </div>
+              </SpotlightCard>
 
               {/* Autonomous Node Diagnostics */}
-              <div className="lg:col-span-7 p-6 border-2 border-border bg-background/40 artisan-shadow rounded-sm flex flex-col gap-4">
+              <SpotlightCard className="lg:col-span-7 p-6 flex flex-col gap-4">
                 <div className="flex items-center gap-3 border-b border-border pb-3">
                   <Activity className="w-4 h-4 text-gold" />
                   <span className="ind-header text-[10px]">Sovereign Node Diagnostics</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {/* Widget 1: Link Status */}
-                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                  <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
                     <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Telemetry Link</span>
                     <div className="flex items-center gap-1.5 mt-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
                       <span className="text-[8px] font-bold text-emerald-500 tracking-wider">SSE_FLOW // LIVE</span>
                     </div>
-                  </div>
+                  </SpotlightCard>
 
                   {/* Widget 2: Batch Throttle */}
-                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                  <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
                     <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Batch Throttle</span>
                     <span className="text-[8px] font-bold text-foreground/80 mt-2">100ms BUFFER DELAY</span>
-                  </div>
+                  </SpotlightCard>
 
                   {/* Widget 3: Buffer Depth */}
-                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                  <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
                     <div className="flex justify-between text-[7px] uppercase font-bold tracking-widest opacity-45">
                       <span>Buffer Depth</span>
                     </div>
                     <div className="mt-2 space-y-1.5">
                       <div className="text-[8px] text-gold font-bold">{logs.length} / 150</div>
-                      <div className="h-1 border border-border bg-foreground/5 rounded-sm p-[0.5px] overflow-hidden">
+                      <div className="h-1 border border-border bg-foreground/5 rounded-full p-[0.5px] overflow-hidden">
                         <div 
                           className="h-full bg-gold transition-all duration-300"
                           style={{ width: `${(logs.length / 150) * 100}%` }}
                         />
                       </div>
                     </div>
-                  </div>
+                  </SpotlightCard>
 
                   {/* Widget 4: Safety Seal */}
-                  <div className="p-3 border border-border bg-background/10 rounded flex flex-col justify-between min-h-[75px] font-mono">
+                  <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
                     <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Safety Seal</span>
                     <div className="flex items-center gap-1.5 text-[8px] text-gold/80 font-bold mt-2">
                       <span className="text-[7px]">🔒</span>
                       <span>XSS_SHIELD // SECURE</span>
                     </div>
-                  </div>
+                  </SpotlightCard>
                 </div>
-              </div>
+              </SpotlightCard>
             </section>
           </div>          {/* DUAL LAYER: BAYESIAN PROBABILITY MATRIX & DIAGNOSTIC DRAWER */}
           <section className="space-y-6">
@@ -1209,7 +1232,7 @@ export default function IntelStream() {
                             <span className="text-gold font-mono">{selectedTool.delta > 0 ? `+${selectedTool.delta}%` : `${selectedTool.delta}%`} DoD</span>
                           </div>
                           {selectedTool.history_trend && selectedTool.history_trend.length > 0 ? (
-                            <div className="p-2 border border-border bg-background rounded-sm">
+                            <div className="p-2 border border-border bg-background rounded-lg">
                               <LinearTrend data={(selectedTool.history_trend as TelemetryTrendPoint[]).map((h: TelemetryTrendPoint) => h.accuracy)} />
                             </div>
                           ) : (
@@ -1225,7 +1248,7 @@ export default function IntelStream() {
                       </div>
                     </motion.div>
                   ) : (
-                    <div className="h-full flex items-center justify-center p-8 border-2 border-dashed border-border rounded text-center opacity-30 text-xs uppercase font-mono">
+                    <div className="h-full flex items-center justify-center p-8 border-2 border-dashed border-border rounded-xl text-center opacity-30 text-xs uppercase font-mono">
                       No tool selected.
                     </div>
                   )}

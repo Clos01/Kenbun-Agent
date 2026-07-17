@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useId, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Server, Key, Activity, Settings as SettingsIcon, X, Network, DollarSign } from "lucide-react";
+import { Server, Key, Activity, Settings as SettingsIcon, X, Network, DollarSign, Shield } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { CONFIG } from "@/lib/config";
 import { tenantFetch } from "@/lib/tenantFetch";
@@ -170,6 +170,7 @@ export default function Settings() {
     { id: "infrastructure", title: "Core Infrastructure", icon: Server, description: "Calibrate Ollama endpoint and local persistence paths.", chapter: 2 },
     { id: "network", title: "Network & Ports", icon: Network, description: "Configure internal API gateway bindings.", chapter: 3 },
     { id: "economics", title: "Swarm Economics", icon: DollarSign, description: "Set daily budget telemetry and token limiters.", chapter: 4 },
+    { id: "security", title: "Guardrails & Sandbox", icon: Shield, description: "Calibrate prompt filters, shell restrictions, and container sandboxing.", chapter: 5 },
   ];
 
   return (
@@ -436,6 +437,126 @@ export default function Settings() {
                           <p className="text-[9px] font-mono opacity-50 text-[var(--foreground)]">Controls the absolute daily ceiling for cloud-based inference tokens.</p>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+                      <div>
+                        {saveStatus && <span className="text-emerald-500 text-[10px] font-bold">{saveStatus}</span>}
+                        {isSaving && !saveStatus && <span className="text-[var(--tertiary)]/70 text-[10px] font-bold animate-pulse">Saving...</span>}
+                        {!isSaving && !saveStatus && <span className="text-[var(--foreground)]/40 text-[10px] font-bold">Auto-save active</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await triggerManualSave();
+                          setActiveSection(null);
+                        }}
+                        className="bg-[var(--tertiary)] hover:bg-[var(--tertiary)]/80 text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-sm cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-[var(--tertiary)]"
+                      >
+                        Save & Close
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* CH.5 Guardrails & Sandbox */}
+                {activeSection === 4 && (
+                  <form onSubmit={handleSave} className="space-y-6 pt-4">
+                    <div className="space-y-2">
+                      <span className="text-[8px] font-mono text-[var(--tertiary)] border border-[var(--tertiary)]/30 px-2 py-0.5 font-bold uppercase rounded bg-[var(--tertiary)]/10">Security Engine Node</span>
+                      <h3 className="text-xl font-serif font-black text-[var(--foreground)]">Guardrails & Sandbox</h3>
+                    </div>
+
+                    {/* Master Interface Mode Toggle */}
+                    <div className="border border-[var(--border)] p-4 bg-[var(--background)]/40 rounded space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)]">Interface Calibration Mode</span>
+                          <span className="text-[9px] opacity-50 font-mono text-[var(--foreground)] font-bold">Choose developer options or simplified preset controls</span>
+                        </div>
+                        <select
+                          value={config["CHOOSE_VIEW_MODE"] || "user"}
+                          onChange={(e) => handleChange("CHOOSE_VIEW_MODE", e.target.value)}
+                          className="bg-[var(--background)] border border-[var(--border)] text-[10px] rounded p-1 cursor-pointer focus:outline-none"
+                        >
+                          <option value="user">User-Friendly Presets</option>
+                          <option value="developer">Developer (Advanced)</option>
+                        </select>
+                      </div>
+
+                      {/* USER-FRIENDLY VIEW */}
+                      {(config["CHOOSE_VIEW_MODE"] || "user") === "user" && (
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-[var(--foreground)] uppercase tracking-wider block">Security Level Preset</label>
+                            <input
+                              type="range"
+                              min="1"
+                              max="5"
+                              value={config["SECURITY_PRESET_LEVEL"] || "3"}
+                              onChange={(e) => handleChange("SECURITY_PRESET_LEVEL", e.target.value)}
+                              className="w-full accent-[var(--tertiary)] cursor-pointer"
+                            />
+                            <div className="flex justify-between text-[8px] font-mono opacity-50 px-1">
+                              <span>Off</span>
+                              <span>Relaxed</span>
+                              <span>Standard</span>
+                              <span>Strict</span>
+                              <span>Lockdown</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between p-2 bg-[var(--background)]/60 rounded border border-[var(--border)]/20">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-[var(--foreground)]">System 2 Supervisor Auditing</span>
+                              <span className="text-[8px] opacity-50 font-mono">Verify file writes and CLI commands before execution</span>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={(config["ENABLE_SUPERVISOR"] || "true") === "true"}
+                              onChange={(e) => handleChange("ENABLE_SUPERVISOR", e.target.checked ? "true" : "false")}
+                              className="accent-[var(--tertiary)] w-4 h-4 cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* DEVELOPER VIEW */}
+                      {(config["CHOOSE_VIEW_MODE"] || "user") === "developer" && (
+                        <div className="space-y-4 pt-2">
+                          {[
+                            { key: "SYSTEM2_SUPERVISOR_MODE", label: "System 2 Supervisor Mode", options: ["Disabled", "Auditing (Log Only)", "Enforcing (Block Actions)"] },
+                            { key: "RESTRICT_SHELL_CHAINING", label: "Shell Chaining Guardrails", options: ["Off", "Strip Metacharacters", "Terminate Execution"] },
+                            { key: "SCRUB_ENV_SECRETS", label: "Subprocess Environment Scrubbing", options: ["Off", "Scrub API Keys & Credentials"] },
+                            { key: "CONTAIN_PROJECT_PATHS", label: "Workspace Path Containment", options: ["Off", "Strict Containment to Project Root"] }
+                          ].map((field) => (
+                            <div key={field.key} className="flex items-center justify-between p-2 bg-[var(--background)]/60 rounded border border-[var(--border)]/20">
+                              <label className="text-[10px] font-bold text-[var(--foreground)] uppercase tracking-wider">{field.label}</label>
+                              <select
+                                value={config[field.key] || field.options[field.options.length - 1]}
+                                onChange={(e) => handleChange(field.key, e.target.value)}
+                                className="bg-[var(--background)] border border-[var(--border)] text-[9px] font-mono rounded p-1 cursor-pointer focus:outline-none"
+                              >
+                                {field.options.map(opt => (
+                                  <option key={opt} value={opt}>{opt}</option>
+                                ))}
+                              </select>
+                            </div>
+                          ))}
+
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-bold text-[var(--foreground)] uppercase tracking-wider">Deterministic Prompt Inspection Blacklist</label>
+                            <input
+                              type="text"
+                              value={config["PROMPT_BLACKLIST_KEYWORDS"] || "sudo, rm -rf, chmod"}
+                              onChange={(e) => handleChange("PROMPT_BLACKLIST_KEYWORDS", e.target.value)}
+                              placeholder="sudo, rm -rf, chmod"
+                              className="w-full bg-[var(--background)] border border-[var(--border)] px-3 py-2 text-[10px] focus:outline-none text-[var(--foreground)] rounded-sm font-mono focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)]/20"
+                            />
+                            <p className="text-[8px] font-mono opacity-50 text-[var(--foreground)]">Comma-separated list of keywords that trigger immediate prompt rejection.</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">

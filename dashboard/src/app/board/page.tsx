@@ -19,7 +19,8 @@ import {
   MapPin,
   Tag,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Filter
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -107,6 +108,133 @@ function injectCardMetadata(description: string, metadata: KenbunMetadata): stri
   return cleanDescription + metadataComment;
 }
 
+function parseDrillContent(description: string) {
+  if (!description) return null;
+
+  const hasQuestion = description.includes("**Question:**") || description.toLowerCase().includes("question:");
+  const hasAnswer = description.includes("**Answer:**") || description.toLowerCase().includes("answer:");
+
+  if (!hasQuestion && !hasAnswer) return null;
+
+  let questionText = "";
+  let answerText = "";
+
+  const qMatch = description.match(/(?:\*\*Question:\*\*|Question:)\s*([\s\S]*?)(?=(?:\*\*Answer:\*\*|Answer:)|$)/i);
+  if (qMatch) {
+    questionText = qMatch[1].trim();
+  } else {
+    const qFallback = description.match(/(?:\*\*Question:\*\*|Question:)\s*([\s\S]*)/i);
+    if (qFallback) {
+      questionText = qFallback[1].trim();
+    }
+  }
+
+  const aMatch = description.match(/(?:\*\*Answer:\*\*|Answer:)\s*([\s\S]*?)$/i);
+  if (aMatch) {
+    answerText = aMatch[1].trim();
+  }
+
+  if (!questionText && !answerText) return null;
+
+  return {
+    question: questionText || description,
+    answer: answerText
+  };
+}
+
+function parseInlineMarkdown(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*.*?\*\*|`.*?`)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={index} className="font-extrabold text-primary">{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return <code key={index} className="px-1.5 py-0.5 bg-neutral/80 border border-border/20 rounded font-mono text-[11px] text-tertiary">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
+
+function formatMarkdown(text: string): React.ReactNode {
+  if (!text) return "";
+
+  // Split by code blocks first to isolate them
+  const parts = text.split(/(```[a-z]*\n[\s\S]*?\n```)/g);
+
+  return parts.map((part, index) => {
+    if (part.startsWith("```")) {
+      const match = part.match(/```([a-z]*)\n([\s\S]*?)\n```/);
+      const code = match ? match[2] : part.slice(3, -3);
+
+      return (
+        <pre key={index} className="bg-neutral/40 border border-border/20 rounded-lg p-3.5 my-3.5 font-mono text-[11px] text-primary overflow-x-auto max-w-full">
+          <code className="block whitespace-pre">{code}</code>
+        </pre>
+      );
+    }
+
+    const lines = part.split("\n");
+    const elements: React.ReactNode[] = [];
+    let listItems: string[] = [];
+
+    const flushList = (keyPrefix: number) => {
+      if (listItems.length > 0) {
+        elements.push(
+          <ul key={`list-${keyPrefix}`} className="list-disc pl-5 my-2 flex flex-col gap-1">
+            {listItems.map((item, idx) => (
+              <li key={idx} className="text-sm text-primary/80 font-sans leading-relaxed">
+                {parseInlineMarkdown(item)}
+              </li>
+            ))}
+          </ul>
+        );
+        listItems = [];
+      }
+    };
+
+    lines.forEach((line, lineIdx) => {
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith("### ")) {
+        flushList(lineIdx);
+        elements.push(
+          <h4 key={lineIdx} className="text-base font-normal italic text-tertiary mt-6 mb-2.5 font-heading">
+            {parseInlineMarkdown(trimmed.slice(4))}
+          </h4>
+        );
+      } else if (trimmed.startsWith("## ")) {
+        flushList(lineIdx);
+        elements.push(
+          <h3 key={lineIdx} className="text-xl font-semibold tracking-normal text-primary/95 mt-8 mb-3.5 font-heading">
+            {parseInlineMarkdown(trimmed.slice(3))}
+          </h3>
+        );
+      } else if (trimmed.startsWith("# ")) {
+        flushList(lineIdx);
+        elements.push(
+          <h2 key={lineIdx} className="text-2xl font-bold tracking-tight text-primary mt-9 mb-4 font-heading">
+            {parseInlineMarkdown(trimmed.slice(2))}
+          </h2>
+        );
+      } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
+        listItems.push(trimmed.slice(2));
+      } else if (trimmed === "") {
+        flushList(lineIdx);
+      } else {
+        flushList(lineIdx);
+        elements.push(
+          <p key={lineIdx} className="text-sm text-primary/85 leading-relaxed font-sans mb-2.5 last:mb-0">
+            {parseInlineMarkdown(line)}
+          </p>
+        );
+      }
+    });
+
+    flushList(lines.length);
+    return <React.Fragment key={index}>{elements}</React.Fragment>;
+  });
+}
+
 // Shared class fragments (Heritage: hairlines, matte surfaces, label-caps)
 const LABEL_CAPS = "text-[9px] font-mono text-secondary uppercase tracking-[0.2em] font-bold";
 const FIELD =
@@ -164,6 +292,16 @@ export default function BoardPage() {
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
   const [selectedCollection, setSelectedCollection] = useState("");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [revealedAnswers, setRevealedAnswers] = useState<Record<string, boolean>>({});
+  const toggleRevealAnswer = (cardId: string) => {
+    setRevealedAnswers(prev => ({
+      ...prev,
+      [cardId]: !prev[cardId]
+    }));
+  };
+
+  const [editingDescTab, setEditingDescTab] = useState<"write" | "preview">("write");
 
   // Board Settings Drawer State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -343,6 +481,7 @@ export default function BoardPage() {
     // Parse metadata
     const { cleanDescription, metadata } = parseCardMetadata(card.description || "");
     setEditingCardDesc(cleanDescription);
+    setEditingDescTab("write");
     setCardLocation(metadata.location || "");
     setCardCollections((metadata.collections || []).join(", "));
     setCardRecurrence(metadata.recurring || "none");
@@ -799,7 +938,7 @@ export default function BoardPage() {
 
       <Sidebar />
 
-      <main className="flex-1 relative z-10 flex flex-col min-w-0 overflow-x-hidden pb-20 lg:pb-0">
+      <main className="flex-1 relative z-10 flex flex-col min-w-0 pb-20 lg:pb-0">
         {/* ============ HEADER — single calm row ============ */}
         <header className="h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-6 lg:px-10 gap-6">
           <div className="flex items-center gap-4 min-w-0">
@@ -893,104 +1032,147 @@ export default function BoardPage() {
 
         {/* Mobile tabs (header hides them under md) */}
         {selectedBoard && (
-          <div className="md:hidden flex border-b border-primary/10 px-6">
+          <div className="md:hidden flex border-b border-primary/10 px-6 py-4 gap-2 overflow-x-auto no-scrollbar bg-card/20 backdrop-blur-sm shrink-0">
             {([
-              { key: "kanban", label: "Board" },
-              { key: "calendar", label: "Calendar" },
-              { key: "messaging", label: "Feed" },
+              { key: "kanban", label: "Board", icon: Columns },
+              { key: "calendar", label: "Calendar", icon: Calendar },
+              { key: "messaging", label: "Feed", icon: MessageSquare },
             ] as const).map(t => (
               <button
                 key={t.key}
                 onClick={() => changeTab(t.key)}
-                className={`py-2.5 px-3 text-[10px] font-bold uppercase tracking-widest border-b-2 -mb-px cursor-pointer ${
-                  activeTab === t.key ? "border-tertiary text-tertiary" : "border-transparent text-secondary"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-sm border transition-all duration-300 text-[10px] font-bold uppercase tracking-widest cursor-pointer ${
+                  activeTab === t.key 
+                    ? "bg-primary text-neutral border-primary shadow-sm" 
+                    : "bg-card/40 border-primary/5 text-secondary hover:text-primary hover:bg-card/80"
                 }`}
               >
-                {t.label}
+                <t.icon className={`w-3.5 h-3.5 ${activeTab === t.key ? "text-tertiary" : "text-secondary"}`} />
+                <span>{t.label}</span>
               </button>
             ))}
           </div>
         )}
 
-        {/* ============ FILTER STRIP — one quiet row ============ */}
+        {/* ============ FILTER STRIP — responsive collapsing drawer ============ */}
         {selectedBoard && (
-          <div className="border-b border-primary/10 px-6 lg:px-10 py-2 flex flex-wrap items-center gap-x-5 gap-y-2 bg-neutral/85 backdrop-blur-sm sticky top-16 z-20 shrink-0">
-            <div className="flex items-center gap-2 flex-1 min-w-[180px]">
-              <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
-              <input
-                type="text"
-                placeholder="Search cards…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none py-1 w-full"
-              />
-              {searchQuery && (
-                <button onClick={() => setSearchQuery("")} className="text-secondary hover:text-primary cursor-pointer" aria-label="Clear search"><X className="w-3 h-3" /></button>
+          <div className="border-b border-border px-6 lg:px-10 py-2.5 bg-card/90 backdrop-blur-md sticky top-16 z-20 shrink-0 flex flex-col gap-2 w-full">
+            <div className="flex items-center gap-3 w-full">
+              <div className="flex items-center gap-2 flex-1 bg-neutral/40 border border-border rounded-md px-2.5 py-1">
+                <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search cards…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none w-full py-0.5"
+                />
+                {searchQuery && (
+                  <button onClick={() => setSearchQuery("")} className="text-secondary hover:text-primary cursor-pointer" aria-label="Clear search">
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+
+              {/* Mobile Filter Toggle Button */}
+              <button
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className={`md:hidden p-2 border rounded-md cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                  showMobileFilters || hasActiveFilters
+                    ? "border-tertiary bg-tertiary/10 text-tertiary"
+                    : "border-border text-secondary hover:text-primary"
+                }`}
+                title="Toggle filters"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                {hasActiveFilters && (
+                  <span className="w-1.5 h-1.5 bg-tertiary rounded-full animate-pulse" />
+                )}
+              </button>
+
+              {/* Desktop Filters Reset / Indicator */}
+              {hasActiveFilters && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilterStartDate("");
+                    setFilterEndDate("");
+                    setFilterLocation("");
+                    setSelectedCollection("");
+                  }}
+                  className="hidden md:block text-[9px] font-mono font-bold uppercase tracking-wider text-tertiary hover:underline cursor-pointer"
+                >
+                  Clear filters
+                </button>
               )}
             </div>
 
-            <label className="flex items-center gap-1.5 text-[9px] font-mono text-secondary uppercase tracking-wider">
-              From
-              <input
-                type="date"
-                value={filterStartDate}
-                onChange={(e) => setFilterStartDate(e.target.value)}
-                className="bg-transparent text-[10px] text-primary focus:outline-none cursor-pointer border-b border-border focus:border-tertiary py-0.5"
-                aria-label="Start date filter"
-              />
-            </label>
+            {/* Expandable/Grid Filters Panel */}
+            <div className={`${showMobileFilters ? "flex" : "hidden"} md:flex flex-col md:flex-row md:items-center flex-wrap gap-3 md:gap-x-5 md:gap-y-2 mt-1 md:mt-0 pt-2 md:pt-0 border-t border-border/40 md:border-t-0 w-full`}>
+              <label className="flex items-center justify-between md:justify-start gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full md:w-auto">
+                <span>From</span>
+                <input
+                  type="date"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5"
+                  aria-label="Start date filter"
+                />
+              </label>
 
-            <label className="flex items-center gap-1.5 text-[9px] font-mono text-secondary uppercase tracking-wider">
-              To
-              <input
-                type="date"
-                value={filterEndDate}
-                onChange={(e) => setFilterEndDate(e.target.value)}
-                className="bg-transparent text-[10px] text-primary focus:outline-none cursor-pointer border-b border-border focus:border-tertiary py-0.5"
-                aria-label="End date filter"
-              />
-            </label>
+              <label className="flex items-center justify-between md:justify-start gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full md:w-auto">
+                <span>To</span>
+                <input
+                  type="date"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5"
+                  aria-label="End date filter"
+                />
+              </label>
 
-            <label className="flex items-center gap-1.5">
-              <MapPin className="w-3 h-3 text-secondary" />
-              <input
-                type="text"
-                placeholder="Location"
-                value={filterLocation}
-                onChange={(e) => setFilterLocation(e.target.value)}
-                className="bg-transparent text-[10px] text-primary placeholder-secondary/50 focus:outline-none w-20 border-b border-border focus:border-tertiary py-0.5"
-              />
-            </label>
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <MapPin className="w-3.5 h-3.5 text-secondary shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Location"
+                  value={filterLocation}
+                  onChange={(e) => setFilterLocation(e.target.value)}
+                  className="bg-neutral text-[10px] text-primary placeholder-secondary/50 focus:outline-none border border-border focus:border-tertiary rounded px-2.5 py-1 w-full md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5 md:w-20"
+                />
+              </div>
 
-            <label className="flex items-center gap-1.5">
-              <Tag className="w-3 h-3 text-secondary" />
-              <select
-                value={selectedCollection}
-                onChange={(e) => setSelectedCollection(e.target.value)}
-                className="bg-transparent text-[10px] text-primary focus:outline-none cursor-pointer border-b border-border focus:border-tertiary py-0.5 w-24"
-                aria-label="Collection filter"
-              >
-                <option value="">Collections</option>
-                {allCollections.map(col => (
-                  <option key={col} value={col}>{col}</option>
-                ))}
-              </select>
-            </label>
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <Tag className="w-3.5 h-3.5 text-secondary shrink-0" />
+                <select
+                  value={selectedCollection}
+                  onChange={(e) => setSelectedCollection(e.target.value)}
+                  className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2.5 py-1 w-full md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5 md:w-24"
+                  aria-label="Collection filter"
+                >
+                  <option value="" className="bg-card text-primary">Collections</option>
+                  {allCollections.map(col => (
+                    <option key={col} value={col} className="bg-card text-primary">{col}</option>
+                  ))}
+                </select>
+              </div>
 
-            {hasActiveFilters && (
-              <button
-                onClick={() => {
-                  setSearchQuery("");
-                  setFilterStartDate("");
-                  setFilterEndDate("");
-                  setFilterLocation("");
-                  setSelectedCollection("");
-                }}
-                className="text-[9px] font-mono font-bold uppercase tracking-wider text-tertiary hover:underline cursor-pointer"
-              >
-                Clear filters
-              </button>
-            )}
+              {/* Mobile Only Clear Filters */}
+              {hasActiveFilters && (
+                <button
+                  onClick={() => {
+                    setSearchQuery("");
+                    setFilterStartDate("");
+                    setFilterEndDate("");
+                    setFilterLocation("");
+                    setSelectedCollection("");
+                  }}
+                  className="md:hidden w-full py-1.5 mt-1 border border-dashed border-tertiary/40 rounded text-center text-[10px] font-mono font-bold uppercase tracking-wider text-tertiary hover:bg-tertiary/5 cursor-pointer"
+                >
+                  Clear all filters
+                </button>
+              )}
+            </div>
           </div>
         )}
 
@@ -1115,21 +1297,21 @@ export default function BoardPage() {
                   )}
                 </motion.div>
               ) : activeTab === "kanban" ? (
-                /* ---- KANBAN — open lanes with hairline separators ---- */
+                /* ---- KANBAN — glassmorphic cards and columns ---- */
                 <motion.div
                   key="board-kanban"
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="flex overflow-x-auto items-stretch h-[calc(100vh-8rem)] min-h-[480px] custom-scrollbar"
+                  className="flex overflow-x-auto gap-4 items-start p-6 h-[calc(100vh-8rem)] min-h-[480px] custom-scrollbar w-full max-w-full min-w-0 snap-x snap-mandatory scroll-smooth scroll-px-6 md:snap-none"
                 >
-                  {lists.map((list, listIdx) => {
+                  {lists.map((list) => {
                     const columnCards = filteredCards.filter(c => c.listId === list.id);
                     return (
                       <div
                         key={list.id}
-                        className={`w-[300px] shrink-0 flex flex-col px-4 pt-5 pb-4 ${listIdx > 0 ? "border-l border-primary/10" : ""}`}
+                        className="w-[290px] sm:w-[320px] shrink-0 flex flex-col px-4 py-5 bg-card/45 backdrop-blur-xs border border-border/80 rounded-md transition-all duration-300 max-h-[calc(100vh-12rem)] snap-center md:snap-none"
                       >
                         {/* Column header — label-caps + count */}
                         <div className="flex items-center justify-between mb-4 px-1 group/column">
@@ -1156,14 +1338,15 @@ export default function BoardPage() {
                             {columnCards.map((card) => {
                               const { metadata, cleanDescription } = parseCardMetadata(card.description || "");
                               const overdue = isOverdue(card);
+                              const drill = parseDrillContent(cleanDescription);
                               return (
                                 <motion.div
                                   layoutId={`card-${card.id}`}
                                   key={card.id}
-                                  className={`p-3.5 bg-card border rounded-lg cursor-pointer relative group/card transition-all duration-200 hover:shadow-md ${
+                                  className={`p-4 bg-card/90 border rounded-md cursor-pointer relative group/card transition-all duration-300 hover:shadow-md hover:scale-[1.01] ${
                                     selectedCard?.id === card.id
-                                      ? "border-tertiary/50 shadow-sm"
-                                      : "border-primary/10 hover:border-primary/25"
+                                      ? "border-tertiary shadow-sm ring-1 ring-tertiary/20"
+                                      : "border-border hover:border-tertiary/30"
                                   }`}
                                   onClick={() => handleOpenCard(card)}
                                 >
@@ -1176,7 +1359,7 @@ export default function BoardPage() {
                                         e.stopPropagation();
                                         handleCloseCard(card.id);
                                       }}
-                                      className="opacity-0 group-hover/card:opacity-100 p-1 -m-1 text-secondary/60 hover:text-[#B8422E] transition-all cursor-pointer shrink-0"
+                                      className="opacity-0 group-hover/card:opacity-100 p-1 -m-1 text-secondary/60 hover:text-tertiary transition-all cursor-pointer shrink-0"
                                       title="Archive card"
                                       aria-label="Archive card"
                                     >
@@ -1184,7 +1367,47 @@ export default function BoardPage() {
                                     </button>
                                   </div>
 
-                                  {cleanDescription && (
+                                  {drill ? (
+                                    <div className="mt-2 space-y-2 text-left">
+                                      <div className="text-[11px] text-primary leading-relaxed">
+                                        <span className="font-semibold text-secondary block text-[8px] uppercase tracking-wider mb-0.5">Question</span>
+                                        <div className="bg-neutral/40 border border-border/40 p-2.5 rounded font-medium text-xs break-words">
+                                          {formatMarkdown(drill.question)}
+                                        </div>
+                                      </div>
+                                      {drill.answer && (
+                                        <div className="text-[11px] leading-relaxed">
+                                          <div className="mt-2 space-y-1.5">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                toggleRevealAnswer(card.id);
+                                              }}
+                                              className="text-[9px] font-mono font-bold text-tertiary hover:underline uppercase tracking-[0.15em] flex items-center gap-1 cursor-pointer"
+                                            >
+                                              {revealedAnswers[card.id] ? "Hide Answer" : "Reveal Answer"}
+                                            </button>
+                                            <AnimatePresence>
+                                              {revealedAnswers[card.id] && (
+                                                <motion.div
+                                                  initial={{ opacity: 0, height: 0 }}
+                                                  animate={{ opacity: 1, height: "auto" }}
+                                                  exit={{ opacity: 0, height: 0 }}
+                                                  transition={{ duration: 0.2 }}
+                                                  className="overflow-hidden"
+                                                >
+                                                  <div className="bg-sand/10 border border-tertiary/20 p-2.5 rounded mt-1 text-xs text-primary leading-relaxed whitespace-pre-wrap break-words">
+                                                    <span className="font-semibold text-tertiary block text-[8px] uppercase tracking-wider mb-0.5">Answer</span>
+                                                    {formatMarkdown(drill.answer)}
+                                                  </div>
+                                                </motion.div>
+                                              )}
+                                            </AnimatePresence>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : cleanDescription && (
                                     <p className="mt-1.5 text-[11px] text-secondary line-clamp-2 leading-relaxed">
                                       {cleanDescription}
                                     </p>
@@ -1195,7 +1418,7 @@ export default function BoardPage() {
                                     <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2.5 items-center">
                                       {card.dueDate && (
                                         <span className={`flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider ${
-                                          overdue ? "text-[#B8422E] font-bold" : "text-secondary"
+                                          overdue ? "text-tertiary font-bold" : "text-secondary"
                                         }`}>
                                           <Clock className="w-2.5 h-2.5" />
                                           {new Date(card.dueDate).toLocaleDateString([], { month: "short", day: "numeric" })}
@@ -1224,18 +1447,18 @@ export default function BoardPage() {
 
                                   {/* Quick move — appears on hover */}
                                   <div
-                                    className="mt-2 pt-2 border-t border-primary/5 hidden group-hover/card:flex items-center justify-between"
+                                    className="mt-2 pt-2 border-t border-border hidden group-hover/card:flex items-center justify-between"
                                     onClick={e => e.stopPropagation()}
                                   >
                                     <span className="text-[8px] font-mono text-secondary/60 uppercase tracking-widest">Move to</span>
                                     <select
                                       onChange={(e) => handleMoveCard(card.id, e.target.value)}
                                       value={card.listId}
-                                      className="text-[10px] bg-transparent text-secondary hover:text-primary cursor-pointer outline-none font-mono text-right"
+                                      className="text-[10px] bg-card text-primary border border-border/20 rounded-xs px-1 py-0.5 cursor-pointer outline-none font-mono text-right"
                                       aria-label="Move card column"
                                     >
                                       {lists.map(l => (
-                                        <option key={l.id} value={l.id}>{l.name}</option>
+                                        <option key={l.id} value={l.id} className="bg-card text-primary">{l.name}</option>
                                       ))}
                                     </select>
                                   </div>
@@ -1246,7 +1469,7 @@ export default function BoardPage() {
 
                           {/* Inline add-card */}
                           {activeAddingCardForListId === list.id ? (
-                            <div className="p-3 bg-card border border-tertiary/30 rounded-lg space-y-2">
+                            <div className="p-3 bg-card border border-tertiary/30 rounded-md space-y-2">
                               <input
                                 type="text"
                                 placeholder="Card title…"
@@ -1431,7 +1654,7 @@ export default function BoardPage() {
                     />
                   )}
 
-                  <div className="grid grid-cols-7 gap-1.5 min-h-[420px]">
+                  <div className="grid grid-cols-7 gap-1 sm:gap-1.5 min-h-[300px] sm:min-h-[420px]">
                     {generateCalendarCells().map((cell, idx) => {
                       const cellCards = filteredCards.filter(c => c.dueDate && !isDoneCard(c) && isSameDay(c.dueDate, cell));
                       const completedCards = filteredCards.filter(c => isDoneCard(c) && isSameDay(c.listChangedAt!, cell));
@@ -1444,16 +1667,20 @@ export default function BoardPage() {
                       return (
                         <div
                           key={idx}
-                          className={`relative min-h-[110px] p-2 border rounded-md flex flex-col transition-colors ${
-                            cell.isCurrentMonth ? "bg-card/60 border-primary/10" : "bg-transparent border-primary/5 opacity-40"
-                          } ${isToday ? "border-tertiary/50" : ""} ${isDoneExpanded || isActiveExpanded ? "z-40 opacity-100" : ""}`}
+                          className={`relative min-h-[65px] sm:min-h-[115px] p-1.5 sm:p-3 border rounded-md flex flex-col transition-all duration-300 ${
+                            cell.isCurrentMonth
+                              ? "bg-card/45 backdrop-blur-xs border-border/80 hover:bg-card/75 hover:border-tertiary/30"
+                              : "bg-transparent border-border/20 opacity-30 pointer-events-none"
+                          } ${isToday ? "border-tertiary ring-1 ring-tertiary/20 bg-sand/10" : ""} ${
+                            isDoneExpanded || isActiveExpanded ? "z-40 ring-1 ring-tertiary shadow-xl opacity-100" : ""
+                          }`}
                         >
                           <div className="flex justify-between items-center">
-                            <span className={`text-[10px] font-mono tabular-nums ${isToday ? "text-tertiary font-bold" : "text-secondary"}`}>
+                            <span className={`text-[9px] sm:text-[10px] font-mono tabular-nums ${isToday ? "text-tertiary font-bold" : "text-secondary"}`}>
                               {cell.day}
                             </span>
                             {isToday && (
-                              <span className="w-1.5 h-1.5 bg-tertiary rounded-full" />
+                              <span className="w-1 h-1 sm:w-1.5 sm:h-1.5 bg-tertiary rounded-full animate-pulse" />
                             )}
                           </div>
 
@@ -1464,17 +1691,17 @@ export default function BoardPage() {
                               aria-expanded={isActiveExpanded}
                               aria-label={`${cellCards.length} active targets — view details`}
                               title={`${cellCards.length} active targets`}
-                              className="group mt-1.5 self-start flex items-center gap-1 h-[18px] px-2 rounded-full border border-primary/15 bg-primary/[0.04] hover:border-primary/35 hover:bg-primary/[0.08] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 cursor-pointer transition-all duration-200"
+                              className="group mt-1 self-start flex items-center gap-0.5 sm:gap-1 h-[14px] sm:h-[18px] px-1 sm:px-2 rounded-full border border-border bg-primary/[0.04] hover:border-tertiary/30 hover:bg-sand/10 cursor-pointer transition-all duration-200"
                             >
-                              {cellCards.slice(0, 4).map(c => (
+                              {cellCards.slice(0, 3).map(c => (
                                 <span
                                   key={c.id}
-                                  className="w-[5px] h-[5px] rounded-full bg-primary/60 group-hover:bg-primary transition-colors duration-200"
+                                  className="w-1 h-1 sm:w-[5px] sm:h-[5px] rounded-full bg-primary/60 group-hover:bg-tertiary transition-colors duration-200"
                                 />
                               ))}
-                              {cellCards.length > 4 && (
-                                <span className="pl-0.5 text-[8px] font-mono leading-none tabular-nums text-primary/70 group-hover:text-primary transition-colors duration-200">
-                                  +{cellCards.length - 4}
+                              {cellCards.length > 3 && (
+                                <span className="pl-0.5 text-[6px] sm:text-[8px] font-mono leading-none tabular-nums text-primary/70 group-hover:text-tertiary transition-colors duration-200">
+                                  +{cellCards.length - 3}
                                 </span>
                               )}
                             </button>
@@ -1487,17 +1714,17 @@ export default function BoardPage() {
                               aria-expanded={isDoneExpanded}
                               aria-label={`${completedCards.length} completed by Kenbun — view details`}
                               title={`${completedCards.length} completed by Kenbun`}
-                              className="group mt-1.5 self-start flex items-center gap-1 h-[18px] px-2 rounded-full border border-tertiary/15 bg-tertiary/[0.06] hover:border-tertiary/35 hover:bg-tertiary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
+                              className="group mt-1 self-start flex items-center gap-0.5 sm:gap-1 h-[14px] sm:h-[18px] px-1 sm:px-2 rounded-full border border-tertiary/15 bg-tertiary/[0.06] hover:border-tertiary/35 hover:bg-tertiary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tertiary/40 cursor-pointer transition-all duration-200"
                             >
-                              {completedCards.slice(0, 4).map(c => (
+                              {completedCards.slice(0, 3).map(c => (
                                 <span
                                   key={c.id}
-                                  className="w-[5px] h-[5px] rounded-full bg-tertiary/60 group-hover:bg-tertiary transition-colors duration-200"
+                                  className="w-1 h-1 sm:w-[5px] sm:h-[5px] rounded-full bg-tertiary/60 group-hover:bg-tertiary transition-colors duration-200"
                                 />
                               ))}
-                              {completedCards.length > 4 && (
-                                <span className="pl-0.5 text-[8px] font-mono leading-none tabular-nums text-tertiary/70 group-hover:text-tertiary transition-colors duration-200">
-                                  +{completedCards.length - 4}
+                              {completedCards.length > 3 && (
+                                <span className="pl-0.5 text-[6px] sm:text-[8px] font-mono leading-none tabular-nums text-tertiary/70 group-hover:text-tertiary transition-colors duration-200">
+                                  +{completedCards.length - 3}
                                 </span>
                               )}
                             </button>
@@ -1510,11 +1737,11 @@ export default function BoardPage() {
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.98, y: Math.floor(idx / 7) < 2 ? -4 : 4 }}
                                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                                className={`absolute z-50 w-[310px] bg-card border border-primary/10 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
+                                className={`absolute z-50 w-[310px] bg-card/95 backdrop-blur-md border border-border rounded-md shadow-2xl overflow-hidden ${
                                   Math.floor(idx / 7) < 2 ? "top-full mt-1.5" : "bottom-8 mb-1"
                                 } ${idx % 7 >= 4 ? "right-0" : "left-0"}`}
                               >
-                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-primary/5">
+                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-border">
                                   <div className="min-w-0">
                                     <span className="block font-serif italic font-bold text-primary text-[13px] leading-tight">
                                       Active Targets
@@ -1581,11 +1808,11 @@ export default function BoardPage() {
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
                                 exit={{ opacity: 0, scale: 0.98, y: Math.floor(idx / 7) < 2 ? -4 : 4 }}
                                 transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                                className={`absolute z-50 w-[310px] bg-card border border-primary/10 rounded-xl shadow-2xl shadow-primary/10 overflow-hidden ${
+                                className={`absolute z-50 w-[310px] bg-card/95 backdrop-blur-md border border-border rounded-md shadow-2xl overflow-hidden ${
                                   Math.floor(idx / 7) < 2 ? "top-full mt-1.5" : "bottom-8 mb-1"
                                 } ${idx % 7 >= 4 ? "right-0" : "left-0"}`}
                               >
-                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-primary/5">
+                                <div className="flex items-start justify-between gap-2 px-4 pt-3.5 pb-2.5 border-b border-border">
                                   <div className="min-w-0">
                                     <span className="block font-serif italic font-bold text-primary text-[13px] leading-tight">
                                       Completed Tasks
@@ -1685,10 +1912,10 @@ export default function BoardPage() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start px-6 lg:px-10 py-6 h-[calc(100vh-8rem)] min-h-[480px]"
+                  className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start px-6 lg:px-10 py-6 h-[calc(100vh-8rem)] min-h-[480px] w-full max-w-full min-w-0"
                 >
-                  <div className="lg:col-span-2 bg-card border border-primary/10 rounded-lg flex flex-col h-full overflow-hidden">
-                    <div className="flex justify-between items-center border-b border-primary/10 px-5 py-4 shrink-0">
+                  <div className="lg:col-span-2 bg-card/45 backdrop-blur-xs border border-border rounded-md flex flex-col h-full overflow-hidden">
+                    <div className="flex justify-between items-center border-b border-border px-5 py-4 shrink-0">
                       <div className="flex items-center gap-2">
                         <MessageSquare className="w-4 h-4 text-tertiary" />
                         <h3 className="font-serif italic font-bold text-primary text-base">Board Signal Feed</h3>
@@ -1713,7 +1940,7 @@ export default function BoardPage() {
                         <div className="text-center text-[10px] font-mono text-secondary py-12">No recent signal notes recorded on this board.</div>
                       ) : (
                         boardComments.map(comment => (
-                          <div key={comment.id} className="flex gap-3.5 items-start text-left border-b border-primary/5 pb-4 last:border-b-0">
+                          <div key={comment.id} className="flex gap-3.5 items-start text-left border-b border-border/40 pb-4 last:border-b-0">
                             <div className="w-7 h-7 bg-tertiary/10 border border-tertiary/25 rounded-full flex items-center justify-center shrink-0">
                               <span className="text-tertiary text-[10px] font-mono font-black uppercase">A</span>
                             </div>
@@ -1749,7 +1976,7 @@ export default function BoardPage() {
                     </div>
                   </div>
 
-                  <div className="bg-card border border-primary/10 p-5 rounded-lg space-y-4 text-left">
+                  <div className="bg-card/45 backdrop-blur-xs border border-border p-5 rounded-md space-y-4 text-left">
                     <div className="space-y-1">
                       <h3 className="font-serif italic font-bold text-primary text-base">Broadcast Update</h3>
                       <p className="text-[10px] text-secondary leading-normal">Publish comments and signal logs to any active card from this central board panel.</p>
@@ -1762,11 +1989,11 @@ export default function BoardPage() {
                           id="feed_card_select"
                           value={feedSelectedCardId}
                           onChange={(e) => setFeedSelectedCardId(e.target.value)}
-                          className={FIELD + " cursor-pointer"}
+                          className={FIELD + " cursor-pointer bg-card"}
                         >
-                          <option value="">— Choose active card —</option>
+                          <option value="" className="bg-card text-primary">— Choose active card —</option>
                           {cards.map(c => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
+                            <option key={c.id} value={c.id} className="bg-card text-primary">{c.name}</option>
                           ))}
                         </select>
                       </div>
@@ -1778,7 +2005,7 @@ export default function BoardPage() {
                           placeholder="Enter comment text…"
                           value={feedCommentText}
                           onChange={(e) => setFeedCommentText(e.target.value)}
-                          className={FIELD + " h-24 resize-none"}
+                          className={FIELD + " h-24 resize-none bg-neutral"}
                         />
                       </div>
 
@@ -1897,44 +2124,78 @@ export default function BoardPage() {
       {/* ============ NEW PROJECT MODAL ============ */}
       <AnimatePresence>
         {isAddingProject && (
-          <div className="fixed inset-0 bg-primary/25 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-primary/25 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            {/* Dismiss backdrop on click */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddingProject(false)}
+              className="absolute inset-0 bg-transparent"
+            />
+            
             <motion.div
-              initial={{ scale: 0.97, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.97, opacity: 0 }}
-              className="w-full max-w-md bg-neutral border border-primary/15 rounded-lg p-6 shadow-xl text-left"
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="w-full max-w-md min-w-[320px] sm:min-w-[400px] bg-card/95 backdrop-blur-xl border border-primary/10 rounded-xl p-6 shadow-2xl text-left relative overflow-hidden z-10"
             >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-base font-serif italic text-primary font-bold">Create Project Workspace</h3>
-                <button onClick={() => setIsAddingProject(false)} className="text-secondary hover:text-primary cursor-pointer" aria-label="Close"><X className="w-4 h-4" /></button>
+              {/* Top Accent Line */}
+              <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-tertiary to-transparent" />
+              
+              {/* Subtle top glow */}
+              <div className="absolute -top-[40%] -left-[20%] w-[80%] h-[80%] bg-tertiary/5 rounded-full blur-[80px] pointer-events-none" />
+
+              {/* Modal Header */}
+              <div className="flex items-center gap-3 mb-6 pb-4 border-b border-primary/5 relative z-10">
+                <div className="w-9 h-9 rounded-lg bg-tertiary/10 border border-tertiary/20 flex items-center justify-center text-tertiary shrink-0">
+                  <Folder className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-serif italic text-primary font-black leading-none">New Project</h3>
+                  <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em]">Create Workspace</span>
+                </div>
+                <button 
+                  onClick={() => setIsAddingProject(false)} 
+                  className="ml-auto text-secondary hover:text-primary transition-colors cursor-pointer p-1.5 hover:bg-neutral rounded-md"
+                  aria-label="Close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
 
-              <form onSubmit={handleCreateProject} className="space-y-4">
+              <form onSubmit={handleCreateProject} className="space-y-5 relative z-10">
                 <div className="space-y-1.5">
                   <label htmlFor="proj_name" className={LABEL_CAPS}>Project Name</label>
-                  <input
-                    id="proj_name"
-                    type="text"
-                    placeholder="e.g. Kenbun Swarm Client"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                    className={FIELD}
-                    autoFocus
-                  />
+                  <div className="relative flex items-center">
+                    <input
+                      id="proj_name"
+                      type="text"
+                      placeholder="e.g. Kenbun Swarm Client"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      className="w-full bg-neutral/50 border border-border rounded-lg p-3 pl-10 text-xs text-primary focus:outline-none focus:border-tertiary focus:bg-neutral/80 transition-all font-semibold placeholder-secondary/50"
+                      autoFocus
+                    />
+                    <div className="absolute left-3.5 pointer-events-none text-secondary">
+                      <Folder className="w-3.5 h-3.5" />
+                    </div>
+                  </div>
                 </div>
 
-                <div className="flex gap-3 justify-end pt-2">
+                <div className="flex gap-3 justify-end pt-3 border-t border-primary/5">
                   <button
                     type="button"
                     onClick={() => setIsAddingProject(false)}
-                    className="px-4 py-2 border border-border text-xs font-bold uppercase tracking-wider rounded text-secondary hover:text-primary hover:bg-sand cursor-pointer"
+                    className="px-4 py-2 border border-border text-[10px] font-bold uppercase tracking-widest rounded-lg text-secondary hover:text-primary hover:bg-neutral transition-all cursor-pointer"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-primary text-neutral hover:bg-primary/90 text-xs font-bold rounded cursor-pointer"
+                    className="px-5 py-2 bg-tertiary hover:bg-tertiary/90 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg cursor-pointer transition-all flex items-center gap-1.5 hover:shadow-lg hover:shadow-tertiary/10"
                   >
+                    <Plus className="w-3.5 h-3.5" />
                     Create Project
                   </button>
                 </div>
@@ -1944,241 +2205,312 @@ export default function BoardPage() {
         )}
       </AnimatePresence>
 
-      {/* ============ CARD SIDE PANEL (replaces the centered modal) ============ */}
+      {/* ============ CARD DIALOG MODAL (centered & wide) ============ */}
       <AnimatePresence>
         {selectedCard && (
           <>
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.25 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setSelectedCard(null)}
-              className="fixed inset-0 bg-primary z-40"
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             />
-            <motion.aside
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 28, stiffness: 260 }}
-              className="fixed right-0 top-0 bottom-0 w-full sm:w-[460px] bg-neutral border-l border-primary/15 z-50 flex flex-col shadow-2xl text-left"
-            >
-              {/* Panel header */}
-              <div className="px-6 pt-5 pb-4 border-b border-primary/10 shrink-0">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <span className={LABEL_CAPS}>
-                    {lists.find(l => l.id === selectedCard.listId)?.name || "Card"}
-                    {selectedCard.dueDate && (
-                      <span className={`ml-3 normal-case tracking-normal inline-flex items-center gap-1 ${
-                        isOverdue(selectedCard) ? "text-[#B8422E]" : "text-secondary"
-                      }`}>
-                        <Clock className="w-3 h-3" />
-                        Due {new Date(selectedCard.dueDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
-                      </span>
-                    )}
-                  </span>
-                  <button onClick={() => setSelectedCard(null)} className="text-secondary hover:text-primary cursor-pointer" aria-label="Close card panel">
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-                <input
-                  type="text"
-                  value={editingCardName}
-                  onChange={(e) => setEditingCardName(e.target.value)}
-                  className="w-full bg-transparent font-serif italic font-bold text-primary text-xl leading-tight focus:outline-none border-b border-transparent focus:border-tertiary transition-colors pb-1"
-                  aria-label="Card title"
-                />
-              </div>
-
-              {/* Panel body */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 custom-scrollbar">
-                {/* Status — move between columns */}
-                <div className="space-y-2">
-                  <span className={LABEL_CAPS}>Status</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {lists.map(list => {
-                      const isActive = list.id === selectedCard.listId;
-                      return (
-                        <button
-                          key={list.id}
-                          onClick={() => handleMoveCard(selectedCard.id, list.id).then(() => {
-                            setSelectedCard(prev => prev ? { ...prev, listId: list.id } : null);
-                          })}
-                          className={`px-3 py-1.5 border rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                            isActive
-                              ? "bg-primary text-neutral border-primary"
-                              : "bg-card border-border text-secondary hover:text-primary hover:bg-sand"
-                          }`}
-                        >
-                          {list.name}
-                        </button>
-                      );
-                    })}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10 pointer-events-none">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                className="w-full max-w-4xl max-h-[85vh] bg-neutral border border-primary/15 rounded-2xl flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
+              >
+                {/* Panel header */}
+                <div className="px-6 pt-5 pb-4 border-b border-primary/10 shrink-0">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className={LABEL_CAPS}>
+                      {lists.find(l => l.id === selectedCard.listId)?.name || "Card"}
+                      {selectedCard.dueDate && (
+                        <span className={`ml-3 normal-case tracking-normal inline-flex items-center gap-1 ${
+                          isOverdue(selectedCard) ? "text-[#B8422E]" : "text-secondary"
+                        }`}>
+                          <Clock className="w-3 h-3" />
+                          Due {new Date(selectedCard.dueDate).toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => setSelectedCard(null)}
+                      className="flex items-center gap-1.5 text-secondary hover:text-primary cursor-pointer text-[10px] font-bold font-mono uppercase tracking-[0.15em] hover:bg-neutral/45 px-2 py-1 rounded transition-colors"
+                      aria-label="Close card panel"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      Back
+                    </button>
                   </div>
-                </div>
-
-                {/* Description — always editable */}
-                <div className="space-y-2">
-                  <span className={LABEL_CAPS}>Description</span>
-                  <textarea
-                    placeholder="Add details about this task…"
-                    value={editingCardDesc}
-                    onChange={(e) => setEditingCardDesc(e.target.value)}
-                    className={FIELD + " h-28 resize-none leading-relaxed"}
+                  <input
+                    type="text"
+                    value={editingCardName}
+                    onChange={(e) => setEditingCardName(e.target.value)}
+                    className="w-full bg-transparent font-serif italic font-bold text-primary text-xl sm:text-2xl leading-tight focus:outline-none border-b border-transparent focus:border-tertiary transition-colors pb-1"
+                    aria-label="Card title"
                   />
                 </div>
 
-                {/* Metadata */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label htmlFor="card_loc" className={LABEL_CAPS + " flex items-center gap-1"}>
-                      <MapPin className="w-3 h-3" />
-                      Location
-                    </label>
-                    <input
-                      id="card_loc"
-                      type="text"
-                      placeholder="e.g. Geneva"
-                      value={cardLocation}
-                      onChange={(e) => setCardLocation(e.target.value)}
-                      className={FIELD}
-                    />
-                  </div>
+                {/* Panel body (split layout) */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6">
+                    {/* Left Column: Description (Wider, h-full/flexible) */}
+                    <div className="md:col-span-7 space-y-6">
+                      {/* Description — Edit / Preview tabs */}
+                      <div className="space-y-3 flex flex-col h-full min-h-[300px]">
+                        <div className="flex items-center justify-between border-b border-border/40 pb-1">
+                          <span className={LABEL_CAPS}>Description</span>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setEditingDescTab("write")}
+                              className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                                editingDescTab === "write"
+                                  ? "bg-primary text-neutral font-semibold"
+                                  : "text-secondary hover:text-primary"
+                              }`}
+                            >
+                              Write
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingDescTab("preview")}
+                              className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer ${
+                                editingDescTab === "preview"
+                                  ? "bg-primary text-neutral font-semibold"
+                                  : "text-secondary hover:text-primary"
+                              }`}
+                            >
+                              Preview
+                            </button>
+                          </div>
+                        </div>
 
-                  <div className="space-y-1.5">
-                    <label htmlFor="card_recur" className={LABEL_CAPS + " flex items-center gap-1"}>
-                      <RefreshCw className="w-3 h-3" />
-                      Recurrence
-                    </label>
-                    <select
-                      id="card_recur"
-                      value={cardRecurrence}
-                      onChange={(e) => setCardRecurrence(e.target.value as "none" | "daily" | "weekly" | "monthly")}
-                      className={FIELD + " cursor-pointer"}
-                    >
-                      <option value="none">None</option>
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
+                        {editingDescTab === "write" ? (
+                          <textarea
+                            placeholder="Add details about this task…"
+                            value={editingCardDesc}
+                            onChange={(e) => setEditingCardDesc(e.target.value)}
+                            className={FIELD + " flex-1 min-h-[320px] resize-y leading-relaxed"}
+                          />
+                        ) : (
+                          <div className="bg-neutral/40 border border-border/40 p-4.5 rounded-md flex-1 min-h-[320px] text-xs text-primary leading-relaxed whitespace-pre-wrap break-words overflow-y-auto">
+                            {(() => {
+                              const drill = parseDrillContent(editingCardDesc);
+                              if (drill) {
+                                return (
+                                  <div className="space-y-4">
+                                    <div>
+                                      <span className="font-semibold text-secondary block text-[8px] uppercase tracking-wider mb-0.5">Question</span>
+                                      <div className="bg-neutral/50 border border-border/40 p-3 rounded font-medium">
+                                        {formatMarkdown(drill.question)}
+                                      </div>
+                                    </div>
+                                    {drill.answer && (
+                                      <div>
+                                        <span className="font-semibold text-tertiary block text-[8px] uppercase tracking-wider mb-0.5">Answer</span>
+                                        <div className="bg-sand/10 border border-tertiary/20 p-3 rounded font-normal">
+                                          {formatMarkdown(drill.answer)}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              return formatMarkdown(editingCardDesc) || <span className="text-secondary italic">No description provided.</span>;
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                  <div className="space-y-1.5">
-                    <label htmlFor="card_colls" className={LABEL_CAPS + " flex items-center gap-1"}>
-                      <Tag className="w-3 h-3" />
-                      Collections
-                    </label>
-                    <input
-                      id="card_colls"
-                      type="text"
-                      placeholder="e.g. Dev, QA"
-                      value={cardCollections}
-                      onChange={(e) => setCardCollections(e.target.value)}
-                      className={FIELD}
-                    />
-                  </div>
+                    {/* Right Column: Status & Metadata (Narrower) */}
+                    <div className="md:col-span-5 space-y-6 border-t md:border-t-0 md:border-l border-primary/10 pt-6 md:pt-0 md:pl-6">
+                      {/* Status — move between columns */}
+                      <div className="space-y-2">
+                        <span className={LABEL_CAPS}>Status</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {lists.map(list => {
+                            const isActive = list.id === selectedCard.listId;
+                            return (
+                              <button
+                                key={list.id}
+                                onClick={() => handleMoveCard(selectedCard.id, list.id).then(() => {
+                                  setSelectedCard(prev => prev ? { ...prev, listId: list.id } : null);
+                                })}
+                                className={`px-3 py-1.5 border rounded text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                  isActive
+                                    ? "bg-primary text-neutral border-primary"
+                                    : "bg-card border-border text-secondary hover:text-primary hover:bg-sand"
+                                }`}
+                              >
+                                {list.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                  <div className="space-y-1.5">
-                    <label htmlFor="card_due_date" className={LABEL_CAPS + " flex items-center gap-1"}>
-                      <Clock className="w-3 h-3" />
-                      Due Date
-                    </label>
-                    <div className="flex gap-1.5 items-center">
-                      <input
-                        id="card_due_date"
-                        type="date"
-                        value={cardDueDate}
-                        onChange={(e) => setCardDueDate(e.target.value)}
-                        className={FIELD + " cursor-pointer"}
-                      />
-                      {cardDueDate && (
-                        <button
-                          type="button"
-                          onClick={() => setCardDueDate("")}
-                          className="p-2 text-secondary hover:text-[#B8422E] cursor-pointer"
-                          title="Clear due date"
-                          aria-label="Clear due date"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      {/* Metadata */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label htmlFor="card_loc" className={LABEL_CAPS + " flex items-center gap-1"}>
+                            <MapPin className="w-3 h-3" />
+                            Location
+                          </label>
+                          <input
+                            id="card_loc"
+                            type="text"
+                            placeholder="e.g. Geneva"
+                            value={cardLocation}
+                            onChange={(e) => setCardLocation(e.target.value)}
+                            className={FIELD}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="card_recur" className={LABEL_CAPS + " flex items-center gap-1"}>
+                            <RefreshCw className="w-3 h-3" />
+                            Recurrence
+                          </label>
+                          <select
+                            id="card_recur"
+                            value={cardRecurrence}
+                            onChange={(e) => setCardRecurrence(e.target.value as "none" | "daily" | "weekly" | "monthly")}
+                            className={FIELD + " cursor-pointer"}
+                          >
+                            <option value="none">None</option>
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="card_colls" className={LABEL_CAPS + " flex items-center gap-1"}>
+                            <Tag className="w-3 h-3" />
+                            Collections
+                          </label>
+                          <input
+                            id="card_colls"
+                            type="text"
+                            placeholder="e.g. Dev, QA"
+                            value={cardCollections}
+                            onChange={(e) => setCardCollections(e.target.value)}
+                            className={FIELD}
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label htmlFor="card_due_date" className={LABEL_CAPS + " flex items-center gap-1"}>
+                            <Clock className="w-3 h-3" />
+                            Due Date
+                          </label>
+                          <div className="flex gap-1.5 items-center">
+                            <input
+                              id="card_due_date"
+                              type="date"
+                              value={cardDueDate}
+                              onChange={(e) => setCardDueDate(e.target.value)}
+                              className={FIELD + " cursor-pointer"}
+                            />
+                            {cardDueDate && (
+                              <button
+                                type="button"
+                                onClick={() => setCardDueDate("")}
+                                className="p-2 text-secondary hover:text-[#B8422E] cursor-pointer"
+                                title="Clear due date"
+                                aria-label="Clear due date"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Discussion */}
+                      <div className="space-y-4 pt-2 border-t border-primary/10">
+                        <div className="flex items-center gap-2 text-secondary pt-2">
+                          <MessageSquare className="w-4 h-4" />
+                          <span className="text-xs font-bold">Discussion</span>
+                        </div>
+
+                        <form onSubmit={handleAddComment} className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Ask a question or post an update…"
+                            value={newCommentText}
+                            onChange={(e) => setNewCommentText(e.target.value)}
+                            className={FIELD}
+                          />
+                          <button
+                            type="submit"
+                            disabled={!newCommentText.trim()}
+                            className="px-4 bg-primary text-neutral hover:bg-primary/90 disabled:bg-card disabled:text-secondary/40 disabled:border disabled:border-border text-xs font-bold rounded cursor-pointer transition-all shrink-0"
+                          >
+                            Post
+                          </button>
+                        </form>
+
+                        <div className="space-y-3.5 max-h-[220px] overflow-y-auto custom-scrollbar pr-1">
+                          {comments.length === 0 ? (
+                            <div className="text-center text-[10px] text-secondary font-mono py-4">No comments posted yet.</div>
+                          ) : (
+                            comments.map((comment) => (
+                              <div key={comment.id} className="flex gap-3 items-start text-left">
+                                <div className="w-6 h-6 bg-tertiary/10 border border-tertiary/25 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                                  <span className="text-tertiary text-[9px] font-mono font-black uppercase">A</span>
+                                </div>
+                                <div className="flex-1 space-y-1 min-w-0">
+                                  <div className="flex justify-between items-baseline gap-2">
+                                    <span className="text-[10px] font-bold text-primary">Agent Supervisor</span>
+                                    <span className="text-[8px] font-mono text-secondary shrink-0">
+                                      {new Date(comment.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} · {new Date(comment.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-primary leading-relaxed border-l-2 border-primary/10 pl-3">{comment.text}</p>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Discussion */}
-                <div className="space-y-4 pt-2 border-t border-primary/10">
-                  <div className="flex items-center gap-2 text-secondary pt-4">
-                    <MessageSquare className="w-4 h-4" />
-                    <span className="text-xs font-bold">Discussion</span>
-                  </div>
-
-                  <form onSubmit={handleAddComment} className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Ask a question or post an update…"
-                      value={newCommentText}
-                      onChange={(e) => setNewCommentText(e.target.value)}
-                      className={FIELD}
-                    />
+                {/* Panel footer */}
+                <div className="px-6 py-4 border-t border-primary/10 bg-card flex justify-between items-center shrink-0">
+                  <button
+                    onClick={() => handleCloseCard(selectedCard.id)}
+                    className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-secondary hover:text-[#B8422E] transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Archive
+                  </button>
+                  <div className="flex gap-2">
                     <button
-                      type="submit"
-                      disabled={!newCommentText.trim()}
-                      className="px-4 bg-primary text-neutral hover:bg-primary/90 disabled:bg-card disabled:text-secondary/40 disabled:border disabled:border-border text-xs font-bold rounded cursor-pointer transition-all shrink-0"
+                      onClick={() => setSelectedCard(null)}
+                      className="px-4 py-2 border border-border hover:bg-sand text-xs font-bold uppercase tracking-wider rounded text-secondary hover:text-primary cursor-pointer transition-colors"
                     >
-                      Post
+                      Cancel
                     </button>
-                  </form>
-
-                  <div className="space-y-3.5">
-                    {comments.length === 0 ? (
-                      <div className="text-center text-[10px] text-secondary font-mono py-4">No comments posted yet.</div>
-                    ) : (
-                      comments.map((comment) => (
-                        <div key={comment.id} className="flex gap-3 items-start text-left">
-                          <div className="w-6 h-6 bg-tertiary/10 border border-tertiary/25 rounded-full flex items-center justify-center shrink-0 mt-0.5">
-                            <span className="text-tertiary text-[9px] font-mono font-black uppercase">A</span>
-                          </div>
-                          <div className="flex-1 space-y-1 min-w-0">
-                            <div className="flex justify-between items-baseline gap-2">
-                              <span className="text-[10px] font-bold text-primary">Agent Supervisor</span>
-                              <span className="text-[8px] font-mono text-secondary shrink-0">
-                                {new Date(comment.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })} · {new Date(comment.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                              </span>
-                            </div>
-                            <p className="text-xs text-primary leading-relaxed border-l-2 border-primary/10 pl-3">{comment.text}</p>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                    <button
+                      onClick={handleUpdateCardDetails}
+                      className="px-5 py-2 bg-tertiary hover:bg-tertiary/90 text-white text-xs font-bold uppercase tracking-wider rounded cursor-pointer transition-colors"
+                    >
+                      Save & Close
+                    </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Panel footer — Save closes the panel */}
-              <div className="px-6 py-4 border-t border-primary/10 bg-card flex justify-between items-center shrink-0">
-                <button
-                  onClick={() => handleCloseCard(selectedCard.id)}
-                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-secondary hover:text-[#B8422E] transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Archive
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSelectedCard(null)}
-                    className="px-4 py-2 border border-border hover:bg-sand text-xs font-bold uppercase tracking-wider rounded text-secondary hover:text-primary cursor-pointer transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleUpdateCardDetails}
-                    className="px-5 py-2 bg-tertiary hover:bg-tertiary/90 text-white text-xs font-bold uppercase tracking-wider rounded cursor-pointer transition-colors"
-                  >
-                    Save & Close
-                  </button>
-                </div>
-              </div>
-            </motion.aside>
+              </motion.div>
+            </div>
           </>
         )}
       </AnimatePresence>

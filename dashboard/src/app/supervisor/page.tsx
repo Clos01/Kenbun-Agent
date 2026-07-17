@@ -13,7 +13,8 @@ import {
   Activity,
   Play,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Menu
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -44,6 +45,7 @@ export default function SupervisorDashboard() {
   const [newCheckpointName, setNewCheckpointName] = useState("");
   const [newCheckpointDesc, setNewCheckpointDesc] = useState("");
   const [isSavingCheckpoint, setIsSavingCheckpoint] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Safety auditor variables
   const [snippetCode, setSnippetCode] = useState("");
@@ -211,40 +213,59 @@ export default function SupervisorDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
+    <div className="min-h-screen bg-background flex selection:bg-[var(--tertiary)]/20 selection:text-[var(--foreground)] max-w-[100vw] overflow-x-hidden font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden">
-        <div className="grain-overlay opacity-20" />
+      {/* Backdrop overlay for mobile sidebar */}
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 bg-primary/25 backdrop-blur-xs z-25 md:hidden"
+        />
+      )}
+
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden bg-background text-[var(--foreground)]">
+        <div className="grain-overlay opacity-5 pointer-events-none" />
 
         {/* Header */}
-        <header className="h-20 lg:h-24 border-b border-primary/5 flex items-center justify-between px-6 lg:px-10 bg-card/40 z-20 sticky top-0 backdrop-blur-xl shrink-0">
-          <div className="flex items-center gap-4 lg:gap-8">
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-30">System.02</span>
-            <div className="h-6 w-[1px] bg-primary/10" />
-            <span className="font-bold text-lg lg:text-xl uppercase tracking-tighter italic">Supervisor <span className="text-tertiary">Auditor</span></span>
+        <header className="h-14 lg:h-16 border-b border-[var(--border)] flex items-center justify-between px-6 bg-[var(--card)]/80 backdrop-blur-xl z-20 sticky top-0 shrink-0">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setSidebarOpen(o => !o)}
+              className="md:hidden p-2 text-[var(--foreground)]/60 hover:text-[var(--foreground)] transition-colors hover:bg-[var(--sand)] rounded-lg cursor-pointer shrink-0"
+              title="Toggle Menu"
+              aria-label="Toggle Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <span className="text-[10px] font-bold font-mono uppercase tracking-widest text-[var(--foreground)]/40 hidden sm:inline">System.02</span>
+            <div className="h-5 w-[1px] bg-[var(--border)] hidden sm:block" />
+            <span className="font-bold text-base uppercase tracking-tighter italic text-[var(--foreground)]">
+              Supervisor <span className="text-[var(--tertiary)]">Auditor</span>
+            </span>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3 bg-primary/5 px-4 py-2 border border-primary/5 rounded-sm">
+            <div className="flex items-center gap-2.5 bg-[var(--sand)] px-4 py-1.5 border border-[var(--border)] rounded-lg">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-black uppercase tracking-widest text-primary/70">
-                {isOnline ? "Supervisor Active" : "Offline Sandbox"}
+              <span className="text-[10px] font-bold font-mono uppercase tracking-wider text-[var(--foreground)]">
+                {isOnline ? "Active Monitor" : "Offline Sandbox"}
               </span>
             </div>
           </div>
         </header>
 
         {/* Main Body Grid */}
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-12 relative z-10 custom-scrollbar pb-32">
+        <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-10 relative z-10 custom-scrollbar pb-32">
           
-          {/* Top Banner Warning Node */}
-          <div className="p-6 border border-tertiary/10 bg-tertiary/[0.02] flex items-center gap-6 rounded-none">
-            <ShieldCheck className="w-8 h-8 text-tertiary animate-pulse shrink-0" />
-            <div className="space-y-1">
-              <span className="text-[9px] font-black uppercase tracking-widest text-tertiary">System Compliance Status: Optimal</span>
-              <p className="text-[10px] sm:text-xs font-bold text-primary/60 uppercase tracking-wide">
-                All System 2 Supervisor safety guardrails have successfully audited local nodes. AST validations 100% stable.
+          {/* Top Banner Warning Node (Cinematic purple twilight gradient) */}
+          <div className="p-6 bg-card/60 backdrop-blur-xl text-[var(--foreground)] flex items-center gap-6 rounded-2xl shadow-lg relative overflow-hidden border border-primary/5">
+            <div className="absolute top-0 right-0 w-[40%] h-[150%] bg-[var(--tertiary)]/5 rounded-full blur-[80px] pointer-events-none" />
+            <ShieldCheck className="w-8 h-8 text-[var(--tertiary)] animate-pulse shrink-0 relative z-10" />
+            <div className="space-y-1 relative z-10 text-left">
+              <span className="text-[9px] font-bold font-mono uppercase tracking-[0.25em] text-[var(--tertiary)]">System Compliance Status: Optimal</span>
+              <p className="text-[11px] sm:text-xs font-medium text-[var(--foreground)]/80 leading-relaxed max-w-3xl">
+                All System 2 Supervisor safety guardrails have successfully audited local nodes. Allowed binary configs and AST validations are 100% stable.
               </p>
             </div>
           </div>
@@ -252,17 +273,17 @@ export default function SupervisorDashboard() {
           {/* Stats Bar Grid */}
           <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { label: "Compliance Score", value: "98.8%", icon: ShieldCheck, color: "text-tertiary" },
-              { label: "Static Code Audited", value: `${stats.linesAudited} LOC`, icon: FileCode2, color: "text-primary" },
-              { label: "AST Integrity Laws", value: `${stats.astIntegrity}% Nominal`, icon: Activity, color: "text-primary" },
-              { label: "Sovereign Checkpoints", value: stats.checkpointsSaved, icon: GitCommit, color: "text-primary" }
+              { label: "Compliance Score", value: "98.8%", icon: ShieldCheck, color: "text-[var(--tertiary)]" },
+              { label: "Static Code Audited", value: `${stats.linesAudited} LOC`, icon: FileCode2, color: "text-[var(--foreground)]" },
+              { label: "AST Integrity Laws", value: `${stats.astIntegrity}% Nominal`, icon: Activity, color: "text-[var(--foreground)]" },
+              { label: "Sovereign Checkpoints", value: stats.checkpointsSaved, icon: GitCommit, color: "text-[var(--foreground)]" }
             ].map((stat, i) => (
-              <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-md shadow-sm rounded-sm flex items-center justify-between group hover:border-tertiary/20 transition-all duration-300">
-                <div className="space-y-2">
-                  <span className="text-[9px] uppercase tracking-[0.2em] opacity-40 font-black">{stat.label}</span>
-                  <div className="text-xl lg:text-2xl font-black text-primary tracking-tighter italic">{stat.value}</div>
+              <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-2xl flex items-center justify-between group hover:border-[var(--tertiary)] transition-all duration-300 hover:scale-[1.02] hover:bg-card/85">
+                <div className="space-y-1 text-left">
+                  <span className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground)]/45 font-bold font-mono">{stat.label}</span>
+                  <div className="text-xl lg:text-2xl font-bold text-[var(--foreground)] tracking-tighter">{stat.value}</div>
                 </div>
-                <stat.icon className="w-8 h-8 opacity-10 group-hover:opacity-30 group-hover:scale-105 transition-all duration-500 text-primary" />
+                <stat.icon className="w-7 h-7 opacity-20 group-hover:opacity-45 group-hover:scale-105 transition-all duration-500 text-[var(--tertiary)]" />
               </div>
             ))}
           </section>
@@ -271,23 +292,23 @@ export default function SupervisorDashboard() {
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
             
             {/* Left Block: Sandboxed Code Safety Inspector */}
-            <section className="xl:col-span-7 p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-sm artisan-shadow space-y-6">
-              <div className="space-y-1">
-                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Real-Time Isolation Vault</span>
-                <h3 className="text-lg font-bold uppercase tracking-tight">Code Safety Sandbox Inspector</h3>
+            <section className="xl:col-span-7 p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
+              <div className="space-y-1 text-left">
+                <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--tertiary)]">Real-Time Isolation Vault</span>
+                <h3 className="text-lg font-bold uppercase tracking-tight text-[var(--foreground)]">Code Safety Sandbox Inspector</h3>
               </div>
 
               <form onSubmit={handleExecuteAudit} className="space-y-4">
-                <div className="flex gap-4">
+                <div className="flex gap-2">
                   {(["security", "ast", "ethics"] as const).map((type) => (
                     <button
                       key={type}
                       type="button"
                       onClick={() => setAuditType(type)}
-                      className={`flex-1 py-2.5 rounded-sm border uppercase text-[9px] font-black tracking-widest transition-all ${
+                      className={`flex-1 py-2 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all cursor-pointer ${
                         auditType === type
-                          ? "bg-primary text-white border-primary"
-                          : "bg-card/40 border-primary/5 text-secondary hover:text-primary hover:bg-card"
+                          ? "bg-[var(--foreground)] text-[var(--background)] border-transparent"
+                          : "bg-card/45 border-primary/5 text-[var(--foreground)]/70 hover:bg-[var(--sand)] hover:text-[var(--foreground)]"
                       }`}
                     >
                       {type} audit
@@ -301,15 +322,15 @@ export default function SupervisorDashboard() {
                     value={snippetCode}
                     onChange={(e) => setSnippetCode(e.target.value)}
                     placeholder={`Paste workspace script snippet here to audit...\n\nExample unsafe string:\ndef query(key):\n    db.execute("SELECT * FROM users WHERE token = '" + key + "'")`}
-                    className="w-full p-4 border border-primary/5 rounded-sm bg-card/40 font-mono text-xs focus:outline-none focus:border-tertiary focus:bg-card hover:border-primary/20 transition-all text-primary placeholder-primary/20"
+                    className="w-full p-4 border border-primary/5 rounded-xl bg-card/40 backdrop-blur-xl font-mono text-xs focus:outline-none focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] transition-all text-[var(--foreground)] placeholder-[var(--secondary)]/40"
                   />
-                  <Terminal className="absolute right-4 bottom-4 w-4 h-4 opacity-15 text-primary" />
+                  <Terminal className="absolute right-4 bottom-4 w-4 h-4 opacity-20 text-[var(--foreground)]" />
                 </div>
 
                 <button 
                   type="submit"
                   disabled={isAuditingCode || !snippetCode.trim()}
-                  className="w-full py-4 bg-primary hover:bg-primary/95 text-white font-black uppercase tracking-[0.2em] text-[10px] transition-all rounded-sm shadow-md disabled:opacity-40 flex items-center justify-center gap-2"
+                  className="w-full py-3.5 bg-[var(--foreground)] hover:opacity-90 text-[var(--background)] font-bold uppercase tracking-widest text-[10px] transition-all rounded-xl shadow-md disabled:opacity-40 flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] duration-300"
                 >
                   <Play className={`w-3.5 h-3.5 fill-current ${isAuditingCode ? 'animate-pulse' : ''}`} />
                   {isAuditingCode ? "Reviewing AST Logic..." : "Execute Supervisor Audit"}
@@ -323,37 +344,37 @@ export default function SupervisorDashboard() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 10 }}
-                    className={`p-6 border rounded-sm space-y-4 font-mono text-xs ${
+                    className={`p-5 border rounded-xl space-y-4 font-mono text-xs text-left ${
                       auditReport.status === "APPROVED" 
-                        ? "border-emerald-500/20 bg-emerald-500/[0.02] text-primary" 
+                        ? "border-emerald-500/20 bg-emerald-500/[0.02] text-[var(--foreground)]" 
                         : auditReport.status === "WARNING"
-                          ? "border-amber-500/20 bg-amber-500/[0.02] text-primary"
-                          : "border-tertiary/20 bg-tertiary/[0.02] text-primary"
+                          ? "border-amber-500/20 bg-amber-500/[0.02] text-[var(--foreground)]"
+                          : "border-[var(--tertiary)]/20 bg-[var(--tertiary)]/[0.02] text-[var(--foreground)]"
                     }`}
                   >
                     <div className="flex items-center justify-between border-b border-primary/5 pb-3">
                       <div className="flex items-center gap-2">
                         {auditReport.status === "APPROVED" ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                           <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                         ) : auditReport.status === "WARNING" ? (
                           <AlertTriangle className="w-4 h-4 text-amber-500" />
                         ) : (
-                          <ShieldAlert className="w-4 h-4 text-tertiary" />
+                          <ShieldAlert className="w-4 h-4 text-[var(--tertiary)]" />
                         )}
-                        <span className={`text-[10px] font-black uppercase tracking-widest ${
-                          auditReport.status === "APPROVED" ? "text-emerald-500" : auditReport.status === "WARNING" ? "text-amber-500" : "text-tertiary"
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                          auditReport.status === "APPROVED" ? "text-emerald-600" : auditReport.status === "WARNING" ? "text-amber-600" : "text-[var(--tertiary)]"
                         }`}>
                           Audit Verdict: {auditReport.status}
                         </span>
                       </div>
-                      <span className="font-bold text-[10px]">Score: {auditReport.score}/100</span>
+                      <span className="font-bold text-[10px] text-[var(--foreground)]/65">Score: {auditReport.score}/100</span>
                     </div>
 
                     {auditReport.violations.length > 0 ? (
                       <div className="space-y-3">
                         <div className="space-y-1.5">
-                          <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Flagged Exceptions:</span>
-                          <ul className="list-disc list-inside space-y-1 text-[10px] opacity-75">
+                          <span className="text-[8px] font-bold uppercase tracking-widest text-[var(--foreground)]/45 font-mono">Flagged Exceptions:</span>
+                          <ul className="list-disc list-inside space-y-1 text-[10px] text-[var(--foreground)]/80">
                             {auditReport.violations.map((v, i) => (
                               <li key={i}>{v}</li>
                             ))}
@@ -361,13 +382,13 @@ export default function SupervisorDashboard() {
                         </div>
                         {auditReport.remedy && (
                           <div className="space-y-1 pt-2.5 border-t border-primary/5">
-                            <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Remedy Protocol:</span>
-                            <p className="text-[10px] text-secondary leading-relaxed font-sans font-medium">{auditReport.remedy}</p>
+                            <span className="text-[8px] font-bold uppercase tracking-widest text-[var(--foreground)]/45 font-mono">Remedy Protocol:</span>
+                            <p className="text-[10px] text-[var(--foreground)]/70 leading-relaxed font-sans font-medium">{auditReport.remedy}</p>
                           </div>
                         )}
                       </div>
                     ) : (
-                      <p className="text-[10px] opacity-70 leading-relaxed font-sans font-medium">
+                      <p className="text-[10px] text-[var(--foreground)]/75 leading-relaxed font-sans font-medium">
                         Verification Successful. The provided code blocks successfully adhere to all local guardrail rules, credential safety scopes, and standard Twelve-Factor architecture parameters.
                       </p>
                     )}
@@ -377,64 +398,70 @@ export default function SupervisorDashboard() {
             </section>
 
             {/* Right Block: Safe Point git/system Checkpoints */}
-            <div className="xl:col-span-5 space-y-6">
-              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 block">System Recovery Rollbacks</span>
+            <div className="xl:col-span-5 space-y-6 text-left">
+              <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--foreground)]/40 block">System Recovery Rollbacks</span>
 
-              <div className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-sm artisan-shadow space-y-6">
+              <div className="p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
                 <div className="space-y-1">
-                  <span className="text-[9px] font-bold text-tertiary uppercase tracking-widest">Rollback Ledger</span>
-                  <h4 className="font-serif font-black text-sm uppercase">Active State Checkpoints</h4>
+                  <span className="text-[9px] font-bold text-[var(--tertiary)] uppercase tracking-widest">Rollback Ledger</span>
+                  <h4 className="font-bold text-sm uppercase text-[var(--foreground)]">Active State Checkpoints</h4>
                 </div>
 
-                <div className="space-y-4 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
-                  {checkpoints.map((cp) => (
-                    <div key={cp.id} className="p-4 border border-primary/5 bg-card/40 rounded-sm hover:border-primary/20 transition-all flex items-center justify-between gap-4">
-                      <div className="space-y-1.5 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[9px] font-mono font-black text-tertiary select-all">[{cp.hash}]</span>
-                          <h5 className="font-sans font-bold text-xs uppercase text-primary truncate">{cp.name}</h5>
-                        </div>
-                        <p className="text-[10px] text-secondary font-medium leading-relaxed truncate">{cp.description}</p>
-                        <div className="text-[9px] font-mono text-primary/30 uppercase">{cp.author} • {cp.timestamp}</div>
-                      </div>
-                      <button 
-                        onClick={() => handleRestoreCheckpoint(cp.hash, cp.name)}
-                        className="px-3 py-1.5 border border-primary/10 hover:border-tertiary hover:text-tertiary rounded-sm text-[8px] font-black uppercase tracking-wider transition-all shrink-0"
-                      >
-                        Restore
-                      </button>
+                <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
+                  {checkpoints.length === 0 ? (
+                    <div className="text-center text-[10px] font-mono text-[var(--foreground)]/40 py-8 border border-dashed border-primary/5 rounded-2xl">
+                      No system checkpoints saved yet.
                     </div>
-                  ))}
+                  ) : (
+                    checkpoints.map((cp) => (
+                      <div key={cp.id} className="p-4 border border-primary/5 bg-card/45 rounded-xl hover:border-[var(--tertiary)]/50 transition-all flex items-center justify-between gap-4 hover:scale-[1.01] duration-300">
+                        <div className="space-y-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[9px] font-mono font-bold text-[var(--tertiary)] select-all">[{cp.hash.substring(0, 8)}]</span>
+                            <h5 className="font-bold text-xs uppercase text-[var(--foreground)] truncate">{cp.name}</h5>
+                          </div>
+                          <p className="text-[10px] text-[var(--foreground)]/60 font-medium leading-relaxed truncate">{cp.description}</p>
+                          <div className="text-[8px] font-mono text-[var(--foreground)]/40 uppercase">{cp.author} • {cp.timestamp}</div>
+                        </div>
+                        <button 
+                          onClick={() => handleRestoreCheckpoint(cp.hash, cp.name)}
+                          className="bg-[var(--sand)] hover:bg-[var(--sand)]/80 text-[var(--foreground)] border border-primary/5 hover:border-[var(--tertiary)] px-3.5 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 hover:scale-105 duration-300"
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
 
                 {/* Create checkpoint form */}
                 <form onSubmit={handleCreateCheckpoint} className="space-y-4 pt-6 border-t border-primary/5">
                   <div className="space-y-2">
-                    <span className="text-[8px] font-black uppercase tracking-widest opacity-40">Create Manual Checkpoint</span>
+                    <span className="text-[8px] font-bold uppercase tracking-widest text-[var(--foreground)]/45 font-mono">Create Manual Checkpoint</span>
                     <input
                       type="text"
                       required
                       value={newCheckpointName}
                       onChange={(e) => setNewCheckpointName(e.target.value)}
                       placeholder="Checkpoint title (e.g. 'Staged memory calibration')"
-                      className="w-full px-4 py-3 border border-primary/5 rounded-sm bg-card/40 font-sans text-xs focus:outline-none focus:border-tertiary focus:bg-card hover:border-primary/20 transition-all text-primary placeholder-primary/20"
+                      className="w-full px-4 py-3 bg-card/40 border border-primary/5 text-[var(--foreground)] placeholder-[var(--secondary)]/40 focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] rounded-xl font-sans text-xs transition-all"
                     />
                     <input
                       type="text"
                       value={newCheckpointDesc}
                       onChange={(e) => setNewCheckpointDesc(e.target.value)}
                       placeholder="Brief description (optional)"
-                      className="w-full px-4 py-3 border border-primary/5 rounded-sm bg-card/40 font-sans text-xs focus:outline-none focus:border-tertiary focus:bg-card hover:border-primary/20 transition-all text-primary placeholder-primary/20"
+                      className="w-full px-4 py-3 bg-card/40 border border-primary/5 text-[var(--foreground)] placeholder-[var(--secondary)]/40 focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] rounded-xl font-sans text-xs transition-all"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSavingCheckpoint || !newCheckpointName.trim()}
-                    className="w-full py-3 bg-primary hover:bg-primary/95 text-white font-black uppercase tracking-[0.2em] text-[9px] transition-all rounded-sm shadow-md disabled:opacity-40 flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-[var(--foreground)] hover:opacity-90 text-[var(--background)] font-bold uppercase tracking-widest text-[9px] transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] duration-300 shadow-md"
                   >
                     <PlusCircle className="w-3.5 h-3.5" />
-                    {isSavingCheckpoint ? "Saving State..." : "Commit System State Snapshot"}
+                    {isSavingCheckpoint ? "Saving State..." : "Commit State Snapshot"}
                   </button>
                 </form>
               </div>
@@ -443,40 +470,40 @@ export default function SupervisorDashboard() {
           </div>
 
           {/* Section: Ethical Guardrails Catalog */}
-          <section className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-sm artisan-shadow space-y-6">
+          <section className="p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6 text-left">
             <div className="flex items-center gap-4">
-              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">System 2 Active Guardrails</span>
-              <div className="flex-1 h-[1px] bg-primary/5" />
-              <span className="text-[10px] font-mono opacity-30 uppercase">{guardrails.length} active monitors</span>
+              <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--foreground)]">System 2 Active Guardrails</span>
+              <div className="flex-1 h-[1px] bg-[var(--border)]" />
+              <span className="text-[10px] font-mono text-[var(--foreground)]/45 uppercase">{guardrails.length} active monitors</span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {guardrails.map((gr) => (
-                <div key={gr.id} className="p-5 border border-primary/5 bg-card/40 rounded-sm hover:border-tertiary/20 transition-all space-y-4">
+                <div key={gr.id} className="p-5 border border-primary/5 bg-card/45 hover:bg-card/75 hover:border-[var(--tertiary)]/30 rounded-2xl transition-all space-y-4 hover:scale-[1.02] duration-300">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Lock className="w-3.5 h-3.5 text-tertiary" />
-                      <span className="text-[9px] font-mono font-bold opacity-30 uppercase">{gr.category} guardian</span>
+                      <Lock className="w-3.5 h-3.5 text-[var(--tertiary)]" />
+                      <span className="text-[9px] font-mono font-bold text-[var(--foreground)]/40 uppercase">{gr.category} guardian</span>
                     </div>
-                    <span className="text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 border border-emerald-500/20 text-emerald-500 rounded-sm bg-emerald-500/[0.02]">
+                    <span className="text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 border border-emerald-500/20 text-emerald-600 rounded-lg bg-emerald-500/[0.02]">
                       {gr.status}
                     </span>
                   </div>
 
-                  <h5 className="font-serif font-black text-xs text-primary uppercase tracking-tight leading-normal min-h-[32px]">
+                  <h5 className="font-bold text-xs text-[var(--foreground)] uppercase tracking-tight leading-normal min-h-[32px]">
                     {gr.name}
                   </h5>
 
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[9px] font-mono leading-none">
-                      <span className="opacity-40">Compliance rating</span>
-                      <span className="text-tertiary font-bold">{gr.complianceScore}%</span>
+                      <span className="text-[var(--foreground)]/45 font-bold">Compliance rating</span>
+                      <span className="text-[var(--tertiary)] font-bold">{gr.complianceScore}%</span>
                     </div>
-                    <div className="h-1 bg-primary/5 w-full relative overflow-hidden rounded-full">
+                    <div className="h-1 bg-[var(--border)] w-full relative overflow-hidden rounded-full">
                       <motion.div 
                         initial={{ width: 0 }}
                         animate={{ width: `${gr.complianceScore}%` }}
-                        className="absolute inset-y-0 left-0 bg-tertiary"
+                        className="absolute inset-y-0 left-0 bg-[var(--tertiary)]"
                       />
                     </div>
                   </div>
@@ -488,7 +515,7 @@ export default function SupervisorDashboard() {
         </div>
 
         {/* Footer */}
-        <footer className="h-16 border-t border-primary/5 flex items-center justify-between px-10 bg-[var(--background)]/60 text-[10px] sm:text-xs font-black uppercase tracking-[0.8em] opacity-30 sticky bottom-0 lg:static backdrop-blur-xl shrink-0">
+        <footer className="h-16 border-t border-primary/5 flex items-center justify-between px-10 bg-[var(--card)]/40 text-[10px] font-mono tracking-widest text-[var(--foreground)]/40 sticky bottom-0 lg:static backdrop-blur-xl shrink-0">
           <span>SUPERVISOR_AUDITOR // SYS.2</span>
           <span>{"GUARDRAILS_"}{guardrails.length}{" // STATE_"}{checkpoints.length}</span>
         </footer>

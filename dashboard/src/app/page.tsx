@@ -105,7 +105,7 @@ export default function EntryTerminal() {
         <div className="flex flex-col sm:flex-row gap-4 w-full action-btn">
           <button 
             onClick={handleLaunch}
-            className="flex-1 py-5 bg-primary hover:bg-primary/95 text-white font-black uppercase tracking-[0.3em] text-xs transition-all duration-300 rounded-sm shadow-lg shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer"
+            className="flex-1 py-5 bg-primary hover:bg-primary/95 text-neutral font-black uppercase tracking-[0.3em] text-xs transition-all duration-300 rounded-sm shadow-lg shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer"
             aria-label="Animate Swarm Launch and Enter"
           >
             Animate Launch

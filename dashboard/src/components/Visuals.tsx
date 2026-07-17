@@ -21,16 +21,16 @@ export const AccuracyGauge = ({ success, total, label = "Signals" }: { success: 
           <span className="opacity-30">Failure ({failurePct.toFixed(0)}%)</span>
         </div>
       </div>
-      <div className="h-4 flex border border-[var(--border)] bg-[var(--foreground)]/5 overflow-hidden p-[2px]">
+      <div className="h-4 flex border border-[var(--border)] bg-[var(--foreground)]/5 overflow-hidden p-[2px] rounded-lg">
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${successPct}%` }}
-          className="h-full bg-[var(--gold)]"
+          className="h-full bg-[var(--gold)] rounded-md"
         />
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${failurePct}%` }}
-          className="h-full bg-[var(--border)] opacity-20 ml-[2px]"
+          className="h-full bg-[var(--border)] opacity-20 ml-[2px] rounded-md"
         />
       </div>
     </div>
@@ -167,14 +167,19 @@ export const SharpAreaChart = ({ data }: { data: number[] }) => {
     return { x, y };
   });
 
+  // Build the SVG Bezier smooth spline path
   let linePath = "";
   if (points.length > 0) {
     linePath = `M ${points[0].x} ${points[0].y}`;
     for (let i = 1; i < points.length; i++) {
       const prev = points[i - 1];
       const curr = points[i];
-      // Step: horizontal to current X, then vertical to current Y
-      linePath += ` H ${curr.x} V ${curr.y}`;
+      // Cubic Bezier interpolation control points
+      const cp1X = prev.x + (curr.x - prev.x) / 3;
+      const cp1Y = prev.y;
+      const cp2X = prev.x + (2 * (curr.x - prev.x)) / 3;
+      const cp2Y = curr.y;
+      linePath += ` C ${cp1X} ${cp1Y}, ${cp2X} ${cp2Y}, ${curr.x} ${curr.y}`;
     }
   }
 
@@ -184,7 +189,7 @@ export const SharpAreaChart = ({ data }: { data: number[] }) => {
 
   return (
     <div 
-      className="h-full min-h-[140px] w-full relative border border-[var(--border)] bg-gradient-to-b from-[var(--background)]/10 to-[var(--background)]/40 overflow-hidden rounded-sm select-none group/chart"
+      className="h-full min-h-[140px] w-full relative border border-[var(--border)] bg-gradient-to-b from-[var(--background)]/10 to-[var(--background)]/40 overflow-hidden rounded-xl select-none group/chart"
       onMouseLeave={() => {
         setHoveredIdx(null);
       }}
@@ -248,18 +253,20 @@ export const SharpAreaChart = ({ data }: { data: number[] }) => {
           />
         )}
 
-        {/* Hover dot */}
-        {hoveredIdx !== null && (
-          <circle
-            cx={points[hoveredIdx].x}
-            cy={points[hoveredIdx].y}
-            r="1.5"
-            fill="var(--background)"
-            stroke="var(--gold)"
-            strokeWidth="0.8"
-          />
-        )}
       </svg>
+
+      {/* Perfectly round HTML Hover dot (non-stretched!) */}
+      {hoveredIdx !== null && (
+        <div className="absolute inset-0 pointer-events-none p-2 pt-8 pb-1 overflow-visible z-20">
+          <div 
+            className="absolute rounded-full w-3 h-3 bg-neutral-950 border-2 border-[var(--gold)] shadow-[0_0_8px_rgba(212,163,89,0.7)] -translate-x-1/2 -translate-y-1/2"
+            style={{
+              left: `${points[hoveredIdx].x}%`,
+              top: `${points[hoveredIdx].y}%`
+            }}
+          />
+        </div>
+      )}
 
       {/* Floating HUD Tooltip */}
       <AnimatePresence>
@@ -269,7 +276,7 @@ export const SharpAreaChart = ({ data }: { data: number[] }) => {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute top-3 left-3 z-20 px-3 py-2 bg-zinc-950/95 backdrop-blur-md border-l-2 border-l-[var(--gold)] border-t border-r border-b border-white/5 rounded-sm font-mono text-[9px] flex flex-col gap-1 shadow-2xl pointer-events-none ring-1 ring-black/50"
+            className="absolute top-3 left-3 z-20 px-3 py-2 bg-zinc-950/95 backdrop-blur-md border-l-2 border-l-[var(--gold)] border-t border-r border-b border-white/5 rounded-md font-mono text-[9px] flex flex-col gap-1 shadow-2xl pointer-events-none ring-1 ring-black/50"
           >
             <div className="flex justify-between items-center gap-6">
               <span className="text-stone-400 text-[7px] uppercase font-bold tracking-wider">CYCLE OFFSET</span>
@@ -315,13 +322,13 @@ export const ContextWindowBar = ({ usedTokens, maxTokens = 8192, label = "Contex
           {usedTokens.toLocaleString()} / {maxTokens.toLocaleString()} Tokens
         </span>
       </div>
-      <div className="h-4 w-full flex border border-[var(--border)] bg-[var(--foreground)]/5 overflow-hidden p-[2px]">
+      <div className="h-4 w-full flex border border-[var(--border)] bg-[var(--foreground)]/5 overflow-hidden p-[2px] rounded-lg">
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: `${percentage}%` }}
-          className={`h-full ${isCritical ? 'bg-red-500' : 'bg-[var(--gold)]'}`}
+          className={`h-full ${isCritical ? 'bg-red-500' : 'bg-[var(--gold)]'} rounded-md`}
         />
-        <div className="flex-1 bg-[var(--border)] opacity-10 ml-[2px]" />
+        <div className="flex-1 bg-[var(--border)] opacity-10 ml-[2px] rounded-md" />
       </div>
       <div className="flex justify-between text-[7px] font-mono opacity-30 mt-1">
         <span>0</span>

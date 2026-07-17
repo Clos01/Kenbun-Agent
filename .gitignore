@@ -120,3 +120,4 @@ core/external/
 # the intent: secrets and runtime logs must never be committed.
 .env
 *.log
+dashboard/.pnpm-store/

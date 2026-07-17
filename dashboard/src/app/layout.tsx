@@ -1,18 +1,27 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Public_Sans } from "next/font/google";
+import { Plus_Jakarta_Sans, Cormorant_Garamond, Space_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { TenantProvider } from "@/context/TenantContext";
 import Script from "next/script";
 
-const spaceGrotesk = Space_Grotesk({
-  variable: "--font-space-grotesk",
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-plus-jakarta",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
-const publicSans = Public_Sans({
-  variable: "--font-public-sans",
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
   subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  style: ["normal", "italic"],
+});
+
+const spaceMono = Space_Mono({
+  variable: "--font-space-mono",
+  subsets: ["latin"],
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -29,7 +38,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${spaceGrotesk.variable} ${publicSans.variable} h-full antialiased`}
+      className={`${plusJakarta.variable} ${cormorant.variable} ${spaceMono.variable} h-full antialiased`}
     >
       <head>
         <script

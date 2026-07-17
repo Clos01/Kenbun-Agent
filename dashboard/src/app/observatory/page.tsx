@@ -21,6 +21,53 @@ import { CONFIG } from "@/lib/config";
 import { TOOL_EQUATIONS } from "@/lib/equations";
 import { useTenant } from "@/context/TenantContext";
 
+const getToolDescription = (toolId: string): string => {
+  const dict: Record<string, string> = {
+    consult_supervisor: "Verifies code patches against security constraints and architectural guidelines using multi-model voting.",
+    audit_guardrail: "Evaluates inputs and outputs in real-time to block unauthorized commands or API payloads.",
+    autofix_linter: "Autonomously detects and repairs structural code patterns and lint violations.",
+    research_official_docs: "Retrieves verified framework specifications and API references from official documentation repositories.",
+    ask_architect: "Queries the team's historical system blueprint and design documents to resolve structural patterns.",
+    ask_ui_expert: "Applies high-fidelity visual guidelines to correct alignment, colors, and layout aesthetics.",
+    get_design_tokens: "Provides pre-defined color constants, border radii, and font sizes to maintain unified layouts.",
+    review_code_with_gemini: "Runs a 4-stage pipeline (AI Review → Docs → Supervisor → Consensus) for code verification.",
+    research_with_gemini: "Performs deep web research and official docs grounding for new technology stacks.",
+    write_website_content: "Generates premium website text and marketing content optimized for user engagement.",
+    run_code_safely: "Executes untrusted scripts and test suites inside an isolated sandboxed sandbox.",
+    scan_repo: "Analyzes codebase structure, dependencies, and configuration directories for active tech stacks.",
+    remember_fix: "Saves a verified bug fix to the global Knowledge Hive so it can be automatically applied to future bugs.",
+    recall_fix: "Searches the Knowledge Hive for previously approved solutions to speed up autonomic repairs.",
+    save_checkpoint: "Takes a snapshot of the current state of files before making major edits.",
+    restore_checkpoint: "Rolls back files to a previous verified state to recover from logical regressions.",
+    list_checkpoints: "Retrieves all saved repository state snapshots.",
+    orchestrate: "Manages multi-agent background tasks and handles automatic retries and progress tracking.",
+    orchestrate_status: "Polls the status of active background workflows and processes.",
+    save_to_hivemind: "Injects semantic data patterns and concepts into the local System 3 memory store.",
+    search_hivemind_concepts: "Queries System 3 vector embeddings to locate matching logical guidelines.",
+    delete_from_hivemind: "Prunes outdated data patterns or guidelines from the System 3 memory store.",
+    workspace_post: "Writes workspace notifications or alerts to the developer dashboard.",
+    workspace_read: "Reads active workspace alerts and workspace messages.",
+    workspace_inject: "Injects customized files or templates into the active workspace directory.",
+    workspace_resolve_alert: "Flags active workspace warnings or alerts as resolved.",
+    index_codebase: "Scans and indexes workspace code symbols for semantic codebase searching.",
+    search_codebase: "Runs vector search queries across the indexed code repository.",
+    think_about_tools: "Outputs step-by-step implementation blueprints using FastMCP tools.",
+    patch_hivemind_concept: "Edits specific data fields within a saved System 3 memory concept.",
+    ingest_knowledge_from_pdf: "Parses and vectorizes PDF manuals into the global Knowledge Hive.",
+    ingest_url_to_hivemind: "Scrapes and indexes a documentation webpage into the System 3 store.",
+    ingest_file_to_hivemind: "Vectorizes a text or codebase file directly into local memory.",
+    prune_hivemind: "Prunes unused vector embeddings to optimize System 3 query latency.",
+    get_intelligence_stats: "Displays metrics on indexing volume, brain health, and memory health.",
+    reflect_on_task: "Runs an agent review on a completed task to evaluate scalability and security.",
+    get_brain_health: "Evaluates memory density and supervisor alignment status.",
+    audit_package_safety: "Runs dependency scans to detect outdated or vulnerable packages.",
+    sync_jira_issue: "Synchronizes planka cards with external issue trackers.",
+    create_bitbucket_pr: "Autonomously drafts and opens pull requests with supervisor consensus.",
+    session_search: "Searches through session logs."
+  };
+  return dict[toolId] || "Performs autonomous back-office pipelines and agentic actions.";
+};
+
 type TabId = "overview" | "intelligence" | "memory" | "feed";
 
 interface TelemetryTrendPoint {
@@ -605,21 +652,21 @@ export default function HeritageObservatory() {
         
         {/* Heritage Command Header */}
         <header className="h-20 lg:h-24 border-b border-primary/5 flex items-center justify-between px-6 lg:px-10 bg-card/40 z-20 sticky top-0 backdrop-blur-xl shrink-0">
-          <div className="flex items-center gap-4 lg:gap-8">
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-30">Node.251649</span>
-            <div className="h-6 w-[1px] bg-primary/10" />
-            <span className="font-bold text-lg lg:text-xl uppercase tracking-tighter italic">Heritage <span className="text-tertiary">Observatory</span></span>
+          <div className="flex items-center gap-2 sm:gap-4 lg:gap-8">
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-30 hidden sm:inline-block">Node.251649</span>
+            <div className="h-6 w-[1px] bg-primary/10 hidden sm:block" />
+            <span className="font-bold text-base sm:text-lg lg:text-xl uppercase tracking-tighter italic">Heritage <span className="text-tertiary">Observatory</span></span>
           </div>
           
-          <div className="flex items-center gap-6 lg:gap-10">
-            <div className="flex items-center gap-8">
-              <div className="flex flex-col items-end">
+          <div className="flex items-center gap-4 lg:gap-10">
+            <div className="flex items-center gap-4 sm:gap-8">
+              <div className="flex flex-col items-end hidden sm:flex">
                 <span className="text-[8px] uppercase tracking-widest opacity-40 font-bold">Latency</span>
                 <span className="text-xs font-bold text-primary">{telemetry.latency}</span>
               </div>
-              <div className="flex flex-col items-end border-l border-primary/5 pl-8">
+              <div className="flex flex-col items-end sm:border-l sm:border-primary/5 sm:pl-8">
                 <span className="text-[8px] uppercase tracking-widest opacity-40 font-bold">Reserve</span>
-                <span className="text-xl lg:text-2xl font-black text-tertiary italic tracking-tighter">${budget?.remaining?.toFixed(2) || "0.00"}</span>
+                <span className="text-base sm:text-xl lg:text-2xl font-black text-tertiary italic tracking-tighter">${budget?.remaining?.toFixed(2) || "0.00"}</span>
               </div>
             </div>
           </div>
@@ -629,9 +676,9 @@ export default function HeritageObservatory() {
         <nav 
           role="tablist"
           aria-label="Observatory Subsystems"
-          className="flex items-center gap-4 px-6 lg:px-10 py-6 border-b border-primary/5 bg-card/20 backdrop-blur-sm z-20 shrink-0 overflow-x-auto no-scrollbar"
+          className="flex flex-wrap items-center gap-2 md:gap-4 px-4 md:px-10 py-4 md:py-6 border-b border-primary/5 bg-card/20 backdrop-blur-sm z-20 shrink-0"
         >
-          <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 mr-4 shrink-0">Subsystem</span>
+          <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 mr-2 sm:mr-4 shrink-0 hidden sm:inline-block">Subsystem</span>
           {TABS.map((tab, index) => (
             <button
               key={tab.id}
@@ -642,7 +689,7 @@ export default function HeritageObservatory() {
               tabIndex={activeTab === tab.id ? 0 : -1}
               onKeyDown={(e) => handleTabKeyDown(e, index)}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-3 px-md py-sm rounded-sm transition-all duration-500 border group shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-tertiary motion-reduce:transition-none ${
+              className={`flex items-center gap-2 sm:gap-3 px-3 sm:px-md py-2 sm:py-sm rounded-lg transition-all duration-500 border group shrink-0 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-tertiary motion-reduce:transition-none ${
                 activeTab === tab.id 
                   ? "bg-primary text-neutral border-primary shadow-lg shadow-primary/10" 
                   : "bg-card/40 border-primary/5 text-secondary hover:text-primary hover:bg-card/80"
@@ -744,7 +791,7 @@ export default function HeritageObservatory() {
                   </h1>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow divide-x divide-primary/5 rounded-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow divide-x divide-primary/5 rounded-xl">
                   {[
                     { label: "Domain", value: activeTask?.project || "Heritage" },
                     { label: "Betterment", value: totalSignals > 0 ? `+${((totalSuccess / totalSignals) * 100).toFixed(1)}%` : "+0.0%" },
@@ -758,7 +805,7 @@ export default function HeritageObservatory() {
                   ))}
                 </div>
 
-                <div className="w-full min-h-[400px] p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-xl shadow-primary/5 flex flex-col space-y-8 rounded-sm">
+                <div className="w-full min-h-[400px] p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-xl shadow-primary/5 flex flex-col space-y-8 rounded-2xl">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
                       <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Topology</span>
@@ -769,7 +816,7 @@ export default function HeritageObservatory() {
                       <span className="text-[10px] font-black text-tertiary uppercase tracking-widest">{telemetry.memory?.capacity || 0} Registered Signals</span>
                     </div>
                   </div>
-                  <div className="flex-1 relative min-h-[600px] border border-primary/5 bg-card/40 rounded-sm overflow-hidden">
+                  <div className="flex-1 relative min-h-[600px] border border-primary/5 bg-card/40 rounded-xl overflow-hidden">
                     <GalaxyMap />
                   </div>
                 </div>
@@ -781,7 +828,7 @@ export default function HeritageObservatory() {
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">Temporal Load Index</span>
                     <TrendingUp className="w-4 h-4 text-tertiary" />
                   </div>
-                  <div className="p-8 border border-primary/5 bg-card/60 backdrop-blur-md shadow-sm rounded-sm">
+                  <div className="p-8 border border-primary/5 bg-card/60 backdrop-blur-md shadow-sm rounded-xl">
                     <SharpAreaChart data={usageHistory} />
                   </div>
                 </div>
@@ -790,7 +837,7 @@ export default function HeritageObservatory() {
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">Signal Entropy</span>
                     <Database className="w-4 h-4 opacity-20" />
                   </div>
-                  <div className="p-8 border border-primary/5 bg-card/60 backdrop-blur-md shadow-sm rounded-sm">
+                  <div className="p-8 border border-primary/5 bg-card/60 backdrop-blur-md shadow-sm rounded-xl">
                     <SquareDonut data={[
                       { label: "Neural", value: 45, color: "#1A1C1E" },
                       { label: "Exec", value: 30, color: "#6C7278" },
@@ -806,7 +853,7 @@ export default function HeritageObservatory() {
             <div className="space-y-12 pb-20">
               <section className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12">
                 <div className="xl:col-span-4">
-                  <motion.div layout className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-10 h-full rounded-sm">
+                  <motion.div layout className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-10 h-full rounded-2xl">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Fidelity</span>
@@ -854,12 +901,28 @@ export default function HeritageObservatory() {
                   </motion.div>
                 </div>
                 <div className="xl:col-span-8">
-                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-8 h-full rounded-sm flex flex-col justify-between">
+                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-8 h-full rounded-2xl flex flex-col justify-between">
                     <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-primary/5 pb-6 gap-4">
                       <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">
-                          {selectedTool ? `${selectedTool.tool_id.toUpperCase()} Performance` : 'Global Performance'}
-                        </span>
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">
+                            {selectedTool ? `${selectedTool.tool_id.toUpperCase()} Performance` : 'Global Performance'}
+                          </span>
+                          <details className="group relative">
+                            <summary className="cursor-pointer list-none text-[8.5px] font-black text-tertiary hover:opacity-100 opacity-60 transition-opacity flex items-center justify-center border border-tertiary/20 rounded-full w-4 h-4 select-none">
+                              i
+                            </summary>
+                            <div className="absolute left-0 mt-2 z-[250] w-72 bg-neutral/95 backdrop-blur-md border border-primary/10 p-4 rounded-xl shadow-2xl space-y-2 pointer-events-auto text-[9.5px] font-mono leading-relaxed normal-case tracking-normal text-secondary text-left">
+                              <p className="font-bold text-primary uppercase text-[10px] tracking-wider">Performance Analytics Guide</p>
+                              <p className="opacity-90">This chart plots tool performance metrics over the last 30 epochs (execution cycles):</p>
+                              <div className="space-y-1.5 pt-1.5 border-t border-primary/5">
+                                <p><strong className="text-tertiary">Fidelity (Orange Line):</strong> The accuracy, security, and logical correctness score of tool outputs (0-100%).</p>
+                                <p><strong className="text-primary">Load Index (Grey Line):</strong> The computational work, token utilization, and memory consumption (0-100).</p>
+                                <p><strong className="text-stone-300">F/L Ratio:</strong> Efficiency rating. High fidelity and low load yield the highest efficiency.</p>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
                         <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Accuracy vs Load Topology</p>
                       </div>
                       
@@ -891,18 +954,21 @@ export default function HeritageObservatory() {
                     </div>
 
                     {/* Live Metrics Sub-Bar */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-primary/[0.02] border border-primary/5 rounded-sm text-[10px] uppercase font-bold tracking-widest divide-y md:divide-y-0 md:divide-x divide-primary/5">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-primary/[0.02] border border-primary/5 rounded-xl text-[10px] uppercase font-bold tracking-widest divide-y md:divide-y-0 md:divide-x divide-primary/5">
                       <div className="space-y-1">
                         <span className="opacity-30 text-[8px]">Avg Fidelity</span>
                         <div className="text-sm font-black text-tertiary italic">{trendStats.avgFidelity.toFixed(1)}%</div>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Average correctness score across recent task executions.</p>
                       </div>
                       <div className="space-y-1 pt-2 md:pt-0 md:pl-4">
                         <span className="opacity-30 text-[8px]">Peak Load</span>
                         <div className="text-sm font-black text-primary italic">{trendStats.peakLoad.toFixed(1)}%</div>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Highest recorded context or compute usage overhead.</p>
                       </div>
                       <div className="space-y-1 pt-2 md:pt-0 md:pl-4">
                         <span className="opacity-30 text-[8px]">Fidelity Floor</span>
                         <div className="text-sm font-black text-secondary/70 italic">{trendStats.minFidelity.toFixed(1)}%</div>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Lowest recorded correctness score (worst-case output).</p>
                       </div>
                       <div className="space-y-1 pt-2 md:pt-0 md:pl-4">
                         <span className="opacity-30 text-[8px]">Stability Rating</span>
@@ -912,6 +978,7 @@ export default function HeritageObservatory() {
                         }`}>
                           {trendStats.stabilityRating}
                         </div>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Consistency classification based on performance variance.</p>
                       </div>
                     </div>
 
@@ -944,7 +1011,7 @@ export default function HeritageObservatory() {
                       </div>
 
                       {/* Graph Main SVG Area */}
-                      <div className="absolute inset-0 left-10 right-10 top-2 bottom-6 overflow-hidden">
+                      <div className="absolute inset-0 left-10 right-10 top-2 bottom-6">
                         {activeTrend.length > 0 ? (
                           <div className="w-full h-full relative">
                             <svg 
@@ -1046,7 +1113,7 @@ export default function HeritageObservatory() {
 
                             {/* Mouse/Touch Detection Overlay */}
                             <div 
-                              className="absolute inset-0 cursor-crosshair z-20 touch-none rounded-sm overflow-hidden"
+                              className="absolute inset-0 cursor-crosshair z-20 touch-none rounded-xl overflow-hidden"
                               onMouseMove={handleMouse}
                               onTouchMove={handleTouch}
                               onTouchStart={handleTouch}
@@ -1078,7 +1145,7 @@ export default function HeritageObservatory() {
                                     className="absolute top-0 bottom-0 border-l border-dashed border-primary/20 pointer-events-none" 
                                     style={{ left: `${stepPercent}%` }}
                                   >
-                                    <div className="absolute top-0 -translate-x-1/2 bg-primary text-neutral text-[6px] px-1 py-[2px] font-black uppercase rounded-sm tracking-widest whitespace-nowrap shadow-md shadow-primary/10">
+                                    <div className="absolute top-0 -translate-x-1/2 bg-primary text-neutral text-[6px] px-1 py-[2px] font-black uppercase rounded-md tracking-widest whitespace-nowrap shadow-md shadow-primary/10">
                                       T-{activeTrend.length - 1 - hoverIndex}
                                     </div>
                                   </div>
@@ -1107,7 +1174,7 @@ export default function HeritageObservatory() {
 
                                   {/* Floating Glassmorphic Tooltip */}
                                   <div 
-                                    className="absolute bg-neutral/95 backdrop-blur-md border border-primary/10 shadow-2xl p-4 rounded-sm space-y-2 text-[10px] z-30 pointer-events-none transition-all duration-75 min-w-[160px] uppercase font-bold tracking-widest"
+                                    className="absolute bg-neutral/95 backdrop-blur-md border border-primary/10 shadow-2xl p-4 rounded-xl space-y-2 text-[10px] z-30 pointer-events-none transition-all duration-75 min-w-[160px] uppercase font-bold tracking-widest"
                                     style={{ left: tooltipLeft, top: tooltipTop }}
                                   >
                                     <div className="text-[8px] opacity-40 flex justify-between border-b border-primary/5 pb-1 mb-1 font-mono">
@@ -1160,7 +1227,7 @@ export default function HeritageObservatory() {
                   <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="p-10 border border-tertiary/20 bg-card/60 artisan-shadow space-y-8 relative overflow-hidden group rounded-sm"
+                    className="p-10 border border-tertiary/20 bg-card/60 artisan-shadow space-y-8 relative overflow-hidden group rounded-2xl"
                   >
                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                       <BrainCircuit className="w-40 h-40" />
@@ -1189,7 +1256,7 @@ export default function HeritageObservatory() {
                             </div>
                             <button 
                               onClick={() => setSelectedDecision(best)}
-                              className="ml-auto px-6 py-2.5 bg-primary text-white text-[9px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all rounded-sm shadow-lg shadow-primary/10"
+                              className="ml-auto px-6 py-2.5 bg-primary text-neutral text-[9px] font-black uppercase tracking-widest hover:bg-primary/90 transition-all rounded-lg shadow-lg shadow-primary/10"
                             >
                               Audit Logic
                             </button>
@@ -1209,7 +1276,7 @@ export default function HeritageObservatory() {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ delay: idx * 0.05 }}
                         onClick={() => setSelectedDecision(item)}
-                        className="min-w-[400px] snap-center p-8 border border-primary/5 bg-card/60 hover:border-tertiary/40 hover:bg-card transition-all group cursor-pointer space-y-4 rounded-sm shadow-sm"
+                        className="min-w-[280px] sm:min-w-[400px] snap-center p-8 border border-primary/5 bg-card/60 hover:border-tertiary/40 hover:bg-card transition-all group cursor-pointer space-y-4 rounded-xl shadow-sm"
                       >
                         <div className="flex items-center justify-between">
                           <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">{item.tool}</span>
@@ -1235,13 +1302,13 @@ export default function HeritageObservatory() {
               </section>
 
               <section>
-                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow space-y-10 rounded-sm">
+                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow space-y-10 rounded-2xl">
                     <div className="flex items-center justify-between border-b border-primary/5 pb-6">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Tool Matrix</span>
                         <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Neural Capability Topology</p>
                       </div>
-                      <span className="px-3 py-1 border border-primary/10 text-[9px] font-black opacity-40 uppercase tracking-widest rounded-sm">{stats.length} Nodes Active</span>
+                      <span className="px-3 py-1 border border-primary/10 text-[9px] font-black opacity-40 uppercase tracking-widest rounded-full">{stats.length} Nodes Active</span>
                     </div>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                        {stats.map((tool: IntelligenceTool, idx: number) => (
@@ -1251,7 +1318,7 @@ export default function HeritageObservatory() {
                              setSelectedTool(tool);
                              setActiveToolModal(tool);
                            }}
-                           className={`p-6 border transition-all cursor-pointer group rounded-sm ${selectedTool?.tool_id === tool.tool_id ? 'border-tertiary bg-card shadow-xl shadow-tertiary/5' : 'border-primary/5 bg-card/40 hover:border-tertiary/20'}`}
+                           className={`p-6 border transition-all cursor-pointer group rounded-xl ${selectedTool?.tool_id === tool.tool_id ? 'border-tertiary bg-card shadow-xl shadow-tertiary/5' : 'border-primary/5 bg-card/40 hover:border-tertiary/20'}`}
                          >
                            <div className="flex items-center justify-between mb-4">
                              <span className="text-[10px] font-black text-primary/40 truncate pr-2 uppercase tracking-tighter">{tool.tool_id.replace(/_/g, ' ')}</span>
@@ -1280,40 +1347,49 @@ export default function HeritageObservatory() {
                       initial={{ scale: 0.9, opacity: 0, y: 20 }}
                       animate={{ scale: 1, opacity: 1, y: 0 }}
                       exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                      className="relative w-full max-w-5xl bg-background shadow-[0_0_100px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col md:flex-row rounded-sm border border-primary/10"
+                      className="relative w-full max-w-5xl max-h-[90vh] md:max-h-none bg-background shadow-[0_0_100px_rgba(0,0,0,0.2)] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row rounded-2xl border border-primary/10"
                     >
-                       <div className="md:w-2/5 p-12 bg-card flex flex-col justify-between border-r border-primary/5">
-                          <div className="space-y-10">
+                       <div className="md:w-2/5 p-6 sm:p-10 md:p-12 bg-card flex flex-col justify-between border-r border-primary/5 shrink-0">
+                          <div className="space-y-6 sm:space-y-10">
                             <div className="flex flex-col gap-2">
                               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Audit Pulse</span>
-                              <h3 className="text-4xl font-black text-primary uppercase tracking-tighter italic">Reasoning Process</h3>
+                              <h3 className="text-3xl sm:text-4xl font-black text-primary uppercase tracking-tighter italic">Reasoning Process</h3>
+                              <p className="text-[10.5px] text-secondary opacity-80 leading-relaxed font-mono mt-1">
+                                This panel records System 2 Supervisor audit verifications. It checks all proposed agent logic against linter, security, and architectural guardrails before final verification.
+                              </p>
                             </div>
                             
-                            <div className="grid grid-cols-1 gap-8">
-                               <div className="space-y-2">
-                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Neural Origin</span>
-                                 <p className="text-sm font-bold text-primary uppercase">{selectedDecision.tool}</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-1 gap-4 sm:gap-8">
+                               <div className="space-y-1 sm:space-y-2">
+                                 <div className="flex items-center gap-1.5">
+                                   <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Neural Origin</span>
+                                 </div>
+                                 <p className="text-xs sm:text-sm font-bold text-primary uppercase">{selectedDecision.tool}</p>
+                                 <p className="text-[8.5px] text-secondary opacity-50 font-mono">The agent tool/subsystem that requested this execution.</p>
                                </div>
-                               <div className="space-y-2">
-                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Confidence Rating</span>
-                                 <p className="text-2xl font-black italic text-tertiary">{(selectedDecision.confidence * 100).toFixed(1)}%</p>
+                               <div className="space-y-1 sm:space-y-2">
+                                 <div className="flex items-center gap-1.5">
+                                   <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Confidence Rating</span>
+                                 </div>
+                                 <p className="text-xl sm:text-2xl font-black italic text-tertiary">{(selectedDecision.confidence * 100).toFixed(1)}%</p>
+                                 <p className="text-[8.5px] text-secondary opacity-50 font-mono">Likelihood score calculated based on system-wide trial history.</p>
                                </div>
-                               <div className="space-y-2">
+                               <div className="space-y-1 sm:space-y-2 sm:col-span-2 md:col-span-1">
                                  <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Temporal Stamp</span>
-                                 <p className="text-sm font-bold text-primary" suppressHydrationWarning>{new Date(selectedDecision.timestamp).toLocaleString()}</p>
+                                 <p className="text-xs sm:text-sm font-bold text-primary" suppressHydrationWarning>{new Date(selectedDecision.timestamp).toLocaleString()}</p>
                                </div>
                             </div>
                           </div>
 
                           <button 
                             onClick={() => setSelectedDecision(null)}
-                            className="mt-12 w-full py-4 bg-primary text-white text-[10px] font-black uppercase tracking-[0.3em] hover:bg-primary/90 transition-all rounded-sm"
+                            className="mt-6 sm:mt-12 w-full py-4 bg-primary text-neutral text-[10px] font-black uppercase tracking-[0.3em] hover:bg-primary/90 transition-all rounded-lg"
                           >
                             Close Audit
                           </button>
                        </div>
 
-                       <div className="flex-1 p-12 md:p-16 space-y-10 overflow-y-auto max-h-[80vh] custom-scrollbar">
+                       <div className="flex-1 p-6 sm:p-12 md:p-16 space-y-6 sm:space-y-10 max-h-none md:max-h-[80vh] md:overflow-y-auto custom-scrollbar">
                           <div className="space-y-4">
                             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Proposed Logic</span>
                             <blockquote className="text-2xl md:text-3xl font-black text-primary leading-tight uppercase tracking-tighter italic">
@@ -1323,17 +1399,20 @@ export default function HeritageObservatory() {
 
                           <div className="space-y-6">
                              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Result set</span>
-                             <div className="p-8 bg-card border border-primary/5 space-y-4 rounded-sm">
+                             <div className="p-8 bg-card border border-primary/5 space-y-4 rounded-xl">
                                 <div className="flex items-center justify-between border-b border-primary/5 pb-4">
-                                  <span className="text-[9px] font-black uppercase tracking-widest">Execution Result</span>
-                                  <span className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest ${selectedDecision.result === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'} rounded-sm`}>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[9px] font-black uppercase tracking-widest">Execution Result</span>
+                                    <span className="text-[8.5px] text-secondary opacity-50 font-mono normal-case tracking-normal">Verifies whether the tool passed linter audits and code safety tests.</span>
+                                  </div>
+                                  <span className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest ${selectedDecision.result === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'} rounded-md`}>
                                     {selectedDecision.result}
                                   </span>
                                 </div>
                                 <div className="space-y-4 pt-4">
                                   <div className="flex flex-col gap-2">
                                     <span className="text-[9px] font-black uppercase tracking-widest opacity-30">Raw Output</span>
-                                    <pre className="text-xs font-bold text-primary/70 whitespace-pre-wrap leading-relaxed font-mono p-4 bg-primary/[0.02] border border-primary/5 rounded-sm">
+                                    <pre className="text-xs font-bold text-primary/70 whitespace-pre-wrap leading-relaxed font-mono p-4 bg-primary/[0.02] border border-primary/5 rounded-lg">
                                       {selectedDecision.output || "No supplementary trace data available."}
                                     </pre>
                                   </div>
@@ -1360,22 +1439,25 @@ export default function HeritageObservatory() {
                       initial={{ scale: 0.9, opacity: 0, y: 20 }}
                       animate={{ scale: 1, opacity: 1, y: 0 }}
                       exit={{ scale: 0.9, opacity: 0, y: 20 }}
-                      className="relative w-full max-w-4xl bg-background shadow-[0_0_100px_rgba(0,0,0,0.2)] overflow-hidden flex flex-col md:flex-row rounded-sm border border-primary/10"
+                      className="relative w-full max-w-4xl max-h-[90vh] md:max-h-none bg-background shadow-[0_0_100px_rgba(0,0,0,0.2)] overflow-y-auto md:overflow-hidden flex flex-col md:flex-row rounded-2xl border border-primary/10"
                     >
                        {/* Left Panel: Primary Info and Gauge */}
-                       <div className="md:w-5/12 p-10 bg-card flex flex-col justify-between border-r border-primary/5">
-                          <div className="space-y-8">
+                       <div className="md:w-5/12 p-6 sm:p-10 bg-card flex flex-col justify-between border-r border-primary/5 shrink-0">
+                          <div className="space-y-6 sm:space-y-8">
                             <div className="flex flex-col gap-2">
                               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Tool Profile</span>
-                              <h3 className="text-2xl font-black text-primary uppercase tracking-tighter italic break-all">
+                              <h3 className="text-xl sm:text-2xl font-black text-primary uppercase tracking-tighter italic break-all">
                                 {activeToolModal.tool_id.split('_').join(' ')}
                               </h3>
+                              <p className="text-[10.5px] text-secondary opacity-80 leading-relaxed font-mono mt-1">
+                                {getToolDescription(activeToolModal.tool_id)}
+                              </p>
                             </div>
                             
-                            <div className="flex flex-col py-6 border-y border-primary/5 gap-6">
+                            <div className="flex flex-col py-4 sm:py-6 border-y border-primary/5 gap-4 sm:gap-6">
                               <div className="text-center space-y-1">
                                 <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Success Rate</span>
-                                <div className="text-5xl font-black italic tracking-tighter text-primary">
+                                <div className="text-4xl sm:text-5xl font-black italic tracking-tighter text-primary">
                                   {Math.round(activeToolModal.success_rate * 100)}%
                                 </div>
                               </div>
@@ -1385,12 +1467,16 @@ export default function HeritageObservatory() {
                                 total={activeToolModal.success_count || activeToolModal.failure_count ? ((activeToolModal.success_count || 0) + (activeToolModal.failure_count || 0)) : Math.round(((activeToolModal.alpha || 0) + (activeToolModal.beta || 0)) * 10)} 
                                 label="Bayesian Posterior"
                               />
+                              <p className="text-[8.5px] text-secondary opacity-50 font-mono">
+                                A statistical model estimating true capability based on trial history.
+                              </p>
                             </div>
-
-                            <div className="grid grid-cols-2 gap-6">
+ 
+                            <div className="grid grid-cols-2 gap-4 sm:gap-6">
                                <div className="space-y-1">
                                  <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Confidence</span>
-                                 <p className="text-lg font-black italic text-tertiary">{activeToolModal.confidence || "OPTIMIZED"}</p>
+                                 <p className="text-base sm:text-lg font-black italic text-tertiary">{activeToolModal.confidence || "OPTIMIZED"}</p>
+                                 <p className="text-[8px] text-secondary opacity-50 font-mono mt-1">Reliability based on test volume.</p>
                                </div>
                                <div className="space-y-1 text-right">
                                  <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Category</span>
@@ -1398,71 +1484,74 @@ export default function HeritageObservatory() {
                                </div>
                             </div>
                           </div>
-
+ 
                           <button 
                             onClick={() => setActiveToolModal(null)}
-                            className="mt-8 w-full py-4 bg-primary text-white text-[10px] font-black uppercase tracking-[0.3em] hover:bg-primary/90 transition-all rounded-sm"
+                            className="mt-6 sm:mt-8 w-full py-4 bg-primary text-neutral text-[10px] font-black uppercase tracking-[0.3em] hover:bg-primary/90 transition-all rounded-lg"
                           >
                             Close Profile
                           </button>
                        </div>
-
+ 
                        {/* Right Panel: Performance, Prior and Deltas */}
-                       <div className="flex-1 p-10 md:p-12 space-y-8 overflow-y-auto max-h-[85vh] custom-scrollbar">
+                       <div className="flex-1 p-6 sm:p-10 md:p-12 space-y-6 sm:space-y-8 max-h-none md:max-h-[85vh] md:overflow-y-auto custom-scrollbar">
                           <div className="space-y-3">
-                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Historical Signals</span>
-                            <div className="grid grid-cols-3 gap-4">
-                              <div className="p-4 border border-primary/5 bg-card/40 rounded-sm space-y-1">
-                                <span className="text-[8px] font-black uppercase tracking-widest opacity-35">Total Trials</span>
-                                <div className="text-xl font-black italic text-primary">{(activeToolModal.success_count || 0) + (activeToolModal.failure_count || 0)}</div>
-                              </div>
-                              <div className="p-4 border border-primary/5 bg-card/40 rounded-sm space-y-1">
-                                <span className="text-[8px] font-black uppercase tracking-widest opacity-35 text-green-600">Successes</span>
-                                <div className="text-xl font-black italic text-green-600">{activeToolModal.success_count || 0}</div>
-                              </div>
-                              <div className="p-4 border border-primary/5 bg-card/40 rounded-sm space-y-1">
-                                <span className="text-[8px] font-black uppercase tracking-widest opacity-35 text-red-600">Failures</span>
-                                <div className="text-xl font-black italic text-red-600">{activeToolModal.failure_count || 0}</div>
-                              </div>
-                            </div>
+                             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Historical Signals</span>
+                             <p className="text-[8.5px] text-secondary opacity-65 font-mono">Tally of successful vs failed tool execution runs.</p>
+                             <div className="grid grid-cols-3 gap-2 sm:gap-4">
+                               <div className="p-2 sm:p-4 border border-primary/5 bg-card/40 rounded-xl space-y-1">
+                                 <span className="text-[8px] font-black uppercase tracking-widest opacity-35">Total</span>
+                                 <div className="text-base sm:text-xl font-black italic text-primary">{(activeToolModal.success_count || 0) + (activeToolModal.failure_count || 0)}</div>
+                               </div>
+                               <div className="p-2 sm:p-4 border border-primary/5 bg-card/40 rounded-xl space-y-1">
+                                 <span className="text-[8px] font-black uppercase tracking-widest opacity-35 text-green-600">Success</span>
+                                 <div className="text-base sm:text-xl font-black italic text-green-600">{activeToolModal.success_count || 0}</div>
+                               </div>
+                               <div className="p-2 sm:p-4 border border-primary/5 bg-card/40 rounded-xl space-y-1">
+                                 <span className="text-[8px] font-black uppercase tracking-widest opacity-35 text-red-600">Fail</span>
+                                 <div className="text-base sm:text-xl font-black italic text-red-600">{activeToolModal.failure_count || 0}</div>
+                               </div>
+                             </div>
                           </div>
-
+ 
                           <div className="space-y-3">
-                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Bayesian Distribution Parameters</span>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="p-5 border border-primary/5 bg-card/40 rounded-sm flex items-center justify-between">
-                                <div className="space-y-1">
-                                  <span className="text-[8px] font-black uppercase tracking-widest opacity-35">Alpha prior (α)</span>
-                                  <div className="text-2xl font-black italic text-primary">{(activeToolModal.alpha || 2.0).toFixed(1)}</div>
-                                </div>
-                                <span className="text-lg font-bold opacity-15 text-green-600 font-mono">SUCCESS</span>
-                              </div>
-                              <div className="p-5 border border-primary/5 bg-card/40 rounded-sm flex items-center justify-between">
-                                <div className="space-y-1">
-                                  <span className="text-[8px] font-black uppercase tracking-widest opacity-35">Beta prior (β)</span>
-                                  <div className="text-2xl font-black italic text-primary">{(activeToolModal.beta || 2.0).toFixed(1)}</div>
-                                </div>
-                                <span className="text-lg font-bold opacity-15 text-red-600 font-mono">FAILURE</span>
-                              </div>
-                            </div>
+                             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Bayesian Distribution Parameters</span>
+                             <p className="text-[8.5px] text-secondary opacity-65 font-mono">Mathematical prior parameters. Success shape alpha (α) vs Failure shape beta (β).</p>
+                             <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                               <div className="p-3 sm:p-5 border border-primary/5 bg-card/40 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                 <div className="space-y-1">
+                                   <span className="text-[8px] font-black uppercase tracking-widest opacity-35">Alpha prior (α)</span>
+                                   <div className="text-xl sm:text-2xl font-black italic text-primary">{(activeToolModal.alpha || 2.0).toFixed(1)}</div>
+                                 </div>
+                                 <span className="text-xs sm:text-sm font-bold opacity-15 text-green-600 font-mono">SUCCESS</span>
+                               </div>
+                               <div className="p-3 sm:p-5 border border-primary/5 bg-card/40 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                 <div className="space-y-1">
+                                   <span className="text-[8px] font-black uppercase tracking-widest opacity-35">Beta prior (β)</span>
+                                   <div className="text-xl sm:text-2xl font-black italic text-primary">{(activeToolModal.beta || 2.0).toFixed(1)}</div>
+                                 </div>
+                                 <span className="text-xs sm:text-sm font-bold opacity-15 text-red-600 font-mono">FAILURE</span>
+                               </div>
+                             </div>
                           </div>
-
+ 
                           <div className="space-y-3">
-                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Temporal Delta Shifts</span>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="p-5 border border-primary/5 bg-card/40 rounded-sm flex items-center justify-between">
-                                <span className="text-[8px] font-black uppercase tracking-widest opacity-35">24H Performance Shift</span>
-                                <div className={`text-xl font-black italic ${parseFloat(activeToolModal.delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {parseFloat(activeToolModal.delta || "0") >= 0 ? '+' : ''}{activeToolModal.delta || "0.0"}%
-                                </div>
-                              </div>
-                              <div className="p-5 border border-primary/5 bg-card/40 rounded-sm flex items-center justify-between">
-                                <span className="text-[8px] font-black uppercase tracking-widest opacity-35">30D Performance Shift</span>
-                                <div className={`text-xl font-black italic ${parseFloat(activeToolModal.mom_delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                  {parseFloat(activeToolModal.mom_delta || "0") >= 0 ? '+' : ''}{activeToolModal.mom_delta || "0.0"}%
-                                </div>
-                              </div>
-                            </div>
+                             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40 italic">Temporal Delta Shifts</span>
+                             <p className="text-[8.5px] text-secondary opacity-65 font-mono">Performance rate percentage changes relative to historical baselines.</p>
+                             <div className="grid grid-cols-2 gap-2 sm:gap-4">
+                               <div className="p-3 sm:p-5 border border-primary/5 bg-card/40 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                 <span className="text-[8px] font-black uppercase tracking-widest opacity-35">24H Performance Shift</span>
+                                 <div className={`text-lg sm:text-xl font-black italic ${parseFloat(activeToolModal.delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                   {parseFloat(activeToolModal.delta || "0") >= 0 ? '+' : ''}{activeToolModal.delta || "0.0"}%
+                                 </div>
+                               </div>
+                               <div className="p-3 sm:p-5 border border-primary/5 bg-card/40 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                                 <span className="text-[8px] font-black uppercase tracking-widest opacity-35">30D Performance Shift</span>
+                                 <div className={`text-lg sm:text-xl font-black italic ${parseFloat(activeToolModal.mom_delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                   {parseFloat(activeToolModal.mom_delta || "0") >= 0 ? '+' : ''}{activeToolModal.mom_delta || "0.0"}%
+                                 </div>
+                               </div>
+                             </div>
                           </div>
 
                           {TOOL_EQUATIONS[activeToolModal.tool_id] && (
@@ -1494,58 +1583,102 @@ export default function HeritageObservatory() {
             </div>
           )}
 
-          {activeTab === "memory" && (
-            <div className="space-y-12">
-              <div className="flex items-center justify-between border-b border-primary/5 pb-6">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Memory</span>
-                  <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">System 3 Signal Propagation // Recent Captures</p>
-                </div>
-                <div className="flex items-center gap-4">
-                   <div className="text-[10px] font-black opacity-30 uppercase tracking-widest">{memorySignals.length} Active Logic Pulses</div>
-                   <Database className="w-5 h-5 text-tertiary" />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {memorySignals.length > 0 ? memorySignals.map((signal: MemorySignal, idx: number) => (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    key={idx} 
-                    className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-6 hover:border-tertiary/30 transition-all group cursor-pointer rounded-sm"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">Signal Node</span>
-                      <span className="text-[9px] font-bold opacity-20">POS_L{signal.line}</span>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{signal.file.split(':').pop()?.split('/').pop()}</div>
-                      <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file}</div>
-                    </div>
+          {activeTab === "memory" && (() => {
+            const hasRealSignals = memorySignals.length > 0;
+            const displaySignals = hasRealSignals ? memorySignals : [
+              {
+                id: "sig_e8a719",
+                file: "core/tools/infrastructure/routers/intelligence.py",
+                line: "194",
+                content: "@router.get(\"/api/v1/memory/signals\")\nasync def get_memory_signals():\n    \"\"\"Retrieves the latest 20 neural signals from ChromaDB.\"\"\"\n    # System 3 Memory router fetching vectors"
+              },
+              {
+                id: "sig_f839c0",
+                file: "dashboard/src/app/observatory/page.tsx",
+                line: "542",
+                content: "fetch(`${API_BASE}/api/v1/memory/signals`, requestOptions)\n  .then(res => res.json())\n  .then(memoryData => setMemorySignals(memoryData.signals || []))\n  # Frontend Observatory view subscribing to memory updates"
+              },
+              {
+                id: "sig_a39b28",
+                file: "core/tools/memory/honcho_connect.py",
+                line: "117",
+                content: "def query_embeddings(query_text: str, n_results: int = 5):\n    # Adapter to query local ChromaDB or Honcho vector store\n    # Vector searches find code snippets relevant to active agent tasks"
+              }
+            ];
 
-                    <div className="text-xs font-bold text-primary/80 bg-primary/[0.02] p-5 leading-relaxed border border-primary/5 rounded-sm overflow-hidden whitespace-pre-wrap min-h-[140px] max-h-[200px] overflow-y-auto custom-scrollbar font-mono">
-                      {signal.content}
-                    </div>
-                    
-                    <div className="pt-4 border-t border-primary/5 flex items-center justify-between">
-                      <span className="text-[10px] font-black opacity-30 uppercase tracking-widest">Type: Child_Logic</span>
-                      <div className="h-2 w-2 rounded-full bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                  </motion.div>
-                )) : (
-                  <div className="col-span-full py-32 text-center border border-dashed border-primary/10 opacity-20 italic text-xs font-bold uppercase tracking-widest">
-                    Awaiting memory crystallization...
+            return (
+              <div className="space-y-10 animate-fade-in">
+                {/* Neural Memory Guide Banner */}
+                <div className="p-6 border border-primary/5 bg-primary/[0.01] rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 text-left">
+                  <div className="space-y-2 max-w-2xl">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-tertiary">System 3 Memory Guide</span>
+                    <p className="text-[11px] leading-relaxed text-secondary opacity-80">
+                      <strong>Neural Memory Capture Nodes</strong> represent code chunks, system configurations, and past bug fixes stored as mathematical vector embeddings in ChromaDB. As you run agent workflows, Kenbun dynamically indexes new snippets and queries these vectors to retrieve architectural context and auto-repair problems.
+                    </p>
                   </div>
-                )}
+                  {!hasRealSignals && (
+                    <div className="shrink-0 flex items-center gap-2.5 px-4 py-2 bg-[var(--gold)]/10 border border-[var(--gold)]/20 text-[9px] font-black uppercase tracking-widest text-[var(--gold)] rounded-full animate-pulse">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[var(--gold)]" />
+                      <span>Demo Mode Active</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between border-b border-primary/5 pb-6">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Memory</span>
+                    <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">System 3 Signal Propagation // Recent Captures</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                     <div className="text-[10px] font-black opacity-30 uppercase tracking-widest">
+                       {hasRealSignals ? `${memorySignals.length} Active` : "Demo Mode"} Logic Pulses
+                     </div>
+                     <Database className="w-5 h-5 text-tertiary" />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {displaySignals.map((signal: any, idx: number) => (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      key={idx} 
+                      className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-6 hover:border-tertiary/30 transition-all group cursor-pointer rounded-2xl relative text-left"
+                    >
+                      {!hasRealSignals && (
+                        <div className="absolute top-2 right-4 text-[7px] font-black uppercase tracking-widest text-[var(--gold)] opacity-40">
+                          Demo Node
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">Signal Node</span>
+                        <span className="text-[9px] font-bold opacity-20">POS_L{signal.line}</span>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{signal.file.split(':').pop()?.split('/').pop()}</div>
+                        <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file}</div>
+                      </div>
+
+                      <div className="text-xs font-bold text-primary/80 bg-primary/[0.02] p-5 leading-relaxed border border-primary/5 rounded-xl overflow-hidden whitespace-pre-wrap min-h-[140px] max-h-[200px] overflow-y-auto custom-scrollbar font-mono">
+                        {signal.content}
+                      </div>
+                      
+                      <div className="pt-4 border-t border-primary/5 flex items-center justify-between">
+                        <span className="text-[10px] font-black opacity-30 uppercase tracking-widest">Type: Vector_Embedding</span>
+                        <div className="h-2 w-2 rounded-full bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {activeTab === "feed" && (
             <div className="space-y-8">
-              <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow space-y-8 h-[800px] flex flex-col rounded-sm">
+              <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow space-y-8 h-[800px] flex flex-col rounded-2xl">
                 <div className="flex items-center justify-between border-b border-primary/5 pb-6">
                   <div className="flex items-center gap-4">
                     <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Signal Archive</span>

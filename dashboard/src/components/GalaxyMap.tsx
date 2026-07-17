@@ -1165,7 +1165,7 @@ export default function GalaxyMap() {
   const MapInner = (
     <div 
       ref={containerRef}
-      className={`relative border border-[var(--border)] bg-[var(--background)] overflow-hidden group transition-[shadow,background-color,border-color] duration-300 artisan-shadow rounded-sm ${
+      className={`relative border border-[var(--border)] bg-[var(--background)] overflow-hidden group transition-[shadow,background-color,border-color] duration-300 artisan-shadow rounded-xl ${
         isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen md:p-6 p-4 bg-[var(--background)]' : 'w-full h-[650px]'
       }`}
       onMouseDown={handleMouseDown}
@@ -1174,13 +1174,13 @@ export default function GalaxyMap() {
       onMouseMove={handleMouseMove}
       onDoubleClick={handleDoubleClick}
     >
-      {/* Topology Header */}
-      <div className="absolute top-8 left-10 z-[100] space-y-2 pointer-events-none select-none">
+      {/* Topology Header (Glassmorphic Badge) */}
+      <div className="absolute top-8 left-10 z-[100] space-y-1 pointer-events-none select-none p-3.5 bg-[var(--background)]/60 border border-[var(--border)]/45 backdrop-blur-xl rounded-xl shadow-xl">
         <div className="flex items-center gap-3">
           <Compass className="w-4 h-4 text-[var(--accent)] animate-spin-slow" />
           <span className="font-heading text-[var(--foreground)] font-bold uppercase tracking-[0.3em] text-xs">Neural Network Topology</span>
         </div>
-        <div className="text-[9px] font-mono opacity-40 uppercase tracking-widest">
+        <div className="text-[9px] font-mono opacity-40 uppercase tracking-widest pl-7">
           {isFullscreen ? "Full Spectrum Focus" : "Swarm Node Cluster View"} • {data.length} Signals
         </div>
       </div>
@@ -1231,8 +1231,8 @@ export default function GalaxyMap() {
         )}
       </AnimatePresence>
 
-      {/* Coordinate Telemetry Indicator */}
-      <div className="absolute bottom-8 left-10 z-[100] flex flex-col gap-1 pointer-events-none select-none">
+      {/* Coordinate Telemetry Indicator (Glassmorphic Badge) */}
+      <div className="absolute bottom-8 left-10 z-[100] flex flex-col gap-1 pointer-events-none select-none p-3.5 bg-[var(--background)]/60 border border-[var(--border)]/45 backdrop-blur-xl rounded-xl shadow-xl">
         <div className="text-[7px] font-mono text-[var(--accent)] opacity-100 uppercase tracking-[0.2em] font-bold">Observer Telemetry</div>
         <div className="text-[9px] font-mono text-[var(--foreground)] opacity-40 italic">
           POS_X: {transform.x.toFixed(0)} • POS_Y: {transform.y.toFixed(0)} • ZOOM: {transform.scale.toFixed(2)}x
@@ -1244,7 +1244,7 @@ export default function GalaxyMap() {
     </div>
   );
 
-  if (!mounted) return <div className="w-full h-[650px] bg-black/5 border border-[var(--border)] rounded-sm" />;
+  if (!mounted) return <div className="w-full h-[650px] bg-black/5 border border-[var(--border)] rounded-xl" />;
 
   return MapInner;
 }

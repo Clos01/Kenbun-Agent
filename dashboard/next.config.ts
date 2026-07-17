@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
     "100.92.127.1",
     "100.100.199.127"
   ],
+  devIndicators: {
+    appIsrStatus: false,
+    buildActivity: false,
+  },
 };
 
 export default nextConfig;
