@@ -68,7 +68,7 @@ const getToolDescription = (toolId: string): string => {
   return dict[toolId] || "Performs autonomous back-office pipelines and agentic actions.";
 };
 
-type TabId = "overview" | "intelligence" | "memory" | "feed";
+type TabId = "overview" | "intelligence" | "memory" | "feed" | "workspace";
 
 interface TelemetryTrendPoint {
   accuracy: number;
@@ -141,6 +141,15 @@ interface SystemLog {
   content?: string;
   message?: string;
   [key: string]: unknown;
+}
+
+interface WorkspaceSlot {
+  concept: string;
+  salience: number;
+  agent_id: string;
+  flagged: boolean;
+  age_min: number;
+  meta: any;
 }
 
 const CHART_SVG_HEIGHT = 240;
@@ -366,6 +375,8 @@ export default function HeritageObservatory() {
   const [intelligenceHistory, setIntelligenceHistory] = useState<IntelligencePulse[]>([]);
   const [selectedDecision, setSelectedDecision] = useState<IntelligencePulse | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [workspaceSlots, setWorkspaceSlots] = useState<WorkspaceSlot[]>([]);
+  const [workspaceAlerts, setWorkspaceAlerts] = useState<WorkspaceSlot[]>([]);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [showFidelity, setShowFidelity] = useState(true);
   const [showLoad, setShowLoad] = useState(true);
@@ -556,6 +567,20 @@ export default function HeritageObservatory() {
       .then(historyData => setIntelligenceHistory(historyData.history || []))
       .catch(err => console.warn("BRIDGE_HISTORY_FETCH_ERROR:", err));
 
+    // 7. Fetch Workspace Slots
+    fetch(`${API_BASE}/api/v1/workspace`, requestOptions)
+      .then(res => {
+        if (!res.ok) throw new Error("Workspace fetch failed");
+        return res.json();
+      })
+      .then(wsData => {
+        if (wsData.status === "success" && wsData.workspace) {
+          setWorkspaceSlots(wsData.workspace.slots || []);
+          setWorkspaceAlerts(wsData.workspace.alerts || []);
+        }
+      })
+      .catch(err => console.warn("BRIDGE_WORKSPACE_FETCH_ERROR:", err));
+
   }, [API_BASE, tenantId]);
 
   const handleReconnect = useCallback(() => {
@@ -571,6 +596,44 @@ export default function HeritageObservatory() {
   const handleDeclareIntentionalOffline = useCallback(() => {
     setIsIntentionalOffline(true);
   }, []);
+
+  const handleResolveAlert = useCallback((concept: string) => {
+    const requestOptions = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tenant-id": tenantId || "00000000-0000-0000-0000-000000000000"
+      },
+      body: JSON.stringify({ concept })
+    };
+    fetch(`${API_BASE}/api/v1/workspace/resolve`, requestOptions)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") {
+          fetchData();
+        }
+      })
+      .catch(err => console.warn("RESOLVE_ALERT_ERROR:", err));
+  }, [API_BASE, tenantId, fetchData]);
+
+  const handleInjectConcept = useCallback((concept: string) => {
+    const requestOptions = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-tenant-id": tenantId || "00000000-0000-0000-0000-000000000000"
+      },
+      body: JSON.stringify({ concept, salience: 0.9, agent_id: "operator" })
+    };
+    fetch(`${API_BASE}/api/v1/workspace`, requestOptions)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "success") {
+          fetchData();
+        }
+      })
+      .catch(err => console.warn("INJECT_CONCEPT_ERROR:", err));
+  }, [API_BASE, tenantId, fetchData]);
 
   useEffect(() => {
     if (isPaused) return;
@@ -622,6 +685,7 @@ export default function HeritageObservatory() {
     { id: "overview", label: "Overview", icon: ShieldCheck },
     { id: "intelligence", label: "Intelligence", icon: BrainCircuit },
     { id: "memory", label: "Memory", icon: Database },
+    { id: "workspace", label: "Workspace", icon: Target },
     { id: "feed", label: "Deep Feed", icon: Activity },
   ] as const;
 
@@ -1668,6 +1732,144 @@ export default function HeritageObservatory() {
                       <div className="pt-4 border-t border-primary/5 flex items-center justify-between">
                         <span className="text-[10px] font-black opacity-30 uppercase tracking-widest">Type: Vector_Embedding</span>
                         <div className="h-2 w-2 rounded-full bg-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {activeTab === "workspace" && (() => {
+            const hasRealSlots = workspaceSlots.length > 0 || workspaceAlerts.length > 0;
+            const displaySlots = hasRealSlots ? [...workspaceAlerts, ...workspaceSlots] : [
+              {
+                concept: "Orchestrator (bug_fix) running step: 🔬 Generating implementation candidate (tool: analyze_bug)",
+                salience: 0.600,
+                agent_id: "orch_bug_fix",
+                flagged: false,
+                age_min: 0.5,
+                meta: null
+              },
+              {
+                concept: "Watchlist breach detected: user requested file deletion using rm -rf",
+                salience: 0.950,
+                agent_id: "guardrail_agent",
+                flagged: true,
+                age_min: 1.2,
+                meta: null
+              },
+              {
+                concept: "Decoupled Data Hydration Pattern loaded from Honcho memory cache",
+                salience: 0.450,
+                agent_id: "code_indexer",
+                flagged: false,
+                age_min: 5.4,
+                meta: null
+              }
+            ];
+
+            return (
+              <div className="space-y-10 animate-fade-in text-left">
+                {/* Workspace Steering input bar */}
+                <div className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl space-y-4">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.3em] text-tertiary">Operator Steering (System 4)</span>
+                    <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Inject concepts directly into swarm working memory</p>
+                  </div>
+                  <div className="flex gap-4">
+                    <input 
+                      id="workspace-inject-input"
+                      type="text" 
+                      placeholder="Inject or boost a concept in working memory (e.g. 'prioritize mobile compatibility checks')..."
+                      className="flex-grow px-4 py-3 border border-primary/5 rounded-xl bg-card/40 font-sans text-sm focus:outline-none focus:border-tertiary text-primary placeholder-primary/25"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const input = e.currentTarget;
+                          if (input && input.value.trim()) {
+                            handleInjectConcept(input.value.trim());
+                            input.value = "";
+                          }
+                        }
+                      }}
+                    />
+                    <button 
+                      onClick={() => {
+                        const input = document.getElementById("workspace-inject-input") as HTMLInputElement;
+                        if (input && input.value.trim()) {
+                          handleInjectConcept(input.value.trim());
+                          input.value = "";
+                        }
+                      }}
+                      className="px-6 py-3 bg-tertiary hover:bg-tertiary/85 text-primary text-xs font-black uppercase tracking-widest rounded-xl transition-all duration-300 shadow-md shadow-tertiary/10"
+                    >
+                      Inject
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between border-b border-primary/5 pb-6">
+                  <div className="space-y-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Global Workspace Slots</span>
+                    <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Swarm Blackboard // Salience-Decaying Slots (Flagged Alerts remain until resolved)</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-[10px] font-black opacity-30 uppercase tracking-widest">
+                      {workspaceAlerts.length} Alerts // {workspaceSlots.length} Active Slots
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  {displaySlots.map((slot: any, idx: number) => (
+                    <motion.div
+                      initial={{ opacity: 0, y: 15 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      key={idx}
+                      className={`p-6 border rounded-2xl relative transition-all duration-300 ${
+                        slot.flagged
+                          ? "border-red-500/20 bg-red-950/5 shadow-md shadow-red-950/5"
+                          : "border-primary/5 bg-card/60 backdrop-blur-xl hover:border-tertiary/30"
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="space-y-2 flex-grow">
+                          <div className="flex items-center gap-3">
+                            <span className={`text-[9px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-full ${
+                              slot.flagged
+                                ? "bg-red-500/10 text-red-500 border border-red-500/20 animate-pulse"
+                                : "bg-primary/5 text-secondary"
+                            }`}>
+                              {slot.flagged ? "Flagged Alert" : "Concept Slot"}
+                            </span>
+                            <span className="text-[10px] font-mono opacity-30 uppercase">Agent: {slot.agent_id}</span>
+                            <span className="text-[10px] font-mono opacity-30">• {slot.age_min}m ago</span>
+                          </div>
+                          <p className={`text-sm font-bold leading-relaxed ${slot.flagged ? "text-red-200" : "text-primary"}`}>
+                            {slot.concept}
+                          </p>
+                        </div>
+                        
+                        <div className="flex items-center gap-4 shrink-0 justify-between sm:justify-end">
+                          <div className="text-right">
+                            <span className="text-[8px] font-mono opacity-30 uppercase block">Salience</span>
+                            <span className={`text-base font-black italic tracking-tighter ${
+                              slot.flagged ? "text-red-400" : "text-tertiary"
+                            }`}>
+                              {slot.salience.toFixed(3)}
+                            </span>
+                          </div>
+
+                          {slot.flagged && (
+                            <button
+                              onClick={() => handleResolveAlert(slot.concept)}
+                              className="px-4 py-2 border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all duration-200"
+                            >
+                              Resolve
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </motion.div>
                   ))}
