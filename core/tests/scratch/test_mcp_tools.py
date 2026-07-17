@@ -3,10 +3,10 @@ import json
 import os
 
 env = os.environ.copy()
-env['PYTHONPATH'] = "/Users/carlosrivas/Dev/Kenbun/core:/Users/carlosrivas/Dev/Kenbun/core/tools:/Users/carlosrivas/Dev/Kenbun"
+env['PYTHONPATH'] = "~/Dev/Kenbun/core:~/Dev/Kenbun/core/tools:~/Dev/Kenbun"
 
 p = subprocess.Popen(
-    ["/Users/carlosrivas/Dev/Kenbun/core/.venv/bin/python3", "-u", "/Users/carlosrivas/Dev/Kenbun/core/tools/infrastructure/server.py"],
+    ["~/Dev/Kenbun/core/.venv/bin/python3", "-u", "~/Dev/Kenbun/core/tools/infrastructure/server.py"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE,

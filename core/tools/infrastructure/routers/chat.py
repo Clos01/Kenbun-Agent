@@ -268,3 +268,20 @@ async def search_chat_sessions(q: str):
     """
     from tools.utils.chat_history_manager import search_sessions
     return search_sessions(q)
+
+
+class UpdateSessionRequest(BaseModel):
+    title: str
+
+
+@router.put("/api/v1/chat/sessions/{session_id}", dependencies=[Depends(verify_authorization)])
+async def update_chat_session(session_id: str, req: UpdateSessionRequest):
+    """
+    Updates the title of a specific chat session.
+    """
+    from tools.utils import chat_history_manager
+    success = chat_history_manager.update_session_title(session_id, req.title)
+    if not success:
+        return JSONResponse(status_code=404, content={"error": f"Session {session_id} not found"})
+    return {"status": "success", "message": f"Session {session_id} updated"}
+

@@ -16,7 +16,7 @@ def get_skills_search_paths():
     # 2. Workspace customizations root
     paths.append(Path(settings.PROJECT_ROOT) / ".agents" / "skills")
     # 3. Global customizations root
-    paths.append(Path("/Users/carlosrivas/.gemini/config/skills"))
+    paths.append(Path("~/.gemini/config/skills"))
     return [p for p in paths if p.exists()]
 
 def find_blueprints():

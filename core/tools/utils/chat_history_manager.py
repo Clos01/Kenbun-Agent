@@ -264,3 +264,22 @@ def search_sessions(query: str) -> List[Dict]:
                 "matches": matching_messages
             })
     return results
+
+
+def update_session_title(session_id: str, new_title: str) -> bool:
+    """Updates the title of a specific session thread-safely."""
+    success = False
+
+    def transform(sessions):
+        nonlocal success
+        for s in sessions:
+            if s["id"] == session_id:
+                s["title"] = new_title
+                s["timestamp"] = datetime.now().isoformat()
+                success = True
+                break
+        return sessions
+
+    _modify_sessions(transform)
+    return success
+

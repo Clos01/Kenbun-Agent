@@ -73,7 +73,7 @@ ALLOWED_BINARIES: frozenset[str] = frozenset({
     # Container tooling (read-only operations only — see DENIED_SUBCOMMANDS)
     "docker", "docker-compose",
     # Misc safe utilities
-    "env", "hostname", "whoami", "date", "uptime", "uname",
+    "env", "hostname", "whoami", "date", "uptime", "uname", "kenbun",
 })
 
 # --------------------------------------------------------------------------- #
@@ -184,14 +184,23 @@ def safe_run(
     subprocess.TimeoutExpired
         Propagated from ``subprocess.run`` on timeout.
     """
+    import os
     argv = _validate(command)
+    
+    # Scrub parent process secrets
+    child_env = os.environ.copy() if env is None else env.copy()
+    child_env = {
+        k: v for k, v in child_env.items()
+        if not any(sec in k.upper() for sec in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "PASSWD", "AUTH"))
+    }
+    
     logger.info("safe_run dispatching argv=%r cwd=%s timeout=%s", argv, cwd, timeout)
     return subprocess.run(
         argv,
         shell=False,
         cwd=cwd,
         timeout=timeout,
-        env=env,
+        env=child_env,
         capture_output=capture_output,
         text=text,
         check=check,
@@ -212,6 +221,7 @@ def safe_run_argv(
     Variant for callers that already have an argv list (skip ``shlex.split``).
     Still runs the allowlist + subcommand-denylist gates.
     """
+    import os
     if not argv:
         raise UnsafeCommandError("empty argv")
     binary = Path(argv[0]).name
@@ -219,13 +229,21 @@ def safe_run_argv(
         raise UnsafeCommandError(f"binary {binary!r} is not in the allowlist")
     if binary in DENIED_SUBCOMMANDS and len(argv) > 1 and argv[1] in DENIED_SUBCOMMANDS[binary]:
         raise UnsafeCommandError(f"{binary} {argv[1]!r} is denied by policy")
+        
+    # Scrub parent process secrets
+    child_env = os.environ.copy() if env is None else env.copy()
+    child_env = {
+        k: v for k, v in child_env.items()
+        if not any(sec in k.upper() for sec in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "PASSWD", "AUTH"))
+    }
+    
     logger.info("safe_run_argv dispatching argv=%r cwd=%s timeout=%s", list(argv), cwd, timeout)
     return subprocess.run(
         list(argv),
         shell=False,
         cwd=cwd,
         timeout=timeout,
-        env=env,
+        env=child_env,
         capture_output=capture_output,
         text=text,
         check=check,

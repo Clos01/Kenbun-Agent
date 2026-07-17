@@ -40,7 +40,10 @@ def get_checkpoints():
 def create_checkpoint(req: CheckpointRequest):
     """Create a new manual checkpoint."""
     try:
-        res = server_tools.save_checkpoint(file_path="", label=req.name)
+        # Default to STRUCTURE.md at project root as the baseline workspace snapshot target
+        from tools.infrastructure.config import settings
+        file_path = str((Path(settings.PROJECT_ROOT) / "STRUCTURE.md").resolve())
+        res = server_tools.save_checkpoint(file_path=file_path, label=req.name)
         return {"status": "success", "result": res}
     except Exception as e:
         logger.error(f"Failed to create checkpoint: {e}")
@@ -50,7 +53,19 @@ def create_checkpoint(req: CheckpointRequest):
 def restore_checkpoint(checkpoint_hash: str):
     """Restore the workspace to a specific checkpoint hash."""
     try:
-        res = server_tools.restore_checkpoint(file_path="", label=checkpoint_hash)
+        # Resolve original path from index database metadata, default to STRUCTURE.md
+        from tools.infrastructure.config import settings
+        file_path = str((Path(settings.PROJECT_ROOT) / "STRUCTURE.md").resolve())
+        try:
+            index = _load_index()
+            for cp in index.get("checkpoints", []):
+                if cp.get("label") == checkpoint_hash or checkpoint_hash in cp.get("id", ""):
+                    file_path = cp.get("original_path", file_path)
+                    break
+        except Exception as idx_err:
+            logger.warn(f"Failed to lookup checkpoint path in index: {idx_err}")
+            
+        res = server_tools.restore_checkpoint(file_path=file_path, label=checkpoint_hash)
         return {"status": "success", "result": res}
     except Exception as e:
         logger.error(f"Failed to restore checkpoint: {e}")
@@ -79,12 +94,13 @@ def execute_audit(req: AuditRequest):
             violations = []
             
             if "status" in parsed:
+                status_val = str(parsed["status"]).lower()
                 # consult_supervisor usually returns status, critique, fixed_code
-                if parsed["status"] == "rejected" or parsed["status"] == "error":
+                if status_val in ["rejected", "error"]:
                     status = "REJECTED"
                     score = 20
                     violations.append(parsed.get("critique", "Unknown violation"))
-                elif parsed["status"] == "warning":
+                elif status_val == "warning":
                     status = "WARNING"
                     score = 75
                     violations.append(parsed.get("critique", "Warning raised"))

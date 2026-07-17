@@ -174,6 +174,11 @@ def execute_cli_command(command: str) -> str:
     output = res.stdout or ""
     if res.stderr:
         output += f"\n{res.stderr}"
+        
+    # Scrub secrets defensively before returning command output to client
+    from scripts.terminal_chat import scrub_secrets
+    output = scrub_secrets(output)
+    
     if not output.strip():
         output = f"Command completed with exit code {res.returncode}."
     return f"```\n{output}\n```"

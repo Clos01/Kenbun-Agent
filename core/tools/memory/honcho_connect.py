@@ -121,11 +121,13 @@ def query_embeddings(query_text: str, n_results: int = 5, category: str = "conce
         try:
             collection = chroma.get_or_create_collection(category)
             res = collection.query(query_texts=[query_text], n_results=n_results)
-            return {
-                "ids": res.get("ids", [[]]),
-                "documents": res.get("documents", [[]]),
-                "metadatas": res.get("metadatas", [[]])
-            }
+            # Fall back to Honcho if Chroma has no matching documents for this query
+            if res.get("documents") and res["documents"][0]:
+                return {
+                    "ids": res.get("ids", [[]]),
+                    "documents": res.get("documents", [[]]),
+                    "metadatas": res.get("metadatas", [[]])
+                }
         except Exception as e:
             logger.warning(f"⚠️ [CHROMA] Query failed: {e}. Falling back to Honcho.")
 

@@ -81,6 +81,10 @@ def scrub_secrets(text: str) -> str:
     text = re.sub(r'\bxox[baprs]-[a-zA-Z0-9\-]{10,100}\b', '******** [REDACTED]', text)
     # AWS Access Key IDs
     text = re.sub(r'\bAKIA[A-Z0-9]{16}\b', '******** [REDACTED]', text)
+    # Anthropic keys (sk-ant-...)
+    text = re.sub(r'\bsk-ant-[a-zA-Z0-9\-_]{40,120}\b', '******** [REDACTED]', text)
+    # Tailscale auth keys (tskey-...)
+    text = re.sub(r'\btskey-[a-zA-Z0-9\-_]{10,100}\b', '******** [REDACTED]', text)
 
     # 4. Redact Passwords in Database Connection Strings / URIs
     # E.g., postgresql://user:password@host:port/db
@@ -127,11 +131,11 @@ def scrub_secrets(text: str) -> str:
         return f"{prefix_part}{sep}{quote}******** [REDACTED]{quote}"
 
     # Quoted heuristic values: key = "value"
-    quoted_pattern = r'(?i)\b(key|secret|token|password|pass|pwd|auth_key|private_key|api_key|client_secret)\s*[:=]\s*(["\'])(.*?)\2'
+    quoted_pattern = r'(?i)\b[a-zA-Z0-9_\-]*(key|secret|token|password|pass|pwd|auth_key|private_key|api_key|client_secret)\s*[:=]\s*(["\'])(.*?)\2'
     text = re.sub(quoted_pattern, replace_heuristic, text)
 
     # Unquoted heuristic values: key=value
-    unquoted_pattern = r'(?i)\b(key|secret|token|password|pass|pwd|auth_key|private_key|api_key|client_secret)\s*[:=]\s*()([^\s"\',;]+)'
+    unquoted_pattern = r'(?i)\b[a-zA-Z0-9_\-]*(key|secret|token|password|pass|pwd|auth_key|private_key|api_key|client_secret)\s*[:=]\s*()([^\s"\',;]+)'
     text = re.sub(unquoted_pattern, replace_heuristic, text)
 
     return text

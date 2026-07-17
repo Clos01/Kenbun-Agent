@@ -4,7 +4,7 @@ import os
 import signal
 
 p = subprocess.Popen(
-    ["/Users/carlosrivas/Dev/Kenbun/core/.venv/bin/python3", "-u", "/Users/carlosrivas/Dev/Kenbun/core/tools/infrastructure/server.py"],
+    ["~/Dev/Kenbun/core/.venv/bin/python3", "-u", "~/Dev/Kenbun/core/tools/infrastructure/server.py"],
     stdin=subprocess.PIPE,
     stdout=subprocess.PIPE,
     stderr=subprocess.PIPE
