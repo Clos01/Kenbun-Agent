@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import Sidebar from "@/components/Sidebar";
-import { 
+import {
   ShieldCheck,
   Activity,
   BrainCircuit,
@@ -11,7 +11,11 @@ import {
   TrendingUp,
   Target,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Terminal,
+  Rocket,
+  Loader2,
+  X
 } from "lucide-react";
 import { SharpAreaChart, SquareDonut, AccuracyGauge, ContextWindowBar } from "@/components/Visuals";
 import GalaxyMap from "@/components/GalaxyMap";
@@ -358,6 +362,25 @@ export function serializeSvgPaths(
   return { lineD, areaD };
 }
 
+interface MissionJob {
+  job_id: string;
+  status: "running" | "completed" | "failed" | string;
+  workflow: string;
+  task: string;
+  result?: string | null;
+  error?: string | null;
+}
+
+// Workflows the backend /orchestrate endpoint accepts (see ORCHESTRATE_WORKFLOWS
+// in routers/swarm.py). Labels are the operator-facing names.
+const MISSION_WORKFLOWS: { id: string; label: string; blurb: string }[] = [
+  { id: "research_implement", label: "Research + Implement", blurb: "Investigate, then build" },
+  { id: "code_review", label: "Code Review", blurb: "Audit changes for defects" },
+  { id: "bug_fix", label: "Bug Fix", blurb: "Diagnose and patch" },
+  { id: "shadow_test", label: "Shadow Test", blurb: "Exercise without side effects" },
+  { id: "design_ui", label: "Design UI", blurb: "Draft an interface" },
+];
+
 export default function HeritageObservatory() {
   const { tenantId } = useTenant();
   const API_BASE = CONFIG.API_BASE;
@@ -385,6 +408,13 @@ export default function HeritageObservatory() {
   const [consecutiveFailures, setConsecutiveFailures] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isIntentionalOffline, setIsIntentionalOffline] = useState<boolean>(false);
+
+  // --- Mission Console (orchestrate dispatch) ---
+  const [missionTask, setMissionTask] = useState<string>("");
+  const [missionWorkflow, setMissionWorkflow] = useState<string>("research_implement");
+  const [missionJob, setMissionJob] = useState<MissionJob | null>(null);
+  const [missionLaunching, setMissionLaunching] = useState<boolean>(false);
+  const [missionErr, setMissionErr] = useState<string | null>(null);
 
   // Use refs to stabilize the callback function reference and prevent interval thrashing
   const selectedToolRef = useRef<IntelligenceTool | null>(null);
@@ -656,6 +686,57 @@ export default function HeritageObservatory() {
   const activeTask = kanban.find(t => t.status === "doing") || kanban[0];
   const usageHistory = [2, 5, 8, 4, 12, 7, 15, 10, 20, 14, 25, 18, 30, 22, 10, 5, 12, 18, 22, 15, 20];
 
+  // Launch an orchestrate workflow via the backend (proxy injects the Bearer
+  // config token; the endpoint runs an injection guardrail on the task).
+  const launchMission = useCallback(async () => {
+    const task = missionTask.trim();
+    if (!task || missionLaunching) return;
+    setMissionLaunching(true);
+    setMissionErr(null);
+    try {
+      const res = await fetch(`${API_BASE}/orchestrate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-tenant-id": tenantId },
+        body: JSON.stringify({ workflow: missionWorkflow, task, project_path: "." }),
+      });
+      const data = await res.json();
+      if (data.status === "initiated" && data.job_id) {
+        setMissionJob({ job_id: data.job_id, status: "running", workflow: data.workflow, task: data.task, result: null, error: null });
+        setMissionTask("");
+      } else if (data.status === "blocked") {
+        setMissionErr(`Blocked by guardrail: ${data.details || data.message || "potential injection"}`);
+      } else {
+        setMissionErr(data.message || "Failed to launch mission.");
+      }
+    } catch {
+      setMissionErr("Network error dispatching mission.");
+    } finally {
+      setMissionLaunching(false);
+    }
+  }, [API_BASE, tenantId, missionTask, missionWorkflow, missionLaunching]);
+
+  // Poll a running mission until it completes/fails.
+  useEffect(() => {
+    if (!missionJob || missionJob.status !== "running") return;
+    const jobId = missionJob.job_id;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/orchestrate/status/${jobId}`, {
+          cache: "no-store",
+          headers: { "x-tenant-id": tenantId },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setMissionJob(prev => (prev && prev.job_id === jobId)
+          ? { ...prev, status: data.status, result: data.result, error: data.error }
+          : prev);
+      } catch {
+        /* transient poll failure — keep trying */
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [API_BASE, tenantId, missionJob]);
+
   const handleInteraction = (clientX: number, currentTarget: HTMLDivElement) => {
     if (activeTrend.length === 0) return;
     const rect = currentTarget.getBoundingClientRect();
@@ -845,14 +926,106 @@ export default function HeritageObservatory() {
           {activeTab === "overview" && (
             <div className="space-y-16">
               <section className="space-y-10">
-                <div className="space-y-4">
-                  <div className="flex items-center gap-4">
-                    <motion.span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Active Mission</motion.span>
-                    <div className="flex-1 h-[1px] bg-tertiary/20" />
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-4">
+                      <motion.span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Active Mission</motion.span>
+                      {missionJob && (
+                        <span className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                          missionJob.status === "completed" ? "text-emerald-500 border-emerald-500/30 bg-emerald-500/5"
+                          : missionJob.status === "failed" ? "text-red-500 border-red-500/30 bg-red-500/5"
+                          : "text-tertiary border-tertiary/30 bg-tertiary/5"
+                        }`}>
+                          {missionJob.status === "running" && <Loader2 className="w-2.5 h-2.5 animate-spin" />}
+                          {missionJob.status}
+                        </span>
+                      )}
+                      <div className="flex-1 h-[1px] bg-tertiary/20" />
+                    </div>
+                    <h1 className="text-[clamp(2rem,4vw,5rem)] font-black text-primary leading-[0.9] break-words italic tracking-tighter uppercase">
+                      {missionJob?.task || activeTask?.objective || "AWAITING_COMMAND"}
+                    </h1>
                   </div>
-                  <h1 className="text-[clamp(2rem,4vw,5rem)] font-black text-primary leading-[0.9] break-words italic tracking-tighter uppercase">
-                    {activeTask?.objective || "AWAITING_COMMAND"}
-                  </h1>
+
+                  {/* MISSION CONSOLE — dispatch orchestrate workflows to the swarm */}
+                  <div className="border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow rounded-2xl p-6 lg:p-7 space-y-5">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <Terminal className="w-4 h-4 text-tertiary" />
+                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Mission Console</span>
+                      <span className="text-[10px] font-bold opacity-25 italic">dispatch an orchestrated workflow to the swarm</span>
+                    </div>
+
+                    <div className="flex flex-col lg:flex-row gap-3">
+                      <textarea
+                        value={missionTask}
+                        onChange={(e) => setMissionTask(e.target.value)}
+                        onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") launchMission(); }}
+                        placeholder={"Describe the mission — e.g. “Review the fleet page for accessibility issues” or “Fix the token-count rounding bug”   (⌘/Ctrl+Enter to launch)"}
+                        rows={2}
+                        disabled={missionJob?.status === "running"}
+                        className="flex-1 resize-none bg-background/70 border border-primary/10 rounded-xl p-4 text-sm text-primary placeholder:text-primary/25 focus:outline-none focus:border-tertiary/50 focus:ring-1 focus:ring-tertiary/30 transition-all disabled:opacity-50 font-medium"
+                      />
+                      <div className="flex lg:flex-col gap-3 lg:w-60 shrink-0">
+                        <select
+                          value={missionWorkflow}
+                          onChange={(e) => setMissionWorkflow(e.target.value)}
+                          disabled={missionJob?.status === "running"}
+                          aria-label="Mission workflow"
+                          className="flex-1 lg:flex-none bg-background/70 border border-primary/10 rounded-xl px-3 py-3 text-xs font-bold text-primary focus:outline-none focus:border-tertiary/50 cursor-pointer disabled:opacity-50 uppercase tracking-wider"
+                        >
+                          {MISSION_WORKFLOWS.map((w) => <option key={w.id} value={w.id}>{w.label}</option>)}
+                        </select>
+                        <button
+                          onClick={launchMission}
+                          disabled={!missionTask.trim() || missionLaunching || missionJob?.status === "running"}
+                          className="flex-1 lg:flex-none flex items-center justify-center gap-2 bg-tertiary hover:bg-tertiary/90 text-white rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-tertiary/40"
+                        >
+                          {missionLaunching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                          {missionJob?.status === "running" ? "Running" : missionLaunching ? "Launching" : "Launch"}
+                        </button>
+                      </div>
+                    </div>
+
+                    {missionErr && (
+                      <div className="flex items-start gap-2.5 px-4 py-3 border border-red-500/20 bg-red-500/5 rounded-xl">
+                        <ShieldAlert className="w-4 h-4 text-red-500 shrink-0 mt-px" />
+                        <p className="text-[11px] font-bold text-red-500/80 leading-relaxed">{missionErr}</p>
+                      </div>
+                    )}
+
+                    {missionJob && (
+                      <div className="border-t border-primary/5 pt-4 space-y-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider opacity-50 min-w-0">
+                            <span className="truncate">Job {missionJob.job_id}</span>
+                            <span className="opacity-40">·</span>
+                            <span className="text-tertiary shrink-0">{missionJob.workflow}</span>
+                          </div>
+                          <button
+                            onClick={() => { setMissionJob(null); setMissionErr(null); }}
+                            className="flex items-center gap-1 text-[9px] font-black uppercase tracking-widest opacity-40 hover:opacity-100 hover:text-tertiary transition-all shrink-0"
+                          >
+                            <X className="w-3 h-3" /> Clear
+                          </button>
+                        </div>
+
+                        {missionJob.status === "running" && (
+                          <div className="flex items-center gap-2.5 px-4 py-3 bg-tertiary/5 border border-tertiary/10 rounded-xl">
+                            <Loader2 className="w-4 h-4 text-tertiary animate-spin shrink-0" />
+                            <span className="text-[11px] font-bold text-primary/60">Swarm executing pipeline… polling every 3s. This can take a minute or two.</span>
+                          </div>
+                        )}
+                        {missionJob.error && (
+                          <div className="px-4 py-3 border border-red-500/20 bg-red-500/5 rounded-xl text-[11px] font-mono text-red-500/80 whitespace-pre-wrap">{missionJob.error}</div>
+                        )}
+                        {missionJob.result && (
+                          <div className="max-h-[380px] overflow-y-auto custom-scrollbar bg-background/70 border border-primary/10 rounded-xl p-4 text-[11px] leading-relaxed text-primary/75 whitespace-pre-wrap font-mono select-text">
+                            {missionJob.result}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow divide-x divide-primary/5 rounded-xl">
