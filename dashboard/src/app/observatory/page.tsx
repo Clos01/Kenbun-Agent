@@ -22,6 +22,7 @@ import GalaxyMap from "@/components/GalaxyMap";
 // import RoamingMascot from "@/components/RoamingMascot";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
+import { formatMarkdown } from "@/lib/markdown";
 import { TOOL_EQUATIONS } from "@/lib/equations";
 import { useTenant } from "@/context/TenantContext";
 
@@ -1024,8 +1025,8 @@ export default function HeritageObservatory() {
                           <div className="px-4 py-3 border border-red-500/20 bg-red-500/5 rounded-xl text-[11px] font-mono text-red-500/80 whitespace-pre-wrap">{missionJob.error}</div>
                         )}
                         {missionJob.result && (
-                          <div className="max-h-[380px] overflow-y-auto custom-scrollbar bg-background/70 border border-primary/10 rounded-xl p-4 text-[11px] leading-relaxed text-primary/75 whitespace-pre-wrap font-mono select-text">
-                            {missionJob.result}
+                          <div className="max-h-[440px] overflow-y-auto custom-scrollbar bg-background/70 border border-primary/10 rounded-xl px-5 py-4 select-text markdown-content">
+                            {formatMarkdown(missionJob.result)}
                           </div>
                         )}
                       </div>

@@ -76,6 +76,18 @@ export function formatMarkdown(text: string): React.ReactNode {
             {parseInlineMarkdown(trimmed.slice(2))}
           </h2>
         );
+      } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+        flushList(lineIdx);
+        elements.push(
+          <hr key={`hr-${lineIdx}`} className="my-4 border-0 border-t border-border/30" />
+        );
+      } else if (trimmed.startsWith("> ")) {
+        flushList(lineIdx);
+        elements.push(
+          <blockquote key={`bq-${lineIdx}`} className="border-l-2 border-tertiary/40 pl-3 my-2 text-sm text-primary/70 italic leading-relaxed">
+            {parseInlineMarkdown(trimmed.slice(2))}
+          </blockquote>
+        );
       } else if (trimmed.startsWith("- ") || trimmed.startsWith("* ")) {
         listItems.push(trimmed.slice(2));
       } else if (trimmed === "") {
