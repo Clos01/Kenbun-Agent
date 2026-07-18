@@ -171,6 +171,14 @@ function ColorSwatch({ token }: { token: typeof COLOR_TOKENS[0] }) {
   );
 }
 
+/** Compact token formatter: 2142029 -> "2.14M", 108220 -> "108.2K". */
+function formatTokens(n: number): string {
+  if (!n || n < 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toLocaleString();
+}
+
 export default function FleetCommand() {
   const API_BASE = CONFIG.API_BASE;
   const [tools, setTools] = useState<ToolStat[]>([]);
@@ -318,9 +326,18 @@ export default function FleetCommand() {
   };
 
   const onlineWorkers = workers.filter(w => w.status === "online").length;
-  const avgSuccessRate = tools.length > 0 
-    ? (tools.reduce((sum, t) => sum + t.success_rate, 0) / tools.length * 100).toFixed(1) 
+  const avgSuccessRate = tools.length > 0
+    ? (tools.reduce((sum, t) => sum + t.success_rate, 0) / tools.length * 100).toFixed(1)
     : "0";
+
+  // Token totals (all-time / month / today) from the router's compute ledger.
+  const totalInputTokens = budget?.total_input_tokens ?? 0;
+  const totalOutputTokens = budget?.total_output_tokens ?? 0;
+  const totalTokensAll = totalInputTokens + totalOutputTokens;
+  const monthlyTokensAll = (budget?.monthly_input_tokens ?? 0) + (budget?.monthly_output_tokens ?? 0);
+  const dailyTokensAll = (budget?.daily_input_tokens ?? 0) + (budget?.daily_output_tokens ?? 0);
+  const inputPct = totalTokensAll > 0 ? Math.round((totalInputTokens / totalTokensAll) * 100) : 0;
+  const outputPct = totalTokensAll > 0 ? 100 - inputPct : 0;
 
   console.log("[browser] DEBUG_FLEET: tools length =", tools.length, "error =", error, "budget =", !!budget);
 
@@ -338,14 +355,21 @@ export default function FleetCommand() {
             <div className="h-6 w-[2px] bg-[var(--border)]" />
             <span className="font-serif italic text-lg lg:text-xl">Fleet Command</span>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-4 px-4 py-2 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow">
+          <div className="flex items-center gap-3 lg:gap-4">
+            <div className="hidden md:flex items-center gap-3 px-4 py-2 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow">
               <span className="text-[10px] sm:text-xs font-bold opacity-30 uppercase tracking-widest">Workers</span>
               <span className="text-xs font-mono font-bold">{onlineWorkers}/{workers.length}</span>
             </div>
-            <div className="flex items-center gap-4 px-4 py-2 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow">
+            <div className="hidden sm:flex items-center gap-3 px-4 py-2 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow">
               <span className="text-[10px] sm:text-xs font-bold opacity-30 uppercase tracking-widest">Avg Accuracy</span>
-              <span className="text-xs font-mono font-bold text-[var(--gold)]">{avgSuccessRate}%</span>
+              <span className="text-xs font-mono font-bold">{avgSuccessRate}%</span>
+            </div>
+            <div
+              className="flex items-center gap-3 px-4 py-2 border border-[var(--gold)]/25 bg-[var(--gold)]/[0.04] artisan-shadow"
+              title={`${totalTokensAll.toLocaleString()} tokens processed all-time`}
+            >
+              <span className="text-[10px] sm:text-xs font-bold opacity-30 uppercase tracking-widest">Total Tokens</span>
+              <span className="text-xs font-mono font-bold text-[var(--gold)] select-all">{formatTokens(totalTokensAll)}</span>
             </div>
           </div>
         </header>
@@ -472,68 +496,77 @@ export default function FleetCommand() {
 
           {/* SECTION 2.5: COMPUTE TOKEN LEDGER */}
           {budget && (() => {
-            const hasRealTokens = (budget.daily_input_tokens || 0) > 0 || (budget.daily_output_tokens || 0) > 0;
-            const dailyInput = budget.daily_input_tokens || 0;
-            const dailyOutput = budget.daily_output_tokens || 0;
-            const totalTokens = hasRealTokens ? (dailyInput + dailyOutput) : Math.round(budget.daily_usage * 5000000);
-            
-            const promptTokens = hasRealTokens ? dailyInput : Math.round(totalTokens * 0.75);
-            const completionTokens = hasRealTokens ? dailyOutput : Math.round(totalTokens * 0.25);
-            
-            const promptPct = totalTokens > 0 ? Math.round((promptTokens / totalTokens) * 100) : 75;
-            const completionPct = totalTokens > 0 ? Math.round((completionTokens / totalTokens) * 100) : 25;
-            
-            const efficiencyRatio = budget.daily_usage > 0 
-              ? `${((totalTokens) / budget.daily_usage / 1000000).toFixed(1)}M / $`
-              : "5.0M / $";
-            
+            const liveToday = dailyTokensAll > 0;
             return (
-              <section className="p-6 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow rounded-md space-y-6">
-                <div className="flex items-center gap-4">
+              <section className="border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow rounded-2xl overflow-hidden">
+                {/* Section header bar */}
+                <div className="flex items-center gap-4 px-6 lg:px-8 pt-6 pb-5 border-b border-[var(--border-muted)]">
                   <span className="ind-header text-[var(--gold)] opacity-100">LLM Compute Token Telemetry</span>
                   <div className="flex-1 h-[2px] bg-[var(--gold)] opacity-10" />
-                  <span className="text-[10px] font-mono opacity-30 uppercase">{hasRealTokens ? "SYSTEM_4_LIVE_TRACKING" : "SYSTEM_4_GOVERNOR"}</span>
+                  <span className="flex items-center gap-2 text-[10px] font-mono opacity-40 uppercase tracking-wider">
+                    <span className={`w-1.5 h-1.5 rounded-full ${liveToday ? "bg-emerald-400 animate-pulse" : "bg-[var(--gold)]/50"}`} />
+                    {budget.source === "kenbun_router" ? "Kenbun Router" : "System 4 Governor"}
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Total Estimated/Actual Tokens */}
-                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded-xl space-y-3">
-                    <span className="text-[9px] font-bold opacity-30 font-mono">{hasRealTokens ? "ACTUAL VOLUME TODAY" : "ESTIMATED VOLUME TODAY"}</span>
-                    <div className="text-3xl font-data font-black tracking-tight text-[var(--foreground)] select-all">
-                      {totalTokens.toLocaleString()}
+                <div className="grid grid-cols-1 lg:grid-cols-5">
+                  {/* HERO — all-time total + input/output split */}
+                  <div className="lg:col-span-3 p-6 lg:p-8 space-y-5 border-b lg:border-b-0 lg:border-r border-[var(--border-muted)]">
+                    <span className="text-[9px] font-bold uppercase tracking-[0.25em] opacity-40 font-mono">All-Time Tokens Processed</span>
+                    <div className="flex items-end gap-3 flex-wrap">
+                      <span className="text-5xl lg:text-6xl font-data font-black tracking-tight text-[var(--foreground)] leading-none select-all">
+                        {formatTokens(totalTokensAll)}
+                      </span>
+                      <span className="text-xs font-mono opacity-40 mb-1.5 select-all">{totalTokensAll.toLocaleString()} total</span>
                     </div>
-                    <div className="text-[9px] opacity-40 uppercase font-bold tracking-wider font-mono">{hasRealTokens ? "Live Cloud Tokens Consumed" : "Est. Cloud Tokens Consumed"}</div>
+
+                    {/* Input vs Output split bar */}
+                    <div className="space-y-2.5 pt-1">
+                      <div className="flex h-2.5 w-full rounded-full overflow-hidden border border-[var(--border-muted)]">
+                        <div className="h-full bg-[var(--gold)]" style={{ width: `${inputPct}%` }} title={`Input ${inputPct}%`} />
+                        <div className="h-full bg-[var(--foreground)]/25" style={{ width: `${outputPct}%` }} title={`Output ${outputPct}%`} />
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-mono">
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-sm bg-[var(--gold)]" />
+                          <span className="opacity-45 uppercase tracking-wider">Input</span>
+                          <span className="font-bold text-[var(--foreground)] select-all">{formatTokens(totalInputTokens)}</span>
+                          <span className="opacity-30">({inputPct}%)</span>
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-sm bg-[var(--foreground)]/25" />
+                          <span className="opacity-45 uppercase tracking-wider">Output</span>
+                          <span className="font-bold text-[var(--foreground)] select-all">{formatTokens(totalOutputTokens)}</span>
+                          <span className="opacity-30">({outputPct}%)</span>
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Token Split (Prompt vs Completion) */}
-                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded-xl space-y-3 flex flex-col justify-between">
-                    <span className="text-[9px] font-bold opacity-30 font-mono">TOKEN SYSTEM BALANCE</span>
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-[10px] font-mono leading-none">
-                        <span className="opacity-45">Prompt Input ({promptPct}%)</span>
-                        <span className="text-[var(--gold)] font-bold select-all">{promptTokens.toLocaleString()}</span>
+                  {/* Today / This Month */}
+                  <div className="lg:col-span-2 grid grid-cols-2 lg:grid-cols-1">
+                    <div className="p-6 lg:px-8 space-y-1.5 flex flex-col justify-center border-r lg:border-r-0 lg:border-b border-[var(--border-muted)]">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.2em] opacity-40 font-mono">Today</span>
+                        {liveToday && <span className="text-[8px] font-bold text-emerald-400 uppercase tracking-wider">● Live</span>}
                       </div>
-                      <div className="h-1.5 border border-[var(--border-muted)] bg-background p-[1px] rounded-full overflow-hidden">
-                        <div className="h-full bg-[var(--gold)]" style={{ width: `${promptPct}%` }} />
-                      </div>
-                      <div className="flex justify-between text-[10px] font-mono leading-none">
-                        <span className="opacity-45">Completion Output ({completionPct}%)</span>
-                        <span className="opacity-80 select-all">{completionTokens.toLocaleString()}</span>
-                      </div>
+                      <div className="text-2xl font-data font-black text-[var(--foreground)] select-all">{formatTokens(dailyTokensAll)}</div>
+                      <div className="text-[9px] font-mono opacity-30">in {formatTokens(budget.daily_input_tokens || 0)} · out {formatTokens(budget.daily_output_tokens || 0)}</div>
+                    </div>
+                    <div className="p-6 lg:px-8 space-y-1.5 flex flex-col justify-center">
+                      <span className="text-[9px] font-bold uppercase tracking-[0.2em] opacity-40 font-mono">This Month</span>
+                      <div className="text-2xl font-data font-black text-[var(--gold)] select-all">{formatTokens(monthlyTokensAll)}</div>
+                      <div className="text-[9px] font-mono opacity-30">in {formatTokens(budget.monthly_input_tokens || 0)} · out {formatTokens(budget.monthly_output_tokens || 0)}</div>
                     </div>
                   </div>
+                </div>
 
-                  {/* Compute Burn Rate & Efficiency */}
-                  <div className="border border-[var(--border-muted)] bg-[var(--background)]/60 p-5 rounded-xl space-y-3">
-                    <span className="text-[9px] font-bold opacity-30 font-mono">COMPUTE EFFICIENCY</span>
-                    <div className="flex justify-between items-baseline">
-                      <div className="text-xl font-data font-black text-[var(--gold)]">{efficiencyRatio}</div>
-                      <span className="text-[10px] font-mono opacity-40 uppercase">Ratio</span>
-                    </div>
-                    <div className="text-[9px] opacity-40 uppercase font-bold tracking-wider leading-relaxed">
-                      {hasRealTokens ? "Real-time token generation throughput efficiency relative to USD spend." : "Average throughput efficiency based on Gemini 2.0 active profiles."}
-                    </div>
-                  </div>
+                {/* Footnote — scope caveat */}
+                <div className="px-6 lg:px-8 py-3 border-t border-[var(--border-muted)] flex items-center gap-2.5 bg-[var(--background)]/30">
+                  <span className="w-1 h-1 rounded-full bg-[var(--gold)] opacity-50 shrink-0" />
+                  <p className="text-[9px] font-mono opacity-35 uppercase tracking-wider leading-relaxed">
+                    {budget.note || "Counts LLM tokens routed through the Kenbun backend. External provider usage is not captured here."}
+                  </p>
                 </div>
               </section>
             );
