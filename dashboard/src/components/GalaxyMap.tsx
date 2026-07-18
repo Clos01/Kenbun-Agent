@@ -5,7 +5,7 @@ import { AnimatePresence } from 'framer-motion';
 import { CONFIG } from '@/lib/config';
 import { useTheme } from '@/context/ThemeContext';
 import { useTenant } from '@/context/TenantContext';
-import { Compass } from 'lucide-react';
+import { Compass, Search, X } from 'lucide-react';
 
 import { StarNode, TransformState, ActiveJob } from './galaxy-map/types';
 import { 
@@ -34,6 +34,11 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
   const [mounted, setMounted] = useState(false);
   const [showConnections, setShowConnections] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+
+  // Explore: free-text search + room isolation. Matches are spotlit on the
+  // canvas while everything else fades, so 1,500 nodes stay navigable.
+  const [search, setSearch] = useState("");
+  const [activeRoom, setActiveRoom] = useState<string | null>(null);
 
   const [activeJobs, setActiveJobs] = useState<Record<string, ActiveJob>>({});
   const activeIntervalsRef = useRef<Record<string, ReturnType<typeof setInterval>>>({});
@@ -568,6 +573,11 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
   useEffect(() => { showLabelsRef.current = showLabels; }, [showLabels]);
   useEffect(() => { dataRef.current = data; }, [data]);
   useEffect(() => { onNodesLoaded?.(data.length); }, [data.length, onNodesLoaded]);
+
+  const searchRef = useRef(search);
+  const activeRoomRef = useRef(activeRoom);
+  useEffect(() => { searchRef.current = search; }, [search]);
+  useEffect(() => { activeRoomRef.current = activeRoom; }, [activeRoom]);
   useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
   useEffect(() => { activeJobsRef.current = activeJobs; }, [activeJobs]);
 
@@ -838,8 +848,17 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         ctx.restore();
       });
 
+      // Active search / room filter (spotlight matches, fade the rest)
+      const filterQ = searchRef.current.trim().toLowerCase();
+      const filterRoom = activeRoomRef.current;
+      const filtering = filterQ.length > 0 || filterRoom !== null;
+      const nodeMatchesFilter = (node: StarNode) =>
+        (!filterQ || node.file.toLowerCase().includes(filterQ) || (node.snippet || "").toLowerCase().includes(filterQ)) &&
+        (!filterRoom || node.room === filterRoom);
+
       // 2. Draw Constellation Links & Animated Photons
-      if (currentShowConnections && currentData.length > 0) {
+      // Skip the web while filtering so the spotlit matches stand out cleanly.
+      if (currentShowConnections && !filtering && currentData.length > 0) {
         for (let i = 0; i < currentData.length; i++) {
           const n1 = currentData[i];
           const { x: x1, y: y1 } = getProjectedCoords(n1.x, n1.y);
@@ -955,8 +974,21 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
           ctx.shadowBlur = currentIsDark ? 8 : 4;
           ctx.globalAlpha = currentIsDark ? 0.75 : 0.85;
         }
+
+        // Spotlight search/room matches; fade everything else.
+        if (filtering) {
+          if (nodeMatchesFilter(node)) {
+            if (!isHovered && !isSelected) {
+              ctx.globalAlpha = 1.0;
+              ctx.shadowBlur = currentIsDark ? 22 : 13;
+            }
+          } else {
+            ctx.globalAlpha *= 0.1;
+            ctx.shadowBlur = 0;
+          }
+        }
         ctx.shadowColor = baseColor;
-        
+
         ctx.fill();
         ctx.shadowBlur = 0;
         ctx.globalAlpha = 1.0;
@@ -1166,6 +1198,22 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
     };
   }, [mounted, backgroundStars]);
 
+  const roomCounts = useMemo(() => {
+    const c: Record<string, number> = {};
+    data.forEach((n) => { c[n.room] = (c[n.room] || 0) + 1; });
+    return c;
+  }, [data]);
+
+  const filterQuery = search.trim().toLowerCase();
+  const filterActive = filterQuery.length > 0 || activeRoom !== null;
+  const matchCount = useMemo(() => {
+    if (!filterActive) return 0;
+    return data.filter((n) =>
+      (!filterQuery || n.file.toLowerCase().includes(filterQuery) || (n.snippet || "").toLowerCase().includes(filterQuery)) &&
+      (!activeRoom || n.room === activeRoom)
+    ).length;
+  }, [data, filterQuery, activeRoom, filterActive]);
+
   const MapInner = (
     <div 
       ref={containerRef}
@@ -1189,8 +1237,45 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         </div>
       </div>
 
+      {/* Explore: search / filter bar */}
+      <div
+        onMouseDown={(e) => e.stopPropagation()}
+        onMouseUp={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+        className="absolute top-8 left-1/2 -translate-x-1/2 z-[110] w-[min(88%,360px)]"
+      >
+        <div className="flex items-center gap-2 bg-[var(--background)]/75 border border-[var(--border)]/50 backdrop-blur-xl rounded-xl px-3 py-2 shadow-xl">
+          <Search className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search files or code across the swarm…"
+            aria-label="Search nodes"
+            className="flex-1 bg-transparent text-[11px] font-mono text-[var(--foreground)] placeholder:text-[var(--foreground)]/30 focus:outline-none min-w-0"
+          />
+          {(search || activeRoom) && (
+            <button
+              onClick={() => { setSearch(""); setActiveRoom(null); }}
+              title="Clear filter"
+              aria-label="Clear filter"
+              className="text-[var(--foreground)]/40 hover:text-[var(--accent)] transition-colors shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+        {filterActive && (
+          <div className="mt-1.5 flex justify-center">
+            <span className="text-[9px] font-mono font-bold uppercase tracking-widest bg-[var(--background)]/75 border border-[var(--border)]/40 backdrop-blur px-2.5 py-0.5 rounded-full text-[var(--accent)]">
+              {matchCount.toLocaleString()} match{matchCount === 1 ? "" : "es"}{activeRoom ? ` · ${activeRoom}` : ""}
+            </span>
+          </div>
+        )}
+      </div>
+
       {/* Floating Control Hub */}
-      <ControlHub 
+      <ControlHub
         showConnections={showConnections}
         setShowConnections={setShowConnections}
         showLabels={showLabels}
@@ -1257,8 +1342,13 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         </div>
       </div>
 
-      {/* Color Coding Swarm Guide */}
-      <SwarmLegend isDragging={isDragging} />
+      {/* Color Coding Swarm Guide — click a room to isolate it */}
+      <SwarmLegend
+        isDragging={isDragging}
+        counts={roomCounts}
+        activeRoom={activeRoom}
+        onToggleRoom={(r) => setActiveRoom((prev) => (prev === r ? null : r))}
+      />
     </div>
   );
 
