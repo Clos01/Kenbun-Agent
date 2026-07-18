@@ -104,6 +104,7 @@ interface TaskItem {
 interface BudgetInfo {
   remaining: number;
   daily_usage: number;
+  lifetime_spend?: number;
 }
 
 interface BuildInfo {
@@ -408,6 +409,10 @@ export default function HeritageObservatory() {
   const [consecutiveFailures, setConsecutiveFailures] = useState<number>(0);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [isIntentionalOffline, setIsIntentionalOffline] = useState<boolean>(false);
+
+  // Real indexed-node count, surfaced by the Galaxy Map's topology fetch.
+  const [indexedNodes, setIndexedNodes] = useState<number>(0);
+  const handleNodesLoaded = useCallback((n: number) => setIndexedNodes(n), []);
 
   // --- Mission Console (orchestrate dispatch) ---
   const [missionTask, setMissionTask] = useState<string>("");
@@ -1030,10 +1035,10 @@ export default function HeritageObservatory() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow divide-x divide-primary/5 rounded-xl">
                   {[
-                    { label: "Domain", value: activeTask?.project || "Heritage" },
+                    { label: missionJob ? "Workflow" : "Domain", value: missionJob?.workflow || activeTask?.project || "Heritage" },
                     { label: "Betterment", value: totalSignals > 0 ? `+${((totalSuccess / totalSignals) * 100).toFixed(1)}%` : "+0.0%" },
-                    { label: "Neural Capacity", value: telemetry.memory?.capacity ? `${telemetry.memory.capacity.toLocaleString()} Signals` : "0 Signals", color: "text-tertiary" },
-                    { label: "Value", value: activeTask?.est_cost ? `$${(activeTask.est_cost).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "$0.00" }
+                    { label: "Indexed Nodes", value: indexedNodes > 0 ? indexedNodes.toLocaleString() : "Not indexed", color: "text-tertiary" },
+                    { label: "LLM Spend", value: `$${(budget?.lifetime_spend ?? budget?.daily_usage ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
                   ].map((stat, i) => (
                     <div key={i} className="p-8 space-y-2">
                       <span className="text-[10px] uppercase tracking-[0.2em] opacity-30 font-black">{stat.label}</span>
@@ -1050,11 +1055,11 @@ export default function HeritageObservatory() {
                     </div>
                     <div className="flex items-center gap-3 bg-primary/5 px-4 py-2 border border-primary/5 rounded-full">
                       <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
-                      <span className="text-[10px] font-black text-tertiary uppercase tracking-widest">{telemetry.memory?.capacity || 0} Registered Signals</span>
+                      <span className="text-[10px] font-black text-tertiary uppercase tracking-widest">{indexedNodes > 0 ? `${indexedNodes.toLocaleString()} Indexed Nodes` : "Not Indexed"}</span>
                     </div>
                   </div>
                   <div className="flex-1 relative min-h-[600px] border border-primary/5 bg-card/40 rounded-xl overflow-hidden">
-                    <GalaxyMap />
+                    <GalaxyMap onNodesLoaded={handleNodesLoaded} />
                   </div>
                 </div>
               </section>

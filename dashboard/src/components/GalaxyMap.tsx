@@ -19,11 +19,12 @@ import InspectorPanel from './galaxy-map/InspectorPanel';
 import HoverPanel from './galaxy-map/HoverPanel';
 import SwarmLegend from './galaxy-map/SwarmLegend';
 
-export default function GalaxyMap() {
+export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: number) => void } = {}) {
   const { tenantId } = useTenant();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<StarNode[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [hovered, setHovered] = useState<StarNode | null>(null);
   const [selectedNode, setSelectedNode] = useState<StarNode | null>(null);
   const [transform, setTransform] = useState<TransformState>({ x: 0, y: 0, scale: 0.8 });
@@ -257,6 +258,7 @@ export default function GalaxyMap() {
               { id: "node-4", x: 350, y: 100, file: "src/db.py", room: "db", snippet: "class Database:\\n  pass" },
               { id: "node-5", x: -250, y: -100, file: "src/auth.py", room: "auth", snippet: "def login():\\n  pass" }
             ]);
+            setLoaded(true);
             return;
           }
           const text = await res.text();
@@ -266,6 +268,7 @@ export default function GalaxyMap() {
         if (Array.isArray(nodes)) {
           setData(nodes);
         }
+        setLoaded(true);
       } catch (e) {
         console.error("Galaxy Fetch Error:", e);
         if (retryCount < maxRetries) {
@@ -564,6 +567,7 @@ export default function GalaxyMap() {
   useEffect(() => { showConnectionsRef.current = showConnections; }, [showConnections]);
   useEffect(() => { showLabelsRef.current = showLabels; }, [showLabels]);
   useEffect(() => { dataRef.current = data; }, [data]);
+  useEffect(() => { onNodesLoaded?.(data.length); }, [data.length, onNodesLoaded]);
   useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
   useEffect(() => { activeJobsRef.current = activeJobs; }, [activeJobs]);
 
@@ -1198,10 +1202,24 @@ export default function GalaxyMap() {
       />
 
       {/* Interactive Map Canvas */}
-      <canvas 
-        ref={canvasRef} 
-        className={`w-full h-full cursor-grab active:cursor-grabbing transition-opacity duration-700 ${isDragging ? 'opacity-90' : 'opacity-100'}`} 
+      <canvas
+        ref={canvasRef}
+        className={`w-full h-full cursor-grab active:cursor-grabbing transition-opacity duration-700 ${isDragging ? 'opacity-90' : 'opacity-100'}`}
       />
+
+      {/* Honest empty-state — shown when the code collection has no indexed nodes
+          (instead of the old 250 fabricated "Unindexed Node" stars). */}
+      {loaded && data.length === 0 && (
+        <div className="absolute inset-0 z-[90] flex items-center justify-center pointer-events-none select-none px-6">
+          <div className="text-center space-y-3 max-w-sm p-8 bg-[var(--background)]/70 border border-[var(--border)]/50 backdrop-blur-xl rounded-2xl">
+            <Compass className="w-6 h-6 text-[var(--accent)] mx-auto opacity-60" />
+            <div className="font-heading text-[var(--foreground)] font-bold uppercase tracking-[0.25em] text-xs">Codebase Not Indexed</div>
+            <p className="text-[11px] font-mono text-[var(--foreground)]/45 leading-relaxed">
+              No neural nodes in the vector store yet. Run <span className="text-[var(--accent)] font-bold">index_codebase</span> so the swarm maps your repository into this topology.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Floating Inspector Panel (Selected Node Details) */}
       <AnimatePresence>
