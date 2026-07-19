@@ -205,7 +205,7 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
       }
 
       if (rawParsed.layout !== undefined) {
-        if (typeof rawParsed.layout !== "object" || Array.isArray(rawParsed.layout)) {
+        if (rawParsed.layout === null || typeof rawParsed.layout !== "object" || Array.isArray(rawParsed.layout)) {
           throw new Error("Invalid layout field type.");
         }
         if (typeof rawParsed.layout.x !== "number" || typeof rawParsed.layout.y !== "number") {
