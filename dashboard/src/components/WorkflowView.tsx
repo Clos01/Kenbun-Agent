@@ -9,6 +9,7 @@ import {
   GitBranch,
   Copy,
   ChevronRight,
+  ChevronDown,
   Layout,
   RefreshCw,
   Trash2,
@@ -20,6 +21,7 @@ import {
 import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/board/page";
 import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
+import MindmapView from "./MindmapView";
 
 interface Card {
   id: string;
@@ -139,7 +141,7 @@ function CustomSelect<T extends string>({
           className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer flex items-center gap-1 hover:text-primary transition-colors"
         >
           <span>{activeOption?.label || value}</span>
-          <span className="text-[6px] opacity-60 ml-0.5">▼</span>
+          <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
         </button>
       </div>
 
@@ -343,7 +345,8 @@ export default function WorkflowView({
           shape,
           status,
           score: workOrder.score.get(card.id) || 0,
-          rank: workOrder.rank.get(card.id) || 999
+          rank: workOrder.rank.get(card.id) || 999,
+          blocked: workOrder.blocked.has(card.id)
         };
       });
   }, [cards, listMap, workOrder]);
@@ -353,13 +356,15 @@ export default function WorkflowView({
   }, [parsedCards]);
 
   const nextStepCardId = useMemo(() => {
+    // "Next" must be dependency-ready (not blocked) so we never point the user
+    // at something they can't actually start.
     const inProgressCards = parsedCards
-      .filter(c => c.status === "in_progress")
+      .filter(c => c.status === "in_progress" && !c.blocked)
       .sort((a, b) => a.rank - b.rank);
     if (inProgressCards.length > 0) return inProgressCards[0].id;
 
     const todoCards = parsedCards
-      .filter(c => c.status === "todo")
+      .filter(c => c.status === "todo" && !c.blocked)
       .sort((a, b) => a.rank - b.rank);
     if (todoCards.length > 0) return todoCards[0].id;
 
@@ -371,98 +376,15 @@ export default function WorkflowView({
     const edges: LayoutEdge[] = [];
     const lanes: { id: string; name: string; minX: number; maxX: number; minY: number; maxY: number }[] = [];
 
-    if (diagramMode === "mindmap") {
-      // 1. Root Node
-      nodes.push({
-        id: "root",
-        type: "root",
-        label: "Project Board",
-        x: -80,
-        y: -25,
-        width: 160,
-        height: 50
-      });
-
-      // 2. Split Lists (columns) Left/Right
-      const mid = Math.ceil(lists.length / 2);
-      const leftLists = lists.slice(0, mid);
-      const rightLists = lists.slice(mid);
-
-      const layList = (list: List, colIndex: number, side: "left" | "right") => {
-        const listCards = parsedCards
-          .filter(c => c.listId === list.id)
-          .sort((a, b) => a.rank - b.rank);
-        
-        const colX = side === "left" 
-          ? -(colIndex + 1) * 360 
-          : (colIndex + 1) * 360;
-        
-        const C = listCards.length;
-        const startY = C > 0 ? -(C - 1) * 60 : 0;
-
-        const listHeaderY = C > 0 ? startY - 80 : -20;
-        const listHeaderId = `list_${list.id}`;
-        nodes.push({
-          id: listHeaderId,
-          type: "list",
-          label: list.name.toUpperCase(),
-          x: colX - 90,
-          y: listHeaderY - 20,
-          width: 180,
-          height: 40
-        });
-
-        edges.push({
-          id: `root_to_${listHeaderId}`,
-          fromId: "root",
-          toId: listHeaderId,
-          fromX: side === "left" ? -80 : 80,
-          fromY: 0,
-          toX: side === "left" ? colX + 90 : colX - 90,
-          toY: listHeaderY,
-          style: "solid"
-        });
-
-        listCards.forEach((card, i) => {
-          const cardY = startY + i * 120;
-          const cardNodeId = `card_${card.id}`;
-          nodes.push({
-            id: cardNodeId,
-            type: "card",
-            label: card.name,
-            x: colX - 95,
-            y: cardY - 42.5,
-            width: 190,
-            height: 85,
-            status: card.status,
-            rank: card.rank,
-            shape: card.shape,
-            cardData: card
-          });
-
-          edges.push({
-            id: `${listHeaderId}_to_${cardNodeId}`,
-            fromId: listHeaderId,
-            toId: cardNodeId,
-            fromX: colX,
-            fromY: listHeaderY + 20,
-            toX: side === "left" ? colX + 95 : colX - 95,
-            toY: cardY,
-            style: "solid"
-          });
-        });
-      };
-
-      leftLists.forEach((list, idx) => layList(list, idx, "left"));
-      rightLists.forEach((list, idx) => layList(list, idx, "right"));
-
-    } else if (diagramMode === "flowchart") {
+    // Mindmap is rendered by its own dedicated <MindmapView> component and does
+    // NOT share this layout engine — the shared code made it hectic to follow.
+    if (diagramMode === "flowchart") {
       const isHorizontal = layoutDir === "LR";
       // Spacing constants – tighter for compact readability
-      const COL_GAP = 260;   // horizontal column spacing (LR mode)
-      const CARD_V_GAP = 105; // vertical gap between cards in same column
-      const ROW_GAP = 180;   // vertical row spacing (TD mode)
-      const CARD_H_GAP = 230; // horizontal gap between cards in same row
+      const COL_GAP = 320;   // horizontal column spacing (LR mode)
+      const CARD_V_GAP = 220; // vertical gap between cards in same column
+      const ROW_GAP = 280;   // vertical row spacing (TD mode)
+      const CARD_H_GAP = 280; // horizontal gap between cards in same row
       const CARD_W = 190;
       const CARD_H = 85;
 
@@ -1556,8 +1478,11 @@ export default function WorkflowView({
       {/* Main split-screen workspace */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Left Side: Dynamic Interactive Mermaid Canvas */}
-        <div 
+        {/* Mindmap: its own dedicated component. Flowchart / ASCII: the canvas below. */}
+        {diagramMode === "mindmap" ? (
+          <MindmapView cards={cards} lists={lists} onSelectCard={setSelectedCardId} />
+        ) : (
+        <div
           ref={canvasRef}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -1600,28 +1525,45 @@ export default function WorkflowView({
               {/* SVG Overlay for Connections */}
               <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: 1, height: 1 }}>
                 <defs>
+                  {/* Fixed-size, notched arrowheads that read clearly on any theme */}
                   <marker
                     id="custom-arrowhead"
-                    viewBox="0 0 10 10"
-                    refX="8"
-                    refY="5"
-                    markerWidth="8"
-                    markerHeight="8"
+                    viewBox="0 0 12 12"
+                    refX="10"
+                    refY="6"
+                    markerWidth="13"
+                    markerHeight="13"
+                    markerUnits="userSpaceOnUse"
                     orient="auto-start-reverse"
                   >
-                    <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--tertiary)" opacity="0.85" />
+                    <path d="M 1 1 L 11 6 L 1 11 L 4 6 z" fill="var(--tertiary)" />
                   </marker>
                   <marker
                     id="suggested-arrowhead"
-                    viewBox="0 0 10 10"
-                    refX="8"
-                    refY="5"
-                    markerWidth="7"
-                    markerHeight="7"
+                    viewBox="0 0 12 12"
+                    refX="10"
+                    refY="6"
+                    markerWidth="11"
+                    markerHeight="11"
+                    markerUnits="userSpaceOnUse"
                     orient="auto-start-reverse"
                   >
-                    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--secondary)" opacity="0.6" />
+                    <path d="M 1 1.5 L 10 6 L 1 10.5 L 3.5 6 z" fill="var(--secondary)" opacity="0.9" />
                   </marker>
+                  {/* Per-edge directional gradient: faded at the source, solid at the
+                      target, so which way a connection points reads at a glance. */}
+                  {layout.edges.filter(e => e.label !== "suggested").map(edge => (
+                    <linearGradient
+                      key={`grad_${edge.id}`}
+                      id={`grad_${edge.id}`}
+                      gradientUnits="userSpaceOnUse"
+                      x1={edge.fromX} y1={edge.fromY} x2={edge.toX} y2={edge.toY}
+                    >
+                      <stop offset="0%" stopColor="var(--tertiary)" stopOpacity="0.22" />
+                      <stop offset="55%" stopColor="var(--tertiary)" stopOpacity="0.75" />
+                      <stop offset="100%" stopColor="var(--tertiary)" stopOpacity="1" />
+                    </linearGradient>
+                  ))}
                 </defs>
 
                 {/* Swimlanes background containers */}
@@ -1666,62 +1608,87 @@ export default function WorkflowView({
 
                 {/* Connection lines */}
                 {layout.edges.map(edge => {
-                  const dx = edge.toX - edge.fromX;
-                  const dy = edge.toY - edge.fromY;
-                  const absDx = Math.abs(dx);
-                  const absDy = Math.abs(dy);
                   const isDotted = edge.style === "dotted";
                   const isSuggested = edge.label === "suggested";
-                  
-                  // Adaptive bezier: pick control point axis based on travel direction
+
+                  // Pull the endpoint back off the target node so the arrowhead
+                  // floats in the gap and clearly "points at" the card.
+                  const fullDx = edge.toX - edge.fromX;
+                  const fullDy = edge.toY - edge.fromY;
+                  const len = Math.hypot(fullDx, fullDy) || 1;
+                  const GAP = 11;
+                  const endX = edge.toX - (fullDx / len) * GAP;
+                  const endY = edge.toY - (fullDy / len) * GAP;
+
+                  const dx = endX - edge.fromX;
+                  const dy = endY - edge.fromY;
+                  const absDx = Math.abs(dx);
+                  const absDy = Math.abs(dy);
+
+                  // Route the edge per the active Curve control (lineStyle):
+                  // "linear" = straight, "step" = orthogonal elbow, "basis" = curved.
                   let pathD = "";
-                  if (diagramMode === "mindmap" && edge.fromId === "root") {
-                    pathD = `M ${edge.fromX} ${edge.fromY} C ${(edge.fromX + edge.toX)/2} ${edge.fromY}, ${edge.toX} ${(edge.fromY + edge.toY)/2}, ${edge.toX} ${edge.toY}`;
+                  if (lineStyle === "linear") {
+                    pathD = `M ${edge.fromX} ${edge.fromY} L ${endX} ${endY}`;
+                  } else if (lineStyle === "step") {
+                    if (absDx > absDy) {
+                      const midX = (edge.fromX + endX) / 2;
+                      pathD = `M ${edge.fromX} ${edge.fromY} L ${midX} ${edge.fromY} L ${midX} ${endY} L ${endX} ${endY}`;
+                    } else {
+                      const midY = (edge.fromY + endY) / 2;
+                      pathD = `M ${edge.fromX} ${edge.fromY} L ${edge.fromX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
+                    }
                   } else if (absDx > absDy) {
-                    // Mostly horizontal travel
-                    const cpx = Math.max(Math.min(absDx * 0.4, 100), 30);
+                    // Curved, mostly horizontal travel
+                    const cpx = Math.max(Math.min(absDx * 0.45, 110), 34);
                     const sign = dx > 0 ? 1 : -1;
-                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cpx * sign} ${edge.fromY}, ${edge.toX - cpx * sign} ${edge.toY}, ${edge.toX} ${edge.toY}`;
+                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cpx * sign} ${edge.fromY}, ${endX - cpx * sign} ${endY}, ${endX} ${endY}`;
                   } else {
-                    // Mostly vertical travel
-                    const cpy = Math.max(Math.min(absDy * 0.4, 100), 30);
+                    // Curved, mostly vertical travel
+                    const cpy = Math.max(Math.min(absDy * 0.45, 110), 34);
                     const sign = dy > 0 ? 1 : -1;
-                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cpy * sign}, ${edge.toX} ${edge.toY - cpy * sign}, ${edge.toX} ${edge.toY}`;
+                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cpy * sign}, ${endX} ${endY - cpy * sign}, ${endX} ${endY}`;
                   }
 
+                  const markerEnd = diagramMode === "flowchart"
+                    ? (isSuggested ? "url(#suggested-arrowhead)" : "url(#custom-arrowhead)")
+                    : undefined;
+
                   return (
-                    <g key={edge.id}>
-                      {/* Glow layer for solid edges */}
-                      {!isSuggested && (
-                        <path
-                          d={pathD}
-                          fill="none"
-                          stroke="var(--tertiary)"
-                          strokeWidth="4"
-                          strokeOpacity="0.08"
-                        />
-                      )}
+                    <g key={edge.id} className="transition-all duration-200">
+                      {/* Casing — a moat in the canvas colour so the line stays
+                          legible where it crosses lane fills and other edges. */}
                       <path
                         d={pathD}
                         fill="none"
-                        stroke={isSuggested ? "var(--secondary)" : "var(--tertiary)"}
-                        strokeWidth={isSuggested ? 1.5 : 2}
-                        strokeOpacity={isSuggested ? 0.5 : 0.8}
-                        strokeDasharray={isDotted ? "6 4" : undefined}
+                        stroke="var(--neutral)"
+                        strokeWidth={isSuggested ? 4.5 : 6}
+                        strokeOpacity="0.92"
+                        strokeLinecap="round"
+                      />
+                      {/* The connection itself */}
+                      <path
+                        d={pathD}
+                        fill="none"
+                        stroke={isSuggested ? "var(--secondary)" : `url(#grad_${edge.id})`}
+                        strokeWidth={isSuggested ? 1.75 : 2.4}
+                        strokeOpacity={isSuggested ? 0.75 : 1}
+                        strokeDasharray={isDotted ? "6 5" : undefined}
+                        strokeLinecap="round"
+                        markerEnd={markerEnd}
                         className="transition-all duration-200"
-                        markerEnd={diagramMode === "flowchart" ? (isSuggested ? "url(#suggested-arrowhead)" : "url(#custom-arrowhead)") : undefined}
                       />
                       {edge.label && edge.label !== "suggested" && (
                         <foreignObject
-                          x={(edge.fromX + edge.toX) / 2 - 40}
-                          y={(edge.fromY + edge.toY) / 2 - 10}
-                          width="80"
-                          height="20"
+                          x={(edge.fromX + endX) / 2 - 45}
+                          y={(edge.fromY + endY) / 2 - 11}
+                          width="90"
+                          height="22"
                           className="overflow-visible"
                         >
                           <div className="flex justify-center select-none pointer-events-none">
-                            <span 
-                              className="px-1.5 py-0.5 rounded text-[8px] font-mono border text-secondary bg-card select-none"
+                            <span
+                              className="px-2 py-0.5 rounded-full text-[8px] font-mono font-bold border text-primary bg-card select-none whitespace-nowrap shadow-sm"
                               style={{ borderColor: 'var(--border)' }}
                             >
                               {edge.label}
@@ -1779,29 +1746,44 @@ export default function WorkflowView({
                 }
 
                 const card = node.cardData;
+                const blocked = !!card.blocked;
                 const isNextStep = card.id === nextStepCardId;
                 const cleanTitle = card.name;
                 const statusColor = getStatusColorClass(card.status);
                 const statusText = getStatusText(card.status);
                 const iconsHtml = getCardIcons(card);
 
-                const borderClass = isNextStep 
-                  ? "border-tertiary shadow-[0_0_12px_rgba(var(--tertiary-rgb),0.35)]" 
-                  : "border-border";
+                // Blocked (a dependency isn't done) > Next > plain rank.
+                const rankBadge = blocked ? (
+                  <span
+                    className="text-[7.5px] font-mono px-1 py-0.5 rounded font-bold flex items-center gap-0.5"
+                    style={{ backgroundColor: "var(--neutral)", color: "#B8422E", border: "1px solid rgba(184,66,46,0.4)" }}
+                    title="Blocked — a predecessor isn't done yet"
+                  >
+                    ⛔ #{card.rank}
+                  </span>
+                ) : isNextStep ? (
+                  <span className="text-[7.5px] font-mono px-1 py-0.5 rounded font-bold animate-pulse" style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>👉 NEXT</span>
+                ) : (
+                  <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary" style={{ backgroundColor: "var(--neutral)" }}>#{card.rank}</span>
+                );
 
                 return (
                   <div
                     key={node.id}
                     onClick={() => setSelectedCardId(card.id)}
-                    className={`absolute rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto ${borderClass}`}
+                    className="absolute rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto"
                     style={{
                       left: node.x,
                       top: node.y,
                       width: node.width,
                       height: node.height,
                       backgroundColor: "var(--card)",
+                      opacity: blocked && !isNextStep ? 0.6 : 1,
                       borderColor: isNextStep ? "var(--tertiary)" : "var(--border)",
-                      borderWidth: isNextStep ? "1.5px" : "1px"
+                      borderWidth: isNextStep ? "1.5px" : "1px",
+                      borderStyle: blocked ? "dashed" : "solid",
+                      boxShadow: isNextStep ? "0 0 12px rgba(184,66,46,0.30)" : undefined
                     }}
                   >
                     {card.shape === "terminal" ? (
@@ -1810,11 +1792,7 @@ export default function WorkflowView({
                           <span className={`w-2 h-2 rounded-full ${statusColor} shrink-0`}></span>
                           <span className="text-[9px] font-bold text-primary truncate">{cleanTitle}</span>
                         </div>
-                        {isNextStep ? (
-                          <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse">👉 NEXT</span>
-                        ) : (
-                          <span className="text-[7px] font-mono uppercase tracking-wider text-secondary/60 shrink-0">Terminal</span>
-                        )}
+                        {rankBadge}
                       </div>
                     ) : card.shape === "decision" ? (
                       <div className="p-3 h-full flex flex-col gap-1.5 justify-between select-none">
@@ -1823,11 +1801,7 @@ export default function WorkflowView({
                             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "var(--accent, var(--tertiary))" }}></span>
                             <span className="text-[7.5px] font-mono font-bold uppercase tracking-wider" style={{ color: "var(--accent, var(--tertiary))" }}>Decision Gate</span>
                           </div>
-                          {isNextStep ? (
-                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse" style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>👉 NEXT</span>
-                          ) : (
-                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary" style={{ backgroundColor: "var(--neutral)" }}>#{card.rank}</span>
-                          )}
+                          {rankBadge}
                         </div>
                         <div className="text-[10px] font-bold text-primary leading-snug line-clamp-2">{cleanTitle}</div>
                         <div className="flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t border-border pt-1">
@@ -1842,11 +1816,7 @@ export default function WorkflowView({
                             <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`}></span>
                             <span className="text-[7.5px] font-mono font-bold uppercase tracking-wider text-secondary">{statusText}</span>
                           </div>
-                          {isNextStep ? (
-                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse" style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>👉 NEXT</span>
-                          ) : (
-                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary" style={{ backgroundColor: "var(--neutral)" }}>#{card.rank}</span>
-                          )}
+                          {rankBadge}
                         </div>
                         <div className="text-[10px] font-bold text-primary leading-snug line-clamp-2">{cleanTitle}</div>
                         <div className="flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t border-border pt-1">
@@ -1871,6 +1841,7 @@ export default function WorkflowView({
             </div>
           )}
         </div>
+        )}
 
         {/* Right Side: Interactive Shape Designer Toolbar & Editor Panel */}
         <div className="w-80 border-l border-border flex flex-col shrink-0 z-20 bg-card">
