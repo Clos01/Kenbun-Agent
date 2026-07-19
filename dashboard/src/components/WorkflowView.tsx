@@ -344,9 +344,9 @@ export default function WorkflowView({
           linkLabels: metadata.linkLabels || {},
           shape,
           status,
-          score: workOrder.score.get(card.id) || 0,
-          rank: workOrder.rank.get(card.id) || 999,
-          blocked: workOrder.blocked.has(card.id)
+          score: workOrder?.score?.get(card.id) || 0,
+          rank: workOrder?.rank?.get(card.id) || 999,
+          blocked: workOrder?.blocked?.has?.(card.id) || false
         };
       });
   }, [cards, listMap, workOrder]);
