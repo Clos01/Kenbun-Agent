@@ -65,37 +65,13 @@ export default function WorkflowView({
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
 
   const mermaidThemeStyles = useMemo(() => {
-    const isDark = preset === "obsidian";
-    if (isDark) {
-      return {
-        completed: "fill:#0f1d16,stroke:#10b981,stroke-width:1.5px,color:#34d399",
-        in_progress: "fill:#0b192c,stroke:#0284c7,stroke-width:1.5px,color:#38bdf8",
-        blocked: "fill:#211406,stroke:#f59e0b,stroke-width:1.5px,color:#fbbf24",
-        todo: "fill:#161616,stroke:#374151,stroke-width:1.2px,color:#9ca3af"
-      };
-    } else if (preset === "limestone") {
-      return {
-        completed: "fill:#f0fdf4,stroke:#10b981,stroke-width:1.5px,color:#14532d",
-        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e",
-        blocked: "fill:#fffbeb,stroke:#f59e0b,stroke-width:1.5px,color:#78350f",
-        todo: "fill:#ffffff,stroke:#e5e7eb,stroke-width:1.2px,color:#4b5563"
-      };
-    } else if (preset === "forest") {
-      return {
-        completed: "fill:#f0fdf4,stroke:#2e8b57,stroke-width:1.5px,color:#1b4332",
-        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e",
-        blocked: "fill:#fffbeb,stroke:#ffc107,stroke-width:1.5px,color:#78350f",
-        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569"
-      };
-    } else { // cobalt
-      return {
-        completed: "fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#334155",
-        in_progress: "fill:#eff6ff,stroke:#2f6feb,stroke-width:1.5px,color:#1e40af",
-        blocked: "fill:#fff7ed,stroke:#f97316,stroke-width:1.5px,color:#7c2d12",
-        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569"
-      };
-    }
-  }, [preset]);
+    return {
+      completed: "fill:none,stroke:none,stroke-width:0px",
+      in_progress: "fill:none,stroke:none,stroke-width:0px",
+      blocked: "fill:none,stroke:none,stroke-width:0px",
+      todo: "fill:none,stroke:none,stroke-width:0px"
+    };
+  }, []);
 
   // Selector / Modal states
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -214,19 +190,101 @@ export default function WorkflowView({
       lines.push("");
     }
 
-    // Declare shapes
+    // Declare shapes as rich visual HTML labels
     parsedCards.forEach(card => {
       // Escape title special characters
       const cleanTitle = card.name.replace(/"/g, "'");
-      const titleWithRank = `[#${card.rank}] ${cleanTitle}`;
       const id = `c_${card.id}`;
       
-      if (card.shape === "decision") {
-        lines.push(`  ${id}{"${titleWithRank}"}`);
-      } else if (card.shape === "terminal") {
-        lines.push(`  ${id}(["${titleWithRank}"])`);
+      // Determine status display values
+      let statusColor = "bg-neutral-500";
+      let statusText = "To Do";
+      if (card.status === "completed") {
+        statusColor = "bg-emerald-500";
+        statusText = "Completed";
+      } else if (card.status === "in_progress") {
+        statusColor = "bg-sky-500";
+        statusText = "In Progress";
+      } else if (card.status === "blocked") {
+        statusColor = "bg-amber-500";
+        statusText = "Blocked";
+      }
+
+      // Build metadata icon indicators
+      const icons: string[] = [];
+      if (card.description && card.description.trim().length > 0) {
+        icons.push("📝");
+      }
+      if (card.metadata.recurring && card.metadata.recurring !== "none") {
+        icons.push("🔁");
+      }
+      if (card.metadata.location) {
+        icons.push("📍");
+      }
+      if (card.metadata.collections && card.metadata.collections.length > 0) {
+        icons.push("🏷️");
+      }
+      const iconsHtml = icons.length > 0 
+        ? `<div class='flex items-center gap-1 opacity-70'>${icons.join("")}</div>` 
+        : "";
+
+      // Construct a premium card component HTML string based on shape type
+      let htmlLabel = "";
+      if (card.shape === "terminal") {
+        // Pill-shaped terminal node
+        htmlLabel = `
+          <div class='px-4 py-2.5 rounded-full border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex items-center justify-between gap-3 border-border' style='width: 190px; border-color: var(--border); background-color: var(--card);'>
+            <div class='flex items-center gap-2 truncate'>
+              <span class='w-2 h-2 rounded-full ${statusColor} shrink-0'></span>
+              <span class='text-[9px] font-bold text-primary truncate' style='color: var(--primary);'>${cleanTitle}</span>
+            </div>
+            <span class='text-[7px] font-mono uppercase tracking-wider text-secondary/60 shrink-0' style='color: var(--secondary); opacity: 0.6;'>Terminal</span>
+          </div>
+        `.replace(/\s+/g, " ").trim();
+      } else if (card.shape === "decision") {
+        // Decision Gate styled card
+        htmlLabel = `
+          <div class='p-3.5 rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2' style='width: 190px; min-height: 85px; border-color: var(--accent, var(--tertiary)); background-color: var(--card); border-width: 1.5px;'>
+            <div class='flex items-center justify-between'>
+              <div class='flex items-center gap-1.5'>
+                <span class='w-2 h-2 rounded-full' style='background-color: var(--accent, var(--tertiary));'></span>
+                <span class='text-[7.5px] font-mono font-bold uppercase tracking-wider' style='color: var(--accent, var(--tertiary));'>Decision Gate</span>
+              </div>
+              <span class='text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary' style='background-color: var(--neutral); color: var(--secondary);'>#${card.rank}</span>
+            </div>
+            <div class='text-[10px] font-bold text-primary leading-snug line-clamp-2' style='color: var(--primary);'>${cleanTitle}</div>
+            <div class='flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t pt-1.5' style='border-color: var(--border); color: var(--secondary);'>
+              <span>Priority: ${card.score}</span>
+              ${iconsHtml}
+            </div>
+          </div>
+        `.replace(/\s+/g, " ").trim();
       } else {
-        lines.push(`  ${id}["${titleWithRank}"]`);
+        // Standard Process card
+        htmlLabel = `
+          <div class='p-3.5 rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 border-border' style='width: 190px; min-height: 85px; border-color: var(--border); background-color: var(--card);'>
+            <div class='flex items-center justify-between'>
+              <div class='flex items-center gap-1.5'>
+                <span class='w-2 h-2 rounded-full ${statusColor}'></span>
+                <span class='text-[7.5px] font-mono font-bold uppercase tracking-wider text-secondary' style='color: var(--secondary);'>${statusText}</span>
+              </div>
+              <span class='text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary' style='background-color: var(--neutral); color: var(--secondary);'>#${card.rank}</span>
+            </div>
+            <div class='text-[10px] font-bold text-primary leading-snug line-clamp-2' style='color: var(--primary);'>${cleanTitle}</div>
+            <div class='flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t pt-1.5' style='border-color: var(--border); color: var(--secondary);'>
+              <span>Priority: ${card.score}</span>
+              ${iconsHtml}
+            </div>
+          </div>
+        `.replace(/\s+/g, " ").trim();
+      }
+
+      if (card.shape === "decision") {
+        lines.push(`  ${id}{"${htmlLabel}"}`);
+      } else if (card.shape === "terminal") {
+        lines.push(`  ${id}(["${htmlLabel}"])`);
+      } else {
+        lines.push(`  ${id}["${htmlLabel}"]`);
       }
     });
 
@@ -259,6 +317,14 @@ export default function WorkflowView({
     parsedCards.forEach(card => {
       lines.push(`  click c_${card.id} onMermaidNodeClick`);
     });
+    lines.push("");
+
+    // Style subgraphs to make them look like premium kanban containers
+    if (groupByLanes) {
+      lists.forEach(list => {
+        lines.push(`  style "${list.name}" fill:var(--card),stroke:var(--border),stroke-width:1px,rx:12px,ry:12px;`);
+      });
+    }
 
     return lines.join("\n");
   }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles, groupByLanes, lists]);
@@ -394,6 +460,55 @@ export default function WorkflowView({
       className="flex flex-col h-[calc(100vh-8.5rem)] relative border rounded-2xl overflow-hidden select-none"
       style={{ backgroundColor: "var(--neutral)", borderColor: "var(--border)" }}
     >
+      <style dangerouslySetInnerHTML={{ __html: `
+        .flowchart-link {
+          stroke: var(--border) !important;
+          stroke-opacity: 0.65 !important;
+          stroke-width: 1.5px !important;
+          transition: stroke 0.2s ease, stroke-width 0.2s ease !important;
+        }
+        .flowchart-link:hover {
+          stroke: var(--tertiary) !important;
+          stroke-opacity: 1 !important;
+          stroke-width: 2.2px !important;
+        }
+        .marker {
+          fill: var(--border) !important;
+          stroke: var(--border) !important;
+        }
+        .edgeLabel {
+          background-color: var(--card) !important;
+          color: var(--secondary) !important;
+          font-family: Space Mono, monospace !important;
+          font-size: 8px !important;
+          padding: 2px 6px !important;
+          border-radius: 4px !important;
+          border: 1px solid var(--border) !important;
+        }
+        .cluster rect {
+          fill: var(--card) !important;
+          fill-opacity: 0.35 !important;
+          stroke: var(--border) !important;
+          stroke-width: 1px !important;
+          rx: 12px !important;
+          ry: 12px !important;
+        }
+        .cluster span {
+          color: var(--primary) !important;
+          font-family: Space Mono, monospace !important;
+          font-size: 9px !important;
+          font-weight: 700 !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.12em !important;
+          opacity: 0.55 !important;
+        }
+        /* Make backing SVG shapes fully transparent since we style HTML cards */
+        .node rect, .node polygon, .node circle, .node path {
+          fill: none !important;
+          stroke: none !important;
+          stroke-width: 0px !important;
+        }
+      ` }} />
       
       {/* Top Header controls bar */}
       <div 
