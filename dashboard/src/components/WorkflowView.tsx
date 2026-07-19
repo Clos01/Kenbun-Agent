@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   X, 
@@ -51,6 +52,28 @@ interface WorkflowViewProps {
 type ShapeType = "process" | "decision" | "terminal";
 type LayoutDir = "TD" | "LR";
 
+// ── Mindmap spacing guard ─────────────────────────────────────────────
+// Mermaid's mindmap uses the cose-bilkent force layout, whose only config
+// lever (padding) grows the bubbles instead of reliably widening the GAPS
+// between them — so crowded mindmaps are a recurring problem. This is the
+// single source of truth that fixes it: every rendered mindmap is passed
+// through spaceOutMindmapNodes(), which shrinks each node in place so the
+// bubbles sit further apart with more breathing room. Raise the factor for
+// more air; lower it toward 1 for tighter. Because it runs on EVERY mindmap
+// render (see the render effect), future mindmaps can never come out cramped.
+const MINDMAP_SPACING_FACTOR = 1.28; // > 1 = more space between bubbles
+
+function spaceOutMindmapNodes(svgEl: Element, factor: number): void {
+  if (!(factor > 1)) return;
+  const shrink = (1 / factor).toFixed(4);
+  svgEl.querySelectorAll(".mindmap-node").forEach((node) => {
+    const t = node.getAttribute("transform") || "";
+    // Idempotent: never stack a second scale() on an already-processed node.
+    if (t.includes("scale(")) return;
+    node.setAttribute("transform", `${t} scale(${shrink})`.trim());
+  });
+}
+
 function CustomSelect<T extends string>({
   value,
   onChange,
@@ -63,23 +86,48 @@ function CustomSelect<T extends string>({
   label?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // The toolbar lives inside an overflow-hidden container, so an absolutely
+  // positioned menu gets clipped. Render it in a body portal with fixed
+  // coordinates measured from the trigger so it's never cut off.
+  const reposition = () => {
+    const r = triggerRef.current?.getBoundingClientRect();
+    if (r) setCoords({ top: r.bottom + 6, right: Math.max(8, window.innerWidth - r.right) });
+  };
+
+  const toggle = () => {
+    if (!isOpen) reposition();
+    setIsOpen(v => !v);
+  };
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
+    if (!isOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      const t = event.target as Node;
+      if (triggerRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setIsOpen(false);
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    // Reposition on layout shifts; close on scroll to avoid a detached menu.
+    function onResize() { reposition(); }
+    function onScroll() { setIsOpen(false); }
+    document.addEventListener("mousedown", onPointerDown);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onScroll, true);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onScroll, true);
+    };
+  }, [isOpen]);
 
   const activeOption = options.find(o => o.value === value);
 
   return (
-    <div className="relative inline-block text-left" ref={ref}>
-      <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2.5 py-1.5">
+    <div className="relative inline-block text-left" ref={triggerRef}>
+      <div className="flex items-center gap-1.5 bg-primary/[0.04] border border-border rounded-md px-2.5 py-1.5 hover:border-tertiary/30 transition-colors">
         {label && (
           <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">
             {label}:
@@ -87,7 +135,7 @@ function CustomSelect<T extends string>({
         )}
         <button
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={toggle}
           className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer flex items-center gap-1 hover:text-primary transition-colors"
         >
           <span>{activeOption?.label || value}</span>
@@ -95,38 +143,106 @@ function CustomSelect<T extends string>({
         </button>
       </div>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 4 }}
-            transition={{ duration: 0.1 }}
-            className="absolute right-0 mt-1 w-32 origin-top-right rounded-lg border shadow-lg focus:outline-none z-50 overflow-hidden"
-            style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
-          >
-            <div className="py-1">
-              {options.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => {
-                    onChange(opt.value);
-                    setIsOpen(false);
-                  }}
-                  className={`block w-full text-left px-3 py-2 text-[9px] font-mono font-bold uppercase hover:bg-white/5 cursor-pointer ${
-                    opt.value === value ? "text-tertiary bg-white/2" : "text-secondary hover:text-primary"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {typeof document !== "undefined" && createPortal(
+        <AnimatePresence>
+          {isOpen && coords && (
+            <motion.div
+              ref={menuRef}
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 4 }}
+              transition={{ duration: 0.1 }}
+              className="fixed origin-top-right rounded-lg border shadow-xl focus:outline-none overflow-hidden"
+              style={{
+                top: coords.top,
+                right: coords.right,
+                minWidth: "9rem",
+                zIndex: 60,
+                backgroundColor: "var(--card)",
+                borderColor: "var(--border)"
+              }}
+            >
+              <div className="py-1">
+                {options.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => {
+                      onChange(opt.value);
+                      setIsOpen(false);
+                    }}
+                    className={`block w-full text-left px-3 py-2 text-[9px] font-mono font-bold uppercase tracking-wider whitespace-nowrap hover:bg-primary/5 cursor-pointer ${
+                      opt.value === value ? "text-tertiary bg-tertiary/[0.06]" : "text-secondary hover:text-primary"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   );
+}
+
+interface LayoutNode {
+  id: string;
+  type: "root" | "list" | "card";
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  status?: string;
+  rank?: number;
+  shape?: ShapeType;
+  cardData?: any;
+}
+
+interface LayoutEdge {
+  id: string;
+  fromId: string;
+  toId: string;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+  label?: string;
+  style?: "dotted" | "solid";
+}
+
+function getStatusColorClass(status: string) {
+  if (status === "completed") return "bg-emerald-500";
+  if (status === "in_progress") return "bg-sky-500";
+  if (status === "blocked") return "bg-amber-500";
+  return "bg-neutral-500";
+}
+
+function getStatusText(status: string) {
+  if (status === "completed") return "Completed";
+  if (status === "in_progress") return "In Progress";
+  if (status === "blocked") return "Blocked";
+  return "To Do";
+}
+
+function getCardIcons(card: any) {
+  const icons = [];
+  if (card.description && card.description.trim().length > 0) {
+    icons.push(<span key="desc" title="Has Description">📝</span>);
+  }
+  if (card.metadata.recurring && card.metadata.recurring !== "none") {
+    icons.push(<span key="rec" title="Recurring task">🔁</span>);
+  }
+  if (card.metadata.location) {
+    icons.push(<span key="loc" title="Has Location">📍</span>);
+  }
+  if (card.metadata.collections && card.metadata.collections.length > 0) {
+    icons.push(<span key="tags" title="Has Collections">🏷️</span>);
+  }
+  return icons;
 }
 
 export default function WorkflowView({
@@ -250,24 +366,281 @@ export default function WorkflowView({
     return null;
   }, [parsedCards]);
 
+  const layout = useMemo(() => {
+    const nodes: LayoutNode[] = [];
+    const edges: LayoutEdge[] = [];
+    const lanes: { id: string; name: string; minX: number; maxX: number; minY: number; maxY: number }[] = [];
+
+    if (diagramMode === "mindmap") {
+      // 1. Root Node
+      nodes.push({
+        id: "root",
+        type: "root",
+        label: "Project Board",
+        x: -80,
+        y: -25,
+        width: 160,
+        height: 50
+      });
+
+      // 2. Split Lists (columns) Left/Right
+      const mid = Math.ceil(lists.length / 2);
+      const leftLists = lists.slice(0, mid);
+      const rightLists = lists.slice(mid);
+
+      const layList = (list: List, colIndex: number, side: "left" | "right") => {
+        const listCards = parsedCards
+          .filter(c => c.listId === list.id)
+          .sort((a, b) => a.rank - b.rank);
+        
+        const colX = side === "left" 
+          ? -(colIndex + 1) * 360 
+          : (colIndex + 1) * 360;
+        
+        const C = listCards.length;
+        const startY = C > 0 ? -(C - 1) * 60 : 0;
+
+        const listHeaderY = C > 0 ? startY - 80 : -20;
+        const listHeaderId = `list_${list.id}`;
+        nodes.push({
+          id: listHeaderId,
+          type: "list",
+          label: list.name.toUpperCase(),
+          x: colX - 90,
+          y: listHeaderY - 20,
+          width: 180,
+          height: 40
+        });
+
+        edges.push({
+          id: `root_to_${listHeaderId}`,
+          fromId: "root",
+          toId: listHeaderId,
+          fromX: side === "left" ? -80 : 80,
+          fromY: 0,
+          toX: side === "left" ? colX + 90 : colX - 90,
+          toY: listHeaderY,
+          style: "solid"
+        });
+
+        listCards.forEach((card, i) => {
+          const cardY = startY + i * 120;
+          const cardNodeId = `card_${card.id}`;
+          nodes.push({
+            id: cardNodeId,
+            type: "card",
+            label: card.name,
+            x: colX - 95,
+            y: cardY - 42.5,
+            width: 190,
+            height: 85,
+            status: card.status,
+            rank: card.rank,
+            shape: card.shape,
+            cardData: card
+          });
+
+          edges.push({
+            id: `${listHeaderId}_to_${cardNodeId}`,
+            fromId: listHeaderId,
+            toId: cardNodeId,
+            fromX: colX,
+            fromY: listHeaderY + 20,
+            toX: side === "left" ? colX + 95 : colX - 95,
+            toY: cardY,
+            style: "solid"
+          });
+        });
+      };
+
+      leftLists.forEach((list, idx) => layList(list, idx, "left"));
+      rightLists.forEach((list, idx) => layList(list, idx, "right"));
+
+    } else if (diagramMode === "flowchart") {
+      if (groupByLanes) {
+        lists.forEach((list, colIdx) => {
+          const listCards = parsedCards
+            .filter(c => c.listId === list.id)
+            .sort((a, b) => a.rank - b.rank);
+          
+          const colX = (colIdx - (lists.length - 1) / 2) * 320;
+          const C = listCards.length;
+          const startY = C > 0 ? -(C - 1) * 65 : 0;
+
+          if (C > 0) {
+            lanes.push({
+              id: list.id,
+              name: list.name,
+              minX: colX - 110,
+              maxX: colX + 110,
+              minY: startY - 90,
+              maxY: startY + (C - 1) * 130 + 70
+            });
+          }
+
+          listCards.forEach((card, i) => {
+            const cardY = startY + i * 130;
+            nodes.push({
+              id: `card_${card.id}`,
+              type: "card",
+              label: card.name,
+              x: colX - 95,
+              y: cardY - 42.5,
+              width: 190,
+              height: 85,
+              status: card.status,
+              rank: card.rank,
+              shape: card.shape,
+              cardData: card
+            });
+          });
+        });
+      } else {
+        const cardLevels = new Map<string, number>();
+        parsedCards.forEach(c => cardLevels.set(c.id, 0));
+
+        for (let pass = 0; pass < 10; pass++) {
+          let changed = false;
+          parsedCards.forEach(card => {
+            let maxDepLevel = -1;
+            card.dependencies.forEach(depId => {
+              if (cardLevels.has(depId)) {
+                maxDepLevel = Math.max(maxDepLevel, cardLevels.get(depId)!);
+              }
+            });
+            if (maxDepLevel >= 0) {
+              const newLevel = maxDepLevel + 1;
+              if (cardLevels.get(card.id) !== newLevel) {
+                cardLevels.set(card.id, newLevel);
+                changed = true;
+              }
+            }
+          });
+          if (!changed) break;
+        }
+
+        const levelCardsMap = new Map<number, typeof parsedCards>();
+        parsedCards.forEach(card => {
+          const lvl = cardLevels.get(card.id) || 0;
+          if (!levelCardsMap.has(lvl)) levelCardsMap.set(lvl, []);
+          levelCardsMap.get(lvl)!.push(card);
+        });
+
+        const activeLevels = Array.from(levelCardsMap.keys()).sort((a, b) => a - b);
+        activeLevels.forEach((level, colIdx) => {
+          const listCards = levelCardsMap.get(level)!;
+          const colX = (colIdx - (activeLevels.length - 1) / 2) * 320;
+          const C = listCards.length;
+          const startY = C > 0 ? -(C - 1) * 65 : 0;
+
+          listCards.forEach((card, i) => {
+            const cardY = startY + i * 130;
+            nodes.push({
+              id: `card_${card.id}`,
+              type: "card",
+              label: card.name,
+              x: colX - 95,
+              y: cardY - 42.5,
+              width: 190,
+              height: 85,
+              status: card.status,
+              rank: card.rank,
+              shape: card.shape,
+              cardData: card
+            });
+          });
+        });
+      }
+
+      const nodeMap = new Map(nodes.map(n => [n.id, n]));
+
+      let hasManualLinks = false;
+      parsedCards.forEach(card => {
+        if (card.dependencies.length > 0) hasManualLinks = true;
+      });
+
+      if (hasManualLinks || !showSuggestedPath) {
+        parsedCards.forEach(card => {
+          const toNode = nodeMap.get(`card_${card.id}`);
+          if (!toNode) return;
+
+          card.dependencies.forEach(depId => {
+            const fromNode = nodeMap.get(`card_${depId}`);
+            if (!fromNode) return;
+
+            const label = card.linkLabels?.[depId];
+
+            edges.push({
+              id: `edge_${depId}_to_${card.id}`,
+              fromId: fromNode.id,
+              toId: toNode.id,
+              fromX: fromNode.x + fromNode.width,
+              fromY: fromNode.y + fromNode.height / 2,
+              toX: toNode.x,
+              toY: toNode.y + toNode.height / 2,
+              label,
+              style: "solid"
+            });
+          });
+        });
+      } else {
+        const activeSequence = parsedCards
+          .filter(c => c.status !== "completed")
+          .sort((a, b) => a.rank - b.rank);
+
+        for (let i = 0; i < activeSequence.length - 1; i++) {
+          const fromCard = activeSequence[i];
+          const toCard = activeSequence[i + 1];
+
+          const fromNode = nodeMap.get(`card_${fromCard.id}`);
+          const toNode = nodeMap.get(`card_${toCard.id}`);
+
+          if (fromNode && toNode) {
+            edges.push({
+              id: `edge_suggested_${fromCard.id}_to_${toCard.id}`,
+              fromId: fromNode.id,
+              toId: toNode.id,
+              fromX: fromNode.x + fromNode.width,
+              fromY: fromNode.y + fromNode.height / 2,
+              toX: toNode.x,
+              toY: toNode.y + toNode.height / 2,
+              label: "suggested",
+              style: "dotted"
+            });
+          }
+        }
+      }
+    }
+
+    return { nodes, edges, lanes };
+  }, [parsedCards, lists, diagramMode, groupByLanes, showSuggestedPath]);
+
   // Mindmap code builder
   const mindmapCode = useMemo(() => {
+    // Strip characters that break Mermaid mindmap parsing, collapse whitespace.
+    const clean = (s: string) => s.replace(/[^A-Za-z0-9 .\-]/g, " ").replace(/\s+/g, " ").trim();
+    const trunc = (s: string) => (s.length > 30 ? `${s.slice(0, 29).trim()}...` : s);
+
     const lines: string[] = [];
     lines.push("mindmap");
     lines.push("  root((Project Board))");
-    
+
     lists.forEach(list => {
-      const listCards = parsedCards.filter(c => c.listId === list.id);
+      const listCards = parsedCards
+        .filter(c => c.listId === list.id)
+        .sort((a, b) => a.rank - b.rank);
       if (listCards.length > 0) {
-        const safeListName = list.name.replace(/[^a-zA-Z0-9\s]/g, "");
-        lines.push(`    ${safeListName}`);
+        // Branch = column (square chip); leaves = cards (rounded chips). Giving
+        // leaves an explicit shape lets us style them as clean themed chips.
+        const branch = clean(list.name).toUpperCase() || "LANE";
+        lines.push(`    [${branch}]`);
         listCards.forEach(card => {
-          const safeCardName = card.name.replace(/[^a-zA-Z0-9\s]/g, "");
-          lines.push(`      ${safeCardName}`);
+          const leaf = trunc(clean(card.name)) || "Untitled";
+          lines.push(`      (${leaf})`);
         });
       }
     });
-    
+
     return lines.join("\n");
   }, [parsedCards, lists]);
 
@@ -498,15 +871,17 @@ export default function WorkflowView({
     });
 
     if (hasManualLinks || !showSuggestedPath) {
-      // Use strict manual dependencies
+      // Use strict manual dependencies. Edges INTO the current/next step use a
+      // thick arrow (==>) so the "do this next" direction is unmistakable.
       parsedCards.forEach(card => {
         card.dependencies.forEach(depId => {
           if (parsedCardMap.has(depId)) {
             const label = card.linkLabels?.[depId];
+            const arrow = card.id === nextStepCardId ? "==>" : "-->";
             if (label) {
-              lines.push(`  c_${depId} -->|"${label}"| c_${card.id}`);
+              lines.push(`  c_${depId} ${arrow}|"${label}"| c_${card.id}`);
             } else {
-              lines.push(`  c_${depId} --> c_${card.id}`);
+              lines.push(`  c_${depId} ${arrow} c_${card.id}`);
             }
           }
         });
@@ -543,67 +918,14 @@ export default function WorkflowView({
 
 
     return lines.join("\n");
-  }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles, groupByLanes, lists]);
+  }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles, groupByLanes, lists, nextStepCardId, showSuggestedPath]);
 
 
 
-  // Render Mermaid code into SVG
+  // Render Mermaid code into SVG (Bypassed in favor of custom React/SVG layout calculations)
   useEffect(() => {
-    let isMounted = true;
-
-    async function renderMermaid() {
-      const activeCode = diagramMode === "mindmap" ? mindmapCode : mermaidCode;
-      
-      if (diagramMode === "ascii") {
-        setIsRendering(false);
-        return;
-      }
-
-      if (isMounted) {
-        setIsRendering(true);
-      }
-      try {
-        const mermaid = (await import("mermaid")).default;
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: preset === "obsidian" ? "dark" : "default",
-          securityLevel: "loose",
-          fontFamily: "Space Mono, monospace",
-          flowchart: {
-            htmlLabels: true,
-            curve: lineStyle,
-            nodeSpacing: 30,
-            rankSpacing: 35,
-            padding: 6
-          }
-        });
-
-        const id = `mermaid-canvas-${Math.random().toString(36).substring(2, 9)}`;
-        const { svg } = await mermaid.render(id, activeCode);
-
-        // Make SVG fluid by stripping explicit width/height and applying max-width
-        const cleanedSvg = svg
-          .replace(/width="[^"]*"/, 'style="max-width: 100%; width: 100%; height: auto;"')
-          .replace(/height="[^"]*"/, "");
-
-        if (isMounted) {
-          setSvgCode(cleanedSvg);
-        }
-      } catch (err) {
-        console.error("Mermaid parsing/rendering error:", err);
-      } finally {
-        if (isMounted) {
-          setIsRendering(false);
-        }
-      }
-    }
-
-    renderMermaid();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [mermaidCode, mindmapCode, diagramMode, lineStyle, preset]);
+    // Left empty since we now calculate node coordinates and draw paths in native React/SVG
+  }, []);
 
   // Register passive-false wheel listener on canvasRef to handle scroll zoom without page scrolling
   useEffect(() => {
@@ -740,30 +1062,44 @@ export default function WorkflowView({
       case "completed": return "bg-emerald-500 border-emerald-500/20 text-emerald-400";
       case "in_progress": return "bg-sky-500 border-sky-500/20 text-sky-400";
       case "blocked": return "bg-amber-500 border-amber-500/20 text-amber-400";
-      default: return "bg-neutral-400 border-white/5 text-secondary";
+      default: return "bg-neutral-400 border-border text-secondary";
     }
   };
 
   return (
-    <div 
-      className="flex flex-col h-[calc(100vh-8.5rem)] relative border rounded-2xl overflow-hidden select-none"
-      style={{ backgroundColor: "var(--neutral)", borderColor: "var(--border)" }}
-    >
+    <div className="flex flex-col h-[calc(100vh-8.5rem)] relative border border-border rounded-md overflow-hidden select-none bg-neutral">
       <style dangerouslySetInnerHTML={{ __html: `
-        .flowchart-link {
-          stroke: var(--border) !important;
-          stroke-opacity: 0.65 !important;
-          stroke-width: 1.5px !important;
+        /* ---- Flowchart edges & arrows (theme-adaptive, high-visibility) ---- */
+        .wf-mode-flowchart .flowchart-link {
+          stroke: var(--secondary) !important;
+          stroke-opacity: 0.55 !important;
+          stroke-width: 1.6px !important;
           transition: stroke 0.2s ease, stroke-width 0.2s ease !important;
         }
-        .flowchart-link:hover {
+        .wf-mode-flowchart .flowchart-link:hover {
           stroke: var(--tertiary) !important;
           stroke-opacity: 1 !important;
-          stroke-width: 2.2px !important;
+          stroke-width: 2.4px !important;
         }
-        .marker {
-          fill: var(--border) !important;
-          stroke: var(--border) !important;
+        /* Thick edges (==>) point into the current/next step — make them pop */
+        .wf-mode-flowchart .flowchart-link.edge-thickness-thick {
+          stroke: var(--tertiary) !important;
+          stroke-opacity: 1 !important;
+          stroke-width: 3px !important;
+        }
+        /* Dashed 'suggested path' edges flow toward the next step */
+        .wf-mode-flowchart .flowchart-link.edge-pattern-dotted,
+        .wf-mode-flowchart .flowchart-link.edge-pattern-dashed {
+          stroke: var(--tertiary) !important;
+          stroke-opacity: 0.85 !important;
+          animation: wfDashFlow 0.9s linear infinite !important;
+        }
+        @keyframes wfDashFlow { to { stroke-dashoffset: -18; } }
+        /* Arrowheads: clay/tertiary so they read on every theme */
+        .marker, marker path, .arrowMarkerPath, #arrowhead path {
+          fill: var(--tertiary) !important;
+          stroke: var(--tertiary) !important;
+          stroke-width: 1px !important;
         }
         .edgeLabel {
           background-color: var(--card) !important;
@@ -791,12 +1127,72 @@ export default function WorkflowView({
           letter-spacing: 0.12em !important;
           opacity: 0.55 !important;
         }
-        /* Make backing SVG shapes fully transparent since we style HTML cards */
-        .node rect, .node polygon, .node circle, .node path {
+        /* Flowchart ONLY: hide backing SVG shapes since we render HTML cards.
+           Scoped so it never blanks mindmap section fills. */
+        .wf-mode-flowchart .node rect, .wf-mode-flowchart .node polygon,
+        .wf-mode-flowchart .node circle, .wf-mode-flowchart .node path {
           fill: none !important;
           stroke: none !important;
           stroke-width: 0px !important;
         }
+
+        /* ---- Mindmap: clean themed chips ----
+           Mermaid's mindmap themeVariables are unreliable, so we override the
+           emitted .section-* classes directly. Every colour is mixed from the
+           user's chosen theme (--tertiary / --card / --primary), so it stays on
+           brand and readable on every preset — never dark-on-dark or light-on-light. */
+        .wf-mode-mindmap g[class*="section-"] text,
+        .wf-mode-mindmap g[class*="section-"] tspan,
+        .wf-mode-mindmap g[class*="section-"] span,
+        .wf-mode-mindmap .mindmap-node text,
+        .wf-mode-mindmap .mindmap-node-label {
+          fill: var(--primary) !important;
+          color: var(--primary) !important;
+          font-family: Space Mono, monospace !important;
+          font-size: 14px !important;
+          font-weight: 600 !important;
+        }
+        /* Leaf/card chips — subtle clay tint of the active theme */
+        .wf-mode-mindmap g[class*="section-"] rect,
+        .wf-mode-mindmap g[class*="section-"] polygon {
+          fill: color-mix(in srgb, var(--tertiary) 8%, var(--card)) !important;
+          stroke: color-mix(in srgb, var(--tertiary) 28%, transparent) !important;
+          stroke-width: 1.25px !important;
+          rx: 11px !important;
+          ry: 11px !important;
+        }
+        /* Branch/column chips ([]) — read as headers: stronger tint + caps */
+        .wf-mode-mindmap g[class*="section-"] > .node-bkg[class*="rect"],
+        .wf-mode-mindmap .section--1 rect,
+        .wf-mode-mindmap g[class*="section-"] rect.node-square {
+          fill: color-mix(in srgb, var(--tertiary) 16%, var(--card)) !important;
+          stroke: color-mix(in srgb, var(--tertiary) 42%, transparent) !important;
+        }
+        /* Root pill: clay bg + paper text — contrasts on every theme */
+        .wf-mode-mindmap .section-root circle,
+        .wf-mode-mindmap .section-root path,
+        .wf-mode-mindmap .section-root rect,
+        .wf-mode-mindmap .section-root polygon {
+          fill: var(--tertiary) !important;
+          stroke: var(--tertiary) !important;
+        }
+        .wf-mode-mindmap .section-root text,
+        .wf-mode-mindmap .section-root tspan,
+        .wf-mode-mindmap .section-root span {
+          fill: var(--neutral) !important;
+          color: var(--neutral) !important;
+          font-weight: 700 !important;
+        }
+        /* Branch lines — subtle clay curves that echo the theme accent */
+        .wf-mode-mindmap .edge,
+        .wf-mode-mindmap path.edge,
+        .wf-mode-mindmap [class*="section-edge-"] {
+          stroke: color-mix(in srgb, var(--tertiary) 55%, transparent) !important;
+          stroke-opacity: 0.7 !important;
+          stroke-width: 1.75px !important;
+          fill: none !important;
+        }
+
         /* Custom styled native select dropdowns to match theme colors and override default OS chevrons */
         select {
           appearance: none !important;
@@ -816,50 +1212,51 @@ export default function WorkflowView({
         }
       ` }} />
       
-      {/* Top Header controls bar */}
-      <div 
-        className="flex items-center justify-between px-6 py-4 border-b shrink-0 z-30"
-        style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
-      >
-        <div className="flex items-center gap-2">
-          <GitBranch className="w-4 h-4 text-tertiary" />
-          <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary">
-            Sovereign Mermaid-Driven Flowchart Maker
-          </h2>
-          <span className="text-[10px] font-mono text-secondary px-2 py-0.5 bg-white/5 rounded">
-            Auto-Generated
+      {/* ============ HEADER — identity + primary actions ============ */}
+      <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-border shrink-0 z-30 bg-card">
+        <div className="flex items-center gap-3 min-w-0">
+          <GitBranch className="w-4 h-4 text-tertiary shrink-0" />
+          <div className="min-w-0">
+            <div className="text-[9px] font-mono text-secondary uppercase tracking-[0.2em] font-bold leading-none mb-1">
+              Workflow
+            </div>
+            <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary leading-none truncate">
+              Flowchart
+            </h2>
+          </div>
+          <span className="hidden sm:inline text-[9px] font-mono text-secondary px-2 py-1 bg-primary/[0.04] border border-border rounded-md">
+            {parsedCards.length} steps · auto-generated
           </span>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-3">
-          {/* Zoom controls (Only for non-ASCII diagrams) */}
+        {/* Primary actions */}
+        <div className="flex items-center gap-2 shrink-0">
           {diagramMode !== "ascii" && (
-            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded px-1.5 py-1">
+            <div className="hidden sm:flex items-center gap-1 bg-primary/[0.04] border border-border rounded-md px-1.5 py-1">
               <button
                 onClick={() => setScale(prev => Math.max(prev - 0.15, 0.25))}
-                className="p-1 hover:bg-white/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
+                className="p-1 hover:bg-primary/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Zoom Out"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
-                className="px-1 text-[9px] font-mono font-bold text-secondary hover:text-primary cursor-pointer"
+                className="px-1 w-10 text-center text-[9px] font-mono font-bold text-secondary hover:text-primary cursor-pointer"
                 title="Reset zoom & fit canvas"
               >
                 {Math.round(scale * 100)}%
               </button>
               <button
                 onClick={() => setScale(prev => Math.min(prev + 0.15, 3))}
-                className="p-1 hover:bg-white/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
+                className="p-1 hover:bg-primary/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Zoom In"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
-                className="p-1 hover:bg-white/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer border-l border-white/10 ml-0.5 pl-1.5"
+                className="p-1 hover:bg-primary/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer border-l border-border ml-0.5 pl-1.5"
                 title="Recenter Canvas"
               >
                 <Maximize2 className="w-3.5 h-3.5" />
@@ -867,7 +1264,6 @@ export default function WorkflowView({
             </div>
           )}
 
-          {/* Diagram Mode Selection */}
           <CustomSelect
             label="Mode"
             value={diagramMode}
@@ -879,72 +1275,94 @@ export default function WorkflowView({
             ]}
           />
 
-          {diagramMode === "flowchart" && (
-            <>
-              <button
-                onClick={() => setGroupByLanes(prev => !prev)}
-                className={`px-2.5 py-1.5 border rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                  groupByLanes
-                    ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
-                    : "bg-white/5 border-white/10 text-secondary hover:text-primary hover:bg-white/10"
-                }`}
-                title="Group Flowchart Nodes by Kanban Lanes"
-              >
-                Lanes: {groupByLanes ? "Enabled" : "Disabled"}
-              </button>
-
-              <button
-                onClick={() => setShowSuggestedPath(prev => !prev)}
-                className={`px-2.5 py-1.5 border rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                  showSuggestedPath
-                    ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
-                    : "bg-white/5 border-white/10 text-secondary hover:text-primary hover:bg-white/10"
-                }`}
-                title="Auto-Draw Arrows Connecting Sequence Steps"
-              >
-                Path: {showSuggestedPath ? "Suggested Flow" : "Manual Link"}
-              </button>
-
-              <CustomSelect
-                label="Curve"
-                value={lineStyle}
-                onChange={setLineStyle}
-                options={[
-                  { value: "basis", label: "Curved" },
-                  { value: "step", label: "Orthogonal" },
-                  { value: "linear", label: "Straight" }
-                ]}
-              />
-
-              <button
-                onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
-                className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Toggle Flowchart Layout Direction"
-              >
-                <Layout className="w-3.5 h-3.5" />
-                Orientation: {layoutDir === "LR" ? "Left-to-Right" : "Top-to-Bottom"}
-              </button>
-            </>
-          )}
-
           <button
             onClick={handleCopyCode}
-            className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Copy Diagram Code/ASCII representation"
+            className="px-2.5 py-1.5 bg-primary/[0.04] hover:bg-primary/[0.08] border border-border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Copy diagram source"
           >
             <Copy className="w-3.5 h-3.5" />
-            {copied ? "Copied!" : "Copy diagram"}
+            <span className="hidden md:inline">{copied ? "Copied!" : "Copy"}</span>
           </button>
 
           <button
             onClick={() => setIsAddingStep(true)}
-            className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/95 rounded text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
+            className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded-md text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            Add step
+            <span className="hidden sm:inline">Add step</span>
           </button>
         </div>
       </div>
+
+      {/* ============ SECONDARY STRIP — flowchart view options + legend ============ */}
+      {diagramMode === "flowchart" && (
+        <div className="flex items-center justify-between gap-4 flex-wrap px-5 py-2.5 border-b border-border shrink-0 bg-card/60 backdrop-blur-sm">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold mr-1">
+              Layout
+            </span>
+            <button
+              onClick={() => setGroupByLanes(prev => !prev)}
+              className={`px-2.5 py-1.5 border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                groupByLanes
+                  ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
+                  : "bg-primary/[0.04] border-border text-secondary hover:text-primary hover:bg-primary/[0.08]"
+              }`}
+              title="Group nodes by kanban column"
+            >
+              Lanes {groupByLanes ? "On" : "Off"}
+            </button>
+            <button
+              onClick={() => setShowSuggestedPath(prev => !prev)}
+              className={`px-2.5 py-1.5 border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                showSuggestedPath
+                  ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
+                  : "bg-primary/[0.04] border-border text-secondary hover:text-primary hover:bg-primary/[0.08]"
+              }`}
+              title="Auto-draw arrows through the priority sequence when no links exist"
+            >
+              {showSuggestedPath ? "Suggested Path" : "Manual Links"}
+            </button>
+            <CustomSelect
+              label="Curve"
+              value={lineStyle}
+              onChange={setLineStyle}
+              options={[
+                { value: "basis", label: "Curved" },
+                { value: "step", label: "Orthogonal" },
+                { value: "linear", label: "Straight" }
+              ]}
+            />
+            <button
+              onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
+              className="px-2.5 py-1.5 bg-primary/[0.04] hover:bg-primary/[0.08] border border-border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Toggle layout direction"
+            >
+              <Layout className="w-3.5 h-3.5" />
+              {layoutDir === "LR" ? "Horizontal" : "Vertical"}
+            </button>
+          </div>
+
+          {/* Legend */}
+          <div className="hidden lg:flex items-center gap-3 text-[8.5px] font-mono text-secondary">
+            {[
+              { c: "bg-neutral-400", l: "To do" },
+              { c: "bg-sky-500", l: "In progress" },
+              { c: "bg-amber-500", l: "Blocked" },
+              { c: "bg-emerald-500", l: "Done" }
+            ].map(s => (
+              <span key={s.l} className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full ${s.c}`} />
+                {s.l}
+              </span>
+            ))}
+            <span className="flex items-center gap-1.5 border-l border-border pl-3">
+              <span className="w-2.5 h-2.5 rotate-45 border border-tertiary/50 bg-tertiary/10" />
+              Gate
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Main split-screen workspace */}
       <div className="flex-1 flex overflow-hidden">
@@ -956,7 +1374,7 @@ export default function WorkflowView({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
-          className="flex-1 relative flex items-center justify-center overflow-hidden select-none"
+          className={`wf-mode-${diagramMode} flex-1 relative flex items-center justify-center overflow-hidden select-none`}
           style={{
             backgroundColor: "var(--neutral)",
             backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
@@ -965,13 +1383,10 @@ export default function WorkflowView({
           }}
         >
           {isRendering && (
-            <div 
-              className="absolute inset-0 backdrop-blur-xs flex items-center justify-center gap-2.5 z-40"
-              style={{ backgroundColor: "rgba(var(--neutral), 0.7)" }}
-            >
+            <div className="absolute inset-0 bg-neutral/70 backdrop-blur-xs flex items-center justify-center gap-2.5 z-40">
               <RefreshCw className="w-4 h-4 text-tertiary animate-spin" />
-              <span className="font-mono text-xs uppercase tracking-wider text-secondary">
-                Rendering diagram...
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">
+                Rendering diagram…
               </span>
             </div>
           )}
@@ -982,35 +1397,264 @@ export default function WorkflowView({
                 {asciiGridCode}
               </pre>
             </div>
-          ) : svgCode ? (
+          ) : layout.nodes.length > 0 ? (
             <div 
-              className="w-full flex items-center justify-center p-4 min-w-[700px]"
+              className="absolute overflow-visible pointer-events-none"
               style={{
+                width: 1,
+                height: 1,
                 transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
                 transformOrigin: "center center",
                 transition: isPanning ? "none" : "transform 0.1s ease-out",
-                pointerEvents: "auto"
               }}
-              dangerouslySetInnerHTML={{ __html: svgCode }}
-            />
+            >
+              {/* SVG Overlay for Connections */}
+              <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: 1, height: 1 }}>
+                <defs>
+                  <marker
+                    id="custom-arrowhead"
+                    viewBox="0 0 10 10"
+                    refX="6"
+                    refY="5"
+                    markerWidth="6"
+                    markerHeight="6"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--border)" opacity="0.6" />
+                  </marker>
+                </defs>
+
+                {/* Swimlanes background containers */}
+                {layout.lanes.map(lane => (
+                  <g key={lane.id} className="opacity-40">
+                    <rect
+                      x={lane.minX}
+                      y={lane.minY}
+                      width={lane.maxX - lane.minX}
+                      height={lane.maxY - lane.minY}
+                      fill="var(--card)"
+                      fillOpacity="0.08"
+                      stroke="var(--border)"
+                      strokeWidth="1.5"
+                      strokeDasharray="4 4"
+                      rx="16"
+                    />
+                    <rect
+                      x={lane.minX}
+                      y={lane.minY}
+                      width={lane.maxX - lane.minX}
+                      height="35"
+                      fill="var(--card)"
+                      fillOpacity="0.12"
+                      rx="16"
+                      clipPath="inset(0 0 16px 0)"
+                    />
+                    <text
+                      x={lane.minX + 16}
+                      y={lane.minY + 22}
+                      fill="var(--primary)"
+                      fontSize="9"
+                      fontWeight="bold"
+                      fontFamily="Space Mono, monospace"
+                      letterSpacing="0.1em"
+                      className="uppercase opacity-70"
+                    >
+                      {lane.name}
+                    </text>
+                  </g>
+                ))}
+
+                {/* Connection lines */}
+                {layout.edges.map(edge => {
+                  const dx = edge.toX - edge.fromX;
+                  const cp = Math.max(Math.min(Math.abs(dx) * 0.45, 120), 40);
+                  const isDotted = edge.style === "dotted";
+                  
+                  let pathD = "";
+                  if (diagramMode === "mindmap" && edge.fromId === "root") {
+                    pathD = `M ${edge.fromX} ${edge.fromY} C ${(edge.fromX + edge.toX)/2} ${edge.fromY}, ${edge.toX} ${(edge.fromY + edge.toY)/2}, ${edge.toX} ${edge.toY}`;
+                  } else {
+                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cp} ${edge.fromY}, ${edge.toX - cp} ${edge.toY}, ${edge.toX} ${edge.toY}`;
+                  }
+
+                  return (
+                    <g key={edge.id}>
+                      <path
+                        d={pathD}
+                        fill="none"
+                        stroke="var(--border)"
+                        strokeWidth="1.5"
+                        strokeOpacity={edge.label === "suggested" ? 0.35 : 0.65}
+                        strokeDasharray={isDotted ? "4 4" : undefined}
+                        className="transition-all duration-200 hover:stroke-[var(--tertiary)] hover:stroke-opacity-100"
+                        markerEnd={diagramMode === "flowchart" ? "url(#custom-arrowhead)" : undefined}
+                      />
+                      {edge.label && edge.label !== "suggested" && (
+                        <foreignObject
+                          x={(edge.fromX + edge.toX) / 2 - 40}
+                          y={(edge.fromY + edge.toY) / 2 - 10}
+                          width="80"
+                          height="20"
+                          className="overflow-visible"
+                        >
+                          <div className="flex justify-center select-none pointer-events-none">
+                            <span 
+                              className="px-1.5 py-0.5 rounded text-[8px] font-mono border text-secondary bg-card select-none"
+                              style={{ borderColor: 'var(--border)' }}
+                            >
+                              {edge.label}
+                            </span>
+                          </div>
+                        </foreignObject>
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Render HTML Nodes */}
+              {layout.nodes.map(node => {
+                if (node.type === "root") {
+                  return (
+                    <div
+                      key={node.id}
+                      className="absolute flex items-center justify-center rounded-2xl border text-center font-bold text-[10px] tracking-wider uppercase text-primary select-none pointer-events-auto"
+                      style={{
+                        left: node.x,
+                        top: node.y,
+                        width: node.width,
+                        height: node.height,
+                        borderColor: "var(--border)",
+                        backgroundColor: "var(--card)",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)"
+                      }}
+                    >
+                      <div className="px-3 truncate">
+                        {node.label}
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (node.type === "list") {
+                  return (
+                    <div
+                      key={node.id}
+                      className="absolute flex items-center justify-center rounded-xl border text-center font-bold text-[9px] tracking-wider uppercase text-secondary/80 select-none pointer-events-auto"
+                      style={{
+                        left: node.x,
+                        top: node.y,
+                        width: node.width,
+                        height: node.height,
+                        borderColor: "var(--border)",
+                        backgroundColor: "var(--card)",
+                        boxShadow: "0 2px 6px rgba(0,0,0,0.05)"
+                      }}
+                    >
+                      {node.label}
+                    </div>
+                  );
+                }
+
+                const card = node.cardData;
+                const isNextStep = card.id === nextStepCardId;
+                const cleanTitle = card.name;
+                const statusColor = getStatusColorClass(card.status);
+                const statusText = getStatusText(card.status);
+                const iconsHtml = getCardIcons(card);
+
+                const borderClass = isNextStep 
+                  ? "border-tertiary shadow-[0_0_12px_rgba(var(--tertiary-rgb),0.35)]" 
+                  : "border-border";
+
+                return (
+                  <div
+                    key={node.id}
+                    onClick={() => setSelectedCardId(card.id)}
+                    className={`absolute rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto ${borderClass}`}
+                    style={{
+                      left: node.x,
+                      top: node.y,
+                      width: node.width,
+                      height: node.height,
+                      backgroundColor: "var(--card)",
+                      borderColor: isNextStep ? "var(--tertiary)" : "var(--border)",
+                      borderWidth: isNextStep ? "1.5px" : "1px"
+                    }}
+                  >
+                    {card.shape === "terminal" ? (
+                      <div className="px-4 py-2.5 h-full rounded-full flex items-center justify-between gap-3 select-none">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className={`w-2 h-2 rounded-full ${statusColor} shrink-0`}></span>
+                          <span className="text-[9px] font-bold text-primary truncate">{cleanTitle}</span>
+                        </div>
+                        {isNextStep ? (
+                          <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse">👉 NEXT</span>
+                        ) : (
+                          <span className="text-[7px] font-mono uppercase tracking-wider text-secondary/60 shrink-0">Terminal</span>
+                        )}
+                      </div>
+                    ) : card.shape === "decision" ? (
+                      <div className="p-3 h-full flex flex-col gap-1.5 justify-between select-none">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "var(--accent, var(--tertiary))" }}></span>
+                            <span className="text-[7.5px] font-mono font-bold uppercase tracking-wider" style={{ color: "var(--accent, var(--tertiary))" }}>Decision Gate</span>
+                          </div>
+                          {isNextStep ? (
+                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse" style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>👉 NEXT</span>
+                          ) : (
+                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary" style={{ backgroundColor: "var(--neutral)" }}>#{card.rank}</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] font-bold text-primary leading-snug line-clamp-2">{cleanTitle}</div>
+                        <div className="flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t border-border pt-1">
+                          <span>Priority: {card.score}</span>
+                          <div className="flex gap-1">{iconsHtml}</div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 h-full flex flex-col gap-1.5 justify-between select-none">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusColor}`}></span>
+                            <span className="text-[7.5px] font-mono font-bold uppercase tracking-wider text-secondary">{statusText}</span>
+                          </div>
+                          {isNextStep ? (
+                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse" style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>👉 NEXT</span>
+                          ) : (
+                            <span className="text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary" style={{ backgroundColor: "var(--neutral)" }}>#{card.rank}</span>
+                          )}
+                        </div>
+                        <div className="text-[10px] font-bold text-primary leading-snug line-clamp-2">{cleanTitle}</div>
+                        <div className="flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t border-border pt-1">
+                          <span>Priority: {card.score}</span>
+                          <div className="flex gap-1">{iconsHtml}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           ) : (
-            <div className="font-mono text-xs uppercase text-secondary">
-              No flowchart schema active.
+            <div className="flex flex-col items-center gap-3 text-center px-8">
+              <GitBranch className="w-10 h-10 text-secondary/25" />
+              <p className="font-mono text-[10px] uppercase tracking-[0.2em] font-bold text-secondary">
+                No steps on this board yet
+              </p>
+              <p className="text-[10px] text-secondary/70 max-w-[220px]">
+                Cards the AI adds to the board render here automatically.
+              </p>
             </div>
           )}
         </div>
 
         {/* Right Side: Interactive Shape Designer Toolbar & Editor Panel */}
-        <div 
-          className="w-80 border-l flex flex-col shrink-0 z-20"
-          style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
-        >
-          
+        <div className="w-80 border-l border-border flex flex-col shrink-0 z-20 bg-card">
+
           {/* Tab bar header */}
-          <div 
-            className="flex border-b shrink-0"
-            style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
-          >
+          <div className="flex border-b border-border shrink-0 bg-card">
             <button
               onClick={() => setActiveSidebarTab("details")}
               className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer border-b ${
@@ -1042,7 +1686,7 @@ export default function WorkflowView({
                 <p className="text-[10px] text-secondary font-mono leading-relaxed">
                   Below is the generated **Mermaid.js** code representing this diagram. It tracks in Git and displays natively in GitHub markdown:
                 </p>
-                <div className="flex-1 bg-neutral p-4 rounded-xl border border-white/5 font-mono text-[9.5px] leading-relaxed text-secondary select-all whitespace-pre overflow-auto h-72 custom-scrollbar">
+                <div className="flex-1 bg-neutral p-4 rounded-xl border border-border font-mono text-[9.5px] leading-relaxed text-secondary select-all whitespace-pre overflow-auto h-72 custom-scrollbar">
                   {mermaidCode}
                 </div>
               </div>
@@ -1059,7 +1703,7 @@ export default function WorkflowView({
                 ) : (
                   <div className="space-y-6">
                     {/* Header */}
-                    <div className="space-y-1 pb-4 border-b border-white/5">
+                    <div className="space-y-1 pb-4 border-b border-border">
                       <div className="flex justify-between items-start gap-2">
                         <span className="text-[9px] font-mono font-bold text-tertiary bg-tertiary/10 border border-tertiary/20 px-1.5 py-0.5 rounded uppercase">
                           {selectedCard.shape}
@@ -1067,7 +1711,7 @@ export default function WorkflowView({
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => onOpenCard(selectedCard)}
-                            className="p-1 text-secondary hover:text-primary hover:bg-white/5 rounded transition-all cursor-pointer"
+                            className="p-1 text-secondary hover:text-primary hover:bg-primary/5 rounded transition-all cursor-pointer"
                             title="Edit task text & description"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -1098,7 +1742,7 @@ export default function WorkflowView({
                       <label className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">
                         Shape Styling
                       </label>
-                      <div className="grid grid-cols-3 gap-1 bg-white/2 rounded p-0.5 border border-white/5">
+                      <div className="grid grid-cols-3 gap-1 bg-primary/[0.03] rounded p-0.5 border border-border">
                         {(["process", "decision", "terminal"] as const).map(s => (
                           <button
                             key={s}
@@ -1121,7 +1765,7 @@ export default function WorkflowView({
                         <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">
                           Step Description
                         </span>
-                        <p className="text-[10px] text-secondary leading-relaxed bg-white/2 p-3 rounded-lg border border-white/5">
+                        <p className="text-[10px] text-secondary leading-relaxed bg-primary/[0.03] p-3 rounded-lg border border-border">
                           {selectedCard.cleanDescription}
                         </p>
                       </div>
@@ -1144,7 +1788,7 @@ export default function WorkflowView({
                                 className={`w-full flex flex-col gap-2 p-2.5 rounded-lg border text-left transition-colors ${
                                   isLinked
                                     ? "bg-tertiary/10 border-tertiary/30 text-primary"
-                                    : "bg-white/2 border-white/5 text-secondary"
+                                    : "bg-primary/[0.03] border-border text-secondary"
                                 }`}
                               >
                                 <div 
@@ -1158,7 +1802,7 @@ export default function WorkflowView({
                                 </div>
 
                                 {isLinked && (
-                                  <div className="flex items-center gap-2 pt-1.5 border-t border-white/5">
+                                  <div className="flex items-center gap-2 pt-1.5 border-t border-border">
                                     <span className="text-[8px] font-mono text-secondary uppercase tracking-wider">Label:</span>
                                     <input
                                       type="text"
@@ -1198,16 +1842,16 @@ export default function WorkflowView({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-sm bg-card border border-white/10 p-6 rounded-2xl shadow-xl flex flex-col"
+              className="w-full max-w-sm bg-card border border-border p-6 rounded-2xl shadow-xl flex flex-col"
             >
-              <div className="flex justify-between items-center pb-4 border-b border-white/5 mb-4">
+              <div className="flex justify-between items-center pb-4 border-b border-border mb-4">
                 <h3 className="font-mono text-xs uppercase tracking-widest text-primary font-bold">
                   Add Flowchart Step
                 </h3>
                 <button
                   type="button"
                   onClick={() => setIsAddingStep(false)}
-                  className="p-1 text-secondary hover:text-primary rounded hover:bg-white/5 cursor-pointer"
+                  className="p-1 text-secondary hover:text-primary rounded hover:bg-primary/5 cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1225,7 +1869,7 @@ export default function WorkflowView({
                     value={newCardName}
                     onChange={(e) => setNewCardName(e.target.value)}
                     placeholder="e.g. Verify Telephony Config"
-                    className="w-full px-3 py-2 bg-neutral border border-white/10 rounded-lg text-xs text-primary focus:outline-none focus:border-tertiary/40"
+                    className="w-full px-3 py-2 bg-neutral border border-border rounded-lg text-xs text-primary focus:outline-none focus:border-tertiary/40"
                   />
                 </div>
 
@@ -1238,7 +1882,7 @@ export default function WorkflowView({
                       id="flowchart_step_shape_select"
                       value={newCardShape}
                       onChange={(e) => setNewCardShape(e.target.value as ShapeType)}
-                      className="w-full px-3 py-2 bg-neutral border border-white/10 rounded-lg text-xs text-primary focus:outline-none focus:border-tertiary/40 cursor-pointer"
+                      className="w-full px-3 py-2 bg-neutral border border-border rounded-lg text-xs text-primary focus:outline-none focus:border-tertiary/40 cursor-pointer"
                     >
                       <option value="process">Process (Box)</option>
                       <option value="decision">Decision (Diamond)</option>
@@ -1254,7 +1898,7 @@ export default function WorkflowView({
                       id="flowchart_step_list_select"
                       value={newCardListId}
                       onChange={(e) => setNewCardListId(e.target.value)}
-                      className="w-full px-3 py-2 bg-neutral border border-white/10 rounded-lg text-xs text-primary focus:outline-none focus:border-tertiary/40 cursor-pointer"
+                      className="w-full px-3 py-2 bg-neutral border border-border rounded-lg text-xs text-primary focus:outline-none focus:border-tertiary/40 cursor-pointer"
                     >
                       {lists.map(list => (
                         <option key={list.id} value={list.id}>
@@ -1269,7 +1913,7 @@ export default function WorkflowView({
                   <button
                     type="button"
                     onClick={() => setIsAddingStep(false)}
-                    className="px-4 py-2 border border-white/10 hover:bg-white/5 rounded text-[9px] font-bold uppercase tracking-widest text-secondary hover:text-primary transition-colors cursor-pointer"
+                    className="px-4 py-2 border border-border hover:bg-primary/5 rounded text-[9px] font-bold uppercase tracking-widest text-secondary hover:text-primary transition-colors cursor-pointer"
                   >
                     Cancel
                   </button>
