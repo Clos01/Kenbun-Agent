@@ -143,7 +143,7 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
 
       const keysRegex = /"([^"]+)"\s*:/g;
       let keyMatch;
-      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout", "shape"];
+      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout", "shape", "x", "y"];
       while ((keyMatch = keysRegex.exec(jsonStr)) !== null) {
         const key = keyMatch[1];
         if (!allowedKeys.includes(key)) {

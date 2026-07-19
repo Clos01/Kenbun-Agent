@@ -170,7 +170,7 @@ export default function Sidebar() {
             <div className="flex flex-col gap-2 px-1">
               <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Visual Theme</label>
               <div className="flex items-center gap-2.5">
-                {[
+                {mounted ? [
                   { id: "limestone", color: "#B8422E", bg: "#F7F5F2", name: "Limestone" },
                   { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
                   { id: "forest", color: "#2E8B57", bg: "#F0F4F1", name: "Forest" },
@@ -193,7 +193,9 @@ export default function Sidebar() {
                       style={{ backgroundColor: item.color }} 
                     />
                   </button>
-                ))}
+                )) : (
+                  <div className="h-6 w-32 bg-white/5 rounded animate-pulse" />
+                )}
               </div>
             </div>
           )}
@@ -300,8 +302,8 @@ export default function Sidebar() {
               {/* THEME PICKER */}
               <div className="p-6 border-t border-border/40 flex flex-col gap-2 shrink-0">
                 <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Visual Theme</label>
-                <div className="flex items-center gap-2.5">
-                  {[
+                <div className="flex items-center gap-2 px-1">
+                  {mounted ? [
                     { id: "limestone", color: "#B8422E", bg: "#F7F5F2", name: "Limestone" },
                     { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
                     { id: "forest", color: "#2E8B57", bg: "#F0F4F1", name: "Forest" },
@@ -318,7 +320,9 @@ export default function Sidebar() {
                     >
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
                     </button>
-                  ))}
+                  )) : (
+                    <div className="h-6 w-32 bg-white/5 rounded animate-pulse" />
+                  )}
                 </div>
               </div>
             </motion.aside>

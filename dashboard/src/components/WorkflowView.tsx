@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/board/page";
 import { computeWorkOrder } from "../lib/prioritize";
+import { useTheme } from "../context/ThemeContext";
 
 interface Card {
   id: string;
@@ -55,10 +56,44 @@ export default function WorkflowView({
   onCreateCard,
   onDeleteCard
 }: WorkflowViewProps) {
+  const { preset } = useTheme();
   const [layoutDir, setLayoutDir] = useState<LayoutDir>("LR");
   const [svgCode, setSvgCode] = useState<string>("");
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+
+  const mermaidThemeStyles = useMemo(() => {
+    const isDark = preset === "obsidian";
+    if (isDark) {
+      return {
+        completed: "fill:#0f1d16,stroke:#10b981,stroke-width:1.5px,color:#34d399;",
+        in_progress: "fill:#0b192c,stroke:#0284c7,stroke-width:1.5px,color:#38bdf8;",
+        blocked: "fill:#211406,stroke:#f59e0b,stroke-width:1.5px,color:#fbbf24;",
+        todo: "fill:#161616,stroke:#374151,stroke-width:1.2px,color:#9ca3af;"
+      };
+    } else if (preset === "limestone") {
+      return {
+        completed: "fill:#f0fdf4,stroke:#10b981,stroke-width:1.5px,color:#14532d;",
+        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e;",
+        blocked: "fill:#fffbeb,stroke:#f59e0b,stroke-width:1.5px,color:#78350f;",
+        todo: "fill:#ffffff,stroke:#e5e7eb,stroke-width:1.2px,color:#4b5563;"
+      };
+    } else if (preset === "forest") {
+      return {
+        completed: "fill:#f0fdf4,stroke:#2e8b57,stroke-width:1.5px,color:#1b4332;",
+        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e;",
+        blocked: "fill:#fffbeb,stroke:#ffc107,stroke-width:1.5px,color:#78350f;",
+        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569;"
+      };
+    } else { // cobalt
+      return {
+        completed: "fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#334155;",
+        in_progress: "fill:#eff6ff,stroke:#2f6feb,stroke-width:1.5px,color:#1e40af;",
+        blocked: "fill:#fff7ed,stroke:#f97316,stroke-width:1.5px,color:#7c2d12;",
+        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569;"
+      };
+    }
+  }, [preset]);
 
   // Selector / Modal states
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
@@ -155,10 +190,10 @@ export default function WorkflowView({
     const lines: string[] = [];
     lines.push(`graph ${layoutDir}`);
     lines.push("  %% Theme Styles");
-    lines.push("  classDef completed fill:#0f1d16,stroke:#10b981,stroke-width:1.5px,color:#34d399,font-size:10.5px;");
-    lines.push("  classDef in_progress fill:#0b192c,stroke:#0284c7,stroke-width:1.5px,color:#38bdf8,font-size:10.5px;");
-    lines.push("  classDef blocked fill:#211406,stroke:#f59e0b,stroke-width:1.5px,color:#fbbf24,font-size:10.5px;");
-    lines.push("  classDef todo fill:#161616,stroke:#374151,stroke-width:1.2px,color:#9ca3af,font-size:10.5px;");
+    lines.push(`  classDef completed ${mermaidThemeStyles.completed}font-size:10.5px;`);
+    lines.push(`  classDef in_progress ${mermaidThemeStyles.in_progress}font-size:10.5px;`);
+    lines.push(`  classDef blocked ${mermaidThemeStyles.blocked}font-size:10.5px;`);
+    lines.push(`  classDef todo ${mermaidThemeStyles.todo}font-size:10.5px;`);
     lines.push("");
 
     // Declare shapes
@@ -199,11 +234,11 @@ export default function WorkflowView({
 
     // Assign click events
     parsedCards.forEach(card => {
-      lines.push(`  click c_${card.id} call onMermaidNodeClick`);
+      lines.push(`  click c_${card.id} onMermaidNodeClick`);
     });
 
     return lines.join("\n");
-  }, [parsedCards, parsedCardMap, layoutDir]);
+  }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles]);
 
   // Render Mermaid code into SVG
   useEffect(() => {
@@ -217,7 +252,7 @@ export default function WorkflowView({
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({
           startOnLoad: false,
-          theme: "dark",
+          theme: preset === "obsidian" ? "dark" : "default",
           securityLevel: "loose",
           fontFamily: "Space Mono, monospace",
           flowchart: {
@@ -310,10 +345,16 @@ export default function WorkflowView({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8.5rem)] relative bg-[#070707] border border-white/5 rounded-2xl overflow-hidden select-none">
+    <div 
+      className="flex flex-col h-[calc(100vh-8.5rem)] relative border rounded-2xl overflow-hidden select-none"
+      style={{ backgroundColor: "var(--neutral)", borderColor: "var(--border)" }}
+    >
       
       {/* Top Header controls bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#0b0b0b] shrink-0 z-30">
+      <div 
+        className="flex items-center justify-between px-6 py-4 border-b shrink-0 z-30"
+        style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+      >
         <div className="flex items-center gap-2">
           <GitBranch className="w-4 h-4 text-tertiary" />
           <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary">
@@ -358,14 +399,18 @@ export default function WorkflowView({
       <div className="flex-1 flex overflow-hidden">
         
         {/* Left Side: Dynamic Interactive Mermaid Canvas */}
-        <div className="flex-1 overflow-auto relative p-8 flex items-center justify-center bg-[#080808]"
+        <div className="flex-1 overflow-auto relative p-8 flex items-center justify-center"
           style={{
-            backgroundImage: "radial-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 0)",
+            backgroundColor: "var(--neutral)",
+            backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
             backgroundSize: "20px 20px"
           }}
         >
           {isRendering && (
-            <div className="absolute inset-0 bg-[#080808]/70 backdrop-blur-xs flex items-center justify-center gap-2.5 z-40">
+            <div 
+              className="absolute inset-0 backdrop-blur-xs flex items-center justify-center gap-2.5 z-40"
+              style={{ backgroundColor: "rgba(var(--neutral), 0.7)" }}
+            >
               <RefreshCw className="w-4 h-4 text-tertiary animate-spin" />
               <span className="font-mono text-xs uppercase tracking-wider text-secondary">
                 Rendering diagram...
@@ -386,10 +431,16 @@ export default function WorkflowView({
         </div>
 
         {/* Right Side: Interactive Shape Designer Toolbar & Editor Panel */}
-        <div className="w-80 border-l border-white/5 bg-[#0a0a0a] flex flex-col shrink-0 z-20">
+        <div 
+          className="w-80 border-l flex flex-col shrink-0 z-20"
+          style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+        >
           
           {/* Tab bar header */}
-          <div className="flex border-b border-white/5 bg-[#0e0e0e] shrink-0">
+          <div 
+            className="flex border-b shrink-0"
+            style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+          >
             <button
               onClick={() => setActiveSidebarTab("details")}
               className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer border-b ${
