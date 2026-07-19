@@ -727,22 +727,23 @@ export default function WorkflowView({
       const listCards = parsedCards.filter(c => c.listId === list.id);
       const colLines: string[] = [];
       
-      const border = "+----------------------+";
-      const headerText = `|  ${list.name.toUpperCase().padEnd(18).substring(0, 18)}  |`;
-      colLines.push(border);
+      const borderTop = "╭──────────────────────╮";
+      const headerText = `│  ${list.name.toUpperCase().padEnd(18).substring(0, 18)}  │`;
+      const borderBot = "╰──────────────────────╯";
+      colLines.push(borderTop);
       colLines.push(headerText);
-      colLines.push(border);
-      colLines.push("|                      |");
+      colLines.push(borderBot);
+      colLines.push("                        ");
       
       listCards.forEach(card => {
         const cleanName = card.name.replace(/[\r\n\t]/g, " ");
-        const titleLine = `| [#${card.rank}] ${cleanName.padEnd(14).substring(0, 14)} |`;
-        const scoreLine = `| Priority: ${String(card.score).padEnd(10).substring(0, 10)} |`;
-        colLines.push("+----------------------+");
+        const titleLine = `│ [#${card.rank}] ${cleanName.padEnd(14).substring(0, 14)} │`;
+        const scoreLine = `│ Priority: ${String(card.score).padEnd(10).substring(0, 10)} │`;
+        colLines.push("╭──────────────────────╮");
         colLines.push(titleLine);
         colLines.push(scoreLine);
-        colLines.push("+----------------------+");
-        colLines.push("|                      |");
+        colLines.push("╰──────────────────────╯");
+        colLines.push("                        ");
       });
       
       const targetLinesCount = 4 + maxCards * 5;
@@ -1611,14 +1612,21 @@ export default function WorkflowView({
                   const isDotted = edge.style === "dotted";
                   const isSuggested = edge.label === "suggested";
 
-                  // Pull the endpoint back off the target node so the arrowhead
-                  // floats in the gap and clearly "points at" the card.
+                  // Force strictly orthogonal entry points so arrowheads never render tilted
                   const fullDx = edge.toX - edge.fromX;
                   const fullDy = edge.toY - edge.fromY;
-                  const len = Math.hypot(fullDx, fullDy) || 1;
+                  const absFullDx = Math.abs(fullDx);
+                  const absFullDy = Math.abs(fullDy);
                   const GAP = 11;
-                  const endX = edge.toX - (fullDx / len) * GAP;
-                  const endY = edge.toY - (fullDy / len) * GAP;
+                  
+                  let endX = edge.toX;
+                  let endY = edge.toY;
+                  
+                  if (absFullDx > absFullDy) {
+                    endX = edge.toX - (fullDx > 0 ? GAP : -GAP);
+                  } else {
+                    endY = edge.toY - (fullDy > 0 ? GAP : -GAP);
+                  }
 
                   const dx = endX - edge.fromX;
                   const dy = endY - edge.fromY;
@@ -1626,26 +1634,25 @@ export default function WorkflowView({
                   const absDy = Math.abs(dy);
 
                   // Route the edge per the active Curve control (lineStyle):
-                  // "linear" = straight, "step" = orthogonal elbow, "basis" = curved.
                   let pathD = "";
                   if (lineStyle === "linear") {
                     pathD = `M ${edge.fromX} ${edge.fromY} L ${endX} ${endY}`;
                   } else if (lineStyle === "step") {
-                    if (absDx > absDy) {
+                    if (absFullDx > absFullDy) {
                       const midX = (edge.fromX + endX) / 2;
                       pathD = `M ${edge.fromX} ${edge.fromY} L ${midX} ${edge.fromY} L ${midX} ${endY} L ${endX} ${endY}`;
                     } else {
                       const midY = (edge.fromY + endY) / 2;
                       pathD = `M ${edge.fromX} ${edge.fromY} L ${edge.fromX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
                     }
-                  } else if (absDx > absDy) {
-                    // Curved, mostly horizontal travel
-                    const cpx = Math.max(Math.min(absDx * 0.45, 110), 34);
+                  } else if (absFullDx > absFullDy) {
+                    // Curved, mostly horizontal travel (perfect cubic S-curve)
+                    const cpx = Math.max(absDx * 0.5, 40);
                     const sign = dx > 0 ? 1 : -1;
                     pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cpx * sign} ${edge.fromY}, ${endX - cpx * sign} ${endY}, ${endX} ${endY}`;
                   } else {
-                    // Curved, mostly vertical travel
-                    const cpy = Math.max(Math.min(absDy * 0.45, 110), 34);
+                    // Curved, mostly vertical travel (perfect cubic S-curve)
+                    const cpy = Math.max(absDy * 0.5, 40);
                     const sign = dy > 0 ? 1 : -1;
                     pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cpy * sign}, ${endX} ${endY - cpy * sign}, ${endX} ${endY}`;
                   }
