@@ -152,7 +152,11 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
       if (Object.getPrototypeOf(rawParsed) !== Object.prototype) {
         throw new Error("Malformed prototype chain detected.");
       }
-      if ("__proto__" in rawParsed || "constructor" in rawParsed || "prototype" in rawParsed) {
+      if (
+        Object.prototype.hasOwnProperty.call(rawParsed, "__proto__") ||
+        Object.prototype.hasOwnProperty.call(rawParsed, "constructor") ||
+        Object.prototype.hasOwnProperty.call(rawParsed, "prototype")
+      ) {
         throw new Error("Malicious prototype attributes present.");
       }
 
