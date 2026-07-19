@@ -63,6 +63,7 @@ export default function WorkflowView({
   const [copied, setCopied] = useState<boolean>(false);
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
+  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "ascii">("flowchart");
 
   const mermaidThemeStyles = useMemo(() => {
     return {
@@ -147,6 +148,92 @@ export default function WorkflowView({
     return new Map(parsedCards.map(c => [c.id, c]));
   }, [parsedCards]);
 
+  // Mindmap code builder
+  const mindmapCode = useMemo(() => {
+    const lines: string[] = [];
+    lines.push("mindmap");
+    lines.push("  root((Project Board))");
+    
+    lists.forEach(list => {
+      const listCards = parsedCards.filter(c => c.listId === list.id);
+      if (listCards.length > 0) {
+        const safeListName = list.name.replace(/[^a-zA-Z0-9\s]/g, "");
+        lines.push(`    ${safeListName}`);
+        listCards.forEach(card => {
+          const safeCardName = card.name.replace(/[^a-zA-Z0-9\s]/g, "");
+          lines.push(`      ${safeCardName}`);
+        });
+      }
+    });
+    
+    return lines.join("\n");
+  }, [parsedCards, lists]);
+
+  // ASCII Grid diagram builder
+  const asciiGridCode = useMemo(() => {
+    const cols: string[][] = [];
+    const maxCards = Math.max(...lists.map(list => parsedCards.filter(c => c.listId === list.id).length), 0);
+    
+    lists.forEach(list => {
+      const listCards = parsedCards.filter(c => c.listId === list.id);
+      const colLines: string[] = [];
+      
+      const border = "+----------------------+";
+      const headerText = `|  ${list.name.toUpperCase().padEnd(18).substring(0, 18)}  |`;
+      colLines.push(border);
+      colLines.push(headerText);
+      colLines.push(border);
+      colLines.push("|                      |");
+      
+      listCards.forEach(card => {
+        const cleanName = card.name.replace(/[\r\n\t]/g, " ");
+        const titleLine = `| [#${card.rank}] ${cleanName.padEnd(14).substring(0, 14)} |`;
+        const scoreLine = `| Priority: ${String(card.score).padEnd(10).substring(0, 10)} |`;
+        colLines.push("+----------------------+");
+        colLines.push(titleLine);
+        colLines.push(scoreLine);
+        colLines.push("+----------------------+");
+        colLines.push("|                      |");
+      });
+      
+      const targetLinesCount = 4 + maxCards * 5;
+      while (colLines.length < targetLinesCount) {
+        colLines.push("                        ");
+      }
+      
+      cols.push(colLines);
+    });
+    
+    const combinedLines: string[] = [];
+    if (cols.length > 0) {
+      const lineCount = cols[0].length;
+      for (let i = 0; i < lineCount; i++) {
+        combinedLines.push(cols.map(c => c[i]).join("    "));
+      }
+    }
+    
+    combinedLines.push("");
+    combinedLines.push("CONNECTIONS / DEPENDENCIES:");
+    combinedLines.push("===========================");
+    let hasConnections = false;
+    parsedCards.forEach(card => {
+      card.dependencies.forEach(depId => {
+        const depCard = parsedCardMap.get(depId);
+        if (depCard) {
+          const label = card.linkLabels?.[depId];
+          const labelStr = label ? ` [${label}]` : "";
+          combinedLines.push(`  ${depCard.name} -------->${labelStr} --------> ${card.name}`);
+          hasConnections = true;
+        }
+      });
+    });
+    if (!hasConnections) {
+      combinedLines.push("  (No relationships defined. Select nodes to link steps)");
+    }
+    
+    return combinedLines.join("\n");
+  }, [parsedCards, lists, parsedCardMap]);
+
   const selectedCard = useMemo(() => {
     if (!selectedCardId) return null;
     return parsedCardMap.get(selectedCardId) || null;
@@ -180,7 +267,8 @@ export default function WorkflowView({
       lists.forEach(list => {
         const listCards = parsedCards.filter(c => c.listId === list.id);
         if (listCards.length > 0) {
-          lines.push(`  subgraph "${list.name}"`);
+          // Use unquoted identifiers for subgraphs to avoid Mermaid parse errors
+          lines.push(`  subgraph lane_${list.id} ["${list.name}"]`);
           listCards.forEach(card => {
             lines.push(`    c_${card.id}`);
           });
@@ -322,18 +410,27 @@ export default function WorkflowView({
     // Style subgraphs to make them look like premium kanban containers
     if (groupByLanes) {
       lists.forEach(list => {
-        lines.push(`  style "${list.name}" fill:var(--card),stroke:var(--border),stroke-width:1px,rx:12px,ry:12px;`);
+        lines.push(`  style lane_${list.id.replace(/-/g, '_')} fill:var(--card),stroke:var(--border),stroke-width:1px,rx:12px,ry:12px;`);
       });
     }
 
     return lines.join("\n");
   }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles, groupByLanes, lists]);
 
+
+
   // Render Mermaid code into SVG
   useEffect(() => {
     let isMounted = true;
 
     async function renderMermaid() {
+      const activeCode = diagramMode === "mindmap" ? mindmapCode : mermaidCode;
+      
+      if (diagramMode === "ascii") {
+        setIsRendering(false);
+        return;
+      }
+
       if (isMounted) {
         setIsRendering(true);
       }
@@ -351,7 +448,7 @@ export default function WorkflowView({
         });
 
         const id = `mermaid-canvas-${Math.random().toString(36).substring(2, 9)}`;
-        const { svg } = await mermaid.render(id, mermaidCode);
+        const { svg } = await mermaid.render(id, activeCode);
 
         if (isMounted) {
           setSvgCode(svg);
@@ -370,11 +467,19 @@ export default function WorkflowView({
     return () => {
       isMounted = false;
     };
-  }, [mermaidCode, lineStyle, preset]);
+  }, [mermaidCode, mindmapCode, diagramMode, lineStyle, preset]);
 
   // Copy code helper
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(mermaidCode);
+    let textToCopy = "";
+    if (diagramMode === "ascii") {
+      textToCopy = asciiGridCode;
+    } else if (diagramMode === "mindmap") {
+      textToCopy = mindmapCode;
+    } else {
+      textToCopy = mermaidCode;
+    }
+    navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -527,47 +632,65 @@ export default function WorkflowView({
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setGroupByLanes(prev => !prev)}
-            className={`px-2.5 py-1.5 border rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-              groupByLanes
-                ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
-                : "bg-white/5 border-white/10 text-secondary hover:text-primary hover:bg-white/10"
-            }`}
-            title="Group Flowchart Nodes by Kanban Status Lanes"
-          >
-            Lanes: {groupByLanes ? "Enabled" : "Disabled"}
-          </button>
-
+          {/* Diagram Mode Selection */}
           <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
-            <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Curve:</span>
+            <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Mode:</span>
             <select
-              value={lineStyle}
-              onChange={(e) => setLineStyle(e.target.value as any)}
+              value={diagramMode}
+              onChange={(e) => setDiagramMode(e.target.value as any)}
               className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer"
             >
-              <option value="basis">Curved</option>
-              <option value="step">Orthogonal</option>
-              <option value="linear">Straight</option>
+              <option value="flowchart">Flowchart</option>
+              <option value="mindmap">Mindmap</option>
+              <option value="ascii">ASCII Board</option>
             </select>
           </div>
 
-          <button
-            onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
-            className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Toggle Flowchart Layout Direction"
-          >
-            <Layout className="w-3.5 h-3.5" />
-            Orientation: {layoutDir === "LR" ? "Left-to-Right" : "Top-to-Bottom"}
-          </button>
-          
+          {diagramMode === "flowchart" && (
+            <>
+              <button
+                onClick={() => setGroupByLanes(prev => !prev)}
+                className={`px-2.5 py-1.5 border rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  groupByLanes
+                    ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
+                    : "bg-white/5 border-white/10 text-secondary hover:text-primary hover:bg-white/10"
+                }`}
+                title="Group Flowchart Nodes by Kanban Lanes"
+              >
+                Lanes: {groupByLanes ? "Enabled" : "Disabled"}
+              </button>
+
+              <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
+                <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Curve:</span>
+                <select
+                  value={lineStyle}
+                  onChange={(e) => setLineStyle(e.target.value as any)}
+                  className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer"
+                >
+                  <option value="basis">Curved</option>
+                  <option value="step">Orthogonal</option>
+                  <option value="linear">Straight</option>
+                </select>
+              </div>
+
+              <button
+                onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
+                className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Toggle Flowchart Layout Direction"
+              >
+                <Layout className="w-3.5 h-3.5" />
+                Orientation: {layoutDir === "LR" ? "Left-to-Right" : "Top-to-Bottom"}
+              </button>
+            </>
+          )}
+
           <button
             onClick={handleCopyCode}
             className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Copy Mermaid.js Markdown Source"
+            title="Copy Diagram Code/ASCII representation"
           >
             <Copy className="w-3.5 h-3.5" />
-            {copied ? "Copied!" : "Copy code"}
+            {copied ? "Copied!" : "Copy diagram"}
           </button>
 
           <button
@@ -603,7 +726,13 @@ export default function WorkflowView({
             </div>
           )}
 
-          {svgCode ? (
+          {diagramMode === "ascii" ? (
+            <div className="w-full h-full flex flex-col justify-stretch p-4 min-w-[700px] overflow-auto select-text">
+              <pre className="font-mono text-[10px] p-6 bg-card border border-border text-primary rounded-xl leading-relaxed whitespace-pre select-text">
+                {asciiGridCode}
+              </pre>
+            </div>
+          ) : svgCode ? (
             <div 
               className="w-full flex items-center justify-center p-4 min-w-[700px] overflow-auto select-none pointer-events-auto"
               dangerouslySetInnerHTML={{ __html: svgCode }}
