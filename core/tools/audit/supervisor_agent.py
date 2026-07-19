@@ -175,8 +175,9 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
         
     context = f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}{rules_context}"
     
-    # --- TWO-PASS LOCAL AUDIT (defeats attention saturation) ---
-    AUDIT_MODEL = "qwen2.5-coder:7b"
+    # --- TWO-PASS CLOUD AUDIT (Anthropic Claude 3.5 Sonnet) ---
+    AUDIT_MODEL = "claude-3-5-sonnet-20241022"
+    AUDIT_URL = "https://api.anthropic.com/v1"
     
     pass_1_prompt = (
         "You are a code security auditor. Perform a QUICK initial scan of the code.\n"
@@ -210,11 +211,11 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
         from tools.utils.llm_router import call_llm_gateway
         
         # ── PASS 1: Quick critical scan ──
-        print("🔍 [SYSTEM 2] Pass 1: Quick critical scan...")
+        print("🔍 [SYSTEM 2] Pass 1: Quick critical scan via Anthropic...")
         user_message = f"CONTEXT:\n{context}\n\nCODE:\n{code_snippet}"
         pass_1_raw = call_llm_gateway(
             pass_1_prompt, user_message, max_tokens=2000,
-            model_override=AUDIT_MODEL
+            url_override=AUDIT_URL, model_override=AUDIT_MODEL
         )
         
         pass_1_obj = extract_json(pass_1_raw) if pass_1_raw else None
@@ -227,13 +228,13 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
             print(f"🔍 [SYSTEM 2] Pass 1 result: {pass_1_status} — {pass_1_critique[:100]}")
         
         # ── PASS 2: Deep scan excluding Pass 1 findings ──
-        print("🔍 [SYSTEM 2] Pass 2: Deep scan (excluding Pass 1 findings)...")
+        print("🔍 [SYSTEM 2] Pass 2: Deep scan via Anthropic (excluding Pass 1 findings)...")
         pass_2_system = pass_2_prompt_template.format(
             pass_1_finding=pass_1_critique or "No critical issues found in Pass 1."
         )
         pass_2_raw = call_llm_gateway(
             pass_2_system, user_message, max_tokens=4000,
-            model_override=AUDIT_MODEL
+            url_override=AUDIT_URL, model_override=AUDIT_MODEL
         )
         
         pass_2_obj = extract_json(pass_2_raw) if pass_2_raw else None

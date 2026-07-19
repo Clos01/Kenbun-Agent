@@ -87,6 +87,7 @@ export interface KenbunMetadata {
   collections?: string[];
   dependencies?: string[];
   layout?: { x: number; y: number };
+  shape?: "process" | "decision" | "terminal";
 }
 
 const KenbunMetadataSchema = z.object({
@@ -98,6 +99,7 @@ const KenbunMetadataSchema = z.object({
     x: z.number(),
     y: z.number()
   }).strict().optional(),
+  shape: z.enum(["process", "decision", "terminal"]).optional(),
 }).strict();
 
 const DescriptionInputSchema = z.string().max(50000).catch("");
@@ -141,7 +143,7 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
 
       const keysRegex = /"([^"]+)"\s*:/g;
       let keyMatch;
-      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout"];
+      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout", "shape"];
       while ((keyMatch = keysRegex.exec(jsonStr)) !== null) {
         const key = keyMatch[1];
         if (!allowedKeys.includes(key)) {
@@ -217,6 +219,13 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
         };
       }
 
+      if (rawParsed.shape !== undefined) {
+        if (typeof rawParsed.shape !== "string" || !["process", "decision", "terminal"].includes(rawParsed.shape)) {
+          throw new Error("Invalid shape field value.");
+        }
+        safeParsed.shape = rawParsed.shape;
+      }
+
       const parsed = KenbunMetadataSchema.parse(safeParsed);
       
       const metadata: KenbunMetadata = {
@@ -224,7 +233,8 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
         recurring: parsed.recurring,
         collections: parsed.collections ? parsed.collections.map(sanitizeText) : undefined,
         dependencies: parsed.dependencies ? parsed.dependencies.map(sanitizeText) : undefined,
-        layout: parsed.layout
+        layout: parsed.layout,
+        shape: parsed.shape
       };
       
       const rawClean = inputStr.replace(regex, "");
@@ -2033,6 +2043,7 @@ export default function BoardPage() {
                         setSyncing(false);
                       }
                     }}
+                    onDeleteCard={handleCloseCard}
                   />
                 </motion.div>
               ) : (
