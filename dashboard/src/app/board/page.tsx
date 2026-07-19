@@ -88,6 +88,7 @@ export interface KenbunMetadata {
   dependencies?: string[];
   layout?: { x: number; y: number };
   shape?: "process" | "decision" | "terminal";
+  linkLabels?: Record<string, string>;
 }
 
 const KenbunMetadataSchema = z.object({
@@ -100,6 +101,7 @@ const KenbunMetadataSchema = z.object({
     y: z.number()
   }).strict().optional(),
   shape: z.enum(["process", "decision", "terminal"]).optional(),
+  linkLabels: z.record(z.string().max(50).regex(/^[a-zA-Z0-9_\-]+$/), z.string().max(100)).optional(),
 }).strict();
 
 const DescriptionInputSchema = z.string().max(50000).catch("");
@@ -143,7 +145,7 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
 
       const keysRegex = /"([^"]+)"\s*:/g;
       let keyMatch;
-      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout", "shape", "x", "y"];
+      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout", "shape", "x", "y", "linkLabels"];
       while ((keyMatch = keysRegex.exec(jsonStr)) !== null) {
         const key = keyMatch[1];
         if (!allowedKeys.includes(key)) {
@@ -226,6 +228,23 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
         safeParsed.shape = rawParsed.shape;
       }
 
+      if (rawParsed.linkLabels !== undefined) {
+        if (typeof rawParsed.linkLabels !== "object" || Array.isArray(rawParsed.linkLabels) || rawParsed.linkLabels === null) {
+          throw new Error("Invalid linkLabels field type.");
+        }
+        const safeLabels: Record<string, string> = {};
+        for (const key in rawParsed.linkLabels) {
+          if (Object.prototype.hasOwnProperty.call(rawParsed.linkLabels, key)) {
+            const val = rawParsed.linkLabels[key];
+            if (typeof key !== "string" || key.length > 50 || typeof val !== "string" || val.length > 100) {
+              throw new Error("Invalid linkLabel key or value size.");
+            }
+            safeLabels[key] = val;
+          }
+        }
+        safeParsed.linkLabels = safeLabels;
+      }
+
       const parsed = KenbunMetadataSchema.parse(safeParsed);
       
       const metadata: KenbunMetadata = {
@@ -234,7 +253,8 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
         collections: parsed.collections ? parsed.collections.map(sanitizeText) : undefined,
         dependencies: parsed.dependencies ? parsed.dependencies.map(sanitizeText) : undefined,
         layout: parsed.layout,
-        shape: parsed.shape
+        shape: parsed.shape,
+        linkLabels: parsed.linkLabels
       };
       
       const rawClean = inputStr.replace(regex, "");

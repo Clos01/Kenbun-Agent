@@ -61,6 +61,8 @@ export default function WorkflowView({
   const [svgCode, setSvgCode] = useState<string>("");
   const [isRendering, setIsRendering] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
+  const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
+  const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
 
   const mermaidThemeStyles = useMemo(() => {
     const isDark = preset === "obsidian";
@@ -156,6 +158,7 @@ export default function WorkflowView({
           cleanDescription,
           metadata,
           dependencies: metadata.dependencies || [],
+          linkLabels: metadata.linkLabels || {},
           shape,
           status,
           score: workOrder.score.get(card.id) || 0,
@@ -196,6 +199,21 @@ export default function WorkflowView({
     lines.push(`  classDef todo ${mermaidThemeStyles.todo},font-size:10.5px;`);
     lines.push("");
 
+    // Group cards inside subgraphs matching their parent Planka status lists
+    if (groupByLanes) {
+      lists.forEach(list => {
+        const listCards = parsedCards.filter(c => c.listId === list.id);
+        if (listCards.length > 0) {
+          lines.push(`  subgraph "${list.name}"`);
+          listCards.forEach(card => {
+            lines.push(`    c_${card.id}`);
+          });
+          lines.push("  end");
+        }
+      });
+      lines.push("");
+    }
+
     // Declare shapes
     parsedCards.forEach(card => {
       // Escape title special characters
@@ -214,11 +232,16 @@ export default function WorkflowView({
 
     lines.push("");
     
-    // Declare links
+    // Declare links with edge labels
     parsedCards.forEach(card => {
       card.dependencies.forEach(depId => {
         if (parsedCardMap.has(depId)) {
-          lines.push(`  c_${depId} --> c_${card.id}`);
+          const label = card.linkLabels?.[depId];
+          if (label) {
+            lines.push(`  c_${depId} -->|"${label}"| c_${card.id}`);
+          } else {
+            lines.push(`  c_${depId} --> c_${card.id}`);
+          }
         }
       });
     });
@@ -238,7 +261,7 @@ export default function WorkflowView({
     });
 
     return lines.join("\n");
-  }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles]);
+  }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles, groupByLanes, lists]);
 
   // Render Mermaid code into SVG
   useEffect(() => {
@@ -257,7 +280,7 @@ export default function WorkflowView({
           fontFamily: "Space Mono, monospace",
           flowchart: {
             htmlLabels: true,
-            curve: "basis"
+            curve: lineStyle
           }
         });
 
@@ -281,7 +304,7 @@ export default function WorkflowView({
     return () => {
       isMounted = false;
     };
-  }, [mermaidCode]);
+  }, [mermaidCode, lineStyle, preset]);
 
   // Copy code helper
   const handleCopyCode = () => {
@@ -306,6 +329,28 @@ export default function WorkflowView({
     const updatedMetadata: KenbunMetadata = {
       ...card.metadata,
       dependencies: newDeps.length > 0 ? newDeps : undefined
+    };
+
+    const newDescription = injectCardMetadata(card.description, updatedMetadata);
+    await onUpdateCardDesc(targetCardId, newDescription);
+  };
+
+  const handleUpdateLinkLabel = async (targetCardId: string, depId: string, newLabel: string) => {
+    const card = parsedCardMap.get(targetCardId);
+    if (!card) return;
+
+    const currentLabels = card.metadata.linkLabels || {};
+    const updatedLabels = { ...currentLabels };
+
+    if (newLabel.trim()) {
+      updatedLabels[depId] = newLabel.trim();
+    } else {
+      delete updatedLabels[depId];
+    }
+
+    const updatedMetadata: KenbunMetadata = {
+      ...card.metadata,
+      linkLabels: Object.keys(updatedLabels).length > 0 ? updatedLabels : undefined
     };
 
     const newDescription = injectCardMetadata(card.description, updatedMetadata);
@@ -367,6 +412,31 @@ export default function WorkflowView({
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setGroupByLanes(prev => !prev)}
+            className={`px-2.5 py-1.5 border rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+              groupByLanes
+                ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
+                : "bg-white/5 border-white/10 text-secondary hover:text-primary hover:bg-white/10"
+            }`}
+            title="Group Flowchart Nodes by Kanban Status Lanes"
+          >
+            Lanes: {groupByLanes ? "Enabled" : "Disabled"}
+          </button>
+
+          <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
+            <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Curve:</span>
+            <select
+              value={lineStyle}
+              onChange={(e) => setLineStyle(e.target.value as any)}
+              className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer"
+            >
+              <option value="basis">Curved</option>
+              <option value="step">Orthogonal</option>
+              <option value="linear">Straight</option>
+            </select>
+          </div>
+
           <button
             onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
             className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
@@ -567,21 +637,40 @@ export default function WorkflowView({
                           .filter(c => c.id !== selectedCard.id) // exclude self
                           .map(item => {
                             const isLinked = selectedCard.dependencies.includes(item.id);
+                            const labelValue = selectedCard.linkLabels?.[item.id] || "";
                             return (
-                              <button
+                              <div
                                 key={item.id}
-                                onClick={() => handleToggleDependency(selectedCard.id, item.id)}
-                                className={`w-full flex items-center justify-between p-2.5 rounded-lg border text-left transition-colors cursor-pointer ${
+                                className={`w-full flex flex-col gap-2 p-2.5 rounded-lg border text-left transition-colors ${
                                   isLinked
                                     ? "bg-tertiary/10 border-tertiary/30 text-primary"
-                                    : "bg-white/2 hover:bg-white/5 border-white/5 text-secondary hover:text-primary"
+                                    : "bg-white/2 border-white/5 text-secondary"
                                 }`}
                               >
-                                <span className="text-[10px] font-medium leading-tight truncate mr-2">
-                                  {item.name}
-                                </span>
-                                <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform ${isLinked ? "rotate-90 text-tertiary" : "text-secondary/40"}`} />
-                              </button>
+                                <div 
+                                  onClick={() => handleToggleDependency(selectedCard.id, item.id)}
+                                  className="flex items-center justify-between cursor-pointer"
+                                >
+                                  <span className="text-[10px] font-medium leading-tight truncate mr-2">
+                                    {item.name}
+                                  </span>
+                                  <ChevronRight className={`w-3.5 h-3.5 shrink-0 transition-transform ${isLinked ? "rotate-90 text-tertiary" : "text-secondary/40"}`} />
+                                </div>
+
+                                {isLinked && (
+                                  <div className="flex items-center gap-2 pt-1.5 border-t border-white/5">
+                                    <span className="text-[8px] font-mono text-secondary uppercase tracking-wider">Label:</span>
+                                    <input
+                                      type="text"
+                                      value={labelValue}
+                                      onChange={(e) => handleUpdateLinkLabel(selectedCard.id, item.id, e.target.value)}
+                                      placeholder="e.g. Yes, No, Fail"
+                                      className="flex-1 px-1.5 py-0.5 bg-neutral border border-border rounded text-[9px] text-primary focus:outline-none focus:border-tertiary/40"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                       </div>
