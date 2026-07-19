@@ -458,6 +458,13 @@ export default function WorkflowView({
 
     } else if (diagramMode === "flowchart") {
       const isHorizontal = layoutDir === "LR";
+      // Spacing constants – tighter for compact readability
+      const COL_GAP = 260;   // horizontal column spacing (LR mode)
+      const CARD_V_GAP = 105; // vertical gap between cards in same column
+      const ROW_GAP = 180;   // vertical row spacing (TD mode)
+      const CARD_H_GAP = 230; // horizontal gap between cards in same row
+      const CARD_W = 190;
+      const CARD_H = 85;
 
       if (groupByLanes) {
         lists.forEach((list, colIdx) => {
@@ -468,30 +475,31 @@ export default function WorkflowView({
           const C = listCards.length;
 
           if (isHorizontal) {
-            const colX = (colIdx - (lists.length - 1) / 2) * 320;
-            const startY = C > 0 ? -(C - 1) * 65 : 0;
+            const colX = (colIdx - (lists.length - 1) / 2) * COL_GAP;
+            const totalH = C > 0 ? (C - 1) * CARD_V_GAP + CARD_H : CARD_H;
+            const startY = -totalH / 2;
 
             if (C > 0) {
               lanes.push({
                 id: list.id,
                 name: list.name,
-                minX: colX - 110,
-                maxX: colX + 110,
-                minY: startY - 90,
-                maxY: startY + (C - 1) * 130 + 70
+                minX: colX - CARD_W / 2 - 15,
+                maxX: colX + CARD_W / 2 + 15,
+                minY: startY - 50,
+                maxY: startY + (C - 1) * CARD_V_GAP + CARD_H + 15
               });
             }
 
             listCards.forEach((card, i) => {
-              const cardY = startY + i * 130;
+              const cardY = startY + i * CARD_V_GAP;
               nodes.push({
                 id: `card_${card.id}`,
                 type: "card",
                 label: card.name,
-                x: colX - 95,
-                y: cardY - 42.5,
-                width: 190,
-                height: 85,
+                x: colX - CARD_W / 2,
+                y: cardY,
+                width: CARD_W,
+                height: CARD_H,
                 status: card.status,
                 rank: card.rank,
                 shape: card.shape,
@@ -500,30 +508,31 @@ export default function WorkflowView({
             });
           } else {
             // Vertical Flow (TD): Lanes stack vertically as rows, cards flow horizontally
-            const rowY = (colIdx - (lists.length - 1) / 2) * 280;
-            const startX = C > 0 ? -(C - 1) * 115 : 0;
+            const rowY = (colIdx - (lists.length - 1) / 2) * ROW_GAP;
+            const totalW = C > 0 ? (C - 1) * CARD_H_GAP + CARD_W : CARD_W;
+            const startX = -totalW / 2;
 
             if (C > 0) {
               lanes.push({
                 id: list.id,
                 name: list.name,
-                minX: startX - 110,
-                maxX: startX + (C - 1) * 230 + 110,
-                minY: rowY - 60,
-                maxY: rowY + 60
+                minX: startX - 15,
+                maxX: startX + (C - 1) * CARD_H_GAP + CARD_W + 15,
+                minY: rowY - 50,
+                maxY: rowY + CARD_H + 15
               });
             }
 
             listCards.forEach((card, i) => {
-              const cardX = startX + i * 230;
+              const cardX = startX + i * CARD_H_GAP;
               nodes.push({
                 id: `card_${card.id}`,
                 type: "card",
                 label: card.name,
-                x: cardX - 95,
-                y: rowY - 42.5,
-                width: 190,
-                height: 85,
+                x: cardX,
+                y: rowY,
+                width: CARD_W,
+                height: CARD_H,
                 status: card.status,
                 rank: card.rank,
                 shape: card.shape,
@@ -569,19 +578,20 @@ export default function WorkflowView({
           const C = listCards.length;
 
           if (isHorizontal) {
-            const colX = (colIdx - (activeLevels.length - 1) / 2) * 320;
-            const startY = C > 0 ? -(C - 1) * 65 : 0;
+            const colX = (colIdx - (activeLevels.length - 1) / 2) * COL_GAP;
+            const totalH = C > 0 ? (C - 1) * CARD_V_GAP + CARD_H : CARD_H;
+            const startY = -totalH / 2;
 
             listCards.forEach((card, i) => {
-              const cardY = startY + i * 130;
+              const cardY = startY + i * CARD_V_GAP;
               nodes.push({
                 id: `card_${card.id}`,
                 type: "card",
                 label: card.name,
-                x: colX - 95,
-                y: cardY - 42.5,
-                width: 190,
-                height: 85,
+                x: colX - CARD_W / 2,
+                y: cardY,
+                width: CARD_W,
+                height: CARD_H,
                 status: card.status,
                 rank: card.rank,
                 shape: card.shape,
@@ -589,19 +599,20 @@ export default function WorkflowView({
               });
             });
           } else {
-            const rowY = (colIdx - (activeLevels.length - 1) / 2) * 280;
-            const startX = C > 0 ? -(C - 1) * 115 : 0;
+            const rowY = (colIdx - (activeLevels.length - 1) / 2) * ROW_GAP;
+            const totalW = C > 0 ? (C - 1) * CARD_H_GAP + CARD_W : CARD_W;
+            const startX = -totalW / 2;
 
             listCards.forEach((card, i) => {
-              const cardX = startX + i * 230;
+              const cardX = startX + i * CARD_H_GAP;
               nodes.push({
                 id: `card_${card.id}`,
                 type: "card",
                 label: card.name,
-                x: cardX - 95,
-                y: rowY - 42.5,
-                width: 190,
-                height: 85,
+                x: cardX,
+                y: rowY,
+                width: CARD_W,
+                height: CARD_H,
                 status: card.status,
                 rank: card.rank,
                 shape: card.shape,
@@ -673,7 +684,7 @@ export default function WorkflowView({
     }
 
     return { nodes, edges, lanes };
-  }, [parsedCards, lists, diagramMode, groupByLanes, showSuggestedPath]);
+  }, [parsedCards, lists, diagramMode, groupByLanes, showSuggestedPath, layoutDir]);
 
   // Mindmap code builder
   const mindmapCode = useMemo(() => {
@@ -773,6 +784,43 @@ export default function WorkflowView({
     if (!selectedCardId) return null;
     return parsedCardMap.get(selectedCardId) || null;
   }, [selectedCardId, parsedCardMap]);
+
+  // Auto-fit: compute bounding box of all nodes and scale/offset to fit canvas
+  useEffect(() => {
+    if (layout.nodes.length === 0 || !canvasRef.current) return;
+    const el = canvasRef.current;
+    const cw = el.clientWidth;
+    const ch = el.clientHeight;
+    if (cw === 0 || ch === 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    layout.nodes.forEach(n => {
+      minX = Math.min(minX, n.x);
+      minY = Math.min(minY, n.y);
+      maxX = Math.max(maxX, n.x + n.width);
+      maxY = Math.max(maxY, n.y + n.height);
+    });
+
+    const diagramW = maxX - minX;
+    const diagramH = maxY - minY;
+    if (diagramW === 0 || diagramH === 0) return;
+
+    const PADDING = 80; // px padding around diagram
+    const fitScaleX = (cw - PADDING * 2) / diagramW;
+    const fitScaleY = (ch - PADDING * 2) / diagramH;
+    const fitScale = Math.min(fitScaleX, fitScaleY, 1.2); // cap at 120% zoom
+    const clampedScale = Math.max(0.25, Math.min(fitScale, 1.2));
+
+    // Center the diagram in the viewport
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    setScale(clampedScale);
+    setOffset({
+      x: -centerX * clampedScale,
+      y: -centerY * clampedScale
+    });
+  }, [layout]);
 
   // Bind click callback globally for Mermaid nodes
   useEffect(() => {
