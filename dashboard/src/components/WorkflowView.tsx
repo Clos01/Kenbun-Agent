@@ -51,6 +51,84 @@ interface WorkflowViewProps {
 type ShapeType = "process" | "decision" | "terminal";
 type LayoutDir = "TD" | "LR";
 
+function CustomSelect<T extends string>({
+  value,
+  onChange,
+  options,
+  label
+}: {
+  value: T;
+  onChange: (val: T) => void;
+  options: { value: T; label: string }[];
+  label?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const activeOption = options.find(o => o.value === value);
+
+  return (
+    <div className="relative inline-block text-left" ref={ref}>
+      <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2.5 py-1.5">
+        {label && (
+          <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">
+            {label}:
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer flex items-center gap-1 hover:text-primary transition-colors"
+        >
+          <span>{activeOption?.label || value}</span>
+          <span className="text-[6px] opacity-60 ml-0.5">▼</span>
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.1 }}
+            className="absolute right-0 mt-1 w-32 origin-top-right rounded-lg border shadow-lg focus:outline-none z-50 overflow-hidden"
+            style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}
+          >
+            <div className="py-1">
+              {options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`block w-full text-left px-3 py-2 text-[9px] font-mono font-bold uppercase hover:bg-white/5 cursor-pointer ${
+                    opt.value === value ? "text-tertiary bg-white/2" : "text-secondary hover:text-primary"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 export default function WorkflowView({
   cards,
   lists,
@@ -719,6 +797,23 @@ export default function WorkflowView({
           stroke: none !important;
           stroke-width: 0px !important;
         }
+        /* Custom styled native select dropdowns to match theme colors and override default OS chevrons */
+        select {
+          appearance: none !important;
+          -webkit-appearance: none !important;
+          -moz-appearance: none !important;
+          background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%23888888' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E") !important;
+          background-position: right 0.75rem center !important;
+          background-repeat: no-repeat !important;
+          background-size: 1em 1em !important;
+          padding-right: 2.2rem !important;
+          background-color: var(--neutral) !important;
+          color: var(--primary) !important;
+        }
+        select option {
+          background-color: var(--card) !important;
+          color: var(--primary) !important;
+        }
       ` }} />
       
       {/* Top Header controls bar */}
@@ -773,18 +868,16 @@ export default function WorkflowView({
           )}
 
           {/* Diagram Mode Selection */}
-          <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
-            <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Mode:</span>
-            <select
-              value={diagramMode}
-              onChange={(e) => setDiagramMode(e.target.value as any)}
-              className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer"
-            >
-              <option value="flowchart">Flowchart</option>
-              <option value="mindmap">Mindmap</option>
-              <option value="ascii">ASCII Board</option>
-            </select>
-          </div>
+          <CustomSelect
+            label="Mode"
+            value={diagramMode}
+            onChange={setDiagramMode}
+            options={[
+              { value: "flowchart", label: "Flowchart" },
+              { value: "mindmap", label: "Mindmap" },
+              { value: "ascii", label: "ASCII Board" }
+            ]}
+          />
 
           {diagramMode === "flowchart" && (
             <>
@@ -812,18 +905,16 @@ export default function WorkflowView({
                 Path: {showSuggestedPath ? "Suggested Flow" : "Manual Link"}
               </button>
 
-              <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
-                <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Curve:</span>
-                <select
-                  value={lineStyle}
-                  onChange={(e) => setLineStyle(e.target.value as any)}
-                  className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer"
-                >
-                  <option value="basis">Curved</option>
-                  <option value="step">Orthogonal</option>
-                  <option value="linear">Straight</option>
-                </select>
-              </div>
+              <CustomSelect
+                label="Curve"
+                value={lineStyle}
+                onChange={setLineStyle}
+                options={[
+                  { value: "basis", label: "Curved" },
+                  { value: "step", label: "Orthogonal" },
+                  { value: "linear", label: "Straight" }
+                ]}
+              />
 
               <button
                 onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
