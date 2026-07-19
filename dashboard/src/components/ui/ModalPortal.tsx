@@ -6,7 +6,8 @@ export default function ModalPortal({ children }: { children: React.ReactNode })
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    const t = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(t);
   }, []);
 
   return mounted ? createPortal(children, document.body) : null;

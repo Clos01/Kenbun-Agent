@@ -1,21 +1,13 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Play, 
-  Check, 
-  Clock, 
-  AlertTriangle, 
-  Link as LinkIcon, 
   X, 
-  Calendar, 
-  Eye, 
   Plus,
   GitBranch,
   Copy,
   ChevronRight,
-  ChevronDown,
   Layout,
   RefreshCw,
   Trash2,
@@ -47,7 +39,6 @@ interface WorkflowViewProps {
   cards: Card[];
   lists: List[];
   onOpenCard: (card: Card) => void;
-  onMoveCard: (cardId: string, newListId: string) => Promise<void>;
   onUpdateCardDesc: (cardId: string, newDescription: string) => Promise<void>;
   onCreateCard: (name: string, listId: string, x: number, y: number) => Promise<void>;
   onDeleteCard: (cardId: string) => Promise<void>;
@@ -60,7 +51,6 @@ export default function WorkflowView({
   cards,
   lists,
   onOpenCard,
-  onMoveCard,
   onUpdateCardDesc,
   onCreateCard,
   onDeleteCard
@@ -150,12 +140,13 @@ export default function WorkflowView({
 
   // Bind click callback globally for Mermaid nodes
   useEffect(() => {
-    (window as any).onMermaidNodeClick = (nodeId: string) => {
+    (window as unknown as Record<string, unknown>).onMermaidNodeClick = (nodeId: string) => {
       const cleanId = nodeId.replace("c_", "");
       setSelectedCardId(cleanId);
     };
     return () => {
-      delete (window as any).onMermaidNodeClick;
+      const w = window as unknown as Record<string, unknown>;
+      delete w.onMermaidNodeClick;
     };
   }, []);
 
@@ -217,9 +208,11 @@ export default function WorkflowView({
   // Render Mermaid code into SVG
   useEffect(() => {
     let isMounted = true;
-    setIsRendering(true);
 
     async function renderMermaid() {
+      if (isMounted) {
+        setIsRendering(true);
+      }
       try {
         const mermaid = (await import("mermaid")).default;
         mermaid.initialize({
@@ -301,12 +294,6 @@ export default function WorkflowView({
     e.preventDefault();
     if (!newCardName.trim() || !newCardListId) return;
 
-    // Use default coordinates (coordinates are computed dynamically by Mermaid, so layout offsets are optional)
-    const initialMetadata: KenbunMetadata = {
-      shape: newCardShape
-    };
-
-    const initialDesc = injectCardMetadata("", initialMetadata);
     await onCreateCard(newCardName.trim(), newCardListId, 120, 120);
     
     setNewCardName("");

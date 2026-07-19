@@ -495,7 +495,7 @@ export default function HivemindMemory() {
                 <div className="space-y-1">
                   <h4 className="font-serif font-bold text-sm text-primary uppercase">Sovereign Semantic Search</h4>
                   <p>
-                    Instead of standard keyword searches (which require exact matching syntax), Semantic Search analyzes the contextual meaning of your query. For example, searching for "auth flow" will retrieve classes, databases, or logic handling cookies, tokens, or JWTs even if they don't contain the word "auth".
+                    Instead of standard keyword searches (which require exact matching syntax), Semantic Search analyzes the contextual meaning of your query. For example, searching for &quot;auth flow&quot; will retrieve classes, databases, or logic handling cookies, tokens, or JWTs even if they don&apos;t contain the word &quot;auth&quot;.
                   </p>
                 </div>
 

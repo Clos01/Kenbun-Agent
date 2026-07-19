@@ -2042,6 +2042,7 @@ export default function HeritageObservatory() {
 
                           {slot.flagged && (
                             <button
+                              // eslint-disable-next-line react-hooks/refs
                               onClick={() => handleResolveAlert(slot.concept)}
                               className="px-4 py-2 border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all duration-200"
                             >

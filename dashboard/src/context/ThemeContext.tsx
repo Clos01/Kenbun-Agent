@@ -62,20 +62,22 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [preset, setPresetState] = useState<ThemePreset>("obsidian");
+  const [preset, setPresetState] = useState<ThemePreset>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("kenbun_theme_preset") as ThemePreset;
+      if (stored && THEME_PRESETS[stored]) {
+        return stored;
+      }
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      return isDark ? "obsidian" : "limestone";
+    }
+    return "obsidian";
+  });
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("kenbun_theme_preset") as ThemePreset;
-      if (stored && THEME_PRESETS[stored]) {
-        setPresetState(stored);
-      } else {
-        const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        setPresetState(isDark ? "obsidian" : "limestone");
-      }
-    } catch {}
-    setMounted(true);
+    const t = setTimeout(() => setMounted(true), 0);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {

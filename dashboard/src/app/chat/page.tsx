@@ -146,7 +146,19 @@ export default function KenbunChat() {
     sessionIds: string[];
     isExpanded?: boolean;
   }
-  const [folders, setFolders] = useState<Folder[]>([]);
+  const [folders, setFolders] = useState<Folder[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("kenbun_chat_folders");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (err) {
+          console.error(err);
+        }
+      }
+    }
+    return [];
+  });
 
   // Text Preview Sanitization Helper
   const cleanPreview = (text: string) => {
@@ -158,17 +170,7 @@ export default function KenbunChat() {
       .trim();
   };
 
-  // Load folders from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("kenbun_chat_folders");
-    if (saved) {
-      try {
-        setFolders(JSON.parse(saved));
-      } catch (err) {
-        console.error(err);
-      }
-    }
-  }, []);
+
 
   // Save folders to localStorage on update
   const saveFolders = (updatedFolders: Folder[]) => {

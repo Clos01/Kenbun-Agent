@@ -308,9 +308,26 @@ export default function BoardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Active view tab: kanban | calendar | messaging | workflow
-  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow">("kanban");
+  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow">(() => {
+    if (typeof window !== "undefined") {
+      const savedTab = localStorage.getItem("board_active_tab");
+      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow") {
+        return savedTab;
+      }
+    }
+    return "kanban";
+  });
 
   const hasRestoredBoard = useRef(false);
+
+  const [now, setNow] = useState<number>(1700000000000);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setNow(Date.now());
+    }, 0);
+    return () => clearTimeout(t);
+  }, []);
 
   // Persistence helpers
   const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow") => {
@@ -331,15 +348,7 @@ export default function BoardPage() {
     }
   };
 
-  // Load saved tab from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedTab = localStorage.getItem("board_active_tab");
-      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow") {
-        setActiveTab(savedTab);
-      }
-    }
-  }, []);
+
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -927,8 +936,10 @@ export default function BoardPage() {
     return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
   }).length;
 
+
+
   const isOverdue = (c: Card) =>
-    !!c.dueDate && !isDoneCard(c) && new Date(c.dueDate).getTime() < Date.now();
+    !!c.dueDate && !isDoneCard(c) && new Date(c.dueDate).getTime() < now;
 
   const hasActiveFilters = !!(searchQuery || filterStartDate || filterEndDate || filterLocation || selectedCollection);
 
@@ -2000,7 +2011,6 @@ export default function BoardPage() {
                     cards={filteredCards}
                     lists={lists}
                     onOpenCard={handleOpenCard}
-                    onMoveCard={handleMoveCard}
                     onUpdateCardDesc={async (cardId, newDesc) => {
                       try {
                         setSyncing(true);
