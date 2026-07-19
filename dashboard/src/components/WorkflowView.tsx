@@ -603,7 +603,7 @@ export default function WorkflowView({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-base/80 backdrop-blur-xs flex items-center justify-center p-6 z-50"
+              className="fixed inset-0 bg-base/80 backdrop-blur-xs flex items-center justify-center p-6 z-50"
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
