@@ -66,31 +66,31 @@ export default function WorkflowView({
     const isDark = preset === "obsidian";
     if (isDark) {
       return {
-        completed: "fill:#0f1d16,stroke:#10b981,stroke-width:1.5px,color:#34d399;",
-        in_progress: "fill:#0b192c,stroke:#0284c7,stroke-width:1.5px,color:#38bdf8;",
-        blocked: "fill:#211406,stroke:#f59e0b,stroke-width:1.5px,color:#fbbf24;",
-        todo: "fill:#161616,stroke:#374151,stroke-width:1.2px,color:#9ca3af;"
+        completed: "fill:#0f1d16,stroke:#10b981,stroke-width:1.5px,color:#34d399",
+        in_progress: "fill:#0b192c,stroke:#0284c7,stroke-width:1.5px,color:#38bdf8",
+        blocked: "fill:#211406,stroke:#f59e0b,stroke-width:1.5px,color:#fbbf24",
+        todo: "fill:#161616,stroke:#374151,stroke-width:1.2px,color:#9ca3af"
       };
     } else if (preset === "limestone") {
       return {
-        completed: "fill:#f0fdf4,stroke:#10b981,stroke-width:1.5px,color:#14532d;",
-        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e;",
-        blocked: "fill:#fffbeb,stroke:#f59e0b,stroke-width:1.5px,color:#78350f;",
-        todo: "fill:#ffffff,stroke:#e5e7eb,stroke-width:1.2px,color:#4b5563;"
+        completed: "fill:#f0fdf4,stroke:#10b981,stroke-width:1.5px,color:#14532d",
+        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e",
+        blocked: "fill:#fffbeb,stroke:#f59e0b,stroke-width:1.5px,color:#78350f",
+        todo: "fill:#ffffff,stroke:#e5e7eb,stroke-width:1.2px,color:#4b5563"
       };
     } else if (preset === "forest") {
       return {
-        completed: "fill:#f0fdf4,stroke:#2e8b57,stroke-width:1.5px,color:#1b4332;",
-        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e;",
-        blocked: "fill:#fffbeb,stroke:#ffc107,stroke-width:1.5px,color:#78350f;",
-        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569;"
+        completed: "fill:#f0fdf4,stroke:#2e8b57,stroke-width:1.5px,color:#1b4332",
+        in_progress: "fill:#f0f9ff,stroke:#0284c7,stroke-width:1.5px,color:#0c4a6e",
+        blocked: "fill:#fffbeb,stroke:#ffc107,stroke-width:1.5px,color:#78350f",
+        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569"
       };
     } else { // cobalt
       return {
-        completed: "fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#334155;",
-        in_progress: "fill:#eff6ff,stroke:#2f6feb,stroke-width:1.5px,color:#1e40af;",
-        blocked: "fill:#fff7ed,stroke:#f97316,stroke-width:1.5px,color:#7c2d12;",
-        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569;"
+        completed: "fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#334155",
+        in_progress: "fill:#eff6ff,stroke:#2f6feb,stroke-width:1.5px,color:#1e40af",
+        blocked: "fill:#fff7ed,stroke:#f97316,stroke-width:1.5px,color:#7c2d12",
+        todo: "fill:#ffffff,stroke:#e2e8f0,stroke-width:1.2px,color:#475569"
       };
     }
   }, [preset]);
@@ -190,10 +190,10 @@ export default function WorkflowView({
     const lines: string[] = [];
     lines.push(`graph ${layoutDir}`);
     lines.push("  %% Theme Styles");
-    lines.push(`  classDef completed ${mermaidThemeStyles.completed}font-size:10.5px;`);
-    lines.push(`  classDef in_progress ${mermaidThemeStyles.in_progress}font-size:10.5px;`);
-    lines.push(`  classDef blocked ${mermaidThemeStyles.blocked}font-size:10.5px;`);
-    lines.push(`  classDef todo ${mermaidThemeStyles.todo}font-size:10.5px;`);
+    lines.push(`  classDef completed ${mermaidThemeStyles.completed},font-size:10.5px;`);
+    lines.push(`  classDef in_progress ${mermaidThemeStyles.in_progress},font-size:10.5px;`);
+    lines.push(`  classDef blocked ${mermaidThemeStyles.blocked},font-size:10.5px;`);
+    lines.push(`  classDef todo ${mermaidThemeStyles.todo},font-size:10.5px;`);
     lines.push("");
 
     // Declare shapes
