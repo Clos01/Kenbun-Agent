@@ -67,6 +67,7 @@ export default function WorkflowView({
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
   const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "ascii">("flowchart");
+  const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(1);
@@ -155,6 +156,20 @@ export default function WorkflowView({
 
   const parsedCardMap = useMemo(() => {
     return new Map(parsedCards.map(c => [c.id, c]));
+  }, [parsedCards]);
+
+  const nextStepCardId = useMemo(() => {
+    const inProgressCards = parsedCards
+      .filter(c => c.status === "in_progress")
+      .sort((a, b) => a.rank - b.rank);
+    if (inProgressCards.length > 0) return inProgressCards[0].id;
+
+    const todoCards = parsedCards
+      .filter(c => c.status === "todo")
+      .sort((a, b) => a.rank - b.rank);
+    if (todoCards.length > 0) return todoCards[0].id;
+
+    return null;
   }, [parsedCards]);
 
   // Mindmap code builder
@@ -292,6 +307,7 @@ export default function WorkflowView({
       // Escape title special characters
       const cleanTitle = card.name.replace(/"/g, "'");
       const id = `c_${card.id}`;
+      const isNextStep = card.id === nextStepCardId;
       
       // Determine status display values
       let statusColor = "bg-neutral-500";
@@ -325,29 +341,37 @@ export default function WorkflowView({
         ? `<div class='flex items-center gap-1 opacity-70'>${icons.join("")}</div>` 
         : "";
 
+      const highlightStyles = isNextStep 
+        ? "border-color: var(--tertiary); box-shadow: 0 0 10px var(--tertiary); border-width: 1.5px;" 
+        : "border-color: var(--border);";
+      
+      const badgeHtml = isNextStep
+        ? `<span class='text-[7.5px] font-mono px-1 py-0.5 rounded text-neutral bg-tertiary font-bold animate-pulse' style='background-color: var(--tertiary); color: var(--neutral);'>👉 NEXT</span>`
+        : `<span class='text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary' style='background-color: var(--neutral); color: var(--secondary);'>#${card.rank}</span>`;
+
       // Construct a premium card component HTML string based on shape type
       let htmlLabel = "";
       if (card.shape === "terminal") {
         // Pill-shaped terminal node
         htmlLabel = `
-          <div class='px-4 py-2.5 rounded-full border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex items-center justify-between gap-3 border-border' style='width: 190px; border-color: var(--border); background-color: var(--card);'>
+          <div class='px-4 py-2.5 rounded-full border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex items-center justify-between gap-3 border-border' style='width: 190px; ${highlightStyles} background-color: var(--card);'>
             <div class='flex items-center gap-2 truncate'>
               <span class='w-2 h-2 rounded-full ${statusColor} shrink-0'></span>
               <span class='text-[9px] font-bold text-primary truncate' style='color: var(--primary);'>${cleanTitle}</span>
             </div>
-            <span class='text-[7px] font-mono uppercase tracking-wider text-secondary/60 shrink-0' style='color: var(--secondary); opacity: 0.6;'>Terminal</span>
+            ${isNextStep ? badgeHtml : `<span class='text-[7px] font-mono uppercase tracking-wider text-secondary/60 shrink-0' style='color: var(--secondary); opacity: 0.6;'>Terminal</span>`}
           </div>
         `.replace(/\s+/g, " ").trim();
       } else if (card.shape === "decision") {
         // Decision Gate styled card
         htmlLabel = `
-          <div class='p-3.5 rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2' style='width: 190px; min-height: 85px; border-color: var(--accent, var(--tertiary)); background-color: var(--card); border-width: 1.5px;'>
+          <div class='p-3.5 rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2' style='width: 190px; min-height: 85px; border-color: ${isNextStep ? "var(--tertiary)" : "var(--accent, var(--tertiary))"}; background-color: var(--card); border-width: ${isNextStep ? "2px" : "1.5px"}; ${isNextStep ? "box-shadow: 0 0 10px var(--tertiary);" : ""}' >
             <div class='flex items-center justify-between'>
               <div class='flex items-center gap-1.5'>
                 <span class='w-2 h-2 rounded-full' style='background-color: var(--accent, var(--tertiary));'></span>
                 <span class='text-[7.5px] font-mono font-bold uppercase tracking-wider' style='color: var(--accent, var(--tertiary));'>Decision Gate</span>
               </div>
-              <span class='text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary' style='background-color: var(--neutral); color: var(--secondary);'>#${card.rank}</span>
+              ${badgeHtml}
             </div>
             <div class='text-[10px] font-bold text-primary leading-snug line-clamp-2' style='color: var(--primary);'>${cleanTitle}</div>
             <div class='flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t pt-1.5' style='border-color: var(--border); color: var(--secondary);'>
@@ -359,13 +383,13 @@ export default function WorkflowView({
       } else {
         // Standard Process card
         htmlLabel = `
-          <div class='p-3.5 rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 border-border' style='width: 190px; min-height: 85px; border-color: var(--border); background-color: var(--card);'>
+          <div class='p-3.5 rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 border-border' style='width: 190px; min-height: 85px; ${highlightStyles} background-color: var(--card);'>
             <div class='flex items-center justify-between'>
               <div class='flex items-center gap-1.5'>
                 <span class='w-2 h-2 rounded-full ${statusColor}'></span>
                 <span class='text-[7.5px] font-mono font-bold uppercase tracking-wider text-secondary' style='color: var(--secondary);'>${statusText}</span>
               </div>
-              <span class='text-[7.5px] font-mono px-1 py-0.5 rounded text-secondary' style='background-color: var(--neutral); color: var(--secondary);'>#${card.rank}</span>
+              ${badgeHtml}
             </div>
             <div class='text-[10px] font-bold text-primary leading-snug line-clamp-2' style='color: var(--primary);'>${cleanTitle}</div>
             <div class='flex items-center justify-between text-[7px] font-mono text-secondary mt-1 border-t pt-1.5' style='border-color: var(--border); color: var(--secondary);'>
@@ -387,19 +411,41 @@ export default function WorkflowView({
 
     lines.push("");
     
-    // Declare links with edge labels
+    // Declare links with edge labels (strict manual or fallback suggested path)
+    let hasManualLinks = false;
     parsedCards.forEach(card => {
-      card.dependencies.forEach(depId => {
-        if (parsedCardMap.has(depId)) {
-          const label = card.linkLabels?.[depId];
-          if (label) {
-            lines.push(`  c_${depId} -->|"${label}"| c_${card.id}`);
-          } else {
-            lines.push(`  c_${depId} --> c_${card.id}`);
-          }
-        }
-      });
+      if (card.dependencies.length > 0) {
+        hasManualLinks = true;
+      }
     });
+
+    if (hasManualLinks || !showSuggestedPath) {
+      // Use strict manual dependencies
+      parsedCards.forEach(card => {
+        card.dependencies.forEach(depId => {
+          if (parsedCardMap.has(depId)) {
+            const label = card.linkLabels?.[depId];
+            if (label) {
+              lines.push(`  c_${depId} -->|"${label}"| c_${card.id}`);
+            } else {
+              lines.push(`  c_${depId} --> c_${card.id}`);
+            }
+          }
+        });
+      });
+    } else {
+      // No manual links exist, draw suggested priority path based on work order ranks!
+      // Sort non-completed cards by rank
+      const activeSequence = parsedCards
+        .filter(c => c.status !== "completed")
+        .sort((a, b) => a.rank - b.rank);
+      
+      for (let i = 0; i < activeSequence.length - 1; i++) {
+        const fromCard = activeSequence[i];
+        const toCard = activeSequence[i + 1];
+        lines.push(`  c_${fromCard.id} -.->|"(suggested)"| c_${toCard.id}`);
+      }
+    }
 
     lines.push("");
 
@@ -744,6 +790,18 @@ export default function WorkflowView({
                 title="Group Flowchart Nodes by Kanban Lanes"
               >
                 Lanes: {groupByLanes ? "Enabled" : "Disabled"}
+              </button>
+
+              <button
+                onClick={() => setShowSuggestedPath(prev => !prev)}
+                className={`px-2.5 py-1.5 border rounded text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
+                  showSuggestedPath
+                    ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
+                    : "bg-white/5 border-white/10 text-secondary hover:text-primary hover:bg-white/10"
+                }`}
+                title="Auto-Draw Arrows Connecting Sequence Steps"
+              >
+                Path: {showSuggestedPath ? "Suggested Flow" : "Manual Link"}
               </button>
 
               <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
