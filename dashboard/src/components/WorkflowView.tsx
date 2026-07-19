@@ -407,12 +407,7 @@ export default function WorkflowView({
     });
     lines.push("");
 
-    // Style subgraphs to make them look like premium kanban containers
-    if (groupByLanes) {
-      lists.forEach(list => {
-        lines.push(`  style lane_${list.id.replace(/-/g, '_')} fill:var(--card),stroke:var(--border),stroke-width:1px,rx:12px,ry:12px;`);
-      });
-    }
+
 
     return lines.join("\n");
   }, [parsedCards, parsedCardMap, layoutDir, mermaidThemeStyles, groupByLanes, lists]);
