@@ -457,43 +457,80 @@ export default function WorkflowView({
       rightLists.forEach((list, idx) => layList(list, idx, "right"));
 
     } else if (diagramMode === "flowchart") {
+      const isHorizontal = layoutDir === "LR";
+
       if (groupByLanes) {
         lists.forEach((list, colIdx) => {
           const listCards = parsedCards
             .filter(c => c.listId === list.id)
             .sort((a, b) => a.rank - b.rank);
           
-          const colX = (colIdx - (lists.length - 1) / 2) * 320;
           const C = listCards.length;
-          const startY = C > 0 ? -(C - 1) * 65 : 0;
 
-          if (C > 0) {
-            lanes.push({
-              id: list.id,
-              name: list.name,
-              minX: colX - 110,
-              maxX: colX + 110,
-              minY: startY - 90,
-              maxY: startY + (C - 1) * 130 + 70
+          if (isHorizontal) {
+            const colX = (colIdx - (lists.length - 1) / 2) * 320;
+            const startY = C > 0 ? -(C - 1) * 65 : 0;
+
+            if (C > 0) {
+              lanes.push({
+                id: list.id,
+                name: list.name,
+                minX: colX - 110,
+                maxX: colX + 110,
+                minY: startY - 90,
+                maxY: startY + (C - 1) * 130 + 70
+              });
+            }
+
+            listCards.forEach((card, i) => {
+              const cardY = startY + i * 130;
+              nodes.push({
+                id: `card_${card.id}`,
+                type: "card",
+                label: card.name,
+                x: colX - 95,
+                y: cardY - 42.5,
+                width: 190,
+                height: 85,
+                status: card.status,
+                rank: card.rank,
+                shape: card.shape,
+                cardData: card
+              });
+            });
+          } else {
+            // Vertical Flow (TD): Lanes stack vertically as rows, cards flow horizontally
+            const rowY = (colIdx - (lists.length - 1) / 2) * 280;
+            const startX = C > 0 ? -(C - 1) * 115 : 0;
+
+            if (C > 0) {
+              lanes.push({
+                id: list.id,
+                name: list.name,
+                minX: startX - 110,
+                maxX: startX + (C - 1) * 230 + 110,
+                minY: rowY - 60,
+                maxY: rowY + 60
+              });
+            }
+
+            listCards.forEach((card, i) => {
+              const cardX = startX + i * 230;
+              nodes.push({
+                id: `card_${card.id}`,
+                type: "card",
+                label: card.name,
+                x: cardX - 95,
+                y: rowY - 42.5,
+                width: 190,
+                height: 85,
+                status: card.status,
+                rank: card.rank,
+                shape: card.shape,
+                cardData: card
+              });
             });
           }
-
-          listCards.forEach((card, i) => {
-            const cardY = startY + i * 130;
-            nodes.push({
-              id: `card_${card.id}`,
-              type: "card",
-              label: card.name,
-              x: colX - 95,
-              y: cardY - 42.5,
-              width: 190,
-              height: 85,
-              status: card.status,
-              rank: card.rank,
-              shape: card.shape,
-              cardData: card
-            });
-          });
         });
       } else {
         const cardLevels = new Map<string, number>();
@@ -529,26 +566,49 @@ export default function WorkflowView({
         const activeLevels = Array.from(levelCardsMap.keys()).sort((a, b) => a - b);
         activeLevels.forEach((level, colIdx) => {
           const listCards = levelCardsMap.get(level)!;
-          const colX = (colIdx - (activeLevels.length - 1) / 2) * 320;
           const C = listCards.length;
-          const startY = C > 0 ? -(C - 1) * 65 : 0;
 
-          listCards.forEach((card, i) => {
-            const cardY = startY + i * 130;
-            nodes.push({
-              id: `card_${card.id}`,
-              type: "card",
-              label: card.name,
-              x: colX - 95,
-              y: cardY - 42.5,
-              width: 190,
-              height: 85,
-              status: card.status,
-              rank: card.rank,
-              shape: card.shape,
-              cardData: card
+          if (isHorizontal) {
+            const colX = (colIdx - (activeLevels.length - 1) / 2) * 320;
+            const startY = C > 0 ? -(C - 1) * 65 : 0;
+
+            listCards.forEach((card, i) => {
+              const cardY = startY + i * 130;
+              nodes.push({
+                id: `card_${card.id}`,
+                type: "card",
+                label: card.name,
+                x: colX - 95,
+                y: cardY - 42.5,
+                width: 190,
+                height: 85,
+                status: card.status,
+                rank: card.rank,
+                shape: card.shape,
+                cardData: card
+              });
             });
-          });
+          } else {
+            const rowY = (colIdx - (activeLevels.length - 1) / 2) * 280;
+            const startX = C > 0 ? -(C - 1) * 115 : 0;
+
+            listCards.forEach((card, i) => {
+              const cardX = startX + i * 230;
+              nodes.push({
+                id: `card_${card.id}`,
+                type: "card",
+                label: card.name,
+                x: cardX - 95,
+                y: rowY - 42.5,
+                width: 190,
+                height: 85,
+                status: card.status,
+                rank: card.rank,
+                shape: card.shape,
+                cardData: card
+              });
+            });
+          }
         });
       }
 
@@ -574,10 +634,10 @@ export default function WorkflowView({
               id: `edge_${depId}_to_${card.id}`,
               fromId: fromNode.id,
               toId: toNode.id,
-              fromX: fromNode.x + fromNode.width,
-              fromY: fromNode.y + fromNode.height / 2,
-              toX: toNode.x,
-              toY: toNode.y + toNode.height / 2,
+              fromX: isHorizontal ? fromNode.x + fromNode.width : fromNode.x + fromNode.width / 2,
+              fromY: isHorizontal ? fromNode.y + fromNode.height / 2 : fromNode.y + fromNode.height,
+              toX: isHorizontal ? toNode.x : toNode.x + toNode.width / 2,
+              toY: isHorizontal ? toNode.y + toNode.height / 2 : toNode.y,
               label,
               style: "solid"
             });
@@ -600,10 +660,10 @@ export default function WorkflowView({
               id: `edge_suggested_${fromCard.id}_to_${toCard.id}`,
               fromId: fromNode.id,
               toId: toNode.id,
-              fromX: fromNode.x + fromNode.width,
-              fromY: fromNode.y + fromNode.height / 2,
-              toX: toNode.x,
-              toY: toNode.y + toNode.height / 2,
+              fromX: isHorizontal ? fromNode.x + fromNode.width : fromNode.x + fromNode.width / 2,
+              fromY: isHorizontal ? fromNode.y + fromNode.height / 2 : fromNode.y + fromNode.height,
+              toX: isHorizontal ? toNode.x : toNode.x + toNode.width / 2,
+              toY: isHorizontal ? toNode.y + toNode.height / 2 : toNode.y,
               label: "suggested",
               style: "dotted"
             });
@@ -1467,14 +1527,21 @@ export default function WorkflowView({
                 {/* Connection lines */}
                 {layout.edges.map(edge => {
                   const dx = edge.toX - edge.fromX;
-                  const cp = Math.max(Math.min(Math.abs(dx) * 0.45, 120), 40);
+                  const dy = edge.toY - edge.fromY;
+                  const isHorizontal = layoutDir === "LR";
+                  
+                  const cp = isHorizontal 
+                    ? Math.max(Math.min(Math.abs(dx) * 0.45, 120), 40)
+                    : Math.max(Math.min(Math.abs(dy) * 0.45, 120), 40);
                   const isDotted = edge.style === "dotted";
                   
                   let pathD = "";
                   if (diagramMode === "mindmap" && edge.fromId === "root") {
                     pathD = `M ${edge.fromX} ${edge.fromY} C ${(edge.fromX + edge.toX)/2} ${edge.fromY}, ${edge.toX} ${(edge.fromY + edge.toY)/2}, ${edge.toX} ${edge.toY}`;
                   } else {
-                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cp} ${edge.fromY}, ${edge.toX - cp} ${edge.toY}, ${edge.toX} ${edge.toY}`;
+                    pathD = isHorizontal
+                      ? `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cp} ${edge.fromY}, ${edge.toX - cp} ${edge.toY}, ${edge.toX} ${edge.toY}`
+                      : `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cp}, ${edge.toX} ${edge.toY - cp}, ${edge.toX} ${edge.toY}`;
                   }
 
                   return (
