@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
+import WorkflowView from "@/components/WorkflowView";
 import { formatMarkdown } from "@/lib/markdown";
 import { computeWorkOrder } from "@/lib/prioritize";
 import {
   Columns,
+  GitFork,
   Plus,
   Folder,
   ArrowLeft,
@@ -27,6 +29,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { tenantFetch } from "@/lib/tenantFetch";
+import { z } from "zod";
 
 // Types
 interface Board {
@@ -78,32 +81,139 @@ interface BoardComment {
   cardId: string;
 }
 
-interface KenbunMetadata {
+export interface KenbunMetadata {
   location?: string;
   recurring?: "none" | "daily" | "weekly" | "monthly";
   collections?: string[];
+  dependencies?: string[];
+}
+
+const KenbunMetadataSchema = z.object({
+  location: z.string().max(100).regex(/^[a-zA-Z0-9_\-\s]+$/).optional(),
+  recurring: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
+  collections: z.array(z.string().max(50).regex(/^[a-zA-Z0-9_\-\s]+$/)).max(30).optional(),
+  dependencies: z.array(z.string().max(50).regex(/^[a-zA-Z0-9_\-]+$/)).max(100).optional(),
+}).strict();
+
+const DescriptionInputSchema = z.string().max(50000).catch("");
+
+function sanitizeText(input: string): string {
+  if (typeof input !== "string") return "";
+  return input
+    .replace(/<[^>]*>?/gm, "")
+    .replace(/javascript:/gi, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+    .trim();
 }
 
 // Helpers for metadata parsing
-function parseCardMetadata(description: string): { cleanDescription: string; metadata: KenbunMetadata } {
-  if (!description) {
+export function parseCardMetadata(description: unknown): { cleanDescription: string; metadata: KenbunMetadata } {
+  const inputStr = DescriptionInputSchema.parse(description);
+  if (!inputStr) {
     return { cleanDescription: "", metadata: {} };
   }
+
   const regex = /<!--\s*kenbun_metadata:\s*({[\s\S]*?})\s*-->/;
-  const match = description.match(regex);
+  const match = inputStr.match(regex);
+  
   if (match) {
     try {
-      const metadata = JSON.parse(match[1]);
-      const cleanDescription = description.replace(regex, "").trim();
+      const jsonStr = match[1].trim();
+      
+      if (jsonStr.length > 5000) {
+        throw new Error("Metadata exceeds length limit.");
+      }
+      if (!jsonStr.startsWith("{") || !jsonStr.endsWith("}")) {
+        throw new Error("Metadata is not a valid JSON object.");
+      }
+
+      const keysRegex = /"([^"]+)"\s*:/g;
+      let keyMatch;
+      const allowedKeys = ["location", "recurring", "collections", "dependencies"];
+      while ((keyMatch = keysRegex.exec(jsonStr)) !== null) {
+        const key = keyMatch[1];
+        if (!allowedKeys.includes(key)) {
+          throw new Error(`Unauthorized key detected before parsing: ${key}`);
+        }
+      }
+      
+      const rawParsed = JSON.parse(jsonStr);
+      
+      if (!rawParsed || typeof rawParsed !== "object" || Array.isArray(rawParsed)) {
+        throw new Error("Parsed metadata is not an object.");
+      }
+      if (Object.getPrototypeOf(rawParsed) !== Object.prototype) {
+        throw new Error("Malformed prototype chain detected.");
+      }
+      if ("__proto__" in rawParsed || "constructor" in rawParsed || "prototype" in rawParsed) {
+        throw new Error("Malicious prototype attributes present.");
+      }
+
+      const safeParsed = Object.create(null);
+      
+      if (rawParsed.location !== undefined) {
+        if (typeof rawParsed.location !== "string" || rawParsed.location.length > 100) {
+          throw new Error("Invalid location field length.");
+        }
+        safeParsed.location = rawParsed.location;
+      }
+      
+      if (rawParsed.recurring !== undefined) {
+        safeParsed.recurring = rawParsed.recurring;
+      }
+      
+      if (rawParsed.collections !== undefined) {
+        if (!Array.isArray(rawParsed.collections) || rawParsed.collections.length > 30) {
+          throw new Error("Collections exceeds array size boundary.");
+        }
+        for (let i = 0; i < rawParsed.collections.length; i++) {
+          const item = rawParsed.collections[i];
+          if (typeof item !== "string" || item.length > 50) {
+            throw new Error("Collection item size exceeds safe limit.");
+          }
+        }
+        safeParsed.collections = rawParsed.collections;
+      }
+      
+      if (rawParsed.dependencies !== undefined) {
+        if (!Array.isArray(rawParsed.dependencies) || rawParsed.dependencies.length > 100) {
+          throw new Error("Dependencies exceeds array size boundary.");
+        }
+        for (let i = 0; i < rawParsed.dependencies.length; i++) {
+          const item = rawParsed.dependencies[i];
+          if (typeof item !== "string" || item.length > 50) {
+            throw new Error("Dependency item size exceeds safe limit.");
+          }
+        }
+        safeParsed.dependencies = rawParsed.dependencies;
+      }
+
+      const parsed = KenbunMetadataSchema.parse(safeParsed);
+      
+      const metadata: KenbunMetadata = {
+        location: parsed.location ? sanitizeText(parsed.location) : undefined,
+        recurring: parsed.recurring,
+        collections: parsed.collections ? parsed.collections.map(sanitizeText) : undefined,
+        dependencies: parsed.dependencies ? parsed.dependencies.map(sanitizeText) : undefined
+      };
+      
+      const rawClean = inputStr.replace(regex, "");
+      const cleanDescription = sanitizeText(rawClean);
+      
       return { cleanDescription, metadata };
     } catch (e) {
       console.error("Failed to parse kenbun_metadata:", e);
     }
   }
-  return { cleanDescription: description, metadata: {} };
+  
+  return { cleanDescription: sanitizeText(inputStr), metadata: {} };
 }
 
-function injectCardMetadata(description: string, metadata: KenbunMetadata): string {
+export function injectCardMetadata(description: string, metadata: KenbunMetadata): string {
   const { cleanDescription } = parseCardMetadata(description);
   const jsonStr = JSON.stringify(metadata);
   const metadataComment = `\n\n<!-- kenbun_metadata: ${jsonStr} -->`;
@@ -161,13 +271,13 @@ export default function BoardPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Active view tab: kanban | calendar | messaging
-  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging">("kanban");
+  // Active view tab: kanban | calendar | messaging | workflow
+  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow">("kanban");
 
   const hasRestoredBoard = useRef(false);
 
   // Persistence helpers
-  const changeTab = (tab: "kanban" | "calendar" | "messaging") => {
+  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow") => {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       localStorage.setItem("board_active_tab", tab);
@@ -189,7 +299,7 @@ export default function BoardPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedTab = localStorage.getItem("board_active_tab");
-      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging") {
+      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow") {
         setActiveTab(savedTab);
       }
     }
@@ -887,6 +997,7 @@ export default function BoardPage() {
                   { key: "kanban", label: "Board", icon: Columns },
                   { key: "calendar", label: "Calendar", icon: Calendar },
                   { key: "messaging", label: "Feed", icon: MessageSquare },
+                  { key: "workflow", label: "Workflow", icon: GitFork },
                 ] as const).map(t => (
                   <button
                     key={t.key}
@@ -952,6 +1063,7 @@ export default function BoardPage() {
               { key: "kanban", label: "Board", icon: Columns },
               { key: "calendar", label: "Calendar", icon: Calendar },
               { key: "messaging", label: "Feed", icon: MessageSquare },
+              { key: "workflow", label: "Workflow", icon: GitFork },
             ] as const).map(t => (
               <button
                 key={t.key}
@@ -1838,6 +1950,43 @@ export default function BoardPage() {
                       );
                     })}
                   </div>
+                </motion.div>
+              ) : activeTab === "workflow" ? (
+                <motion.div
+                  key="board-workflow"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="px-6 lg:px-10 py-6 h-[calc(100vh-8rem)] min-h-[480px] w-full max-w-full min-w-0"
+                >
+                  <WorkflowView
+                    cards={filteredCards}
+                    lists={lists}
+                    onOpenCard={handleOpenCard}
+                    onMoveCard={handleMoveCard}
+                    onUpdateCardDesc={async (cardId, newDesc) => {
+                      try {
+                        setSyncing(true);
+                        const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${cardId}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ description: newDesc })
+                        });
+                        if (res.ok) {
+                          setCards(prev => prev.map(c => c.id === cardId ? { ...c, description: newDesc } : c));
+                          if (selectedBoard) fetchBoardDetails(selectedBoard.id);
+                        } else {
+                          setError(`Failed to save dependency (HTTP ${res.status})`);
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setError("Failed to save dependency: network error");
+                      } finally {
+                        setSyncing(false);
+                      }
+                    }}
+                  />
                 </motion.div>
               ) : (
                 /* ---- FEED (mail & messaging) ---- */
