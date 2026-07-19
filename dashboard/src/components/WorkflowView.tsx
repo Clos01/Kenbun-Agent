@@ -625,12 +625,40 @@ export default function WorkflowView({
 
       const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
+      // Smart anchor point selection based on relative node positions
+      const getAnchors = (from: LayoutNode, to: LayoutNode) => {
+        const fcx = from.x + from.width / 2;
+        const fcy = from.y + from.height / 2;
+        const tcx = to.x + to.width / 2;
+        const tcy = to.y + to.height / 2;
+        const dx = tcx - fcx;
+        const dy = tcy - fcy;
+
+        // Choose exit/entry sides based on which axis has the larger delta
+        if (Math.abs(dx) > Math.abs(dy)) {
+          // Mostly horizontal
+          if (dx > 0) {
+            return { fx: from.x + from.width, fy: fcy, tx: to.x, ty: tcy };
+          } else {
+            return { fx: from.x, fy: fcy, tx: to.x + to.width, ty: tcy };
+          }
+        } else {
+          // Mostly vertical
+          if (dy > 0) {
+            return { fx: fcx, fy: from.y + from.height, tx: tcx, ty: to.y };
+          } else {
+            return { fx: fcx, fy: from.y, tx: tcx, ty: to.y + to.height };
+          }
+        }
+      };
+
       let hasManualLinks = false;
       parsedCards.forEach(card => {
         if (card.dependencies.length > 0) hasManualLinks = true;
       });
 
       if (hasManualLinks || !showSuggestedPath) {
+        // Draw manual dependency edges
         parsedCards.forEach(card => {
           const toNode = nodeMap.get(`card_${card.id}`);
           if (!toNode) return;
@@ -640,44 +668,97 @@ export default function WorkflowView({
             if (!fromNode) return;
 
             const label = card.linkLabels?.[depId];
+            const a = getAnchors(fromNode, toNode);
 
             edges.push({
               id: `edge_${depId}_to_${card.id}`,
               fromId: fromNode.id,
               toId: toNode.id,
-              fromX: isHorizontal ? fromNode.x + fromNode.width : fromNode.x + fromNode.width / 2,
-              fromY: isHorizontal ? fromNode.y + fromNode.height / 2 : fromNode.y + fromNode.height,
-              toX: isHorizontal ? toNode.x : toNode.x + toNode.width / 2,
-              toY: isHorizontal ? toNode.y + toNode.height / 2 : toNode.y,
+              fromX: a.fx, fromY: a.fy,
+              toX: a.tx, toY: a.ty,
               label,
               style: "solid"
             });
           });
         });
       } else {
-        const activeSequence = parsedCards
-          .filter(c => c.status !== "completed")
-          .sort((a, b) => a.rank - b.rank);
+        // Suggested path: within each lane, connect cards sequentially top→bottom
+        if (groupByLanes) {
+          lists.forEach(list => {
+            const laneCards = parsedCards
+              .filter(c => c.listId === list.id && c.status !== "completed")
+              .sort((a, b) => a.rank - b.rank);
 
-        for (let i = 0; i < activeSequence.length - 1; i++) {
-          const fromCard = activeSequence[i];
-          const toCard = activeSequence[i + 1];
+            for (let i = 0; i < laneCards.length - 1; i++) {
+              const fromNode = nodeMap.get(`card_${laneCards[i].id}`);
+              const toNode = nodeMap.get(`card_${laneCards[i + 1].id}`);
+              if (fromNode && toNode) {
+                const a = getAnchors(fromNode, toNode);
+                edges.push({
+                  id: `edge_lane_${laneCards[i].id}_to_${laneCards[i + 1].id}`,
+                  fromId: fromNode.id,
+                  toId: toNode.id,
+                  fromX: a.fx, fromY: a.fy,
+                  toX: a.tx, toY: a.ty,
+                  label: "suggested",
+                  style: "dotted"
+                });
+              }
+            }
+          });
 
-          const fromNode = nodeMap.get(`card_${fromCard.id}`);
-          const toNode = nodeMap.get(`card_${toCard.id}`);
+          // Cross-lane: connect last active card of each lane to first active card of the next lane
+          const laneLastCards: { listId: string; card: typeof parsedCards[0] }[] = [];
+          lists.forEach(list => {
+            const laneCards = parsedCards
+              .filter(c => c.listId === list.id && c.status !== "completed")
+              .sort((a, b) => a.rank - b.rank);
+            if (laneCards.length > 0) {
+              laneLastCards.push({ listId: list.id, card: laneCards[laneCards.length - 1] });
+            }
+          });
 
-          if (fromNode && toNode) {
-            edges.push({
-              id: `edge_suggested_${fromCard.id}_to_${toCard.id}`,
-              fromId: fromNode.id,
-              toId: toNode.id,
-              fromX: isHorizontal ? fromNode.x + fromNode.width : fromNode.x + fromNode.width / 2,
-              fromY: isHorizontal ? fromNode.y + fromNode.height / 2 : fromNode.y + fromNode.height,
-              toX: isHorizontal ? toNode.x : toNode.x + toNode.width / 2,
-              toY: isHorizontal ? toNode.y + toNode.height / 2 : toNode.y,
-              label: "suggested",
-              style: "dotted"
-            });
+          for (let i = 0; i < laneLastCards.length - 1; i++) {
+            const fromNode = nodeMap.get(`card_${laneLastCards[i].card.id}`);
+            const nextLaneFirstCards = parsedCards
+              .filter(c => c.listId === laneLastCards[i + 1].card.listId && c.status !== "completed")
+              .sort((a, b) => a.rank - b.rank);
+            if (nextLaneFirstCards.length === 0) continue;
+            const toNode = nodeMap.get(`card_${nextLaneFirstCards[0].id}`);
+            if (fromNode && toNode) {
+              const a = getAnchors(fromNode, toNode);
+              edges.push({
+                id: `edge_crosslane_${laneLastCards[i].card.id}_to_${nextLaneFirstCards[0].id}`,
+                fromId: fromNode.id,
+                toId: toNode.id,
+                fromX: a.fx, fromY: a.fy,
+                toX: a.tx, toY: a.ty,
+                label: "suggested",
+                style: "dotted"
+              });
+            }
+          }
+        } else {
+          // No lanes: connect all cards sequentially by rank
+          const activeSequence = parsedCards
+            .filter(c => c.status !== "completed")
+            .sort((a, b) => a.rank - b.rank);
+
+          for (let i = 0; i < activeSequence.length - 1; i++) {
+            const fromNode = nodeMap.get(`card_${activeSequence[i].id}`);
+            const toNode = nodeMap.get(`card_${activeSequence[i + 1].id}`);
+            if (fromNode && toNode) {
+              const a = getAnchors(fromNode, toNode);
+              edges.push({
+                id: `edge_suggested_${activeSequence[i].id}_to_${activeSequence[i + 1].id}`,
+                fromId: fromNode.id,
+                toId: toNode.id,
+                fromX: a.fx, fromY: a.fy,
+                toX: a.tx, toY: a.ty,
+                label: "suggested",
+                style: "dotted"
+              });
+            }
           }
         }
       }
@@ -1522,13 +1603,24 @@ export default function WorkflowView({
                   <marker
                     id="custom-arrowhead"
                     viewBox="0 0 10 10"
-                    refX="6"
+                    refX="8"
                     refY="5"
-                    markerWidth="6"
-                    markerHeight="6"
+                    markerWidth="8"
+                    markerHeight="8"
                     orient="auto-start-reverse"
                   >
-                    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--border)" opacity="0.6" />
+                    <path d="M 0 1 L 9 5 L 0 9 z" fill="var(--tertiary)" opacity="0.85" />
+                  </marker>
+                  <marker
+                    id="suggested-arrowhead"
+                    viewBox="0 0 10 10"
+                    refX="8"
+                    refY="5"
+                    markerWidth="7"
+                    markerHeight="7"
+                    orient="auto-start-reverse"
+                  >
+                    <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="var(--secondary)" opacity="0.6" />
                   </marker>
                 </defs>
 
@@ -1576,33 +1668,48 @@ export default function WorkflowView({
                 {layout.edges.map(edge => {
                   const dx = edge.toX - edge.fromX;
                   const dy = edge.toY - edge.fromY;
-                  const isHorizontal = layoutDir === "LR";
-                  
-                  const cp = isHorizontal 
-                    ? Math.max(Math.min(Math.abs(dx) * 0.45, 120), 40)
-                    : Math.max(Math.min(Math.abs(dy) * 0.45, 120), 40);
+                  const absDx = Math.abs(dx);
+                  const absDy = Math.abs(dy);
                   const isDotted = edge.style === "dotted";
+                  const isSuggested = edge.label === "suggested";
                   
+                  // Adaptive bezier: pick control point axis based on travel direction
                   let pathD = "";
                   if (diagramMode === "mindmap" && edge.fromId === "root") {
                     pathD = `M ${edge.fromX} ${edge.fromY} C ${(edge.fromX + edge.toX)/2} ${edge.fromY}, ${edge.toX} ${(edge.fromY + edge.toY)/2}, ${edge.toX} ${edge.toY}`;
+                  } else if (absDx > absDy) {
+                    // Mostly horizontal travel
+                    const cpx = Math.max(Math.min(absDx * 0.4, 100), 30);
+                    const sign = dx > 0 ? 1 : -1;
+                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cpx * sign} ${edge.fromY}, ${edge.toX - cpx * sign} ${edge.toY}, ${edge.toX} ${edge.toY}`;
                   } else {
-                    pathD = isHorizontal
-                      ? `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cp} ${edge.fromY}, ${edge.toX - cp} ${edge.toY}, ${edge.toX} ${edge.toY}`
-                      : `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cp}, ${edge.toX} ${edge.toY - cp}, ${edge.toX} ${edge.toY}`;
+                    // Mostly vertical travel
+                    const cpy = Math.max(Math.min(absDy * 0.4, 100), 30);
+                    const sign = dy > 0 ? 1 : -1;
+                    pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cpy * sign}, ${edge.toX} ${edge.toY - cpy * sign}, ${edge.toX} ${edge.toY}`;
                   }
 
                   return (
                     <g key={edge.id}>
+                      {/* Glow layer for solid edges */}
+                      {!isSuggested && (
+                        <path
+                          d={pathD}
+                          fill="none"
+                          stroke="var(--tertiary)"
+                          strokeWidth="4"
+                          strokeOpacity="0.08"
+                        />
+                      )}
                       <path
                         d={pathD}
                         fill="none"
-                        stroke="var(--border)"
-                        strokeWidth="1.5"
-                        strokeOpacity={edge.label === "suggested" ? 0.35 : 0.65}
-                        strokeDasharray={isDotted ? "4 4" : undefined}
-                        className="transition-all duration-200 hover:stroke-[var(--tertiary)] hover:stroke-opacity-100"
-                        markerEnd={diagramMode === "flowchart" ? "url(#custom-arrowhead)" : undefined}
+                        stroke={isSuggested ? "var(--secondary)" : "var(--tertiary)"}
+                        strokeWidth={isSuggested ? 1.5 : 2}
+                        strokeOpacity={isSuggested ? 0.5 : 0.8}
+                        strokeDasharray={isDotted ? "6 4" : undefined}
+                        className="transition-all duration-200"
+                        markerEnd={diagramMode === "flowchart" ? (isSuggested ? "url(#suggested-arrowhead)" : "url(#custom-arrowhead)") : undefined}
                       />
                       {edge.label && edge.label !== "suggested" && (
                         <foreignObject
