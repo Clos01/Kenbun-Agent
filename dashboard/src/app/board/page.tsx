@@ -86,6 +86,7 @@ export interface KenbunMetadata {
   recurring?: "none" | "daily" | "weekly" | "monthly";
   collections?: string[];
   dependencies?: string[];
+  layout?: { x: number; y: number };
 }
 
 const KenbunMetadataSchema = z.object({
@@ -93,6 +94,10 @@ const KenbunMetadataSchema = z.object({
   recurring: z.enum(["none", "daily", "weekly", "monthly"]).optional(),
   collections: z.array(z.string().max(50).regex(/^[a-zA-Z0-9_\-\s]+$/)).max(30).optional(),
   dependencies: z.array(z.string().max(50).regex(/^[a-zA-Z0-9_\-]+$/)).max(100).optional(),
+  layout: z.object({
+    x: z.number(),
+    y: z.number()
+  }).strict().optional(),
 }).strict();
 
 const DescriptionInputSchema = z.string().max(50000).catch("");
@@ -136,7 +141,7 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
 
       const keysRegex = /"([^"]+)"\s*:/g;
       let keyMatch;
-      const allowedKeys = ["location", "recurring", "collections", "dependencies"];
+      const allowedKeys = ["location", "recurring", "collections", "dependencies", "layout"];
       while ((keyMatch = keysRegex.exec(jsonStr)) !== null) {
         const key = keyMatch[1];
         if (!allowedKeys.includes(key)) {
@@ -199,13 +204,27 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
         safeParsed.dependencies = rawParsed.dependencies;
       }
 
+      if (rawParsed.layout !== undefined) {
+        if (typeof rawParsed.layout !== "object" || Array.isArray(rawParsed.layout)) {
+          throw new Error("Invalid layout field type.");
+        }
+        if (typeof rawParsed.layout.x !== "number" || typeof rawParsed.layout.y !== "number") {
+          throw new Error("Layout coordinates must be numbers.");
+        }
+        safeParsed.layout = {
+          x: rawParsed.layout.x,
+          y: rawParsed.layout.y
+        };
+      }
+
       const parsed = KenbunMetadataSchema.parse(safeParsed);
       
       const metadata: KenbunMetadata = {
         location: parsed.location ? sanitizeText(parsed.location) : undefined,
         recurring: parsed.recurring,
         collections: parsed.collections ? parsed.collections.map(sanitizeText) : undefined,
-        dependencies: parsed.dependencies ? parsed.dependencies.map(sanitizeText) : undefined
+        dependencies: parsed.dependencies ? parsed.dependencies.map(sanitizeText) : undefined,
+        layout: parsed.layout
       };
       
       const rawClean = inputStr.replace(regex, "");
@@ -1989,6 +2008,27 @@ export default function BoardPage() {
                       } catch (err) {
                         console.error(err);
                         setError("Failed to save dependency: network error");
+                      } finally {
+                        setSyncing(false);
+                      }
+                    }}
+                    onCreateCard={async (name, listId, x, y) => {
+                      try {
+                        setSyncing(true);
+                        const initialDesc = injectCardMetadata("", { layout: { x, y } });
+                        const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards`, {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ listId, name: name.trim(), description: initialDesc })
+                        });
+                        if (res.ok) {
+                          if (selectedBoard) fetchBoardDetails(selectedBoard.id);
+                        } else {
+                          setError(`Failed to create card (HTTP ${res.status})`);
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        setError("Failed to create card: network error");
                       } finally {
                         setSyncing(false);
                       }
