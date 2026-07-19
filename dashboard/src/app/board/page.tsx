@@ -111,7 +111,10 @@ function sanitizeText(input: string): string {
 }
 
 // Helpers for metadata parsing
-export function parseCardMetadata(description: unknown): { cleanDescription: string; metadata: KenbunMetadata } {
+export function parseCardMetadata(description: string): { cleanDescription: string; metadata: KenbunMetadata } {
+  if (typeof description !== "string") {
+    return { cleanDescription: "", metadata: {} };
+  }
   const inputStr = DescriptionInputSchema.parse(description);
   if (!inputStr) {
     return { cleanDescription: "", metadata: {} };
