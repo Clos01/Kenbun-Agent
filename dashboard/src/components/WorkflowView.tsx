@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   X, 
@@ -11,7 +11,10 @@ import {
   Layout,
   RefreshCw,
   Trash2,
-  FileText
+  FileText,
+  ZoomIn,
+  ZoomOut,
+  Maximize2
 } from "lucide-react";
 import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/board/page";
 import { computeWorkOrder } from "../lib/prioritize";
@@ -64,6 +67,12 @@ export default function WorkflowView({
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
   const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "ascii">("flowchart");
+
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState<number>(1);
+  const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState<boolean>(false);
+  const [panStart, setPanStart] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
 
   const mermaidThemeStyles = useMemo(() => {
     return {
@@ -464,6 +473,54 @@ export default function WorkflowView({
     };
   }, [mermaidCode, mindmapCode, diagramMode, lineStyle, preset]);
 
+  // Register passive-false wheel listener on canvasRef to handle scroll zoom without page scrolling
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || diagramMode === "ascii") return;
+
+    const handleWheelEvent = (e: WheelEvent) => {
+      e.preventDefault();
+      const zoomFactor = 0.08;
+      const direction = e.deltaY < 0 ? 1 : -1;
+      setScale(prev => {
+        const next = prev + direction * zoomFactor;
+        return Math.min(Math.max(next, 0.25), 3);
+      });
+    };
+
+    canvas.addEventListener("wheel", handleWheelEvent, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleWheelEvent);
+    };
+  }, [diagramMode]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0 || diagramMode === "ascii") return;
+    const target = e.target as HTMLElement;
+    if (
+      target.closest(".cursor-pointer") || 
+      target.closest("button") || 
+      target.closest("input") || 
+      target.closest("select")
+    ) {
+      return;
+    }
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - offset.x, y: e.clientY - offset.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setOffset({
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y
+    });
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
   // Copy code helper
   const handleCopyCode = () => {
     let textToCopy = "";
@@ -627,6 +684,40 @@ export default function WorkflowView({
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
+          {/* Zoom controls (Only for non-ASCII diagrams) */}
+          {diagramMode !== "ascii" && (
+            <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded px-1.5 py-1">
+              <button
+                onClick={() => setScale(prev => Math.max(prev - 0.15, 0.25))}
+                className="p-1 hover:bg-white/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
+                title="Zoom Out"
+              >
+                <ZoomOut className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
+                className="px-1 text-[9px] font-mono font-bold text-secondary hover:text-primary cursor-pointer"
+                title="Reset zoom & fit canvas"
+              >
+                {Math.round(scale * 100)}%
+              </button>
+              <button
+                onClick={() => setScale(prev => Math.min(prev + 0.15, 3))}
+                className="p-1 hover:bg-white/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
+                title="Zoom In"
+              >
+                <ZoomIn className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => { setScale(1); setOffset({ x: 0, y: 0 }); }}
+                className="p-1 hover:bg-white/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer border-l border-white/10 ml-0.5 pl-1.5"
+                title="Recenter Canvas"
+              >
+                <Maximize2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Diagram Mode Selection */}
           <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded px-2 py-1.5">
             <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">Mode:</span>
@@ -702,11 +793,18 @@ export default function WorkflowView({
       <div className="flex-1 flex overflow-hidden">
         
         {/* Left Side: Dynamic Interactive Mermaid Canvas */}
-        <div className="flex-1 overflow-auto relative p-8 flex items-center justify-center"
+        <div 
+          ref={canvasRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          className="flex-1 relative flex items-center justify-center overflow-hidden select-none"
           style={{
             backgroundColor: "var(--neutral)",
             backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
-            backgroundSize: "20px 20px"
+            backgroundSize: "20px 20px",
+            cursor: diagramMode !== "ascii" ? (isPanning ? "grabbing" : "grab") : "default"
           }}
         >
           {isRendering && (
@@ -729,7 +827,13 @@ export default function WorkflowView({
             </div>
           ) : svgCode ? (
             <div 
-              className="w-full flex items-center justify-center p-4 min-w-[700px] overflow-auto select-none pointer-events-auto"
+              className="w-full flex items-center justify-center p-4 min-w-[700px]"
+              style={{
+                transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+                transformOrigin: "center center",
+                transition: isPanning ? "none" : "transform 0.1s ease-out",
+                pointerEvents: "auto"
+              }}
               dangerouslySetInnerHTML={{ __html: svgCode }}
             />
           ) : (
