@@ -493,15 +493,23 @@ export default function WorkflowView({
           fontFamily: "Space Mono, monospace",
           flowchart: {
             htmlLabels: true,
-            curve: lineStyle
+            curve: lineStyle,
+            nodeSpacing: 30,
+            rankSpacing: 35,
+            padding: 6
           }
         });
 
         const id = `mermaid-canvas-${Math.random().toString(36).substring(2, 9)}`;
         const { svg } = await mermaid.render(id, activeCode);
 
+        // Make SVG fluid by stripping explicit width/height and applying max-width
+        const cleanedSvg = svg
+          .replace(/width="[^"]*"/, 'style="max-width: 100%; width: 100%; height: auto;"')
+          .replace(/height="[^"]*"/, "");
+
         if (isMounted) {
-          setSvgCode(svg);
+          setSvgCode(cleanedSvg);
         }
       } catch (err) {
         console.error("Mermaid parsing/rendering error:", err);
