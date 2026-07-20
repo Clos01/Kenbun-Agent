@@ -70,6 +70,71 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
     const nodes: MNode[] = [];
     const edges: MEdge[] = [];
 
+    if (lanes.length === 0) {
+      return { nodes, edges, width: 0, height: 0, empty: true };
+    }
+
+    if (lanes.length === 1) {
+      // 🦋 SINGLE-LIST BUTTERFLY GRID 🦋
+      // For a single column, we put Root -> List vertically in the center.
+      // Then we split the leaf cards 50/50 left and right, grouping them into grids!
+      const { list, cards: lc } = lanes[0];
+      const st = statusOf(list.name);
+      const listId = `list_${list.id}`;
+
+      const leftCards = lc.filter((_, i) => i % 2 !== 0);
+      const rightCards = lc.filter((_, i) => i % 2 === 0);
+      let maxCy = 0;
+
+      const buildGrid = (cardsArr: typeof lc, isRight: boolean) => {
+        const numCols = cardsArr.length > 12 ? 3 : cardsArr.length > 6 ? 2 : 1;
+        const numRows = Math.ceil(cardsArr.length / numCols) || 1;
+        
+        cardsArr.forEach((card, i) => {
+          const col = Math.floor(i / numRows);
+          const row = i % numRows;
+          const cy = row * ROW;
+          if (cy > maxCy) maxCy = cy;
+          
+          const cardXOffset = col * (CARD_W + 40);
+          const cardX = isRight 
+              ? (LIST_W/2 + GAP2 + cardXOffset) 
+              : (-LIST_W/2 - GAP2 - CARD_W - cardXOffset);
+              
+          nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
+          
+          const e1 = isRight ? (LIST_W/2) : (-LIST_W/2);
+          const e2 = isRight ? cardX : (cardX + CARD_W);
+          edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
+        });
+        return numRows;
+      };
+      
+      const rightRows = buildGrid(rightCards, true);
+      const leftRows = buildGrid(leftCards, false);
+      const listCy = (Math.max(rightRows, leftRows) - 1) / 2 * ROW;
+      
+      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: 0, cy: listCy, w: LIST_W, h: LIST_H });
+      
+      edges.forEach(e => {
+        if (e.id.startsWith(listId)) e.y1 = listCy;
+      });
+
+      const rootCy = listCy - ROOT_H - 120;
+      nodes.push({ kind: "root", id: "root", name: "Project Board", status: "todo", cx: 0, cy: rootCy, w: ROOT_W, h: ROOT_H });
+      edges.push({ id: `root_list_${list.id}`, x1: 0, y1: rootCy, x2: 0, y2: listCy });
+      
+      // Normalize center to root
+      nodes.forEach(n => n.cy -= rootCy);
+      edges.forEach(e => { e.y1 -= rootCy; e.y2 -= rootCy; });
+
+      const totalW = (LIST_W/2 + GAP2 + 3 * (CARD_W + 40)) * 2;
+      return { nodes, edges, width: totalW, height: maxCy + CARD_H * 2, empty: false };
+    }
+
+    // 🌳 MULTI-LIST ALTERNATING GRID 🌳
+    // Root in center. Lists alternate left and right. 
+    // Leaf cards group into grids on their respective sides.
     let slotRight = 0;
     let slotLeft = 0;
     const allCyRight: number[] = [];
@@ -77,36 +142,42 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
 
     lanes.forEach(({ list, cards: lc }, laneIdx) => {
       const isRight = laneIdx % 2 === 0;
-      
-      let slot = isRight ? slotRight : slotLeft;
-      if (slot > 0) {
-        slot += 1.5; // Add extra vertical spacing between categories
-      }
+      let startSlot = isRight ? slotRight : slotLeft;
+      if (startSlot > 0) startSlot += 1.5;
       
       const st = statusOf(list.name);
-      const cys: number[] = [];
-      const listX = isRight ? (ROOT_W/2 + GAP1) : (-ROOT_W/2 - GAP1 - LIST_W);
-      const cardX = isRight ? (listX + LIST_W + GAP2) : (listX - GAP2 - CARD_W);
-      
-      lc.forEach(card => {
-        const cy = slot * ROW;
-        slot++;
-        cys.push(cy);
-        if (isRight) allCyRight.push(cy); else allCyLeft.push(cy);
-        nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
-      });
-      
-      const listCy = cys.length ? cys.reduce((a, b) => a + b, 0) / cys.length : (slot * ROW);
       const listId = `list_${list.id}`;
-      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: listX + LIST_W / 2, cy: listCy, w: LIST_W, h: LIST_H });
+      const listX = isRight ? (ROOT_W/2 + GAP1) : (-ROOT_W/2 - GAP1 - LIST_W);
+      
+      const numCols = lc.length > 12 ? 3 : lc.length > 6 ? 2 : 1;
+      const numRows = Math.ceil(lc.length / numCols) || 1;
       
       lc.forEach((card, i) => {
+        const col = Math.floor(i / numRows);
+        const row = i % numRows;
+        const cy = (startSlot + row) * ROW;
+        if (isRight) allCyRight.push(cy); else allCyLeft.push(cy);
+        
+        const cardXOffset = col * (CARD_W + 40);
+        const cardX = isRight 
+            ? (listX + LIST_W + GAP2 + cardXOffset) 
+            : (listX - GAP2 - CARD_W - cardXOffset);
+            
+        nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
+        
         const e1 = isRight ? (listX + LIST_W) : listX;
         const e2 = isRight ? cardX : (cardX + CARD_W);
-        edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: listCy, x2: e2, y2: cys[i] });
+        edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
       });
       
-      if (isRight) slotRight = slot; else slotLeft = slot;
+      const listCy = lc.length ? (startSlot + (numRows - 1) / 2) * ROW : startSlot * ROW;
+      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: listX + LIST_W / 2, cy: listCy, w: LIST_W, h: LIST_H });
+      
+      edges.forEach(e => {
+        if (e.id.startsWith(listId)) e.y1 = listCy;
+      });
+      
+      if (isRight) slotRight = startSlot + numRows; else slotLeft = startSlot + numRows;
     });
 
     const rootCyRight = allCyRight.length ? allCyRight.reduce((a, b) => a + b, 0) / allCyRight.length : 0;
@@ -126,15 +197,14 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
       }
     });
 
-    // Normalise so the tree centres on the origin (== container centre).
     nodes.forEach(n => { n.cy -= rootCy; });
     edges.forEach(e => { e.y1 -= rootCy; e.y2 -= rootCy; });
 
-    const totalW = (ROOT_W/2 + GAP1 + LIST_W + GAP2 + CARD_W) * 2;
+    const totalW = (ROOT_W/2 + GAP1 + LIST_W + GAP2 + 3 * (CARD_W + 40)) * 2;
     const maxCy = Math.max(...allCyRight, ...allCyLeft, 0);
     const minCy = Math.min(...allCyRight, ...allCyLeft, 0);
     const height = (maxCy - minCy) + CARD_H * 2;
-    return { nodes, edges, width: totalW, height, empty: lanes.length === 0 };
+    return { nodes, edges, width: totalW, height, empty: false };
   }, [cards, lists]);
 
   const fit = useCallback(() => {
