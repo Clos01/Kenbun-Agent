@@ -212,6 +212,7 @@ interface LayoutEdge {
   fromY: number;
   toX: number;
   toY: number;
+  orientation?: "horizontal" | "vertical";
   label?: string;
   style?: "dotted" | "solid";
 }
@@ -547,29 +548,35 @@ export default function WorkflowView({
 
       const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
-      // Smart anchor point selection based on relative node positions
-      const getAnchors = (from: LayoutNode, to: LayoutNode) => {
+      // Smart anchor point selection based on layout constraints
+      const getAnchors = (from: LayoutNode, to: LayoutNode): { fx: number, fy: number, tx: number, ty: number, orientation: "horizontal" | "vertical" } => {
+        const isHorizontalLayout = layoutDir === "LR";
+        
         const fcx = from.x + from.width / 2;
         const fcy = from.y + from.height / 2;
         const tcx = to.x + to.width / 2;
         const tcy = to.y + to.height / 2;
-        const dx = tcx - fcx;
-        const dy = tcy - fcy;
+        
+        let connectHorizontal = false;
+        if (isHorizontalLayout) {
+          // Cross-lane connections have different X coordinates
+          connectHorizontal = Math.abs(from.x - to.x) > 10;
+        } else {
+          // Cross-lane connections have different Y coordinates
+          connectHorizontal = Math.abs(from.y - to.y) <= 10;
+        }
 
-        // Choose exit/entry sides based on which axis has the larger delta
-        if (Math.abs(dx) > Math.abs(dy)) {
-          // Mostly horizontal
-          if (dx > 0) {
-            return { fx: from.x + from.width, fy: fcy, tx: to.x, ty: tcy };
+        if (connectHorizontal) {
+          if (tcx > fcx) {
+            return { fx: from.x + from.width, fy: fcy, tx: to.x, ty: tcy, orientation: "horizontal" };
           } else {
-            return { fx: from.x, fy: fcy, tx: to.x + to.width, ty: tcy };
+            return { fx: from.x, fy: fcy, tx: to.x + to.width, ty: tcy, orientation: "horizontal" };
           }
         } else {
-          // Mostly vertical
-          if (dy > 0) {
-            return { fx: fcx, fy: from.y + from.height, tx: tcx, ty: to.y };
+          if (tcy > fcy) {
+            return { fx: fcx, fy: from.y + from.height, tx: tcx, ty: to.y, orientation: "vertical" };
           } else {
-            return { fx: fcx, fy: from.y, tx: tcx, ty: to.y + to.height };
+            return { fx: fcx, fy: from.y, tx: tcx, ty: to.y + to.height, orientation: "vertical" };
           }
         }
       };
@@ -592,15 +599,16 @@ export default function WorkflowView({
             const label = card.linkLabels?.[depId];
             const a = getAnchors(fromNode, toNode);
 
-            edges.push({
-              id: `edge_${depId}_to_${card.id}`,
-              fromId: fromNode.id,
-              toId: toNode.id,
-              fromX: a.fx, fromY: a.fy,
-              toX: a.tx, toY: a.ty,
-              label,
-              style: "solid"
-            });
+              edges.push({
+                id: `edge_${depId}_to_${card.id}`,
+                fromId: fromNode.id,
+                toId: toNode.id,
+                fromX: a.fx, fromY: a.fy,
+                toX: a.tx, toY: a.ty,
+                orientation: a.orientation,
+                label,
+                style: "solid"
+              });
           });
         });
       } else {
@@ -616,15 +624,16 @@ export default function WorkflowView({
               const toNode = nodeMap.get(`card_${laneCards[i + 1].id}`);
               if (fromNode && toNode) {
                 const a = getAnchors(fromNode, toNode);
-                edges.push({
-                  id: `edge_lane_${laneCards[i].id}_to_${laneCards[i + 1].id}`,
-                  fromId: fromNode.id,
-                  toId: toNode.id,
-                  fromX: a.fx, fromY: a.fy,
-                  toX: a.tx, toY: a.ty,
-                  label: "suggested",
-                  style: "dotted"
-                });
+                  edges.push({
+                    id: `edge_lane_${laneCards[i].id}_to_${laneCards[i + 1].id}`,
+                    fromId: fromNode.id,
+                    toId: toNode.id,
+                    fromX: a.fx, fromY: a.fy,
+                    toX: a.tx, toY: a.ty,
+                    orientation: a.orientation,
+                    label: "suggested",
+                    style: "dotted"
+                  });
               }
             }
           });
@@ -655,6 +664,7 @@ export default function WorkflowView({
                 toId: toNode.id,
                 fromX: a.fx, fromY: a.fy,
                 toX: a.tx, toY: a.ty,
+                orientation: a.orientation,
                 label: "suggested",
                 style: "dotted"
               });
@@ -677,6 +687,7 @@ export default function WorkflowView({
                 toId: toNode.id,
                 fromX: a.fx, fromY: a.fy,
                 toX: a.tx, toY: a.ty,
+                orientation: a.orientation,
                 label: "suggested",
                 style: "dotted"
               });
@@ -1612,20 +1623,17 @@ export default function WorkflowView({
                   const isDotted = edge.style === "dotted";
                   const isSuggested = edge.label === "suggested";
 
-                  // Force strictly orthogonal entry points so arrowheads never render tilted
-                  const fullDx = edge.toX - edge.fromX;
-                  const fullDy = edge.toY - edge.fromY;
-                  const absFullDx = Math.abs(fullDx);
-                  const absFullDy = Math.abs(fullDy);
-                  const GAP = 11;
+                  // Use explicit orientation to route curves flawlessly
+                  const GAP = 0; // flush with the node edge
+                  const orientation = (edge as any).orientation || "horizontal";
                   
                   let endX = edge.toX;
                   let endY = edge.toY;
-                  
-                  if (absFullDx > absFullDy) {
-                    endX = edge.toX - (fullDx > 0 ? GAP : -GAP);
+
+                  if (orientation === "horizontal") {
+                    endX = edge.toX - (edge.toX > edge.fromX ? GAP : -GAP);
                   } else {
-                    endY = edge.toY - (fullDy > 0 ? GAP : -GAP);
+                    endY = edge.toY - (edge.toY > edge.fromY ? GAP : -GAP);
                   }
 
                   const dx = endX - edge.fromX;
@@ -1638,20 +1646,20 @@ export default function WorkflowView({
                   if (lineStyle === "linear") {
                     pathD = `M ${edge.fromX} ${edge.fromY} L ${endX} ${endY}`;
                   } else if (lineStyle === "step") {
-                    if (absFullDx > absFullDy) {
+                    if (orientation === "horizontal") {
                       const midX = (edge.fromX + endX) / 2;
                       pathD = `M ${edge.fromX} ${edge.fromY} L ${midX} ${edge.fromY} L ${midX} ${endY} L ${endX} ${endY}`;
                     } else {
                       const midY = (edge.fromY + endY) / 2;
                       pathD = `M ${edge.fromX} ${edge.fromY} L ${edge.fromX} ${midY} L ${endX} ${midY} L ${endX} ${endY}`;
                     }
-                  } else if (absFullDx > absFullDy) {
-                    // Curved, mostly horizontal travel (perfect cubic S-curve)
+                  } else if (orientation === "horizontal") {
+                    // Curved, horizontal travel (perfect cubic S-curve)
                     const cpx = Math.max(absDx * 0.5, 40);
                     const sign = dx > 0 ? 1 : -1;
                     pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX + cpx * sign} ${edge.fromY}, ${endX - cpx * sign} ${endY}, ${endX} ${endY}`;
                   } else {
-                    // Curved, mostly vertical travel (perfect cubic S-curve)
+                    // Curved, vertical travel (perfect cubic S-curve)
                     const cpy = Math.max(absDy * 0.5, 40);
                     const sign = dy > 0 ? 1 : -1;
                     pathD = `M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${edge.fromY + cpy * sign}, ${endX} ${endY - cpy * sign}, ${endX} ${endY}`;
