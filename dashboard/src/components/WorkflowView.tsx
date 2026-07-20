@@ -1444,107 +1444,6 @@ export default function WorkflowView({
         </div>
       </div>
 
-      {/* ============ SECONDARY STRIP — flowchart view options + legend ============ */}
-      {diagramMode === "flowchart" && (
-        <div className="absolute top-4 left-4 z-30">
-          <div className="relative">
-            <button
-              onClick={() => setShowViewSettings(!showViewSettings)}
-              className={`px-5 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
-                showViewSettings ? "border-tertiary text-tertiary" : "border-border/80 text-secondary hover:text-primary hover:border-border"
-              }`}
-            >
-              <Settings className="w-3.5 h-3.5" />
-              View Settings
-            </button>
-
-            <AnimatePresence>
-              {showViewSettings && (
-                <>
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowViewSettings(false)}
-                  />
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute top-full left-0 mt-2 w-64 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-4 gap-4"
-                  >
-                    <div className="flex flex-col gap-3">
-                      <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold border-b border-border pb-2">
-                        Layout Engine
-                      </span>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-primary font-medium">Lanes</span>
-                        <button
-                          onClick={() => setGroupByLanes(prev => !prev)}
-                          className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                            groupByLanes
-                              ? "bg-tertiary/10 text-tertiary"
-                              : "bg-primary/[0.04] text-secondary hover:text-primary"
-                          }`}
-                        >
-                          {groupByLanes ? "On" : "Off"}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-primary font-medium">Direction</span>
-                        <button
-                          onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
-                          className="px-2.5 py-1 rounded bg-primary/[0.04] hover:bg-primary/[0.08] text-[10px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all cursor-pointer"
-                        >
-                          {layoutDir === "LR" ? "Horizontal" : "Vertical"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-3 pt-2">
-                      <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold border-b border-border pb-2">
-                        Routing
-                      </span>
-                      
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-primary font-medium">Auto-Paths</span>
-                        <button
-                          onClick={() => setShowSuggestedPath(prev => !prev)}
-                          className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
-                            showSuggestedPath
-                              ? "bg-tertiary/10 text-tertiary"
-                              : "bg-primary/[0.04] text-secondary hover:text-primary"
-                          }`}
-                        >
-                          {showSuggestedPath ? "On" : "Off"}
-                        </button>
-                      </div>
-
-                      <div className="flex flex-col gap-1.5 mt-1">
-                        <span className="text-[10px] font-mono uppercase text-secondary/60">Edge Style</span>
-                        <div className="flex bg-neutral/50 p-1 rounded-md">
-                          {[
-                            { value: "basis", label: "Curved" },
-                            { value: "step", label: "Ortho" },
-                            { value: "linear", label: "Straight" }
-                          ].map(opt => (
-                            <button
-                              key={opt.value}
-                              onClick={() => setLineStyle(opt.value as any)}
-                              className={`flex-1 py-1 text-[9px] font-bold uppercase tracking-wider rounded transition-colors cursor-pointer ${
-                                lineStyle === opt.value 
-                                  ? "bg-card text-primary shadow-sm" 
-                                  : "text-secondary hover:text-primary"
-                              }`}
-                            >
-                              {opt.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
                     </div>
                   </motion.div>
                 </>
@@ -1583,6 +1482,116 @@ export default function WorkflowView({
             cursor: diagramMode !== "ascii" ? (isPanning ? "grabbing" : "grab") : "default"
           }}
         >
+          {/* ============ SECONDARY STRIP — flowchart view options + legend ============ */}
+          {diagramMode === "flowchart" && (
+            <div className="absolute top-4 left-4 z-30">
+              <div className="relative">
+                <button
+                  onClick={() => setShowViewSettings(!showViewSettings)}
+                  className={`px-5 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                    showViewSettings ? "border-tertiary text-tertiary" : "border-border/80 text-secondary hover:text-primary hover:border-border"
+                  }`}
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                  View Settings
+                </button>
+
+                <AnimatePresence>
+                  {showViewSettings && (
+                    <>
+                      <motion.div 
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-40"
+                        onClick={() => setShowViewSettings(false)}
+                      />
+                      <motion.div
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                        className="absolute top-full left-0 mt-2 w-64 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-4 gap-4"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold border-b border-border pb-2">
+                            Layout Engine
+                          </span>
+                          
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-primary font-medium">Lanes</span>
+                            <button
+                              onClick={() => setGroupByLanes(prev => !prev)}
+                              className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                groupByLanes
+                                  ? "bg-tertiary/10 text-tertiary"
+                                  : "bg-primary/[0.04] text-secondary hover:text-primary"
+                              }`}
+                            >
+                              {groupByLanes ? "On" : "Off"}
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-primary font-medium">Direction</span>
+                            <button
+                              onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
+                              className="px-2.5 py-1 rounded bg-primary/[0.04] hover:bg-primary/[0.08] text-[10px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all cursor-pointer"
+                            >
+                              {layoutDir === "LR" ? "Horizontal" : "Vertical"}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-3 pt-2">
+                          <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold border-b border-border pb-2">
+                            Routing
+                          </span>
+                          
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-primary font-medium">Auto-Paths</span>
+                            <button
+                              onClick={() => setShowSuggestedPath(prev => !prev)}
+                              className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                                showSuggestedPath
+                                  ? "bg-tertiary/10 text-tertiary"
+                                  : "bg-primary/[0.04] text-secondary hover:text-primary"
+                              }`}
+                            >
+                              {showSuggestedPath ? "On" : "Off"}
+                            </button>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5 mt-1">
+                            <span className="text-[10px] font-mono uppercase text-secondary/60">Edge Style</span>
+                            <div className="flex bg-neutral/50 p-1 rounded-md">
+                              {[
+                                { value: "basis", label: "Curved" },
+                                { value: "step", label: "Stepped" },
+                                { value: "linear", label: "Direct" }
+                              ].map(opt => (
+                                <button
+                                  key={opt.value}
+                                  onClick={() => setLineStyle(opt.value as any)}
+                                  className={`flex-1 text-[9px] font-mono font-bold uppercase tracking-wider py-1.5 rounded transition-colors cursor-pointer ${
+                                    lineStyle === opt.value
+                                      ? "bg-card text-tertiary shadow-sm"
+                                      : "text-secondary hover:text-primary"
+                                  }`}
+                                >
+                                  {opt.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          )}
+
           {isRendering && (
             <div className="absolute inset-0 bg-neutral/70 backdrop-blur-xs flex items-center justify-center gap-2.5 z-40">
               <RefreshCw className="w-4 h-4 text-tertiary animate-spin" />
