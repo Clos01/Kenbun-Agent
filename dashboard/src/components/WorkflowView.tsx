@@ -1802,18 +1802,26 @@ export default function WorkflowView({
                         strokeOpacity="0.92"
                         strokeLinecap="round"
                       />
-                      {/* The connection itself */}
+                      {/* The connection itself (Base line) */}
                       <path
                         d={pathD}
                         fill="none"
                         stroke={isSuggested ? "var(--secondary)" : `url(#grad_${edge.id})`}
                         strokeWidth={isSuggested ? 1.75 : 2.4}
                         strokeOpacity={isSuggested ? 0.75 : 1}
-                        strokeDasharray={isDotted && !isTronPath ? "6 5" : undefined}
+                        strokeDasharray={isDotted ? "6 5" : undefined}
                         strokeLinecap="round"
                         markerEnd={markerEnd}
-                        className={`transition-all duration-200 ${isTronPath ? 'tron-line' : ''}`}
+                        className="transition-all duration-200"
                       />
+                      {/* TRON Pulse Overlay */}
+                      {isTronPath && (
+                        <path
+                          d={pathD}
+                          fill="none"
+                          className="tron-line pointer-events-none"
+                        />
+                      )}
                       {edge.label && edge.label !== "suggested" && (
                         <foreignObject
                           x={(edge.fromX + endX) / 2 - 45}

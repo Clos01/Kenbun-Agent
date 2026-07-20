@@ -151,14 +151,16 @@ h1, h2, h3, .pub-title {
 }
 
 /* TRON Lighting Effect */
-@keyframes tron-pulse {
-  0% { stroke-dashoffset: 40; filter: drop-shadow(0 0 4px var(--tertiary)); }
-  100% { stroke-dashoffset: 0; filter: drop-shadow(0 0 12px var(--tertiary)); }
+@keyframes tron-flow {
+  0% { stroke-dashoffset: 60; opacity: 0; filter: drop-shadow(0 0 2px var(--tertiary)); }
+  15% { opacity: 1; filter: drop-shadow(0 0 12px var(--tertiary)); }
+  85% { opacity: 1; filter: drop-shadow(0 0 12px var(--tertiary)); }
+  100% { stroke-dashoffset: -600; opacity: 0; filter: drop-shadow(0 0 2px var(--tertiary)); }
 }
 .tron-line {
-  stroke-dasharray: 10 20;
-  animation: tron-pulse 1.2s linear infinite;
+  stroke-dasharray: 60 600;
+  animation: tron-flow 2s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
   stroke: var(--tertiary) !important;
-  stroke-width: 4px !important;
+  stroke-width: 5px !important;
   stroke-linecap: round;
 }

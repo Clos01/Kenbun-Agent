@@ -354,19 +354,26 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
                   const d = `M ${e.x1} ${e.y1} C ${mx} ${e.y1}, ${mx} ${e.y2}, ${e.x2} ${e.y2}`;
                   const isTronPath = selectedCardId && e.id.endsWith(`_${selectedCardId}`);
                   return (
-                    <motion.path
-                      key={e.id}
-                      initial={{ pathLength: 0, opacity: 0, d }}
-                      animate={{ pathLength: 1, opacity: 1, d }}
-                      exit={{ opacity: 0 }}
-                      transition={{ type: "spring", bounce: 0, duration: 0.5 }}
-                      fill="none"
-                      stroke="var(--tertiary)"
-                      strokeOpacity={0.45}
-                      strokeWidth={1.75}
-                      strokeLinecap="round"
-                      className={`transition-all duration-200 ${isTronPath ? 'tron-line' : ''}`}
-                    />
+                    <g key={e.id}>
+                      <motion.path
+                        initial={{ pathLength: 0, opacity: 0, d }}
+                        animate={{ pathLength: 1, opacity: 1, d }}
+                        exit={{ opacity: 0 }}
+                        transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+                        fill="none"
+                        stroke="var(--tertiary)"
+                        strokeOpacity={0.45}
+                        strokeWidth={1.75}
+                        strokeLinecap="round"
+                      />
+                      {isTronPath && (
+                        <path
+                          d={d}
+                          fill="none"
+                          className="tron-line pointer-events-none"
+                        />
+                      )}
+                    </g>
                   );
                 })}
               </AnimatePresence>
