@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { GitBranch, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { GitBranch, ChevronRight, ChevronLeft } from "lucide-react";
 
 // Self-contained mindmap. Deliberately shares NO layout or edge code with the
 // flowchart renderer — it is a strict root -> column -> card TREE, so branches
@@ -53,13 +53,32 @@ const LIST_W = 178, LIST_H = 34;
 const CARD_W = 216, CARD_H = 52;
 const ROW = 76, GAP1 = 180, GAP2 = 240;
 
-interface MNode { kind: "root" | "list" | "card"; id: string; name: string; status: Status; cx: number; cy: number; w: number; h: number; }
-interface MEdge { id: string; x1: number; y1: number; x2: number; y2: number; }
+interface MNode { kind: "root" | "list" | "card"; id: string; name: string; status: Status;  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  isCollapsed?: boolean;
+  isRightSide?: boolean;
+};
+
+type MEdge = { id: string; x1: number; y1: number; x2: number; y2: number; }
 
 export default function MindmapView({ cards, lists, onSelectCard, scale, setScale, offset, setOffset }: MindmapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
+  
+  const [collapsedLists, setCollapsedLists] = useState<Set<string>>(new Set());
+
+  const toggleCollapse = (e: React.MouseEvent, listId: string) => {
+    e.stopPropagation();
+    setCollapsedLists(prev => {
+      const next = new Set(prev);
+      if (next.has(listId)) next.delete(listId);
+      else next.add(listId);
+      return next;
+    });
+  };
 
   const model = useMemo(() => {
     const active = cards.filter(c => !c.isClosed);
@@ -76,14 +95,13 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
 
     if (lanes.length === 1) {
       // 🦋 SINGLE-LIST BUTTERFLY GRID 🦋
-      // For a single column, we put Root -> List vertically in the center.
-      // Then we split the leaf cards 50/50 left and right, grouping them into grids!
       const { list, cards: lc } = lanes[0];
       const st = statusOf(list.name);
       const listId = `list_${list.id}`;
+      const isCollapsed = collapsedLists.has(list.id);
 
-      const leftCards = lc.filter((_, i) => i % 2 !== 0);
-      const rightCards = lc.filter((_, i) => i % 2 === 0);
+      const leftCards = isCollapsed ? [] : lc.filter((_, i) => i % 2 !== 0);
+      const rightCards = isCollapsed ? [] : lc.filter((_, i) => i % 2 === 0);
       let maxCy = 0;
 
       const buildGrid = (cardsArr: typeof lc, isRight: boolean) => {
@@ -107,14 +125,14 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
           const e2 = isRight ? cardX : (cardX + CARD_W);
           edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
         });
-        return numRows;
+        return cardsArr.length > 0 ? numRows : 1;
       };
       
       const rightRows = buildGrid(rightCards, true);
       const leftRows = buildGrid(leftCards, false);
       const listCy = (Math.max(rightRows, leftRows) - 1) / 2 * ROW;
       
-      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: 0, cy: listCy, w: LIST_W, h: LIST_H });
+      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: 0, cy: listCy, w: LIST_W, h: LIST_H, isCollapsed, isRightSide: true });
       
       edges.forEach(e => {
         if (e.id.startsWith(listId)) e.y1 = listCy;
@@ -148,11 +166,13 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
       const st = statusOf(list.name);
       const listId = `list_${list.id}`;
       const listX = isRight ? (ROOT_W/2 + GAP1) : (-ROOT_W/2 - GAP1 - LIST_W);
+      const isCollapsed = collapsedLists.has(list.id);
       
-      const numCols = lc.length > 12 ? 3 : lc.length > 6 ? 2 : 1;
-      const numRows = Math.ceil(lc.length / numCols) || 1;
+      const visibleCards = isCollapsed ? [] : lc;
+      const numCols = visibleCards.length > 12 ? 3 : visibleCards.length > 6 ? 2 : 1;
+      const numRows = visibleCards.length > 0 ? Math.ceil(visibleCards.length / numCols) : 1;
       
-      lc.forEach((card, i) => {
+      visibleCards.forEach((card, i) => {
         const col = Math.floor(i / numRows);
         const row = i % numRows;
         const cy = (startSlot + row) * ROW;
@@ -170,8 +190,8 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
         edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
       });
       
-      const listCy = lc.length ? (startSlot + (numRows - 1) / 2) * ROW : startSlot * ROW;
-      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: listX + LIST_W / 2, cy: listCy, w: LIST_W, h: LIST_H });
+      const listCy = visibleCards.length ? (startSlot + (numRows - 1) / 2) * ROW : startSlot * ROW;
+      nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: listX + LIST_W / 2, cy: listCy, w: LIST_W, h: LIST_H, isCollapsed, isRightSide: isRight });
       
       edges.forEach(e => {
         if (e.id.startsWith(listId)) e.y1 = listCy;
@@ -205,7 +225,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
     const minCy = Math.min(...allCyRight, ...allCyLeft, 0);
     const height = (maxCy - minCy) + CARD_H * 2;
     return { nodes, edges, width: totalW, height, empty: false };
-  }, [cards, lists]);
+  }, [cards, lists, collapsedLists]);
 
   const fit = useCallback(() => {
     const el = containerRef.current;
@@ -311,15 +331,28 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                 );
               }
               if (n.kind === "list") {
+                const Icon = n.isCollapsed 
+                  ? (n.isRightSide ? ChevronRight : ChevronLeft) 
+                  : (n.isRightSide ? ChevronLeft : ChevronRight);
+                  
                 return (
                   <div key={n.id} data-node style={nodeStyle(n)}
-                    className="flex items-center gap-2 rounded-lg border px-3 select-none shadow-sm"
+                    className="flex items-center gap-2 rounded-lg border px-3 select-none shadow-sm relative group"
                   >
                     <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"
                       style={{ backgroundColor: "color-mix(in srgb, var(--tertiary) 12%, var(--card))", borderColor: "color-mix(in srgb, var(--tertiary) 35%, transparent)" }}>
                       <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[n.status]}`} />
                       <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-primary truncate">{n.name}</span>
                     </div>
+                    
+                    <button
+                      onClick={(e) => toggleCollapse(e, n.id.replace('list_', ''))}
+                      className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center bg-card border border-border rounded-full shadow-sm text-tertiary hover:text-primary hover:border-primary transition-colors cursor-pointer z-10 ${
+                        n.isRightSide ? '-right-2' : '-left-2'
+                      }`}
+                    >
+                      <Icon className="w-3 h-3" />
+                    </button>
                   </div>
                 );
               }
