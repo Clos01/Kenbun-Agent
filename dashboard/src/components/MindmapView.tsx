@@ -122,9 +122,20 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
               
           nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
           
-          const e1 = isRight ? (LIST_W/2) : (-LIST_W/2);
-          const e2 = isRight ? cardX : (cardX + CARD_W);
-          edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
+          if (col === 0) {
+            const e1 = isRight ? (LIST_W/2) : (-LIST_W/2);
+            const e2 = isRight ? cardX : (cardX + CARD_W);
+            edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
+          } else {
+            const prevCardXOffset = (col - 1) * (CARD_W + 40);
+            const prevCardX = isRight 
+                ? (LIST_W/2 + GAP2 + prevCardXOffset) 
+                : (-LIST_W/2 - GAP2 - CARD_W - prevCardXOffset);
+                
+            const e1 = isRight ? (prevCardX + CARD_W) : prevCardX;
+            const e2 = isRight ? cardX : (cardX + CARD_W);
+            edges.push({ id: `card_link_${card.id}`, x1: e1, y1: cy, x2: e2, y2: cy });
+          }
         });
         return cardsArr.length > 0 ? numRows : 1;
       };
@@ -186,9 +197,20 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
             
         nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
         
-        const e1 = isRight ? (listX + LIST_W) : listX;
-        const e2 = isRight ? cardX : (cardX + CARD_W);
-        edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
+        if (col === 0) {
+          const e1 = isRight ? (listX + LIST_W) : listX;
+          const e2 = isRight ? cardX : (cardX + CARD_W);
+          edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
+        } else {
+          const prevCardXOffset = (col - 1) * (CARD_W + 40);
+          const prevCardX = isRight 
+              ? (listX + LIST_W + GAP2 + prevCardXOffset) 
+              : (listX - GAP2 - CARD_W - prevCardXOffset);
+              
+          const e1 = isRight ? (prevCardX + CARD_W) : prevCardX;
+          const e2 = isRight ? cardX : (cardX + CARD_W);
+          edges.push({ id: `card_link_${card.id}`, x1: e1, y1: cy, x2: e2, y2: cy });
+        }
       });
       
       const listCy = visibleCards.length ? (startSlot + (numRows - 1) / 2) * ROW : startSlot * ROW;
