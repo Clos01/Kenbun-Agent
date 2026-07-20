@@ -1878,7 +1878,7 @@ export default function WorkflowView({
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-                    className="absolute rounded-xl border bg-card text-left shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto"
+                    className={`absolute ${card.status === 'completed' ? 'rounded-sm' : 'rounded-xl'} border bg-card text-left shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto`}
                     style={{
                       left: node.x,
                       top: node.y,
@@ -1897,7 +1897,7 @@ export default function WorkflowView({
                     }}
                   >
                     {card.shape === "terminal" ? (
-                      <div className="px-4 py-2.5 h-full rounded-full flex items-center justify-between gap-3 select-none">
+                      <div className={`px-4 py-2.5 h-full ${card.status === 'completed' ? 'rounded-sm' : 'rounded-full'} flex items-center justify-between gap-3 select-none`}>
                         <div className="flex items-center gap-2 truncate">
                           <span className={`w-2 h-2 rounded-full ${statusColor} shrink-0`}></span>
                           <span className="text-[9px] font-bold text-primary truncate">{cleanTitle}</span>
