@@ -389,81 +389,16 @@ export default function WorkflowView({
       const CARD_W = 190;
       const CARD_H = 85;
 
+      const MAX_PER_LINE = 5;
+
+      let groups: { id: string; name: string; cards: typeof parsedCards }[] = [];
+
       if (groupByLanes) {
-        lists.forEach((list, colIdx) => {
-          const listCards = parsedCards
-            .filter(c => c.listId === list.id)
-            .sort((a, b) => a.rank - b.rank);
-          
-          const C = listCards.length;
-
-          if (isHorizontal) {
-            const colX = (colIdx - (lists.length - 1) / 2) * COL_GAP;
-            const totalH = C > 0 ? (C - 1) * CARD_V_GAP + CARD_H : CARD_H;
-            const startY = -totalH / 2;
-
-            if (C > 0) {
-              lanes.push({
-                id: list.id,
-                name: list.name,
-                minX: colX - CARD_W / 2 - 15,
-                maxX: colX + CARD_W / 2 + 15,
-                minY: startY - 50,
-                maxY: startY + (C - 1) * CARD_V_GAP + CARD_H + 15
-              });
-            }
-
-            listCards.forEach((card, i) => {
-              const cardY = startY + i * CARD_V_GAP;
-              nodes.push({
-                id: `card_${card.id}`,
-                type: "card",
-                label: card.name,
-                x: colX - CARD_W / 2,
-                y: cardY,
-                width: CARD_W,
-                height: CARD_H,
-                status: card.status,
-                rank: card.rank,
-                shape: card.shape,
-                cardData: card
-              });
-            });
-          } else {
-            // Vertical Flow (TD): Lanes stack vertically as rows, cards flow horizontally
-            const rowY = (colIdx - (lists.length - 1) / 2) * ROW_GAP;
-            const totalW = C > 0 ? (C - 1) * CARD_H_GAP + CARD_W : CARD_W;
-            const startX = -totalW / 2;
-
-            if (C > 0) {
-              lanes.push({
-                id: list.id,
-                name: list.name,
-                minX: startX - 15,
-                maxX: startX + (C - 1) * CARD_H_GAP + CARD_W + 15,
-                minY: rowY - 50,
-                maxY: rowY + CARD_H + 15
-              });
-            }
-
-            listCards.forEach((card, i) => {
-              const cardX = startX + i * CARD_H_GAP;
-              nodes.push({
-                id: `card_${card.id}`,
-                type: "card",
-                label: card.name,
-                x: cardX,
-                y: rowY,
-                width: CARD_W,
-                height: CARD_H,
-                status: card.status,
-                rank: card.rank,
-                shape: card.shape,
-                cardData: card
-              });
-            });
-          }
-        });
+        groups = lists.map(list => ({
+          id: list.id,
+          name: list.name,
+          cards: parsedCards.filter(c => c.listId === list.id).sort((a, b) => a.rank - b.rank)
+        }));
       } else {
         const cardLevels = new Map<string, number>();
         parsedCards.forEach(c => cardLevels.set(c.id, 0));
@@ -496,55 +431,92 @@ export default function WorkflowView({
         });
 
         const activeLevels = Array.from(levelCardsMap.keys()).sort((a, b) => a - b);
-        activeLevels.forEach((level, colIdx) => {
-          const listCards = levelCardsMap.get(level)!;
-          const C = listCards.length;
-
-          if (isHorizontal) {
-            const colX = (colIdx - (activeLevels.length - 1) / 2) * COL_GAP;
-            const totalH = C > 0 ? (C - 1) * CARD_V_GAP + CARD_H : CARD_H;
-            const startY = -totalH / 2;
-
-            listCards.forEach((card, i) => {
-              const cardY = startY + i * CARD_V_GAP;
-              nodes.push({
-                id: `card_${card.id}`,
-                type: "card",
-                label: card.name,
-                x: colX - CARD_W / 2,
-                y: cardY,
-                width: CARD_W,
-                height: CARD_H,
-                status: card.status,
-                rank: card.rank,
-                shape: card.shape,
-                cardData: card
-              });
-            });
-          } else {
-            const rowY = (colIdx - (activeLevels.length - 1) / 2) * ROW_GAP;
-            const totalW = C > 0 ? (C - 1) * CARD_H_GAP + CARD_W : CARD_W;
-            const startX = -totalW / 2;
-
-            listCards.forEach((card, i) => {
-              const cardX = startX + i * CARD_H_GAP;
-              nodes.push({
-                id: `card_${card.id}`,
-                type: "card",
-                label: card.name,
-                x: cardX,
-                y: rowY,
-                width: CARD_W,
-                height: CARD_H,
-                status: card.status,
-                rank: card.rank,
-                shape: card.shape,
-                cardData: card
-              });
-            });
-          }
-        });
+        groups = activeLevels.map(lvl => ({
+          id: `level_${lvl}`,
+          name: `Level ${lvl}`,
+          cards: levelCardsMap.get(lvl)!.sort((a, b) => a.rank - b.rank)
+        }));
       }
+
+      const groupLayouts = groups.map(g => {
+        const C = g.cards.length;
+        const numLines = Math.ceil(C / MAX_PER_LINE);
+        const maxInLine = Math.min(C, MAX_PER_LINE);
+        
+        let w = 0;
+        let h = 0;
+        if (isHorizontal) {
+           w = numLines * CARD_W + Math.max(0, numLines - 1) * 60; // 60px gap between wrapped columns
+           h = maxInLine * CARD_H + Math.max(0, maxInLine - 1) * CARD_V_GAP;
+        } else {
+           w = maxInLine * CARD_W + Math.max(0, maxInLine - 1) * CARD_H_GAP;
+           h = numLines * CARD_H + Math.max(0, numLines - 1) * 60; // 60px gap between wrapped rows
+        }
+        return { ...g, w, h, numLines, maxInLine };
+      });
+
+      const GAP_BETWEEN_GROUPS = isHorizontal ? COL_GAP : ROW_GAP;
+      let totalSpan = 0;
+      groupLayouts.forEach(g => {
+        totalSpan += (isHorizontal ? g.w : g.h);
+      });
+      totalSpan += Math.max(0, groupLayouts.length - 1) * GAP_BETWEEN_GROUPS;
+
+      let currentOffset = -totalSpan / 2;
+
+      groupLayouts.forEach(g => {
+         if (isHorizontal) {
+            const groupLeft = currentOffset;
+            const groupTop = -g.h / 2;
+            
+            if (g.cards.length > 0 && groupByLanes) {
+              lanes.push({
+                id: g.id, name: g.name,
+                minX: groupLeft - 30, maxX: groupLeft + g.w + 30,
+                minY: groupTop - 60, maxY: groupTop + g.h + 30
+              });
+            }
+
+            g.cards.forEach((card, i) => {
+               const localCol = Math.floor(i / MAX_PER_LINE);
+               const localRow = i % MAX_PER_LINE;
+               const cx = groupLeft + localCol * (CARD_W + 60) + CARD_W / 2;
+               const cy = groupTop + localRow * (CARD_H + CARD_V_GAP) + CARD_H / 2;
+               nodes.push({
+                 id: `card_${card.id}`, type: "card", label: card.name,
+                 x: cx - CARD_W / 2, y: cy - CARD_H / 2,
+                 width: CARD_W, height: CARD_H,
+                 status: card.status, rank: card.rank, shape: card.shape, cardData: card
+               });
+            });
+            currentOffset += g.w + GAP_BETWEEN_GROUPS;
+         } else {
+            const groupTop = currentOffset;
+            const groupLeft = -g.w / 2;
+
+            if (g.cards.length > 0 && groupByLanes) {
+              lanes.push({
+                id: g.id, name: g.name,
+                minX: groupLeft - 30, maxX: groupLeft + g.w + 30,
+                minY: groupTop - 60, maxY: groupTop + g.h + 30
+              });
+            }
+
+            g.cards.forEach((card, i) => {
+               const localRow = Math.floor(i / MAX_PER_LINE);
+               const localCol = i % MAX_PER_LINE;
+               const cx = groupLeft + localCol * (CARD_W + CARD_H_GAP) + CARD_W / 2;
+               const cy = groupTop + localRow * (CARD_H + 60) + CARD_H / 2;
+               nodes.push({
+                 id: `card_${card.id}`, type: "card", label: card.name,
+                 x: cx - CARD_W / 2, y: cy - CARD_H / 2,
+                 width: CARD_W, height: CARD_H,
+                 status: card.status, rank: card.rank, shape: card.shape, cardData: card
+               });
+            });
+            currentOffset += g.h + GAP_BETWEEN_GROUPS;
+         }
+      });
 
       const nodeMap = new Map(nodes.map(n => [n.id, n]));
 
@@ -612,49 +584,44 @@ export default function WorkflowView({
           });
         });
       } else {
-        // Suggested path: within each lane, connect cards sequentially top→bottom
+        // Generate suggested flow (dotted lines)
         if (groupByLanes) {
-          lists.forEach(list => {
-            const laneCards = parsedCards
-              .filter(c => c.listId === list.id && c.status !== "completed")
-              .sort((a, b) => a.rank - b.rank);
-
+          // Intra-lane connections (connecting items sequentially inside each lane)
+          groups.forEach(group => {
+            const laneCards = group.cards.filter(c => c.status !== "completed");
             for (let i = 0; i < laneCards.length - 1; i++) {
               const fromNode = nodeMap.get(`card_${laneCards[i].id}`);
               const toNode = nodeMap.get(`card_${laneCards[i + 1].id}`);
               if (fromNode && toNode) {
                 const a = getAnchors(fromNode, toNode);
-                  edges.push({
-                    id: `edge_lane_${laneCards[i].id}_to_${laneCards[i + 1].id}`,
-                    fromId: fromNode.id,
-                    toId: toNode.id,
-                    fromX: a.fx, fromY: a.fy,
-                    toX: a.tx, toY: a.ty,
-                    orientation: a.orientation,
-                    label: "suggested",
-                    style: "dotted"
-                  });
+                edges.push({
+                  id: `edge_lane_${laneCards[i].id}_to_${laneCards[i + 1].id}`,
+                  fromId: fromNode.id,
+                  toId: toNode.id,
+                  fromX: a.fx, fromY: a.fy,
+                  toX: a.tx, toY: a.ty,
+                  orientation: a.orientation,
+                  label: "suggested",
+                  style: "dotted"
+                });
               }
             }
           });
 
-          // Cross-lane: connect last active card of each lane to first active card of the next lane
-          const laneLastCards: { listId: string; card: typeof parsedCards[0] }[] = [];
-          lists.forEach(list => {
-            const laneCards = parsedCards
-              .filter(c => c.listId === list.id && c.status !== "completed")
-              .sort((a, b) => a.rank - b.rank);
+          // Cross-lane connections
+          const laneLastCards: { groupId: string; card: typeof parsedCards[0] }[] = [];
+          groups.forEach(group => {
+            const laneCards = group.cards.filter(c => c.status !== "completed");
             if (laneCards.length > 0) {
-              laneLastCards.push({ listId: list.id, card: laneCards[laneCards.length - 1] });
+              laneLastCards.push({ groupId: group.id, card: laneCards[laneCards.length - 1] });
             }
           });
 
           for (let i = 0; i < laneLastCards.length - 1; i++) {
             const fromNode = nodeMap.get(`card_${laneLastCards[i].card.id}`);
-            const nextLaneFirstCards = parsedCards
-              .filter(c => c.listId === laneLastCards[i + 1].card.listId && c.status !== "completed")
-              .sort((a, b) => a.rank - b.rank);
+            const nextLaneFirstCards = groups.find(g => g.id === laneLastCards[i + 1].groupId)?.cards.filter(c => c.status !== "completed") || [];
             if (nextLaneFirstCards.length === 0) continue;
+            
             const toNode = nodeMap.get(`card_${nextLaneFirstCards[0].id}`);
             if (fromNode && toNode) {
               const a = getAnchors(fromNode, toNode);
@@ -671,7 +638,7 @@ export default function WorkflowView({
             }
           }
         } else {
-          // No lanes: connect all cards sequentially by rank
+          // No lanes: connect all active cards sequentially by rank across the board
           const activeSequence = parsedCards
             .filter(c => c.status !== "completed")
             .sort((a, b) => a.rank - b.rank);
