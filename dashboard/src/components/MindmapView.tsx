@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { GitBranch, ChevronRight, ChevronLeft } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 // Self-contained mindmap. Deliberately shares NO layout or edge code with the
 // flowchart renderer — it is a strict root -> column -> card TREE, so branches
@@ -264,11 +265,11 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
   const stop = () => setPanning(false);
 
   const nodeStyle = (n: MNode): React.CSSProperties => ({
-    left: n.cx - n.w / 2,
-    top: n.cy - n.h / 2,
     width: n.w,
     height: n.h,
-    position: "absolute"
+    position: "absolute",
+    left: 0,
+    top: 0
   });
 
   return (
@@ -299,75 +300,98 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
           >
             {/* Branch lines (strict tree — no crossings) */}
             <svg className="absolute overflow-visible pointer-events-none" style={{ left: 0, top: 0, width: 1, height: 1 }}>
-              {model.edges.map(e => {
-                const mx = (e.x1 + e.x2) / 2;
-                const d = `M ${e.x1} ${e.y1} C ${mx} ${e.y1}, ${mx} ${e.y2}, ${e.x2} ${e.y2}`;
-                return (
-                  <path
-                    key={e.id}
-                    d={d}
-                    fill="none"
-                    stroke="var(--tertiary)"
-                    strokeOpacity={0.45}
-                    strokeWidth={1.75}
-                    strokeLinecap="round"
-                  />
-                );
-              })}
+              <AnimatePresence>
+                {model.edges.map(e => {
+                  const mx = (e.x1 + e.x2) / 2;
+                  const d = `M ${e.x1} ${e.y1} C ${mx} ${e.y1}, ${mx} ${e.y2}, ${e.x2} ${e.y2}`;
+                  return (
+                    <motion.path
+                      key={e.id}
+                      initial={{ pathLength: 0, opacity: 0, d }}
+                      animate={{ pathLength: 1, opacity: 1, d }}
+                      exit={{ opacity: 0 }}
+                      transition={{ type: "spring", bounce: 0, duration: 0.5 }}
+                      fill="none"
+                      stroke="var(--tertiary)"
+                      strokeOpacity={0.45}
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
+              </AnimatePresence>
             </svg>
 
             {/* Nodes */}
-            {model.nodes.map(n => {
-              if (n.kind === "root") {
+            <AnimatePresence>
+              {model.nodes.map(n => {
+                const x = n.cx - n.w / 2;
+                const y = n.cy - n.h / 2;
+
+                if (n.kind === "root") {
+                  return (
+                    <motion.div key={n.id} data-node style={nodeStyle(n)}
+                      initial={{ x, y, opacity: 0, scale: 0.8 }}
+                      animate={{ x, y, opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                      className="flex items-center justify-center rounded-full text-center font-bold text-[10px] tracking-wider uppercase select-none shadow-sm"
+                    >
+                      <div className="w-full h-full flex items-center justify-center rounded-full px-3"
+                        style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>
+                        {n.name}
+                      </div>
+                    </motion.div>
+                  );
+                }
+                if (n.kind === "list") {
+                  const Icon = n.isCollapsed 
+                    ? (n.isRightSide ? ChevronRight : ChevronLeft) 
+                    : (n.isRightSide ? ChevronLeft : ChevronRight);
+                    
+                  return (
+                    <motion.div key={n.id} data-node style={nodeStyle(n)}
+                      initial={{ x, y, opacity: 0, scale: 0.8 }}
+                      animate={{ x, y, opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                      className="flex items-center gap-2 rounded-lg border px-3 select-none shadow-sm relative group"
+                    >
+                      <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"
+                        style={{ backgroundColor: "color-mix(in srgb, var(--tertiary) 12%, var(--card))", borderColor: "color-mix(in srgb, var(--tertiary) 35%, transparent)" }}>
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[n.status]}`} />
+                        <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-primary truncate">{n.name}</span>
+                      </div>
+                      
+                      <button
+                        onClick={(e) => toggleCollapse(e, n.id.replace('list_', ''))}
+                        className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center bg-card border border-border rounded-full shadow-sm text-tertiary hover:text-primary hover:border-primary transition-colors cursor-pointer z-10 ${
+                          n.isRightSide ? '-right-2' : '-left-2'
+                        }`}
+                      >
+                        <Icon className="w-3 h-3" />
+                      </button>
+                    </motion.div>
+                  );
+                }
                 return (
-                  <div key={n.id} data-node style={nodeStyle(n)}
-                    className="flex items-center justify-center rounded-full text-center font-bold text-[10px] tracking-wider uppercase select-none shadow-sm"
-                  >
-                    <div className="w-full h-full flex items-center justify-center rounded-full px-3"
-                      style={{ backgroundColor: "var(--tertiary)", color: "var(--neutral)" }}>
-                      {n.name}
-                    </div>
-                  </div>
-                );
-              }
-              if (n.kind === "list") {
-                const Icon = n.isCollapsed 
-                  ? (n.isRightSide ? ChevronRight : ChevronLeft) 
-                  : (n.isRightSide ? ChevronLeft : ChevronRight);
-                  
-                return (
-                  <div key={n.id} data-node style={nodeStyle(n)}
-                    className="flex items-center gap-2 rounded-lg border px-3 select-none shadow-sm relative group"
+                  <motion.div key={n.id} data-node onClick={() => onSelectCard(n.id)} style={nodeStyle(n)}
+                    initial={{ x, y, opacity: 0, scale: 0.8 }}
+                    animate={{ x, y, opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.5 }}
+                    transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                    whileHover={{ scale: 1.02 }}
+                    className="rounded-lg border cursor-pointer shadow-sm pointer-events-auto"
                   >
                     <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"
-                      style={{ backgroundColor: "color-mix(in srgb, var(--tertiary) 12%, var(--card))", borderColor: "color-mix(in srgb, var(--tertiary) 35%, transparent)" }}>
-                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[n.status]}`} />
-                      <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-primary truncate">{n.name}</span>
+                      style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${DOT[n.status]}`} />
+                      <span className="text-[10px] font-semibold text-primary leading-snug line-clamp-2">{n.name}</span>
                     </div>
-                    
-                    <button
-                      onClick={(e) => toggleCollapse(e, n.id.replace('list_', ''))}
-                      className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center bg-card border border-border rounded-full shadow-sm text-tertiary hover:text-primary hover:border-primary transition-colors cursor-pointer z-10 ${
-                        n.isRightSide ? '-right-2' : '-left-2'
-                      }`}
-                    >
-                      <Icon className="w-3 h-3" />
-                    </button>
-                  </div>
+                  </motion.div>
                 );
-              }
-              return (
-                <div key={n.id} data-node onClick={() => onSelectCard(n.id)} style={nodeStyle(n)}
-                  className="rounded-lg border cursor-pointer transition-all hover:scale-[1.02] shadow-sm pointer-events-auto"
-                >
-                  <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"
-                    style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${DOT[n.status]}`} />
-                    <span className="text-[10px] font-semibold text-primary leading-snug line-clamp-2">{n.name}</span>
-                  </div>
-                </div>
-              );
-            })}
+              })}
+            </AnimatePresence>
           </div>
         )}
       </div>
