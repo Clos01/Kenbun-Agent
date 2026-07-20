@@ -273,7 +273,22 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const dir = e.deltaY < 0 ? 1 : -1;
-        setScale(prev => Math.min(2.4, Math.max(0.3, prev + dir * 0.08)));
+        setScale(prevScale => {
+          const nextScale = Math.min(2.4, Math.max(0.3, prevScale + dir * 0.08));
+          if (nextScale === prevScale) return prevScale;
+
+          const rect = el.getBoundingClientRect();
+          const mx = e.clientX - rect.left - rect.width / 2;
+          const my = e.clientY - rect.top - rect.height / 2;
+          const ratio = nextScale / prevScale;
+
+          setOffset(prevOffset => ({
+            x: prevOffset.x * ratio + mx * (1 - ratio),
+            y: prevOffset.y * ratio + my * (1 - ratio)
+          }));
+
+          return nextScale;
+        });
       } else {
         setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
       }

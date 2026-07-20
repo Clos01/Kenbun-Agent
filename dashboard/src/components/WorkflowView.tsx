@@ -1049,9 +1049,21 @@ export default function WorkflowView({
       if (e.ctrlKey || e.metaKey) {
         const zoomFactor = 0.08;
         const direction = e.deltaY < 0 ? 1 : -1;
-        setScale(prev => {
-          const next = prev + direction * zoomFactor;
-          return Math.min(Math.max(next, 0.25), 3);
+        setScale(prevScale => {
+          const nextScale = Math.min(Math.max(prevScale + direction * zoomFactor, 0.25), 3);
+          if (nextScale === prevScale) return prevScale;
+
+          const rect = canvas.getBoundingClientRect();
+          const mx = e.clientX - rect.left - rect.width / 2;
+          const my = e.clientY - rect.top - rect.height / 2;
+          const ratio = nextScale / prevScale;
+
+          setOffset(prevOffset => ({
+            x: prevOffset.x * ratio + mx * (1 - ratio),
+            y: prevOffset.y * ratio + my * (1 - ratio)
+          }));
+
+          return nextScale;
         });
       } else {
         setOffset(prev => ({
@@ -1066,6 +1078,19 @@ export default function WorkflowView({
       canvas.removeEventListener("wheel", handleWheelEvent);
     };
   }, [diagramMode]);
+
+  const handleZoomBtnClick = (dir: 1 | -1) => {
+    setScale(prevScale => {
+      const nextScale = Math.min(Math.max(prevScale + dir * 0.15, 0.25), 3);
+      if (nextScale === prevScale) return prevScale;
+      const ratio = nextScale / prevScale;
+      setOffset(prevOffset => ({
+        x: prevOffset.x * ratio,
+        y: prevOffset.y * ratio
+      }));
+      return nextScale;
+    });
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0 || diagramMode === "ascii") return;
@@ -1359,7 +1384,7 @@ export default function WorkflowView({
           {diagramMode !== "ascii" && (
             <div className="hidden sm:flex items-center gap-1 bg-primary/[0.04] border border-border rounded-md px-1.5 py-1">
               <button
-                onClick={() => setScale(prev => Math.max(prev - 0.15, 0.25))}
+                onClick={() => handleZoomBtnClick(-1)}
                 className="p-1 hover:bg-primary/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Zoom Out"
               >
@@ -1373,7 +1398,7 @@ export default function WorkflowView({
                 {Math.round(scale * 100)}%
               </button>
               <button
-                onClick={() => setScale(prev => Math.min(prev + 0.15, 3))}
+                onClick={() => handleZoomBtnClick(1)}
                 className="p-1 hover:bg-primary/5 rounded text-secondary hover:text-primary transition-colors cursor-pointer"
                 title="Zoom In"
               >
