@@ -69,11 +69,11 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
   
-  const [collapsedLists, setCollapsedLists] = useState<Set<string>>(new Set());
+  const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
 
   const toggleCollapse = (e: React.MouseEvent, listId: string) => {
     e.stopPropagation();
-    setCollapsedLists(prev => {
+    setExpandedLists(prev => {
       const next = new Set(prev);
       if (next.has(listId)) next.delete(listId);
       else next.add(listId);
@@ -99,7 +99,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
       const { list, cards: lc } = lanes[0];
       const st = statusOf(list.name);
       const listId = `list_${list.id}`;
-      const isCollapsed = collapsedLists.has(list.id);
+      const isCollapsed = !expandedLists.has(list.id);
 
       const leftCards = isCollapsed ? [] : lc.filter((_, i) => i % 2 !== 0);
       const rightCards = isCollapsed ? [] : lc.filter((_, i) => i % 2 === 0);
@@ -178,7 +178,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
       const st = statusOf(list.name);
       const listId = `list_${list.id}`;
       const listX = isRight ? (ROOT_W/2 + GAP1) : (-ROOT_W/2 - GAP1 - LIST_W);
-      const isCollapsed = collapsedLists.has(list.id);
+      const isCollapsed = !expandedLists.has(list.id);
       
       const visibleCards = isCollapsed ? [] : lc;
       const numCols = visibleCards.length > 12 ? 3 : visibleCards.length > 6 ? 2 : 1;
@@ -248,7 +248,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
     const minCy = Math.min(...allCyRight, ...allCyLeft, 0);
     const height = (maxCy - minCy) + CARD_H * 2;
     return { nodes, edges, width: totalW, height, empty: false };
-  }, [cards, lists, collapsedLists]);
+  }, [cards, lists, expandedLists]);
 
   const fit = useCallback(() => {
     const el = containerRef.current;
