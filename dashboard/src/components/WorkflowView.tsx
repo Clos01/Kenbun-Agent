@@ -25,6 +25,7 @@ import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/bo
 import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
+import AnalyticsPanel from "./AnalyticsPanel";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -294,7 +295,7 @@ export default function WorkflowView({
   const [copied, setCopied] = useState<boolean>(false);
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
-  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap">("flowchart");
+  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "analytics">("flowchart");
   const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
   const [showViewSettings, setShowViewSettings] = useState<boolean>(false);
 
@@ -1062,7 +1063,9 @@ export default function WorkflowView({
   const handleCopyCode = () => {
     let textToCopy = "";
     if (diagramMode === "mindmap") {
-      textToCopy = mindmapCode;
+      textToCopy = "Mindmap mode not yet copyable as text";
+    } else if (diagramMode === "analytics") {
+      textToCopy = "Analytics mode not yet copyable as text";
     } else {
       textToCopy = mermaidCode;
     }
@@ -1302,7 +1305,7 @@ export default function WorkflowView({
               Workflow
             </div>
             <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary leading-none truncate">
-              {diagramMode === "mindmap" ? "Mind Map" : "Flowchart"}
+              {diagramMode === "mindmap" ? "Mind Map" : diagramMode === "analytics" ? "Analytics" : "Flowchart"}
             </h2>
           </div>
           {diagramMode === "mindmap" ? (
@@ -1356,8 +1359,9 @@ export default function WorkflowView({
             value={diagramMode}
             onChange={setDiagramMode}
             options={[
+              { value: "flowchart", label: "Flowchart" },
               { value: "mindmap", label: "Mindmap" },
-              { value: "flowchart", label: "Flowchart" }
+              { value: "analytics", label: "Analytics" }
             ]}
           />
 
@@ -1384,7 +1388,23 @@ export default function WorkflowView({
       <div className="flex-1 flex overflow-hidden">
         
         {/* Mindmap: dedicated component. Flowchart: the canvas below. */}
-        {diagramMode === "mindmap" ? (
+        {diagramMode === "analytics" ? (
+          <div 
+            className="flex-1 overflow-hidden relative"
+            style={{
+              backgroundColor: "var(--neutral)",
+              backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
+              backgroundSize: "20px 20px"
+            }}
+          >
+            <AnalyticsPanel 
+              cards={cards}
+              lists={lists}
+              onClose={() => setDiagramMode("flowchart")}
+              onOpenCard={onOpenCard}
+            />
+          </div>
+        ) : diagramMode === "mindmap" ? (
           <MindmapView 
             cards={cards} 
             lists={lists} 

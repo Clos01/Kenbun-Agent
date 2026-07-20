@@ -204,9 +204,13 @@ export default function Sidebar() {
                     <div className="flex items-center gap-2.5">
                       {mounted ? [
                         { id: "limestone", color: "#B8422E", bg: "#F7F5F2", name: "Limestone" },
-                        { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
                         { id: "forest", color: "#2E8B57", bg: "#F0F4F1", name: "Forest" },
-                        { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", name: "Cobalt" }
+                        { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", name: "Cobalt" },
+                        { id: "breeze", color: "#0EA5E9", bg: "#F8FAFC", name: "Breeze" },
+                        { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
+                        { id: "sunset", color: "#F97316", bg: "#170F11", name: "Sunset" },
+                        { id: "midnight", color: "#818CF8", bg: "#09090B", name: "Midnight" },
+                        { id: "cyber", color: "#00FF41", bg: "#000000", name: "Cyber" }
                       ].map((item) => (
                         <button
                           key={item.id}
@@ -320,12 +324,16 @@ export default function Sidebar() {
               {/* THEME PICKER */}
               <div className="p-6 border-t border-border/40 flex flex-col gap-2 shrink-0">
                 <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Visual Theme</label>
-                <div className="flex items-center gap-2 px-1">
+                <div className="flex flex-wrap items-center gap-2.5">
                   {mounted ? [
                     { id: "limestone", color: "#B8422E", bg: "#F7F5F2", name: "Limestone" },
-                    { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
                     { id: "forest", color: "#2E8B57", bg: "#F0F4F1", name: "Forest" },
-                    { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", name: "Cobalt" }
+                    { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", name: "Cobalt" },
+                    { id: "breeze", color: "#0EA5E9", bg: "#F8FAFC", name: "Breeze" },
+                    { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
+                    { id: "sunset", color: "#F97316", bg: "#170F11", name: "Sunset" },
+                    { id: "midnight", color: "#818CF8", bg: "#09090B", name: "Midnight" },
+                    { id: "cyber", color: "#00FF41", bg: "#000000", name: "Cyber" }
                   ].map((item) => (
                     <button
                       key={item.id}

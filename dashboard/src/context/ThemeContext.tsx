@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-export type ThemePreset = "limestone" | "obsidian" | "forest" | "cobalt";
+export type ThemePreset = "limestone" | "obsidian" | "forest" | "cobalt" | "midnight" | "cyber" | "sunset" | "breeze";
 
 export const THEME_PRESETS = {
   limestone: {
@@ -48,6 +48,50 @@ export const THEME_PRESETS = {
     border: "rgba(26, 35, 50, 0.08)",
     borderMuted: "rgba(26, 35, 50, 0.04)",
     sand: "rgba(47, 111, 235, 0.04)"
+  },
+  breeze: {
+    name: "Breeze",
+    primary: "#1E293B",
+    secondary: "#64748B",
+    tertiary: "#0EA5E9",
+    neutral: "#F8FAFC",
+    card: "#FFFFFF",
+    border: "rgba(30, 41, 59, 0.08)",
+    borderMuted: "rgba(30, 41, 59, 0.04)",
+    sand: "rgba(14, 165, 233, 0.04)"
+  },
+  midnight: {
+    name: "Midnight",
+    primary: "#F8FAFC",
+    secondary: "#94A3B8",
+    tertiary: "#818CF8",
+    neutral: "#09090B",
+    card: "#121216",
+    border: "rgba(248, 250, 252, 0.08)",
+    borderMuted: "rgba(248, 250, 252, 0.04)",
+    sand: "rgba(129, 140, 248, 0.04)"
+  },
+  cyber: {
+    name: "Cyber",
+    primary: "#00FF41",
+    secondary: "#008F11",
+    tertiary: "#00FF41",
+    neutral: "#000000",
+    card: "#050505",
+    border: "rgba(0, 255, 65, 0.15)",
+    borderMuted: "rgba(0, 255, 65, 0.05)",
+    sand: "rgba(0, 255, 65, 0.04)"
+  },
+  sunset: {
+    name: "Sunset",
+    primary: "#FDE047",
+    secondary: "#FDBA74",
+    tertiary: "#F97316",
+    neutral: "#170F11",
+    card: "#211518",
+    border: "rgba(253, 224, 71, 0.1)",
+    borderMuted: "rgba(253, 224, 71, 0.04)",
+    sand: "rgba(249, 115, 22, 0.04)"
   }
 };
 
