@@ -294,8 +294,25 @@ class TokenGovernor:
             except Exception as backup_err:
                 print(f"⚠️ Failed to backup corrupted budget stats file: {backup_err}")
                 
-            stats = self._get_default_stats()
-            self._save_stats_unlocked(stats)
+            # Attempt to restore from .backup.json
+            backup_path = self.log_file.with_suffix(".backup.json")
+            if backup_path.exists():
+                try:
+                    print(f"🔄 Attempting to restore stats from {backup_path}")
+                    with open(backup_path, "r", encoding="utf-8") as f:
+                        stats = json.load(f)
+                    if not isinstance(stats, dict):
+                        raise ValueError("Backup JSON invalid")
+                    # Save restored file back to main
+                    self._save_stats_unlocked(stats)
+                    print("✅ Successfully restored from backup file!")
+                except Exception as e:
+                    print(f"⚠️ Backup file also corrupted or unreadable: {e}")
+                    stats = self._get_default_stats()
+                    self._save_stats_unlocked(stats)
+            else:
+                stats = self._get_default_stats()
+                self._save_stats_unlocked(stats)
         except FileNotFoundError:
             stats = self._get_default_stats()
             self._save_stats_unlocked(stats)
@@ -385,6 +402,12 @@ class TokenGovernor:
                 os.fsync(dir_fd)
             finally:
                 os.close(dir_fd)
+                
+            # Maintain a secondary backup after successful write
+            import shutil
+            backup_path = self.log_file.with_suffix(".backup.json")
+            shutil.copy2(self.log_file, backup_path)
+            
         except Exception:
             if temp_path.exists():
                 try:
