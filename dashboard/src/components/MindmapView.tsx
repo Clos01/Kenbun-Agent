@@ -69,6 +69,11 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
   const containerRef = useRef<HTMLDivElement>(null);
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
+
+  const selectedListId = useMemo(() => {
+    if (!selectedCardId) return null;
+    return cards.find(c => c.id === selectedCardId)?.listId || null;
+  }, [selectedCardId, cards]);
   
   const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
 
@@ -352,7 +357,10 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
                 {model.edges.map(e => {
                   const mx = (e.x1 + e.x2) / 2;
                   const d = `M ${e.x1} ${e.y1} C ${mx} ${e.y1}, ${mx} ${e.y2}, ${e.x2} ${e.y2}`;
-                  const isTronPath = selectedCardId && e.id.endsWith(`_${selectedCardId}`);
+                  const isTronPath = selectedCardId && (
+                    e.id.endsWith(`_${selectedCardId}`) || 
+                    e.id === `root_list_${selectedListId}`
+                  );
                   return (
                     <g key={e.id}>
                       <motion.path
