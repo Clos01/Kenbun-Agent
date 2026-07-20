@@ -1454,6 +1454,7 @@ export default function WorkflowView({
             cards={cards} 
             lists={lists} 
             onSelectCard={setSelectedCardId} 
+            selectedCardId={selectedCardId}
             scale={scale}
             setScale={setScale}
             offset={offset}
@@ -1787,6 +1788,8 @@ export default function WorkflowView({
                     ? (isSuggested ? "url(#suggested-arrowhead)" : "url(#custom-arrowhead)")
                     : undefined;
 
+                  const isTronPath = selectedCardId && edge.fromId === selectedCardId;
+
                   return (
                     <g key={edge.id} className="transition-all duration-200">
                       {/* Casing — a moat in the canvas colour so the line stays
@@ -1795,7 +1798,7 @@ export default function WorkflowView({
                         d={pathD}
                         fill="none"
                         stroke="var(--neutral)"
-                        strokeWidth={isSuggested ? 4.5 : 6}
+                        strokeWidth={isSuggested ? 4.5 : (isTronPath ? 8 : 6)}
                         strokeOpacity="0.92"
                         strokeLinecap="round"
                       />
@@ -1806,10 +1809,10 @@ export default function WorkflowView({
                         stroke={isSuggested ? "var(--secondary)" : `url(#grad_${edge.id})`}
                         strokeWidth={isSuggested ? 1.75 : 2.4}
                         strokeOpacity={isSuggested ? 0.75 : 1}
-                        strokeDasharray={isDotted ? "6 5" : undefined}
+                        strokeDasharray={isDotted && !isTronPath ? "6 5" : undefined}
                         strokeLinecap="round"
                         markerEnd={markerEnd}
-                        className="transition-all duration-200"
+                        className={`transition-all duration-200 ${isTronPath ? 'tron-line' : ''}`}
                       />
                       {edge.label && edge.label !== "suggested" && (
                         <foreignObject

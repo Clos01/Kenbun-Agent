@@ -150,4 +150,15 @@ h1, h2, h3, .pub-title {
   scrollbar-width: none;  /* Firefox */
 }
 
-
+/* TRON Lighting Effect */
+@keyframes tron-pulse {
+  0% { stroke-dashoffset: 40; filter: drop-shadow(0 0 4px var(--tertiary)); }
+  100% { stroke-dashoffset: 0; filter: drop-shadow(0 0 12px var(--tertiary)); }
+}
+.tron-line {
+  stroke-dasharray: 10 20;
+  animation: tron-pulse 1.2s linear infinite;
+  stroke: var(--tertiary) !important;
+  stroke-width: 4px !important;
+  stroke-linecap: round;
+}

@@ -27,6 +27,7 @@ interface MindmapViewProps {
   cards: Card[];
   lists: List[];
   onSelectCard: (cardId: string) => void;
+  selectedCardId?: string | null;
   scale: number;
   setScale: React.Dispatch<React.SetStateAction<number>>;
   offset: { x: number; y: number };
@@ -64,7 +65,7 @@ interface MNode { kind: "root" | "list" | "card"; id: string; name: string; stat
 
 type MEdge = { id: string; x1: number; y1: number; x2: number; y2: number; }
 
-export default function MindmapView({ cards, lists, onSelectCard, scale, setScale, offset, setOffset }: MindmapViewProps) {
+export default function MindmapView({ cards, lists, onSelectCard, selectedCardId, scale, setScale, offset, setOffset }: MindmapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
@@ -351,6 +352,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                 {model.edges.map(e => {
                   const mx = (e.x1 + e.x2) / 2;
                   const d = `M ${e.x1} ${e.y1} C ${mx} ${e.y1}, ${mx} ${e.y2}, ${e.x2} ${e.y2}`;
+                  const isTronPath = selectedCardId && e.id.endsWith(`_${selectedCardId}`);
                   return (
                     <motion.path
                       key={e.id}
@@ -363,6 +365,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                       strokeOpacity={0.45}
                       strokeWidth={1.75}
                       strokeLinecap="round"
+                      className={`transition-all duration-200 ${isTronPath ? 'tron-line' : ''}`}
                     />
                   );
                 })}
@@ -414,7 +417,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                       
                       <button
                         onClick={(e) => toggleCollapse(e, n.id.replace('list_', ''))}
-                        className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center bg-card border border-border rounded-full shadow-sm text-tertiary hover:text-primary hover:border-primary transition-colors cursor-pointer z-10 ${
+                        className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center bg-card border border-border rounded-full shadow-sm text-tertiary hover:text-primary hover:border-primary transition-colors cursor-pointer z-10 pointer-events-auto ${
                           n.isRightSide ? '-right-2' : '-left-2'
                         }`}
                       >
