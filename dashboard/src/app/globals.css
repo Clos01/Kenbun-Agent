@@ -152,15 +152,15 @@ h1, h2, h3, .pub-title {
 
 /* TRON Lighting Effect */
 @keyframes tron-flow {
-  0% { stroke-dashoffset: 60; opacity: 0; filter: drop-shadow(0 0 2px var(--tertiary)); }
-  15% { opacity: 1; filter: drop-shadow(0 0 12px var(--tertiary)); }
-  85% { opacity: 1; filter: drop-shadow(0 0 12px var(--tertiary)); }
-  100% { stroke-dashoffset: -600; opacity: 0; filter: drop-shadow(0 0 2px var(--tertiary)); }
+  from { stroke-dashoffset: 64; }
+  to { stroke-dashoffset: 0; }
 }
 .tron-line {
-  stroke-dasharray: 60 600;
-  animation: tron-flow 2s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
+  stroke-dasharray: 16 48;
+  animation: tron-flow 1s linear infinite;
   stroke: var(--tertiary) !important;
   stroke-width: 5px !important;
   stroke-linecap: round;
+  filter: drop-shadow(0 0 6px var(--tertiary)) drop-shadow(0 0 12px var(--tertiary));
+  opacity: 0.9;
 }

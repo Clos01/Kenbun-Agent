@@ -1788,7 +1788,7 @@ export default function WorkflowView({
                     ? (isSuggested ? "url(#suggested-arrowhead)" : "url(#custom-arrowhead)")
                     : undefined;
 
-                  const isTronPath = selectedCardId && edge.fromId === selectedCardId;
+                  const isTronPath = selectedCardId && edge.fromId === `card_${selectedCardId}`;
 
                   return (
                     <g key={edge.id} className="transition-all duration-200">
