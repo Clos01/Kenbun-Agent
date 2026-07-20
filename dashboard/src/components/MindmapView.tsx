@@ -407,6 +407,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                     exit={{ opacity: 0, scale: 0.5 }}
                     transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
                     whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                     className="rounded-lg border cursor-pointer shadow-sm pointer-events-auto"
                   >
                     <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"

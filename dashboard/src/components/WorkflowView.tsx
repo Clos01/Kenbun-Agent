@@ -17,7 +17,9 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize2,
-  Settings
+  Settings,
+  Square,
+  Diamond
 } from "lucide-react";
 import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/board/page";
 import { computeWorkOrder } from "../lib/prioritize";
@@ -1676,7 +1678,45 @@ export default function WorkflowView({
                   if (lineStyle === "linear") {
                     pathD = `M ${edge.fromX} ${edge.fromY} L ${endX} ${endY}`;
                   } else if (lineStyle === "step") {
-                    if (orientation === "horizontal") {
+                    if (diagramMode === "flowchart") {
+                      const r = 12; // 12px border radius for sleek look
+                      const x1 = edge.fromX, y1 = edge.fromY;
+                      const x2 = endX, y2 = endY;
+                      
+                      if (orientation === "horizontal") {
+                        if (Math.abs(y2 - y1) < 1) {
+                          pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+                        } else {
+                          const midX = (x1 + x2) / 2;
+                          const dirX = Math.sign(midX - x1);
+                          const dirY = Math.sign(y2 - y1);
+                          const maxR = Math.min(r, Math.abs(midX - x1), Math.abs(y2 - y1) / 2);
+                          
+                          pathD = `M ${x1} ${y1} ` +
+                                  `L ${midX - maxR * dirX} ${y1} ` +
+                                  `Q ${midX} ${y1} ${midX} ${y1 + maxR * dirY} ` +
+                                  `L ${midX} ${y2 - maxR * dirY} ` +
+                                  `Q ${midX} ${y2} ${midX + maxR * dirX} ${y2} ` +
+                                  `L ${x2} ${y2}`;
+                        }
+                      } else {
+                        if (Math.abs(x2 - x1) < 1) {
+                          pathD = `M ${x1} ${y1} L ${x2} ${y2}`;
+                        } else {
+                          const midY = (y1 + y2) / 2;
+                          const dirX = Math.sign(x2 - x1);
+                          const dirY = Math.sign(midY - y1);
+                          const maxR = Math.min(r, Math.abs(midY - y1), Math.abs(x2 - x1) / 2);
+                          
+                          pathD = `M ${x1} ${y1} ` +
+                                  `L ${x1} ${midY - maxR * dirY} ` +
+                                  `Q ${x1} ${midY} ${x1 + maxR * dirX} ${midY} ` +
+                                  `L ${x2 - maxR * dirX} ${midY} ` +
+                                  `Q ${x2} ${midY} ${x2} ${midY + maxR * dirY} ` +
+                                  `L ${x2} ${y2}`;
+                        }
+                      };
+                    } else if (orientation === "horizontal") {
                       const midX = (edge.fromX + endX) / 2;
                       pathD = `M ${edge.fromX} ${edge.fromY} L ${midX} ${edge.fromY} L ${midX} ${endY} L ${endX} ${endY}`;
                     } else {
@@ -1814,10 +1854,13 @@ export default function WorkflowView({
                 );
 
                 return (
-                  <div
+                  <motion.div
                     key={node.id}
                     onClick={() => setSelectedCardId(card.id)}
-                    className="absolute rounded-xl border bg-card text-left transition-all hover:scale-[1.02] shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+                    className="absolute rounded-xl border bg-card text-left shadow-sm flex flex-col gap-2 cursor-pointer pointer-events-auto"
                     style={{
                       left: node.x,
                       top: node.y,
@@ -1825,10 +1868,14 @@ export default function WorkflowView({
                       height: node.height,
                       backgroundColor: "var(--card)",
                       opacity: blocked && !isNextStep ? 0.6 : 1,
-                      borderColor: isNextStep ? "var(--tertiary)" : "var(--border)",
-                      borderWidth: isNextStep ? "1.5px" : "1px",
+                      borderColor: selectedCardId === card.id || isNextStep ? "var(--tertiary)" : "var(--border)",
+                      borderWidth: selectedCardId === card.id || isNextStep ? 1.5 : 1,
                       borderStyle: blocked ? "dashed" : "solid",
-                      boxShadow: isNextStep ? "0 0 12px rgba(184,66,46,0.30)" : undefined
+                      boxShadow: selectedCardId === card.id 
+                        ? "0 0 0 2px rgba(var(--tertiary-rgb), 0.15), 0 4px 12px rgba(0,0,0,0.15)" 
+                        : isNextStep 
+                          ? "0 0 12px rgba(184,66,46,0.30)" 
+                          : "0 2px 8px rgba(0,0,0,0.05)"
                     }}
                   >
                     {card.shape === "terminal" ? (
@@ -1870,7 +1917,40 @@ export default function WorkflowView({
                         </div>
                       </div>
                     )}
-                  </div>
+
+                    {/* Floating Context Action Bar (Bento-Box Toolbar) */}
+                    <AnimatePresence>
+                      {selectedCardId === card.id && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                          className="absolute -top-12 left-1/2 -translate-x-1/2 bg-card/90 backdrop-blur-md border border-border rounded-xl shadow-xl flex items-center p-1 gap-1 z-50 pointer-events-auto cursor-default"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button 
+                            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${card.shape === 'process' || !card.shape ? 'bg-secondary/10 text-primary' : 'hover:bg-neutral hover:text-primary text-secondary'}`} 
+                            title="Process Shape"
+                          >
+                            <Square className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${card.shape === 'decision' ? 'bg-secondary/10 text-primary' : 'hover:bg-neutral hover:text-primary text-secondary'}`} 
+                            title="Decision Shape"
+                          >
+                            <Diamond className="w-3.5 h-3.5" />
+                          </button>
+                          <div className="w-px h-5 bg-border/50 mx-1"></div>
+                          <button 
+                            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-500/10 hover:text-red-500 text-secondary transition-colors" 
+                            title="Delete Node"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
                 );
               })}
             </div>
