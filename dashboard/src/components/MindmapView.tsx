@@ -272,9 +272,11 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        const dir = e.deltaY < 0 ? 1 : -1;
+        const speed = e.ctrlKey ? 100 : 200; // Trackpad pinch gives smaller deltaY than standard mouse wheel, adjust divisor
+        const scaleMultiplier = Math.exp(-e.deltaY / speed);
+
         setScale(prevScale => {
-          const nextScale = Math.min(2.4, Math.max(0.3, prevScale + dir * 0.08));
+          const nextScale = Math.min(2.4, Math.max(0.3, prevScale * scaleMultiplier));
           if (nextScale === prevScale) return prevScale;
 
           const rect = el.getBoundingClientRect();

@@ -1047,10 +1047,11 @@ export default function WorkflowView({
     const handleWheelEvent = (e: WheelEvent) => {
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        const zoomFactor = 0.08;
-        const direction = e.deltaY < 0 ? 1 : -1;
+        const speed = e.ctrlKey ? 100 : 200; // Trackpad pinch gives smaller deltaY than standard mouse wheel, adjust divisor
+        const scaleMultiplier = Math.exp(-e.deltaY / speed);
+        
         setScale(prevScale => {
-          const nextScale = Math.min(Math.max(prevScale + direction * zoomFactor, 0.25), 3);
+          const nextScale = Math.min(Math.max(prevScale * scaleMultiplier, 0.1), 5);
           if (nextScale === prevScale) return prevScale;
 
           const rect = canvas.getBoundingClientRect();
