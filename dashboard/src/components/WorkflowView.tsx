@@ -160,14 +160,14 @@ function CustomSelect<T extends string>({
     <div className="relative inline-block text-left" ref={triggerRef}>
       <div className="flex items-center gap-1.5 bg-primary/[0.04] border border-border rounded-md px-2.5 py-1.5 hover:border-tertiary/30 transition-colors">
         {label && (
-          <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">
+          <span className="text-[9px] font-mono text-secondary uppercase tracking-widest">
             {label}:
           </span>
         )}
         <button
           type="button"
           onClick={toggle}
-          className="bg-transparent text-[9px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer flex items-center gap-1 hover:text-primary transition-colors"
+          className="bg-transparent text-[10px] font-mono text-primary font-bold uppercase focus:outline-none cursor-pointer flex items-center gap-1 hover:text-primary transition-colors"
         >
           <span>{activeOption?.label || value}</span>
           <ChevronDown className="w-3 h-3 ml-0.5 opacity-60" />
