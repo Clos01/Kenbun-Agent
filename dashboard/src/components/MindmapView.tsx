@@ -26,6 +26,10 @@ interface MindmapViewProps {
   cards: Card[];
   lists: List[];
   onSelectCard: (cardId: string) => void;
+  scale: number;
+  setScale: React.Dispatch<React.SetStateAction<number>>;
+  offset: { x: number; y: number };
+  setOffset: React.Dispatch<React.SetStateAction<{ x: number; y: number }>>;
 }
 
 type Status = "todo" | "in_progress" | "blocked" | "completed";
@@ -52,10 +56,8 @@ const ROW = 76, GAP1 = 180, GAP2 = 240;
 interface MNode { kind: "root" | "list" | "card"; id: string; name: string; status: Status; cx: number; cy: number; w: number; h: number; }
 interface MEdge { id: string; x1: number; y1: number; x2: number; y2: number; }
 
-export default function MindmapView({ cards, lists, onSelectCard }: MindmapViewProps) {
+export default function MindmapView({ cards, lists, onSelectCard, scale, setScale, offset, setOffset }: MindmapViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(0.9);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [panning, setPanning] = useState(false);
   const panStart = useRef({ x: 0, y: 0 });
 
@@ -67,48 +69,72 @@ export default function MindmapView({ cards, lists, onSelectCard }: MindmapViewP
 
     const nodes: MNode[] = [];
     const edges: MEdge[] = [];
-    const listX = ROOT_W + GAP1;
-    const cardX = listX + LIST_W + GAP2;
 
-    let slot = 0;
-    const allCy: number[] = [];
+    let slotRight = 0;
+    let slotLeft = 0;
+    const allCyRight: number[] = [];
+    const allCyLeft: number[] = [];
+
     lanes.forEach(({ list, cards: lc }, laneIdx) => {
-      if (laneIdx > 0) {
+      const isRight = laneIdx % 2 === 0;
+      
+      let slot = isRight ? slotRight : slotLeft;
+      if (slot > 0) {
         slot += 1.5; // Add extra vertical spacing between categories
       }
+      
       const st = statusOf(list.name);
       const cys: number[] = [];
+      const listX = isRight ? (ROOT_W/2 + GAP1) : (-ROOT_W/2 - GAP1 - LIST_W);
+      const cardX = isRight ? (listX + LIST_W + GAP2) : (listX - GAP2 - CARD_W);
+      
       lc.forEach(card => {
         const cy = slot * ROW;
         slot++;
         cys.push(cy);
-        allCy.push(cy);
+        if (isRight) allCyRight.push(cy); else allCyLeft.push(cy);
         nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
       });
-      const listCy = cys.reduce((a, b) => a + b, 0) / cys.length;
+      
+      const listCy = cys.length ? cys.reduce((a, b) => a + b, 0) / cys.length : (slot * ROW);
       const listId = `list_${list.id}`;
       nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: listX + LIST_W / 2, cy: listCy, w: LIST_W, h: LIST_H });
+      
       lc.forEach((card, i) => {
-        edges.push({ id: `${listId}_${card.id}`, x1: listX + LIST_W, y1: listCy, x2: cardX, y2: cys[i] });
+        const e1 = isRight ? (listX + LIST_W) : listX;
+        const e2 = isRight ? cardX : (cardX + CARD_W);
+        edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: listCy, x2: e2, y2: cys[i] });
       });
+      
+      if (isRight) slotRight = slot; else slotLeft = slot;
     });
 
-    const rootCy = allCy.length ? allCy.reduce((a, b) => a + b, 0) / allCy.length : 0;
-    nodes.push({ kind: "root", id: "root", name: "Project Board", status: "todo", cx: ROOT_W / 2, cy: rootCy, w: ROOT_W, h: ROOT_H });
-    lanes.forEach(({ list }) => {
+    const rootCyRight = allCyRight.length ? allCyRight.reduce((a, b) => a + b, 0) / allCyRight.length : 0;
+    const rootCyLeft = allCyLeft.length ? allCyLeft.reduce((a, b) => a + b, 0) / allCyLeft.length : 0;
+    const allCyCount = allCyRight.length + allCyLeft.length;
+    const rootCy = allCyCount ? ((rootCyRight * allCyRight.length) + (rootCyLeft * allCyLeft.length)) / allCyCount : 0;
+
+    nodes.push({ kind: "root", id: "root", name: "Project Board", status: "todo", cx: 0, cy: rootCy, w: ROOT_W, h: ROOT_H });
+    
+    lanes.forEach(({ list }, laneIdx) => {
+      const isRight = laneIdx % 2 === 0;
       const ln = nodes.find(n => n.id === `list_${list.id}`);
-      if (ln) edges.push({ id: `root_list_${list.id}`, x1: ROOT_W, y1: rootCy, x2: listX, y2: ln.cy });
+      if (ln) {
+        const x1 = isRight ? ROOT_W/2 : -ROOT_W/2;
+        const x2 = isRight ? (ROOT_W/2 + GAP1) : (-ROOT_W/2 - GAP1);
+        edges.push({ id: `root_list_${list.id}`, x1, y1: rootCy, x2, y2: ln.cy });
+      }
     });
 
     // Normalise so the tree centres on the origin (== container centre).
-    const cy0 = rootCy;
-    const bcx = cardX / 2 + CARD_W / 4; // rough horizontal centre of the tree
-    nodes.forEach(n => { n.cx -= bcx; n.cy -= cy0; });
-    edges.forEach(e => { e.x1 -= bcx; e.x2 -= bcx; e.y1 -= cy0; e.y2 -= cy0; });
+    nodes.forEach(n => { n.cy -= rootCy; });
+    edges.forEach(e => { e.y1 -= rootCy; e.y2 -= rootCy; });
 
-    const width = cardX + CARD_W;
-    const height = allCy.length ? Math.max(...allCy) - Math.min(...allCy) + CARD_H : CARD_H;
-    return { nodes, edges, width, height, empty: lanes.length === 0 };
+    const totalW = (ROOT_W/2 + GAP1 + LIST_W + GAP2 + CARD_W) * 2;
+    const maxCy = Math.max(...allCyRight, ...allCyLeft, 0);
+    const minCy = Math.min(...allCyRight, ...allCyLeft, 0);
+    const height = (maxCy - minCy) + CARD_H * 2;
+    return { nodes, edges, width: totalW, height, empty: lanes.length === 0 };
   }, [cards, lists]);
 
   const fit = useCallback(() => {
@@ -157,21 +183,6 @@ export default function MindmapView({ cards, lists, onSelectCard }: MindmapViewP
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden relative">
-      {/* Mini toolbar */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-border bg-card/60 backdrop-blur-sm shrink-0">
-        <div className="flex items-center gap-2">
-          <GitBranch className="w-3.5 h-3.5 text-tertiary" />
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] font-bold text-primary">Mind Map</span>
-          <span className="text-[9px] font-mono text-secondary">root → columns → cards</span>
-        </div>
-        <div className="flex items-center gap-1 bg-primary/[0.04] border border-border rounded-md px-1.5 py-1">
-          <button onClick={() => setScale(s => Math.max(0.3, s - 0.1))} className="p-1 text-secondary hover:text-primary rounded cursor-pointer" title="Zoom out"><ZoomOut className="w-3.5 h-3.5" /></button>
-          <span className="text-[9px] font-mono text-secondary w-9 text-center font-bold">{Math.round(scale * 100)}%</span>
-          <button onClick={() => setScale(s => Math.min(2.4, s + 0.1))} className="p-1 text-secondary hover:text-primary rounded cursor-pointer" title="Zoom in"><ZoomIn className="w-3.5 h-3.5" /></button>
-          <button onClick={fit} className="p-1 text-secondary hover:text-primary rounded cursor-pointer border-l border-border ml-0.5 pl-1.5" title="Fit"><Maximize2 className="w-3.5 h-3.5" /></button>
-        </div>
-      </div>
-
       {/* Canvas */}
       <div
         ref={containerRef}

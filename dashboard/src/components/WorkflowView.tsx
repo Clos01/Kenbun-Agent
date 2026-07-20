@@ -1313,12 +1313,18 @@ export default function WorkflowView({
               Workflow
             </div>
             <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary leading-none truncate">
-              Flowchart
+              {diagramMode === "mindmap" ? "Mind Map" : diagramMode === "ascii" ? "ASCII Board" : "Flowchart"}
             </h2>
           </div>
-          <span className="hidden sm:inline text-[9px] font-mono text-secondary px-2 py-1 bg-primary/[0.04] border border-border rounded-md">
-            {parsedCards.length} steps · auto-generated
-          </span>
+          {diagramMode === "mindmap" ? (
+            <span className="hidden sm:inline text-[9px] font-mono text-secondary px-2 py-1">
+              root → columns → cards
+            </span>
+          ) : (
+            <span className="hidden sm:inline text-[9px] font-mono text-secondary px-2 py-1 bg-primary/[0.04] border border-border rounded-md">
+              {parsedCards.length} steps · auto-generated
+            </span>
+          )}
         </div>
 
         {/* Primary actions */}
@@ -1392,7 +1398,7 @@ export default function WorkflowView({
           <div className="relative">
             <button
               onClick={() => setShowViewSettings(!showViewSettings)}
-              className={`px-3 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-4 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
                 showViewSettings ? "border-tertiary text-tertiary" : "border-border/80 text-secondary hover:text-primary hover:border-border"
               }`}
             >
@@ -1501,7 +1507,15 @@ export default function WorkflowView({
         
         {/* Mindmap: its own dedicated component. Flowchart / ASCII: the canvas below. */}
         {diagramMode === "mindmap" ? (
-          <MindmapView cards={cards} lists={lists} onSelectCard={setSelectedCardId} />
+          <MindmapView 
+            cards={cards} 
+            lists={lists} 
+            onSelectCard={setSelectedCardId} 
+            scale={scale}
+            setScale={setScale}
+            offset={offset}
+            setOffset={setOffset}
+          />
         ) : (
         <div
           ref={canvasRef}
