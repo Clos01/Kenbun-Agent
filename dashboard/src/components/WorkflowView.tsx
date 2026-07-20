@@ -1158,10 +1158,10 @@ export default function WorkflowView({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "completed": return "bg-emerald-500 border-emerald-500/20 text-emerald-400";
-      case "in_progress": return "bg-sky-500 border-sky-500/20 text-sky-400";
-      case "blocked": return "bg-amber-500 border-amber-500/20 text-amber-400";
-      default: return "bg-neutral-400 border-border text-secondary";
+      case "completed": return "text-emerald-400";
+      case "in_progress": return "text-sky-400";
+      case "blocked": return "text-amber-400";
+      default: return "text-secondary";
     }
   };
 
