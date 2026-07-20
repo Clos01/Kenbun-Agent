@@ -152,15 +152,16 @@ h1, h2, h3, .pub-title {
 
 /* TRON Lighting Effect */
 @keyframes tron-flow {
-  from { stroke-dashoffset: 64; }
+  from { stroke-dashoffset: 100; }
   to { stroke-dashoffset: 0; }
 }
 .tron-line {
-  stroke-dasharray: 16 48;
-  animation: tron-flow 1s linear infinite;
+  /* Creates a 'comet' effect: small dash, medium dash, long dash, then a gap */
+  stroke-dasharray: 4 6 12 8 30 40;
+  animation: tron-flow 1.5s linear infinite;
   stroke: var(--tertiary) !important;
-  stroke-width: 5px !important;
+  stroke-width: 4px !important;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 6px var(--tertiary)) drop-shadow(0 0 12px var(--tertiary));
-  opacity: 0.9;
+  filter: drop-shadow(0 0 5px var(--tertiary)) drop-shadow(0 0 12px var(--tertiary));
+  opacity: 1;
 }

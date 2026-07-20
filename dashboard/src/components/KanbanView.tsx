@@ -164,11 +164,12 @@ export default function KanbanView({
       <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
         {lists.map(list => {
           const listCards = cards.filter(c => c.listId === list.id).sort((a, b) => a.position - b.position);
+          const isDoneList = list.name.toLowerCase().includes('done') || list.name.toLowerCase().includes('complete');
           
           return (
-            <div key={list.id} className="flex flex-col w-[320px] shrink-0 max-h-full h-full rounded-2xl bg-card border border-border/50 shadow-sm backdrop-blur-xl z-20 overflow-hidden">
-              <div className="p-4 border-b border-border/50 bg-primary/[0.02]">
-                <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest text-primary truncate">
+            <div key={list.id} className={`flex flex-col w-[320px] shrink-0 max-h-full h-full rounded-2xl bg-card shadow-sm backdrop-blur-xl z-20 overflow-hidden transition-all duration-300 ${isDoneList ? 'border-2 border-dashed border-tertiary/60 bg-tertiary/[0.03]' : 'border border-border/50'}`}>
+              <div className={`p-4 border-b ${isDoneList ? 'border-tertiary/20 bg-tertiary/[0.05]' : 'border-border/50 bg-primary/[0.02]'}`}>
+                <h3 className={`font-mono text-[11px] font-bold uppercase tracking-widest truncate ${isDoneList ? 'text-tertiary' : 'text-primary'}`}>
                   {list.name}
                 </h3>
                 <div className="text-[9px] font-mono text-secondary mt-1">
