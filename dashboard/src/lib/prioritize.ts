@@ -66,35 +66,84 @@ function isDoneList(listName: string): boolean {
   return n.includes("done") || n.includes("completed");
 }
 
+/**
+ * Extract the dependency card ids a card declares in its kenbun_metadata
+ * comment. Kept dependency-free (no import of the board parser) so this lib
+ * stays self-contained; the shape mirrors parseCardMetadata's output.
+ */
+export function extractDependencies(description?: string): string[] {
+  if (!description) return [];
+  const m = /<!--\s*kenbun_metadata:\s*(\{[\s\S]*?\})\s*-->/.exec(description);
+  if (!m) return [];
+  try {
+    const obj = JSON.parse(m[1]);
+    const deps = obj && obj.dependencies;
+    return Array.isArray(deps) ? deps.filter((d: unknown): d is string => typeof d === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface WorkOrder {
   /** cardId -> 1-based global rank among actionable cards (1 = do first). */
   rank: Map<string, number>;
   /** cardId -> raw priority score, for tooltips/debugging. */
   score: Map<string, number>;
+  /** cardIds that are NOT dependency-ready (a predecessor is still open). */
+  blocked: Set<string>;
   /** total number of actionable (ranked) cards. */
   total: number;
 }
 
 /**
  * Rank every open, non-done card into a single global work order.
- * Done/completed and closed cards are excluded so the badges read 1..N over
- * the cards you'd actually pick up next.
+ *
+ * Dependency-readiness gate (first step of the WSJF/CPM engine tracked on the
+ * Main Board): a card is "ready" only when every dependency it declares is
+ * done/closed or absent from the board. READY cards always rank ahead of
+ * blocked ones, so #1 is guaranteed to be something you can actually start —
+ * within each group, ordering falls back to calculateCardScore.
+ *
+ * (calculateCardScore itself is unchanged and still mirrors
+ * scripts/prioritize_board.py; only the ordering adds the readiness gate.)
  */
 export function computeWorkOrder(cards: ScorableCard[], lists: ScorableList[]): WorkOrder {
   const listNameById = new Map(lists.map((l) => [l.id, l.name || "Unknown List"]));
 
-  const scored = cards
-    .filter((c) => {
-      if (c.isClosed) return false;
-      return !isDoneList(listNameById.get(c.listId) || "");
-    })
-    .map((c) => ({
-      id: c.id,
-      score: calculateCardScore(c, listNameById.get(c.listId) || "Unknown List"),
-    }));
+  // Ids that count as "satisfied" for a dependency: closed, or sitting in a
+  // done/completed list.
+  const doneIds = new Set(
+    cards
+      .filter((c) => c.isClosed || isDoneList(listNameById.get(c.listId) || ""))
+      .map((c) => c.id),
+  );
 
-  // Descending score; stable ties keep the incoming (Planka position) order.
-  scored.sort((a, b) => b.score - a.score);
+  const active = cards.filter(
+    (c) => !c.isClosed && !isDoneList(listNameById.get(c.listId) || ""),
+  );
+  const activeIds = new Set(active.map((c) => c.id));
+
+  // A dependency only blocks if it points at an active card that isn't done.
+  // Unknown ids (off-board / already-deleted) are treated as satisfied.
+  const isReady = (c: ScorableCard) =>
+    extractDependencies(c.description).every((d) => !activeIds.has(d) || doneIds.has(d));
+
+  const blocked = new Set<string>();
+  const scored = active.map((c) => {
+    const ready = isReady(c);
+    if (!ready) blocked.add(c.id);
+    return {
+      id: c.id,
+      ready,
+      score: calculateCardScore(c, listNameById.get(c.listId) || "Unknown List"),
+    };
+  });
+
+  // Ready first, then by descending score; stable ties keep incoming order.
+  scored.sort((a, b) => {
+    if (a.ready !== b.ready) return a.ready ? -1 : 1;
+    return b.score - a.score;
+  });
 
   const rank = new Map<string, number>();
   const score = new Map<string, number>();
@@ -103,5 +152,5 @@ export function computeWorkOrder(cards: ScorableCard[], lists: ScorableList[]): 
     score.set(s.id, s.score);
   });
 
-  return { rank, score, total: scored.length };
+  return { rank, score, blocked, total: scored.length };
 }

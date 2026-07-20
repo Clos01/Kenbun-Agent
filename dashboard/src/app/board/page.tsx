@@ -1084,6 +1084,135 @@ export default function BoardPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {/* Search and Filters */ }
+            {selectedBoard && (
+              <div className="flex items-center gap-2 mr-2">
+                <div className="hidden md:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-64 transition-all focus-within:border-tertiary/50">
+                  <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
+                  <input
+                    type="text"
+                    placeholder="Search cards…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none w-full py-0.5"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} className="text-secondary hover:text-primary cursor-pointer" aria-label="Clear search">
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowMobileFilters(!showMobileFilters)}
+                    className={`p-1.5 rounded-md cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
+                      showMobileFilters || hasActiveFilters
+                        ? "bg-tertiary/10 text-tertiary"
+                        : "text-secondary hover:text-primary hover:bg-card"
+                    }`}
+                    title="Toggle filters"
+                  >
+                    <Filter className="w-4 h-4" />
+                    {hasActiveFilters && (
+                      <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-tertiary rounded-full animate-pulse" />
+                    )}
+                  </button>
+
+                  <AnimatePresence>
+                    {showMobileFilters && (
+                      <>
+                        <motion.div 
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="fixed inset-0 z-40"
+                          onClick={() => setShowMobileFilters(false)}
+                        />
+                        <motion.div
+                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                          className="absolute top-full right-0 mt-2 w-72 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-4 gap-4"
+                        >
+                          {/* Mobile Search - only shows on mobile */}
+                          <div className="md:hidden flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-full">
+                            <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
+                            <input
+                              type="text"
+                              placeholder="Search cards…"
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none w-full py-0.5"
+                            />
+                          </div>
+
+                          <label className="flex items-center justify-between gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full">
+                            <span>From</span>
+                            <input
+                              type="date"
+                              value={filterStartDate}
+                              onChange={(e) => setFilterStartDate(e.target.value)}
+                              className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 flex-1 max-w-[140px]"
+                            />
+                          </label>
+
+                          <label className="flex items-center justify-between gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full">
+                            <span>To</span>
+                            <input
+                              type="date"
+                              value={filterEndDate}
+                              onChange={(e) => setFilterEndDate(e.target.value)}
+                              className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 flex-1 max-w-[140px]"
+                            />
+                          </label>
+
+                          <div className="flex items-center gap-2 w-full">
+                            <MapPin className="w-3.5 h-3.5 text-secondary shrink-0" />
+                            <input
+                              type="text"
+                              placeholder="Location"
+                              value={filterLocation}
+                              onChange={(e) => setFilterLocation(e.target.value)}
+                              className="bg-neutral text-[10px] text-primary placeholder-secondary/50 focus:outline-none border border-border focus:border-tertiary rounded px-2.5 py-1 w-full"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2 w-full">
+                            <Tag className="w-3.5 h-3.5 text-secondary shrink-0" />
+                            <select
+                              value={selectedCollection}
+                              onChange={(e) => setSelectedCollection(e.target.value)}
+                              className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2.5 py-1 w-full"
+                            >
+                              <option value="" className="bg-card text-primary">Collections</option>
+                              {allCollections.map(col => (
+                                <option key={col} value={col} className="bg-card text-primary">{col}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {hasActiveFilters && (
+                            <button
+                              onClick={() => {
+                                setSearchQuery("");
+                                setFilterStartDate("");
+                                setFilterEndDate("");
+                                setFilterLocation("");
+                                setSelectedCollection("");
+                              }}
+                              className="w-full py-2 mt-1 border border-dashed border-tertiary/40 rounded text-center text-[10px] font-mono font-bold uppercase tracking-wider text-tertiary hover:bg-tertiary/5 cursor-pointer transition-colors"
+                            >
+                              Clear all filters
+                            </button>
+                          )}
+                        </motion.div>
+                      </>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </div>
+            )}
+
             {syncing && (
               <span className="hidden sm:flex items-center gap-1.5 text-[9px] font-mono uppercase tracking-wider text-secondary mr-2">
                 <span className="w-1.5 h-1.5 bg-tertiary rounded-full animate-pulse" />
@@ -1148,127 +1277,7 @@ export default function BoardPage() {
           </div>
         )}
 
-        {/* ============ FILTER STRIP — responsive collapsing drawer ============ */}
-        {selectedBoard && (
-          <div className="border-b border-border px-6 lg:px-10 py-2.5 bg-card/90 backdrop-blur-md sticky top-16 z-20 shrink-0 flex flex-col gap-2 w-full">
-            <div className="flex items-center gap-3 w-full">
-              <div className="flex items-center gap-2 flex-1 bg-neutral/40 border border-border rounded-md px-2.5 py-1">
-                <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Search cards…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none w-full py-0.5"
-                />
-                {searchQuery && (
-                  <button onClick={() => setSearchQuery("")} className="text-secondary hover:text-primary cursor-pointer" aria-label="Clear search">
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-
-              {/* Mobile Filter Toggle Button */}
-              <button
-                onClick={() => setShowMobileFilters(!showMobileFilters)}
-                className={`md:hidden p-2 border rounded-md cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
-                  showMobileFilters || hasActiveFilters
-                    ? "border-tertiary bg-tertiary/10 text-tertiary"
-                    : "border-border text-secondary hover:text-primary"
-                }`}
-                title="Toggle filters"
-              >
-                <Filter className="w-3.5 h-3.5" />
-                {hasActiveFilters && (
-                  <span className="w-1.5 h-1.5 bg-tertiary rounded-full animate-pulse" />
-                )}
-              </button>
-
-              {/* Desktop Filters Reset / Indicator */}
-              {hasActiveFilters && (
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setFilterStartDate("");
-                    setFilterEndDate("");
-                    setFilterLocation("");
-                    setSelectedCollection("");
-                  }}
-                  className="hidden md:block text-[9px] font-mono font-bold uppercase tracking-wider text-tertiary hover:underline cursor-pointer"
-                >
-                  Clear filters
-                </button>
-              )}
-            </div>
-
-            {/* Expandable/Grid Filters Panel */}
-            <div className={`${showMobileFilters ? "flex" : "hidden"} md:flex flex-col md:flex-row md:items-center flex-wrap gap-3 md:gap-x-5 md:gap-y-2 mt-1 md:mt-0 pt-2 md:pt-0 border-t border-border/40 md:border-t-0 w-full`}>
-              <label className="flex items-center justify-between md:justify-start gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full md:w-auto">
-                <span>From</span>
-                <input
-                  type="date"
-                  value={filterStartDate}
-                  onChange={(e) => setFilterStartDate(e.target.value)}
-                  className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5"
-                  aria-label="Start date filter"
-                />
-              </label>
-
-              <label className="flex items-center justify-between md:justify-start gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full md:w-auto">
-                <span>To</span>
-                <input
-                  type="date"
-                  value={filterEndDate}
-                  onChange={(e) => setFilterEndDate(e.target.value)}
-                  className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5"
-                  aria-label="End date filter"
-                />
-              </label>
-
-              <div className="flex items-center gap-2 w-full md:w-auto">
-                <MapPin className="w-3.5 h-3.5 text-secondary shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Location"
-                  value={filterLocation}
-                  onChange={(e) => setFilterLocation(e.target.value)}
-                  className="bg-neutral text-[10px] text-primary placeholder-secondary/50 focus:outline-none border border-border focus:border-tertiary rounded px-2.5 py-1 w-full md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5 md:w-20"
-                />
-              </div>
-
-              <div className="flex items-center gap-2 w-full md:w-auto">
-                <Tag className="w-3.5 h-3.5 text-secondary shrink-0" />
-                <select
-                  value={selectedCollection}
-                  onChange={(e) => setSelectedCollection(e.target.value)}
-                  className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2.5 py-1 w-full md:bg-transparent md:border-0 md:border-b md:rounded-none md:p-0 md:py-0.5 md:w-24"
-                  aria-label="Collection filter"
-                >
-                  <option value="" className="bg-card text-primary">Collections</option>
-                  {allCollections.map(col => (
-                    <option key={col} value={col} className="bg-card text-primary">{col}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Mobile Only Clear Filters */}
-              {hasActiveFilters && (
-                <button
-                  onClick={() => {
-                    setSearchQuery("");
-                    setFilterStartDate("");
-                    setFilterEndDate("");
-                    setFilterLocation("");
-                    setSelectedCollection("");
-                  }}
-                  className="md:hidden w-full py-1.5 mt-1 border border-dashed border-tertiary/40 rounded text-center text-[10px] font-mono font-bold uppercase tracking-wider text-tertiary hover:bg-tertiary/5 cursor-pointer"
-                >
-                  Clear all filters
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Header replaces old FILTER STRIP entirely */}
 
         {/* ============ WORKSPACE ============ */}
         <div className="flex-1 overflow-y-auto">

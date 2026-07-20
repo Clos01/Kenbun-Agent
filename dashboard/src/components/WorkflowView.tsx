@@ -16,7 +16,8 @@ import {
   FileText,
   ZoomIn,
   ZoomOut,
-  Maximize2
+  Maximize2,
+  Settings
 } from "lucide-react";
 import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/board/page";
 import { computeWorkOrder } from "../lib/prioritize";
@@ -265,6 +266,7 @@ export default function WorkflowView({
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
   const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "ascii">("flowchart");
   const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
+  const [showViewSettings, setShowViewSettings] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState<number>(1);
@@ -1386,70 +1388,110 @@ export default function WorkflowView({
 
       {/* ============ SECONDARY STRIP — flowchart view options + legend ============ */}
       {diagramMode === "flowchart" && (
-        <div className="flex items-center justify-between gap-4 flex-wrap px-5 py-2.5 border-b border-border shrink-0 bg-card/60 backdrop-blur-sm">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold mr-1">
-              Layout
-            </span>
+        <div className="absolute top-4 left-4 z-30">
+          <div className="relative">
             <button
-              onClick={() => setGroupByLanes(prev => !prev)}
-              className={`px-2.5 py-1.5 border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                groupByLanes
-                  ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
-                  : "bg-primary/[0.04] border-border text-secondary hover:text-primary hover:bg-primary/[0.08]"
+              onClick={() => setShowViewSettings(!showViewSettings)}
+              className={`px-3 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+                showViewSettings ? "border-tertiary text-tertiary" : "border-border/80 text-secondary hover:text-primary hover:border-border"
               }`}
-              title="Group nodes by kanban column"
             >
-              Lanes {groupByLanes ? "On" : "Off"}
+              <Settings className="w-3.5 h-3.5" />
+              View Settings
             </button>
-            <button
-              onClick={() => setShowSuggestedPath(prev => !prev)}
-              className={`px-2.5 py-1.5 border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-1.5 cursor-pointer ${
-                showSuggestedPath
-                  ? "bg-tertiary/10 border-tertiary/30 text-tertiary"
-                  : "bg-primary/[0.04] border-border text-secondary hover:text-primary hover:bg-primary/[0.08]"
-              }`}
-              title="Auto-draw arrows through the priority sequence when no links exist"
-            >
-              {showSuggestedPath ? "Suggested Path" : "Manual Links"}
-            </button>
-            <CustomSelect
-              label="Curve"
-              value={lineStyle}
-              onChange={setLineStyle}
-              options={[
-                { value: "basis", label: "Curved" },
-                { value: "step", label: "Orthogonal" },
-                { value: "linear", label: "Straight" }
-              ]}
-            />
-            <button
-              onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
-              className="px-2.5 py-1.5 bg-primary/[0.04] hover:bg-primary/[0.08] border border-border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
-              title="Toggle layout direction"
-            >
-              <Layout className="w-3.5 h-3.5" />
-              {layoutDir === "LR" ? "Horizontal" : "Vertical"}
-            </button>
-          </div>
 
-          {/* Legend */}
-          <div className="hidden lg:flex items-center gap-3 text-[8.5px] font-mono text-secondary">
-            {[
-              { c: "bg-neutral-400", l: "To do" },
-              { c: "bg-sky-500", l: "In progress" },
-              { c: "bg-amber-500", l: "Blocked" },
-              { c: "bg-emerald-500", l: "Done" }
-            ].map(s => (
-              <span key={s.l} className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${s.c}`} />
-                {s.l}
-              </span>
-            ))}
-            <span className="flex items-center gap-1.5 border-l border-border pl-3">
-              <span className="w-2.5 h-2.5 rotate-45 border border-tertiary/50 bg-tertiary/10" />
-              Gate
-            </span>
+            <AnimatePresence>
+              {showViewSettings && (
+                <>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowViewSettings(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full left-0 mt-2 w-64 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-4 gap-4"
+                  >
+                    <div className="flex flex-col gap-3">
+                      <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold border-b border-border pb-2">
+                        Layout Engine
+                      </span>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-primary font-medium">Lanes</span>
+                        <button
+                          onClick={() => setGroupByLanes(prev => !prev)}
+                          className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            groupByLanes
+                              ? "bg-tertiary/10 text-tertiary"
+                              : "bg-primary/[0.04] text-secondary hover:text-primary"
+                          }`}
+                        >
+                          {groupByLanes ? "On" : "Off"}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-primary font-medium">Direction</span>
+                        <button
+                          onClick={() => setLayoutDir(prev => prev === "LR" ? "TD" : "LR")}
+                          className="px-2.5 py-1 rounded bg-primary/[0.04] hover:bg-primary/[0.08] text-[10px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all cursor-pointer"
+                        >
+                          {layoutDir === "LR" ? "Horizontal" : "Vertical"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 pt-2">
+                      <span className="text-[8px] font-mono text-secondary uppercase tracking-[0.2em] font-bold border-b border-border pb-2">
+                        Routing
+                      </span>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-primary font-medium">Auto-Paths</span>
+                        <button
+                          onClick={() => setShowSuggestedPath(prev => !prev)}
+                          className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                            showSuggestedPath
+                              ? "bg-tertiary/10 text-tertiary"
+                              : "bg-primary/[0.04] text-secondary hover:text-primary"
+                          }`}
+                        >
+                          {showSuggestedPath ? "On" : "Off"}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        <span className="text-[10px] font-mono uppercase text-secondary/60">Edge Style</span>
+                        <div className="flex bg-neutral/50 p-1 rounded-md">
+                          {[
+                            { value: "basis", label: "Curved" },
+                            { value: "step", label: "Ortho" },
+                            { value: "linear", label: "Straight" }
+                          ].map(opt => (
+                            <button
+                              key={opt.value}
+                              onClick={() => setLineStyle(opt.value as any)}
+                              className={`flex-1 py-1 text-[9px] font-bold uppercase tracking-wider rounded transition-colors cursor-pointer ${
+                                lineStyle === opt.value 
+                                  ? "bg-card text-primary shadow-sm" 
+                                  : "text-secondary hover:text-primary"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       )}
@@ -1822,14 +1864,50 @@ export default function WorkflowView({
               </p>
             </div>
           )}
+          
+          {/* Floating Legend */}
+          {diagramMode === "flowchart" && (
+            <div className="absolute bottom-6 right-6 hidden lg:flex items-center gap-3 text-[8.5px] font-mono text-secondary bg-card/85 backdrop-blur-md px-4 py-2 border border-border/60 rounded-full shadow-lg z-30 pointer-events-auto">
+              {[
+                { c: "bg-neutral-400", l: "To do" },
+                { c: "bg-sky-500", l: "In progress" },
+                { c: "bg-amber-500", l: "Blocked" },
+                { c: "bg-emerald-500", l: "Done" }
+              ].map(s => (
+                <span key={s.l} className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${s.c}`} />
+                  {s.l}
+                </span>
+              ))}
+              <span className="flex items-center gap-1.5 border-l border-border pl-3">
+                <span className="w-2.5 h-2.5 rotate-45 border border-tertiary/50 bg-tertiary/10" />
+                Gate
+              </span>
+            </div>
+          )}
         </div>
         )}
 
         {/* Right Side: Interactive Shape Designer Toolbar & Editor Panel */}
-        <div className="w-80 border-l border-border flex flex-col shrink-0 z-20 bg-card">
-
-          {/* Tab bar header */}
-          <div className="flex border-b border-border shrink-0 bg-card">
+        <AnimatePresence>
+          {selectedCardId && (
+            <motion.div 
+              initial={{ x: "100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="absolute right-0 top-0 bottom-0 w-80 border-l border-border flex flex-col shrink-0 z-40 bg-card/95 backdrop-blur-xl shadow-2xl"
+            >
+              <button 
+                onClick={() => setSelectedCardId(null)}
+                className="absolute top-2 left-2 p-1.5 bg-neutral/80 hover:bg-neutral rounded-full text-secondary hover:text-primary z-50 cursor-pointer border border-border transition-colors"
+                title="Close panel"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              
+              {/* Tab bar header */}
+              <div className="flex border-b border-border shrink-0 bg-transparent pl-12">
             <button
               onClick={() => setActiveSidebarTab("details")}
               className={`flex-1 py-3 text-[9px] font-bold uppercase tracking-widest transition-colors cursor-pointer border-b ${
@@ -2000,7 +2078,9 @@ export default function WorkflowView({
             )}
 
           </div>
-        </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
 
       </div>
 

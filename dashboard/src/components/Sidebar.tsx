@@ -31,6 +31,7 @@ export default function Sidebar() {
   const { tenantId, setTenantId, tenants } = useTenant();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const navItems = [
@@ -143,79 +144,96 @@ export default function Sidebar() {
           })}
         </nav>
 
-        {/* TENANT SELECTOR */}
-        {!isCollapsed && (
-          <div className="px-6 py-4 border-t border-border/40 flex flex-col gap-2 shrink-0 overflow-hidden">
-            <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Active Tenant</label>
-            <div className="relative">
-              <select
-                value={tenantId}
-                onChange={(e) => setTenantId(e.target.value)}
-                className="bg-card/45 border border-border/60 hover:border-gold/30 text-[10px] py-1.5 pl-2.5 pr-8 rounded text-primary focus:outline-none focus:ring-1 focus:ring-gold w-full cursor-pointer appearance-none transition-colors"
-              >
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-primary/40" />
-            </div>
-          </div>
-        )}
-
-        {/* FOOTER UTILITY */}
-        <div className="p-5 border-t border-border/40 flex flex-col gap-3 shrink-0 overflow-hidden">
-          {!isCollapsed && (
-            <div className="flex flex-col gap-2 px-1">
-              <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Visual Theme</label>
-              <div className="flex items-center gap-2.5">
-                {mounted ? [
-                  { id: "limestone", color: "#B8422E", bg: "#F7F5F2", name: "Limestone" },
-                  { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
-                  { id: "forest", color: "#2E8B57", bg: "#F0F4F1", name: "Forest" },
-                  { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", name: "Cobalt" }
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setPreset(item.id as any)}
-                    title={item.name}
-                    className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
-                      preset === item.id 
-                        ? "border-gold scale-110 shadow-sm" 
-                        : "border-border hover:scale-105 opacity-60 hover:opacity-100"
-                    }`}
-                    style={{ backgroundColor: item.bg }}
-                  >
-                    <motion.div 
-                      layout
-                      className="w-2.5 h-2.5 rounded-full" 
-                      style={{ backgroundColor: item.color }} 
-                    />
-                  </button>
-                )) : (
-                  <div className="h-6 w-32 bg-white/5 rounded animate-pulse" />
-                )}
-              </div>
-            </div>
-          )}
+        {/* SETTINGS UTILITY (Popover) */}
+        <div className="p-4 border-t border-border/40 shrink-0 relative overflow-visible">
+          <button 
+            onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+            className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'justify-start px-4'} gap-4 py-2.5 rounded-lg transition-all group relative border cursor-pointer ${
+              isSettingsOpen ? "bg-gold/8 border-gold/15 text-gold font-bold" : "border-transparent text-primary/45 hover:text-primary hover:bg-primary/5"
+            }`}
+          >
+            <Settings className={`w-4 h-4 transition-all duration-300 group-hover:scale-110 shrink-0 ${isSettingsOpen ? "text-gold" : "text-primary/40 group-hover:text-primary"}`} />
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  className="text-[10px] font-bold uppercase tracking-[0.25em]"
+                >
+                  Preferences
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
           
-          {isCollapsed && (
-            <button 
-              onClick={() => {
-                const list: ("limestone"|"obsidian"|"forest"|"cobalt")[] = ["limestone", "obsidian", "forest", "cobalt"];
-                const idx = list.indexOf(preset);
-                const next = list[(idx + 1) % list.length];
-                setPreset(next);
-              }}
-              className="w-full flex items-center justify-center text-primary/40 hover:text-gold transition-all group opacity-60 hover:opacity-100 cursor-pointer"
-              title="Cycle Theme"
-            >
-              <div className="w-9 h-9 border border-border/80 rounded flex items-center justify-center group-hover:border-gold transition-colors shrink-0 text-primary">
-                <Sun className="w-4 h-4 animate-spin-slow" />
-              </div>
-            </button>
-          )}
+          <AnimatePresence>
+            {isSettingsOpen && (
+              <>
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsSettingsOpen(false)}
+                />
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className={`absolute bottom-full mb-2 w-64 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col ${isCollapsed ? 'left-full ml-4 bottom-0 mb-0' : 'left-4'}`}
+                >
+                  <div className="px-5 py-4 border-b border-border/40 flex flex-col gap-2">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Active Tenant</label>
+                    <div className="relative">
+                      <select
+                        value={tenantId}
+                        onChange={(e) => setTenantId(e.target.value)}
+                        className="bg-card/45 border border-border/60 hover:border-gold/30 text-[10px] py-1.5 pl-2.5 pr-8 rounded text-primary focus:outline-none focus:ring-1 focus:ring-gold w-full cursor-pointer appearance-none transition-colors"
+                      >
+                        {tenants.map((t) => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-primary/40" />
+                    </div>
+                  </div>
+
+                  <div className="px-5 py-4 flex flex-col gap-2">
+                    <label className="text-[8px] font-bold uppercase tracking-[0.25em] opacity-40 select-none">Visual Theme</label>
+                    <div className="flex items-center gap-2.5">
+                      {mounted ? [
+                        { id: "limestone", color: "#B8422E", bg: "#F7F5F2", name: "Limestone" },
+                        { id: "obsidian", color: "#FF6B4A", bg: "#0F1011", name: "Obsidian" },
+                        { id: "forest", color: "#2E8B57", bg: "#F0F4F1", name: "Forest" },
+                        { id: "cobalt", color: "#2F6FEB", bg: "#F0F4F8", name: "Cobalt" }
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => setPreset(item.id as any)}
+                          title={item.name}
+                          className={`w-6 h-6 rounded-full flex items-center justify-center border transition-all cursor-pointer ${
+                            preset === item.id 
+                              ? "border-gold scale-110 shadow-sm" 
+                              : "border-border hover:scale-105 opacity-60 hover:opacity-100"
+                          }`}
+                          style={{ backgroundColor: item.bg }}
+                        >
+                          <motion.div 
+                            layoutId="theme-indicator"
+                            className="w-2.5 h-2.5 rounded-full" 
+                            style={{ backgroundColor: item.color }} 
+                          />
+                        </button>
+                      )) : (
+                        <div className="h-6 w-32 bg-white/5 rounded animate-pulse" />
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </motion.aside>
 
