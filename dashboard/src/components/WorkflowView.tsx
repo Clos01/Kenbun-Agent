@@ -25,7 +25,6 @@ import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/bo
 import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
-import KanbanView from "./KanbanView";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -295,7 +294,7 @@ export default function WorkflowView({
   const [copied, setCopied] = useState<boolean>(false);
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
-  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "kanban">("flowchart");
+  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap">("flowchart");
   const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
   const [showViewSettings, setShowViewSettings] = useState<boolean>(false);
 
@@ -723,7 +722,7 @@ export default function WorkflowView({
     return lines.join("\n");
   }, [parsedCards, lists]);
 
-  // Kanban view uses a separate component.
+  // Mindmap view uses a separate component.
 
   const selectedCard = useMemo(() => {
     if (!selectedCardId) return null;
@@ -981,7 +980,7 @@ export default function WorkflowView({
   // Register passive-false wheel listener on canvasRef to handle scroll zoom without page scrolling
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || diagramMode === "kanban") return;
+    if (!canvas) return;
 
     const handleWheelEvent = (e: WheelEvent) => {
       e.preventDefault();
@@ -1033,7 +1032,7 @@ export default function WorkflowView({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0 || diagramMode === "kanban") return;
+    if (e.button !== 0) return;
     const target = e.target as HTMLElement;
     if (
       target.closest(".cursor-pointer") || 
@@ -1062,9 +1061,7 @@ export default function WorkflowView({
   // Copy code helper
   const handleCopyCode = () => {
     let textToCopy = "";
-    if (diagramMode === "kanban") {
-      textToCopy = "Kanban mode not yet copyable as text";
-    } else if (diagramMode === "mindmap") {
+    if (diagramMode === "mindmap") {
       textToCopy = mindmapCode;
     } else {
       textToCopy = mermaidCode;
@@ -1305,7 +1302,7 @@ export default function WorkflowView({
               Workflow
             </div>
             <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary leading-none truncate">
-              {diagramMode === "mindmap" ? "Mind Map" : diagramMode === "kanban" ? "Kanban Logic" : "Flowchart"}
+              {diagramMode === "mindmap" ? "Mind Map" : "Flowchart"}
             </h2>
           </div>
           {diagramMode === "mindmap" ? (
@@ -1321,7 +1318,7 @@ export default function WorkflowView({
 
         {/* Primary actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {diagramMode !== "kanban" && (
+          {diagramMode === "flowchart" && (
             <div className="hidden sm:flex items-center gap-1 bg-primary/[0.04] border border-border rounded-md px-1.5 py-1">
               <button
                 onClick={() => handleZoomBtnClick(-1)}
@@ -1359,9 +1356,8 @@ export default function WorkflowView({
             value={diagramMode}
             onChange={setDiagramMode}
             options={[
-              { value: "flowchart", label: "Flowchart" },
               { value: "mindmap", label: "Mindmap" },
-              { value: "kanban", label: "Kanban Logic" }
+              { value: "flowchart", label: "Flowchart" }
             ]}
           />
 
@@ -1387,7 +1383,7 @@ export default function WorkflowView({
       {/* Main split-screen workspace */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Mindmap & Kanban: dedicated components. Flowchart: the canvas below. */}
+        {/* Mindmap: dedicated component. Flowchart: the canvas below. */}
         {diagramMode === "mindmap" ? (
           <MindmapView 
             cards={cards} 
@@ -1411,7 +1407,7 @@ export default function WorkflowView({
             backgroundColor: "var(--neutral)",
             backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
             backgroundSize: "20px 20px",
-            cursor: diagramMode !== "kanban" ? (isPanning ? "grabbing" : "grab") : "default"
+            cursor: diagramMode === "flowchart" ? (isPanning ? "grabbing" : "grab") : "default"
           }}
         >
           {/* ============ SECONDARY STRIP — flowchart view options + legend ============ */}
@@ -1533,15 +1529,7 @@ export default function WorkflowView({
             </div>
           )}
 
-          {diagramMode === "kanban" ? (
-            <KanbanView
-              cards={parsedCards}
-              lists={lists}
-              selectedCardId={selectedCardId}
-              onSelectCard={setSelectedCardId}
-              onMoveCard={onMoveCard}
-            />
-          ) : layout.nodes.length > 0 ? (
+          {layout.nodes.length > 0 ? (
             <div 
               className="absolute overflow-visible pointer-events-none"
               style={{
