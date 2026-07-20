@@ -2083,6 +2083,7 @@ export default function BoardPage() {
                       }
                     }}
                     onDeleteCard={handleCloseCard}
+                    onMoveCard={handleMoveCard}
                   />
                 </motion.div>
               ) : (

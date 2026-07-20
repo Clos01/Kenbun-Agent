@@ -25,6 +25,7 @@ import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/bo
 import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
+import KanbanView from "./KanbanView";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -78,6 +79,7 @@ interface WorkflowViewProps {
   onUpdateCardDesc: (cardId: string, newDescription: string) => Promise<void>;
   onCreateCard: (name: string, listId: string, x: number, y: number) => Promise<void>;
   onDeleteCard: (cardId: string) => Promise<void>;
+  onMoveCard: (cardId: string, newListId: string) => Promise<void>;
 }
 
 type ShapeType = "process" | "decision" | "terminal";
@@ -283,7 +285,8 @@ export default function WorkflowView({
   onOpenCard,
   onUpdateCardDesc,
   onCreateCard,
-  onDeleteCard
+  onDeleteCard,
+  onMoveCard
 }: WorkflowViewProps) {
   const { preset } = useTheme();
   const [layoutDir, setLayoutDir] = useState<LayoutDir>("LR");
@@ -292,7 +295,7 @@ export default function WorkflowView({
   const [copied, setCopied] = useState<boolean>(false);
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
-  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "ascii">("flowchart");
+  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "kanban">("flowchart");
   const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
   const [showViewSettings, setShowViewSettings] = useState<boolean>(false);
 
@@ -720,71 +723,7 @@ export default function WorkflowView({
     return lines.join("\n");
   }, [parsedCards, lists]);
 
-  // ASCII Grid diagram builder
-  const asciiGridCode = useMemo(() => {
-    const cols: string[][] = [];
-    const maxCards = Math.max(...lists.map(list => parsedCards.filter(c => c.listId === list.id).length), 0);
-    
-    lists.forEach(list => {
-      const listCards = parsedCards.filter(c => c.listId === list.id);
-      const colLines: string[] = [];
-      
-      const borderTop = "╭──────────────────────╮";
-      const headerText = `│  ${list.name.toUpperCase().padEnd(18).substring(0, 18)}  │`;
-      const borderBot = "╰──────────────────────╯";
-      colLines.push(borderTop);
-      colLines.push(headerText);
-      colLines.push(borderBot);
-      colLines.push("                        ");
-      
-      listCards.forEach(card => {
-        const cleanName = card.name.replace(/[\r\n\t]/g, " ");
-        const titleLine = `│ [#${card.rank}] ${cleanName.padEnd(14).substring(0, 14)} │`;
-        const scoreLine = `│ Priority: ${String(card.score).padEnd(10).substring(0, 10)} │`;
-        colLines.push("╭──────────────────────╮");
-        colLines.push(titleLine);
-        colLines.push(scoreLine);
-        colLines.push("╰──────────────────────╯");
-        colLines.push("                        ");
-      });
-      
-      const targetLinesCount = 4 + maxCards * 5;
-      while (colLines.length < targetLinesCount) {
-        colLines.push("                        ");
-      }
-      
-      cols.push(colLines);
-    });
-    
-    const combinedLines: string[] = [];
-    if (cols.length > 0) {
-      const lineCount = cols[0].length;
-      for (let i = 0; i < lineCount; i++) {
-        combinedLines.push(cols.map(c => c[i]).join("    "));
-      }
-    }
-    
-    combinedLines.push("");
-    combinedLines.push("CONNECTIONS / DEPENDENCIES:");
-    combinedLines.push("===========================");
-    let hasConnections = false;
-    parsedCards.forEach(card => {
-      card.dependencies.forEach(depId => {
-        const depCard = parsedCardMap.get(depId);
-        if (depCard) {
-          const label = card.linkLabels?.[depId];
-          const labelStr = label ? ` [${label}]` : "";
-          combinedLines.push(`  ${depCard.name} -------->${labelStr} --------> ${card.name}`);
-          hasConnections = true;
-        }
-      });
-    });
-    if (!hasConnections) {
-      combinedLines.push("  (No relationships defined. Select nodes to link steps)");
-    }
-    
-    return combinedLines.join("\n");
-  }, [parsedCards, lists, parsedCardMap]);
+  // Kanban view uses a separate component.
 
   const selectedCard = useMemo(() => {
     if (!selectedCardId) return null;
@@ -1042,7 +981,7 @@ export default function WorkflowView({
   // Register passive-false wheel listener on canvasRef to handle scroll zoom without page scrolling
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || diagramMode === "ascii") return;
+    if (!canvas || diagramMode === "kanban") return;
 
     const handleWheelEvent = (e: WheelEvent) => {
       e.preventDefault();
@@ -1094,7 +1033,7 @@ export default function WorkflowView({
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (e.button !== 0 || diagramMode === "ascii") return;
+    if (e.button !== 0 || diagramMode === "kanban") return;
     const target = e.target as HTMLElement;
     if (
       target.closest(".cursor-pointer") || 
@@ -1123,8 +1062,8 @@ export default function WorkflowView({
   // Copy code helper
   const handleCopyCode = () => {
     let textToCopy = "";
-    if (diagramMode === "ascii") {
-      textToCopy = asciiGridCode;
+    if (diagramMode === "kanban") {
+      textToCopy = "Kanban mode not yet copyable as text";
     } else if (diagramMode === "mindmap") {
       textToCopy = mindmapCode;
     } else {
@@ -1366,7 +1305,7 @@ export default function WorkflowView({
               Workflow
             </div>
             <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary leading-none truncate">
-              {diagramMode === "mindmap" ? "Mind Map" : diagramMode === "ascii" ? "ASCII Board" : "Flowchart"}
+              {diagramMode === "mindmap" ? "Mind Map" : diagramMode === "kanban" ? "Kanban Logic" : "Flowchart"}
             </h2>
           </div>
           {diagramMode === "mindmap" ? (
@@ -1382,7 +1321,7 @@ export default function WorkflowView({
 
         {/* Primary actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {diagramMode !== "ascii" && (
+          {diagramMode !== "kanban" && (
             <div className="hidden sm:flex items-center gap-1 bg-primary/[0.04] border border-border rounded-md px-1.5 py-1">
               <button
                 onClick={() => handleZoomBtnClick(-1)}
@@ -1422,7 +1361,7 @@ export default function WorkflowView({
             options={[
               { value: "flowchart", label: "Flowchart" },
               { value: "mindmap", label: "Mindmap" },
-              { value: "ascii", label: "ASCII Board" }
+              { value: "kanban", label: "Kanban Logic" }
             ]}
           />
 
@@ -1448,7 +1387,7 @@ export default function WorkflowView({
       {/* Main split-screen workspace */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Mindmap: its own dedicated component. Flowchart / ASCII: the canvas below. */}
+        {/* Mindmap & Kanban: dedicated components. Flowchart: the canvas below. */}
         {diagramMode === "mindmap" ? (
           <MindmapView 
             cards={cards} 
@@ -1472,7 +1411,7 @@ export default function WorkflowView({
             backgroundColor: "var(--neutral)",
             backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
             backgroundSize: "20px 20px",
-            cursor: diagramMode !== "ascii" ? (isPanning ? "grabbing" : "grab") : "default"
+            cursor: diagramMode !== "kanban" ? (isPanning ? "grabbing" : "grab") : "default"
           }}
         >
           {/* ============ SECONDARY STRIP — flowchart view options + legend ============ */}
@@ -1594,12 +1533,14 @@ export default function WorkflowView({
             </div>
           )}
 
-          {diagramMode === "ascii" ? (
-            <div className="w-full h-full flex flex-col justify-stretch p-4 min-w-[700px] overflow-auto select-text">
-              <pre className="font-mono text-[10px] p-6 bg-card border border-border text-primary rounded-xl leading-relaxed whitespace-pre select-text">
-                {asciiGridCode}
-              </pre>
-            </div>
+          {diagramMode === "kanban" ? (
+            <KanbanView
+              cards={parsedCards}
+              lists={lists}
+              selectedCardId={selectedCardId}
+              onSelectCard={setSelectedCardId}
+              onMoveCard={onMoveCard}
+            />
           ) : layout.nodes.length > 0 ? (
             <div 
               className="absolute overflow-visible pointer-events-none"
