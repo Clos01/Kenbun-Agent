@@ -25,6 +25,32 @@ import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/bo
 import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+const decodeHtmlEntities = (text: string) => {
+  return text
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+};
+
+const markdownComponents: any = {
+  p: ({ children }: any) => <p className="mb-2 text-[10px] text-secondary leading-relaxed">{children}</p>,
+  h1: ({ children }: any) => <h1 className="mb-2 text-xs font-bold text-primary mt-4">{children}</h1>,
+  h2: ({ children }: any) => <h2 className="mb-2 text-[11px] font-bold text-primary mt-3">{children}</h2>,
+  h3: ({ children }: any) => <h3 className="mb-1 text-[10px] font-bold text-primary mt-2">{children}</h3>,
+  ul: ({ children }: any) => <ul className="list-disc pl-4 mb-2 space-y-1 text-[10px] text-secondary">{children}</ul>,
+  ol: ({ children }: any) => <ol className="list-decimal pl-4 mb-2 space-y-1 text-[10px] text-secondary">{children}</ol>,
+  li: ({ children }: any) => <li>{children}</li>,
+  strong: ({ children }: any) => <strong className="font-bold text-primary">{children}</strong>,
+  em: ({ children }: any) => <em className="italic text-secondary/80">{children}</em>,
+  code: ({ children }: any) => <code className="bg-card text-tertiary px-1 py-0.5 rounded text-[9px] font-mono">{children}</code>,
+  a: ({ href, children }: any) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-tertiary hover:underline">{children}</a>,
+};
 
 interface Card {
   id: string;
@@ -2106,9 +2132,14 @@ export default function WorkflowView({
                         <span className="text-[8px] font-mono text-secondary uppercase tracking-widest font-bold">
                           Step Description
                         </span>
-                        <p className="text-[10px] text-secondary leading-relaxed bg-primary/[0.03] p-3 rounded-lg border border-border">
-                          {selectedCard.cleanDescription}
-                        </p>
+                        <div className="bg-primary/[0.03] p-3 rounded-lg border border-border">
+                          <ReactMarkdown 
+                            remarkPlugins={[remarkGfm]}
+                            components={markdownComponents}
+                          >
+                            {decodeHtmlEntities(selectedCard.cleanDescription)}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     )}
 
