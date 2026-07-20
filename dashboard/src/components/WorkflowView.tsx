@@ -1398,7 +1398,7 @@ export default function WorkflowView({
           <div className="relative">
             <button
               onClick={() => setShowViewSettings(!showViewSettings)}
-              className={`px-4 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
+              className={`px-5 py-2 bg-card/85 backdrop-blur-md border rounded-lg shadow-sm text-[10px] font-mono font-bold uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer ${
                 showViewSettings ? "border-tertiary text-tertiary" : "border-border/80 text-secondary hover:text-primary hover:border-border"
               }`}
             >
