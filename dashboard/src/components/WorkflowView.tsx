@@ -556,39 +556,33 @@ export default function WorkflowView({
           }
         }
       };
-
-      let hasManualLinks = false;
+      // 1) Draw manual dependency edges ALWAYS
       parsedCards.forEach(card => {
-        if (card.dependencies.length > 0) hasManualLinks = true;
-      });
+        const toNode = nodeMap.get(`card_${card.id}`);
+        if (!toNode) return;
 
-      if (hasManualLinks || !showSuggestedPath) {
-        // Draw manual dependency edges
-        parsedCards.forEach(card => {
-          const toNode = nodeMap.get(`card_${card.id}`);
-          if (!toNode) return;
+        card.dependencies.forEach(depId => {
+          const fromNode = nodeMap.get(`card_${depId}`);
+          if (!fromNode) return;
 
-          card.dependencies.forEach(depId => {
-            const fromNode = nodeMap.get(`card_${depId}`);
-            if (!fromNode) return;
+          const label = card.linkLabels?.[depId];
+          const a = getAnchors(fromNode, toNode);
 
-            const label = card.linkLabels?.[depId];
-            const a = getAnchors(fromNode, toNode);
-
-              edges.push({
-                id: `edge_${depId}_to_${card.id}`,
-                fromId: fromNode.id,
-                toId: toNode.id,
-                fromX: a.fx, fromY: a.fy,
-                toX: a.tx, toY: a.ty,
-                orientation: a.orientation,
-                label,
-                style: "solid"
-              });
+          edges.push({
+            id: `edge_${depId}_to_${card.id}`,
+            fromId: fromNode.id,
+            toId: toNode.id,
+            fromX: a.fx, fromY: a.fy,
+            toX: a.tx, toY: a.ty,
+            orientation: a.orientation,
+            label,
+            style: "solid"
           });
         });
-      } else {
-        // Generate suggested flow (dotted lines)
+      });
+
+      // 2) Draw suggested flow (dotted lines) if toggled on
+      if (showSuggestedPath) {
         if (groupByLanes) {
           // Intra-lane connections (connecting items sequentially inside each lane)
           groups.forEach(group => {
@@ -956,32 +950,25 @@ export default function WorkflowView({
 
     lines.push("");
     
-    // Declare links with edge labels (strict manual or fallback suggested path)
-    let hasManualLinks = false;
+    // 1) Draw strict manual dependencies ALWAYS
+    // Edges INTO the current/next step use a
+    // thick arrow (==>) so the "do this next" direction is unmistakable.
     parsedCards.forEach(card => {
-      if (card.dependencies.length > 0) {
-        hasManualLinks = true;
-      }
+      card.dependencies.forEach(depId => {
+        if (parsedCardMap.has(depId)) {
+          const label = card.linkLabels?.[depId];
+          const arrow = card.id === nextStepCardId ? "==>" : "-->";
+          if (label) {
+            lines.push(`  c_${depId} ${arrow}|"${label}"| c_${card.id}`);
+          } else {
+            lines.push(`  c_${depId} ${arrow} c_${card.id}`);
+          }
+        }
+      });
     });
 
-    if (hasManualLinks || !showSuggestedPath) {
-      // Use strict manual dependencies. Edges INTO the current/next step use a
-      // thick arrow (==>) so the "do this next" direction is unmistakable.
-      parsedCards.forEach(card => {
-        card.dependencies.forEach(depId => {
-          if (parsedCardMap.has(depId)) {
-            const label = card.linkLabels?.[depId];
-            const arrow = card.id === nextStepCardId ? "==>" : "-->";
-            if (label) {
-              lines.push(`  c_${depId} ${arrow}|"${label}"| c_${card.id}`);
-            } else {
-              lines.push(`  c_${depId} ${arrow} c_${card.id}`);
-            }
-          }
-        });
-      });
-    } else {
-      // No manual links exist, draw suggested priority path based on work order ranks!
+    // 2) Draw suggested path if toggled on
+    if (showSuggestedPath) {
       // Sort non-completed cards by rank
       const activeSequence = parsedCards
         .filter(c => c.status !== "completed")
