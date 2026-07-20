@@ -1026,12 +1026,19 @@ export default function WorkflowView({
 
     const handleWheelEvent = (e: WheelEvent) => {
       e.preventDefault();
-      const zoomFactor = 0.08;
-      const direction = e.deltaY < 0 ? 1 : -1;
-      setScale(prev => {
-        const next = prev + direction * zoomFactor;
-        return Math.min(Math.max(next, 0.25), 3);
-      });
+      if (e.ctrlKey || e.metaKey) {
+        const zoomFactor = 0.08;
+        const direction = e.deltaY < 0 ? 1 : -1;
+        setScale(prev => {
+          const next = prev + direction * zoomFactor;
+          return Math.min(Math.max(next, 0.25), 3);
+        });
+      } else {
+        setOffset(prev => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY
+        }));
+      }
     };
 
     canvas.addEventListener("wheel", handleWheelEvent, { passive: false });

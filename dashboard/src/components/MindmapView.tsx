@@ -245,8 +245,12 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const dir = e.deltaY < 0 ? 1 : -1;
-      setScale(prev => Math.min(2.4, Math.max(0.3, prev + dir * 0.08)));
+      if (e.ctrlKey || e.metaKey) {
+        const dir = e.deltaY < 0 ? 1 : -1;
+        setScale(prev => Math.min(2.4, Math.max(0.3, prev + dir * 0.08)));
+      } else {
+        setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
+      }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
