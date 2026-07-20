@@ -1,0 +1,108 @@
+{
+  "name": "Flooring Lead Inbound Pipeline V2 (Google Sheets)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flooring-lead",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook: Inbound Lead",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ],
+      "webhookId": "flooring-lead-webhook-uuid-v2"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "const lead = $input.item.json.body || $input.item.json.query || {};\nreturn {\n  Name: lead.name || 'Unknown Lead',\n  Phone: lead.contractor_phone || 'No Phone',\n  Address: lead.address || 'No Address',\n  Type: lead.work_class || 'General',\n  Value: lead.valuation_est ? `$${lead.valuation_est} est.` : 'Unknown',\n  Notes: lead.description || 'N/A',\n  Score: lead.score ? `${lead.score}%` : 'N/A'\n};"
+      },
+      "id": "2",
+      "name": "Normalize Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "list"
+        },
+        "mappingColumnMode": "autoMapInputData",
+        "options": {}
+      },
+      "id": "3",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.1,
+      "position": [
+        650,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "from": "+1234567890",
+        "to": "={{ $json.Phone }}",
+        "message": "={{ 'Hi ' + $json.Name + '! We received your flooring request. Our team will contact you shortly.' }}"
+      },
+      "id": "4",
+      "name": "Auto-Reply (Twilio)",
+      "type": "n8n-nodes-base.twilio",
+      "typeVersion": 1,
+      "position": [
+        650,
+        450
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: Inbound Lead": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Auto-Reply (Twilio)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

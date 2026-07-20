@@ -754,6 +754,33 @@ async def run_pipeline(
             report.append(f"⚠️ Input prep failed for `{step_id}`: {e}")
             continue
 
+        # --- GLOBAL WORKSPACE V2: POST CONCEPTS & SUPERVISOR GATE ---
+        try:
+            from tools.memory.global_workspace import post_concept, read_workspace
+            # 1. Post current concept/step to the workspace
+            step_concept = f"Orchestrator ({workflow}) running step: {label} (tool: {step_id}) for task: {task[:80]}"
+            post_concept(concept=step_concept, salience=0.6, agent_id=f"orch_{workflow}")
+
+            # 2. Supervisor Gate: Pause execution if any unresolved watchlist alert exists
+            ws_data = read_workspace()
+            if ws_data.get("alerts"):
+                print("⏳ [Global Workspace Gate] Paused. Unresolved flagged alert detected.")
+                report.append("⏳ **Global Workspace Gate:** Pipeline paused. Unresolved flagged concept detected on the workspace.")
+                log_to_dashboard(f"WORKSPACE GATE PAUSED | Active Alerts: {len(ws_data['alerts'])}")
+                
+                # Poll every 2.0s until resolved
+                while True:
+                    await asyncio.sleep(2.0)
+                    ws_data = read_workspace()
+                    if not ws_data.get("alerts"):
+                        break
+                
+                report.append("✅ **Global Workspace Gate:** Watchlist alert resolved. Resuming execution.")
+                print("✅ [Global Workspace Gate] Watchlist alert resolved. Resuming execution.")
+                log_to_dashboard("WORKSPACE GATE RESOLVED | Resuming tool execution")
+        except Exception as ws_err:
+            print(f"⚠️ Global Workspace hooks failed: {ws_err}")
+
         # --- EXECUTE TOOL ---
         print(f"🔧 [{step_count}] {label}")
         try:
