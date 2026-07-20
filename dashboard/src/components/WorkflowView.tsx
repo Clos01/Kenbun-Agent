@@ -1048,7 +1048,7 @@ export default function WorkflowView({
       e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
         const zoomFactor = 0.08;
-        const direction = e.deltaY < 0 ? -1 : 1;
+        const direction = e.deltaY < 0 ? 1 : -1;
         setScale(prev => {
           const next = prev + direction * zoomFactor;
           return Math.min(Math.max(next, 0.25), 3);
