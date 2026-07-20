@@ -76,6 +76,12 @@ body {
   @apply antialiased;
 }
 
+p {
+  color: var(--secondary);
+  line-height: 1.65;
+  font-weight: 400;
+}
+
 /* Interactivity Mandate */
 button, a, [role="button"], .cursor-pointer {
   cursor: pointer !important;

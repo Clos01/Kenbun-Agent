@@ -8,7 +8,7 @@ export const THEME_PRESETS = {
   limestone: {
     name: "Limestone",
     primary: "#1A1C1E",
-    secondary: "#6C7278",
+    secondary: "#5A524F", // Warm brownish gray
     tertiary: "#B8422E",
     neutral: "#F7F5F2",
     card: "#FFFFFF",
@@ -19,7 +19,7 @@ export const THEME_PRESETS = {
   obsidian: {
     name: "Obsidian",
     primary: "#F7F5F2",
-    secondary: "#9EA4AC",
+    secondary: "#C0B4B0", // Warm light gray/tan
     tertiary: "#FF6B4A",
     neutral: "#0F1011",
     card: "#181A1C",
@@ -30,7 +30,7 @@ export const THEME_PRESETS = {
   forest: {
     name: "Forest",
     primary: "#1B2A1E",
-    secondary: "#788A7D",
+    secondary: "#425A47", // Deep readable forest green
     tertiary: "#2E8B57",
     neutral: "#F0F4F1",
     card: "#FFFFFF",
@@ -40,8 +40,8 @@ export const THEME_PRESETS = {
   },
   cobalt: {
     name: "Cobalt",
-    primary: "#1A2332",
-    secondary: "#6C7D93",
+    primary: "#111827",
+    secondary: "#374B66", // Deep steel blue
     tertiary: "#2F6FEB",
     neutral: "#F0F4F8",
     card: "#FFFFFF",
@@ -51,8 +51,8 @@ export const THEME_PRESETS = {
   },
   breeze: {
     name: "Breeze",
-    primary: "#1E293B",
-    secondary: "#64748B",
+    primary: "#0F172A",
+    secondary: "#334C66", // Deep slate blue
     tertiary: "#0EA5E9",
     neutral: "#F8FAFC",
     card: "#FFFFFF",
@@ -63,7 +63,7 @@ export const THEME_PRESETS = {
   midnight: {
     name: "Midnight",
     primary: "#F8FAFC",
-    secondary: "#94A3B8",
+    secondary: "#A5B4FC", // Soft indigo, very readable on black
     tertiary: "#818CF8",
     neutral: "#09090B",
     card: "#121216",
@@ -74,7 +74,7 @@ export const THEME_PRESETS = {
   cyber: {
     name: "Cyber",
     primary: "#00FF41",
-    secondary: "#008F11",
+    secondary: "#20D14F", // Bright readable green
     tertiary: "#00FF41",
     neutral: "#000000",
     card: "#050505",
@@ -85,7 +85,7 @@ export const THEME_PRESETS = {
   sunset: {
     name: "Sunset",
     primary: "#FDE047",
-    secondary: "#FDBA74",
+    secondary: "#FCA5A5", // Soft red/orange
     tertiary: "#F97316",
     neutral: "#170F11",
     card: "#211518",
