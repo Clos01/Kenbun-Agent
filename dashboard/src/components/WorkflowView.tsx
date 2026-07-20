@@ -1654,44 +1654,48 @@ export default function WorkflowView({
                 </defs>
 
                 {/* Swimlanes background containers */}
-                {layout.lanes.map(lane => (
-                  <g key={lane.id} className="opacity-40">
-                    <rect
-                      x={lane.minX}
-                      y={lane.minY}
-                      width={lane.maxX - lane.minX}
-                      height={lane.maxY - lane.minY}
-                      fill="var(--card)"
-                      fillOpacity="0.08"
-                      stroke="var(--border)"
-                      strokeWidth="1.5"
-                      strokeDasharray="4 4"
-                      rx="16"
-                    />
-                    <rect
-                      x={lane.minX}
-                      y={lane.minY}
-                      width={lane.maxX - lane.minX}
-                      height="35"
-                      fill="var(--card)"
-                      fillOpacity="0.12"
-                      rx="16"
-                      clipPath="inset(0 0 16px 0)"
-                    />
-                    <text
-                      x={lane.minX + 16}
-                      y={lane.minY + 22}
-                      fill="var(--primary)"
-                      fontSize="9"
-                      fontWeight="bold"
-                      fontFamily="Space Mono, monospace"
-                      letterSpacing="0.1em"
-                      className="uppercase opacity-70"
-                    >
-                      {lane.name}
-                    </text>
-                  </g>
-                ))}
+                {layout.lanes.map(lane => {
+                  const isDoneLane = lane.name.toLowerCase().includes("done") || lane.name.toLowerCase().includes("completed");
+                  
+                  return (
+                    <g key={lane.id} className={isDoneLane ? "opacity-100" : "opacity-40"}>
+                      <rect
+                        x={lane.minX}
+                        y={lane.minY}
+                        width={lane.maxX - lane.minX}
+                        height={lane.maxY - lane.minY}
+                        fill="var(--card)"
+                        fillOpacity={isDoneLane ? "0.15" : "0.08"}
+                        stroke={isDoneLane ? "#10b981" : "var(--border)"}
+                        strokeWidth={isDoneLane ? "2" : "1.5"}
+                        strokeDasharray={isDoneLane ? "8 6" : "4 4"}
+                        rx="16"
+                      />
+                      <rect
+                        x={lane.minX}
+                        y={lane.minY}
+                        width={lane.maxX - lane.minX}
+                        height="35"
+                        fill={isDoneLane ? "#10b981" : "var(--card)"}
+                        fillOpacity={isDoneLane ? "0.1" : "0.12"}
+                        rx="16"
+                        clipPath="inset(0 0 16px 0)"
+                      />
+                      <text
+                        x={lane.minX + 16}
+                        y={lane.minY + 22}
+                        fill={isDoneLane ? "#10b981" : "var(--primary)"}
+                        fontSize="9"
+                        fontWeight="bold"
+                        fontFamily="Space Mono, monospace"
+                        letterSpacing="0.1em"
+                        className={isDoneLane ? "uppercase opacity-100" : "uppercase opacity-70"}
+                      >
+                        {lane.name}
+                      </text>
+                    </g>
+                  );
+                })}
 
                 {/* Connection lines */}
                 {layout.edges.map(edge => {
