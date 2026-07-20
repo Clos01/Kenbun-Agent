@@ -791,9 +791,13 @@ export default function WorkflowView({
     return parsedCardMap.get(selectedCardId) || null;
   }, [selectedCardId, parsedCardMap]);
 
+  const hasInitialFit = useRef<boolean>(false);
+
   // Auto-fit: compute bounding box of all nodes and scale/offset to fit canvas
   useEffect(() => {
     if (layout.nodes.length === 0 || !canvasRef.current) return;
+    if (hasInitialFit.current) return; // Only fit on the first meaningful load
+    
     const el = canvasRef.current;
     const cw = el.clientWidth;
     const ch = el.clientHeight;
@@ -826,6 +830,7 @@ export default function WorkflowView({
       x: -centerX * clampedScale,
       y: -centerY * clampedScale
     });
+    hasInitialFit.current = true;
   }, [layout]);
 
   // Bind click callback globally for Mermaid nodes

@@ -250,13 +250,17 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
     return { nodes, edges, width: totalW, height, empty: false };
   }, [cards, lists, expandedLists]);
 
+  const hasInitialFit = useRef<boolean>(false);
+
   const fit = useCallback(() => {
+    if (hasInitialFit.current) return;
     const el = containerRef.current;
     if (!el) { setScale(0.9); setOffset({ x: 0, y: 0 }); return; }
     const sx = (el.clientWidth - 80) / Math.max(1, model.width);
     const sy = (el.clientHeight - 80) / Math.max(1, model.height);
     setScale(Math.max(0.35, Math.min(1.1, Math.min(sx, sy))));
     setOffset({ x: 0, y: 0 });
+    hasInitialFit.current = true;
   }, [model.width, model.height]);
 
   useEffect(() => { fit(); }, [fit]);
