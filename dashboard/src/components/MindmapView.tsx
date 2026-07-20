@@ -400,12 +400,14 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                       animate={{ x, y, opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.5 }}
                       transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
-                      className="flex items-center gap-2 rounded-lg border px-3 select-none shadow-sm relative group"
+                      className="rounded-lg select-none shadow-sm pointer-events-none group"
                     >
-                      <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"
+                      <div className="w-full h-full flex items-center justify-between rounded-lg border px-3 pointer-events-auto"
                         style={{ backgroundColor: "color-mix(in srgb, var(--tertiary) 12%, var(--card))", borderColor: "color-mix(in srgb, var(--tertiary) 35%, transparent)" }}>
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[n.status]}`} />
-                        <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-primary truncate">{n.name}</span>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${DOT[n.status]}`} />
+                          <span className="font-mono text-[9px] font-bold uppercase tracking-widest text-primary truncate">{n.name}</span>
+                        </div>
                       </div>
                       
                       <button
@@ -427,7 +429,7 @@ export default function MindmapView({ cards, lists, onSelectCard, scale, setScal
                     transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    className="rounded-lg border cursor-pointer shadow-sm pointer-events-auto"
+                    className="rounded-lg cursor-pointer shadow-sm pointer-events-auto"
                   >
                     <div className="w-full h-full flex items-center gap-2 rounded-lg border px-3"
                       style={{ backgroundColor: "var(--card)", borderColor: "var(--border)" }}>

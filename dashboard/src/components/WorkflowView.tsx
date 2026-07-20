@@ -1444,15 +1444,6 @@ export default function WorkflowView({
         </div>
       </div>
 
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
-      )}
-
       {/* Main split-screen workspace */}
       <div className="flex-1 flex overflow-hidden">
         
