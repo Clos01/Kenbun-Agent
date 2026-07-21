@@ -178,7 +178,7 @@ export default function Settings() {
       <div className="grain-overlay" />
       <Sidebar />
       
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden z-10">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-24 lg:pb-0 min-w-0 overflow-x-hidden z-10">
         
         <header className="h-24 lg:h-32 border-b-2 border-[var(--border)] flex items-center justify-between px-6 lg:px-12 bg-[var(--background)]/60 z-20 sticky top-0 backdrop-blur-xl">
           <div className="flex items-center gap-4 lg:gap-10">

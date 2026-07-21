@@ -827,7 +827,7 @@ export default function HeritageObservatory() {
         <nav 
           role="tablist"
           aria-label="Observatory Subsystems"
-          className="flex flex-wrap items-center gap-2 md:gap-4 px-4 md:px-10 py-4 md:py-6 border-b border-primary/5 bg-card/20 backdrop-blur-sm z-20 shrink-0"
+          className="flex items-center gap-2 md:gap-4 px-4 md:px-10 py-3 md:py-6 border-b border-primary/5 bg-card/20 backdrop-blur-sm z-20 shrink-0 overflow-x-auto no-scrollbar"
         >
           <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 mr-2 sm:mr-4 shrink-0 hidden sm:inline-block">Subsystem</span>
           {TABS.map((tab, index) => (

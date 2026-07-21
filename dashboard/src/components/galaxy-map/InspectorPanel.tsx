@@ -40,12 +40,14 @@ export default function InspectorPanel({
       onMouseDown={(e) => e.stopPropagation()}
       onMouseUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
-      initial={{ opacity: 0, x: -30, scale: 0.98 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: -30, scale: 0.98 }}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      initial={{ opacity: 0, y: 30, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 30, scale: 0.98 }}
       transition={{ duration: 0.3, ease: "easeOut" }}
-      className={`absolute z-[150] w-88 md:w-96 bg-[var(--background)]/75 border border-[var(--border)]/45 backdrop-blur-3xl p-6 md:p-8 shadow-[0_0_50px_rgba(0,0,0,0.25)] dark:shadow-[0_0_50px_rgba(0,0,0,0.65)] space-y-6 rounded-2xl transition-all duration-300 relative overflow-hidden ${
-        isFullscreen ? 'bottom-28 left-10' : 'top-24 left-10'
+      className={`fixed sm:absolute z-[150] inset-x-3 bottom-20 sm:bottom-auto top-auto sm:top-24 sm:left-10 sm:right-auto w-auto sm:w-96 max-h-[75vh] sm:max-h-none overflow-y-auto bg-[var(--background)]/90 border border-[var(--border)]/60 backdrop-blur-3xl p-5 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.35)] space-y-5 rounded-2xl transition-all duration-300 relative overflow-hidden ${
+        isFullscreen ? 'sm:bottom-28 sm:top-auto sm:left-10' : 'sm:top-24 sm:left-10'
       }`}
     >
       {/* Dynamic SVE Audit Loading / Progress Overlay */}

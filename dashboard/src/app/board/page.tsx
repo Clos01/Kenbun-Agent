@@ -1407,7 +1407,7 @@ export default function BoardPage() {
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.2 }}
-                  className="flex overflow-x-auto gap-4 items-start p-6 h-[calc(100vh-8rem)] min-h-[480px] custom-scrollbar w-full max-w-full min-w-0 snap-x snap-mandatory scroll-smooth scroll-px-6 md:snap-none"
+                  className="flex overflow-x-auto gap-4 items-start p-4 sm:p-6 pb-24 lg:pb-6 h-[calc(100vh-8rem)] min-h-[480px] custom-scrollbar w-full max-w-full min-w-0 snap-x snap-mandatory scroll-smooth scroll-px-4 md:snap-none"
                 >
                   {lists.map((list) => {
                     const columnCards = filteredCards.filter(c => c.listId === list.id);

@@ -27,7 +27,9 @@ export default function ControlHub({
       onMouseDown={(e) => e.stopPropagation()}
       onMouseUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
-      className="absolute top-8 right-10 z-[100] flex items-center gap-2 select-none p-1.5 bg-[var(--background)]/60 border border-[var(--border)]/45 backdrop-blur-xl rounded-full shadow-2xl"
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      className="absolute top-16 sm:top-8 right-4 sm:right-10 z-[120] flex items-center gap-1 sm:gap-2 select-none p-1 sm:p-1.5 bg-[var(--background)]/75 border border-[var(--border)]/45 backdrop-blur-xl rounded-full shadow-2xl"
     >
       {/* Toggle Constellation Connections */}
       <button

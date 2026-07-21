@@ -26,7 +26,9 @@ export default function SwarmLegend({ isDragging, counts, activeRoom, onToggleRo
       onMouseUp={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
-      className={`absolute bottom-8 right-10 z-[100] flex flex-wrap gap-x-3 gap-y-1.5 max-w-[280px] justify-end bg-[var(--background)]/75 px-4 py-3 border border-[var(--border)]/45 backdrop-blur-2xl shadow-xl transition-opacity duration-300 rounded-xl ${
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchEnd={(e) => e.stopPropagation()}
+      className={`absolute bottom-20 right-4 sm:bottom-8 sm:right-10 z-[100] flex flex-wrap gap-x-2 sm:gap-x-3 gap-y-1.5 max-w-[calc(100%-2rem)] sm:max-w-[320px] justify-end bg-[var(--background)]/85 px-3 py-2 sm:px-4 sm:py-3 border border-[var(--border)]/45 backdrop-blur-2xl shadow-xl transition-opacity duration-300 rounded-xl ${
         isDragging ? 'opacity-20' : 'opacity-100'
       }`}
     >

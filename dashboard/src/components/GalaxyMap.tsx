@@ -1214,26 +1214,75 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
     ).length;
   }, [data, filterQuery, activeRoom, filterActive]);
 
+  const touchStartRef = useRef<{ dist: number }>({ dist: 0 });
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      setIsDragging(true);
+      setLastMouse({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchStartRef.current.dist = dist;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && isDragging) {
+      const dx = e.touches[0].clientX - lastMouse.x;
+      const dy = e.touches[0].clientY - lastMouse.y;
+      transformRef.current = {
+        ...transformRef.current,
+        x: transformRef.current.x + dx,
+        y: transformRef.current.y + dy
+      };
+      setTransform(transformRef.current);
+      setLastMouse({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      if (touchStartRef.current.dist > 0) {
+        const factor = dist / touchStartRef.current.dist;
+        const newScale = Math.min(Math.max(transformRef.current.scale * (factor > 1 ? 1.05 : 0.95), 0.15), 5);
+        transformRef.current.scale = newScale;
+        setTransform({ ...transformRef.current });
+      }
+      touchStartRef.current.dist = dist;
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    touchStartRef.current.dist = 0;
+  };
+
   const MapInner = (
     <div 
       ref={containerRef}
       className={`relative border border-[var(--border)] bg-[var(--background)] overflow-hidden group transition-[shadow,background-color,border-color] duration-300 artisan-shadow rounded-xl ${
-        isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen md:p-6 p-4 bg-[var(--background)]' : 'w-full h-[650px]'
+        isFullscreen ? 'fixed inset-0 z-[9999] w-screen h-screen md:p-6 p-4 bg-[var(--background)]' : 'w-full h-[480px] sm:h-[600px] lg:h-[650px]'
       }`}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onMouseLeave={() => setIsDragging(false)}
       onMouseMove={handleMouseMove}
       onDoubleClick={handleDoubleClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Topology Header (Glassmorphic Badge) */}
-      <div className="absolute top-8 left-10 z-[100] space-y-1 pointer-events-none select-none p-3.5 bg-[var(--background)]/60 border border-[var(--border)]/45 backdrop-blur-xl rounded-xl shadow-xl">
-        <div className="flex items-center gap-3">
-          <Compass className="w-4 h-4 text-[var(--accent)] animate-spin-slow" />
-          <span className="font-heading text-[var(--foreground)] font-bold uppercase tracking-[0.3em] text-xs">Neural Network Topology</span>
+      <div className="absolute top-4 left-4 sm:top-8 sm:left-10 z-[100] space-y-0.5 sm:space-y-1 pointer-events-none select-none p-2.5 sm:p-3.5 bg-[var(--background)]/75 border border-[var(--border)]/45 backdrop-blur-xl rounded-xl shadow-xl max-w-[200px] sm:max-w-none">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[var(--accent)] animate-spin-slow shrink-0" />
+          <span className="font-heading text-[var(--foreground)] font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-[10px] sm:text-xs truncate">Neural Network Topology</span>
         </div>
-        <div className="text-[9px] font-mono opacity-40 uppercase tracking-widest pl-7">
-          {isFullscreen ? "Full Spectrum Focus" : "Swarm Node Cluster View"} • {data.length} Signals
+        <div className="text-[8px] sm:text-[9px] font-mono opacity-40 uppercase tracking-widest pl-5 sm:pl-7">
+          {isFullscreen ? "Full Spectrum Focus" : "Swarm Cluster"} • {data.length} Signals
         </div>
       </div>
 
@@ -1243,31 +1292,33 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         onMouseUp={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
-        className="absolute top-8 left-1/2 -translate-x-1/2 z-[110] w-[min(88%,360px)]"
+        onTouchStart={(e) => e.stopPropagation()}
+        onTouchEnd={(e) => e.stopPropagation()}
+        className="absolute top-16 sm:top-8 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[110] w-auto sm:w-[min(88%,360px)]"
       >
-        <div className="flex items-center gap-2 bg-[var(--background)]/75 border border-[var(--border)]/50 backdrop-blur-xl rounded-xl px-3 py-2 shadow-xl">
+        <div className="flex items-center gap-2 bg-[var(--background)]/85 border border-[var(--border)]/50 backdrop-blur-xl rounded-xl px-3 py-1.5 sm:py-2 shadow-xl">
           <Search className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search files or code across the swarm…"
+            placeholder="Search files or code..."
             aria-label="Search nodes"
-            className="flex-1 bg-transparent text-[11px] font-mono text-[var(--foreground)] placeholder:text-[var(--foreground)]/30 focus:outline-none min-w-0"
+            className="flex-1 bg-transparent text-[11px] font-mono text-[var(--foreground)] placeholder:text-[var(--foreground)]/40 focus:outline-none min-w-0"
           />
           {(search || activeRoom) && (
             <button
               onClick={() => { setSearch(""); setActiveRoom(null); }}
               title="Clear filter"
               aria-label="Clear filter"
-              className="text-[var(--foreground)]/40 hover:text-[var(--accent)] transition-colors shrink-0"
+              className="text-[var(--foreground)]/40 hover:text-[var(--accent)] transition-colors shrink-0 p-1"
             >
               <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
         {filterActive && (
-          <div className="mt-1.5 flex justify-center">
-            <span className="text-[9px] font-mono font-bold uppercase tracking-widest bg-[var(--background)]/75 border border-[var(--border)]/40 backdrop-blur px-2.5 py-0.5 rounded-full text-[var(--accent)]">
+          <div className="mt-1 flex justify-center">
+            <span className="text-[8.5px] sm:text-[9px] font-mono font-bold uppercase tracking-widest bg-[var(--background)]/85 border border-[var(--border)]/40 backdrop-blur px-2.5 py-0.5 rounded-full text-[var(--accent)]">
               {matchCount.toLocaleString()} match{matchCount === 1 ? "" : "es"}{activeRoom ? ` · ${activeRoom}` : ""}
             </span>
           </div>
@@ -1292,8 +1343,7 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         className={`w-full h-full cursor-grab active:cursor-grabbing transition-opacity duration-700 ${isDragging ? 'opacity-90' : 'opacity-100'}`}
       />
 
-      {/* Honest empty-state — shown when the code collection has no indexed nodes
-          (instead of the old 250 fabricated "Unindexed Node" stars). */}
+      {/* Honest empty-state */}
       {loaded && data.length === 0 && (
         <div className="absolute inset-0 z-[90] flex items-center justify-center pointer-events-none select-none px-6">
           <div className="text-center space-y-3 max-w-sm p-8 bg-[var(--background)]/70 border border-[var(--border)]/50 backdrop-blur-xl rounded-2xl">
@@ -1335,9 +1385,9 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
       </AnimatePresence>
 
       {/* Coordinate Telemetry Indicator (Glassmorphic Badge) */}
-      <div className="absolute bottom-8 left-10 z-[100] flex flex-col gap-1 pointer-events-none select-none p-3.5 bg-[var(--background)]/60 border border-[var(--border)]/45 backdrop-blur-xl rounded-xl shadow-xl">
+      <div className="absolute bottom-20 left-4 sm:bottom-8 sm:left-10 z-[100] flex flex-col gap-0.5 sm:gap-1 pointer-events-none select-none p-2.5 sm:p-3.5 bg-[var(--background)]/75 border border-[var(--border)]/45 backdrop-blur-xl rounded-xl shadow-xl hidden xs:flex">
         <div className="text-[7px] font-mono text-[var(--accent)] opacity-100 uppercase tracking-[0.2em] font-bold">Observer Telemetry</div>
-        <div className="text-[9px] font-mono text-[var(--foreground)] opacity-40 italic">
+        <div className="text-[8px] sm:text-[9px] font-mono text-[var(--foreground)] opacity-40 italic">
           POS_X: {transform.x.toFixed(0)} • POS_Y: {transform.y.toFixed(0)} • ZOOM: {transform.scale.toFixed(2)}x
         </div>
       </div>

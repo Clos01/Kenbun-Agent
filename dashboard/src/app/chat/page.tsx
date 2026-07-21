@@ -979,7 +979,7 @@ export default function KenbunChat() {
         </div>
 
         {/* Input Area */}
-        <div className="p-4 pb-20 md:pb-6 lg:p-6 bg-background/80 backdrop-blur-xl shrink-0 z-20">
+        <div className="p-4 pb-24 lg:pb-6 lg:p-6 bg-background/80 backdrop-blur-xl shrink-0 z-20">
           <div className="max-w-4xl mx-auto">
             <form
               onSubmit={handleSend}

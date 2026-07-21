@@ -89,7 +89,7 @@ export default function AnalyticsPanel({ cards, lists, onClose, onOpenCard }: An
       transition={{ type: "spring", damping: 25, stiffness: 300 }}
       className="w-full h-full flex flex-col bg-transparent"
     >
-      <div className="flex-1 overflow-y-auto p-8 flex flex-col gap-8 custom-scrollbar items-center">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex flex-col gap-6 sm:gap-8 custom-scrollbar items-center">
         <div className="w-full max-w-5xl flex flex-col gap-8">
           
           <div className="flex items-center justify-between pb-6 border-b border-border/40">
