@@ -86,18 +86,13 @@ async def generate_b2b_outreach_email(req: B2BOutreachRequest) -> Dict[str, str]
     address = re.sub(r'[\r\n]', ' ', req.address or "the local area")
     address = re.sub(r"[^a-zA-Z0-9\s\.\-'\&]", '', address).strip()
 
-    subject = f"Vendor Roster Inquiry - CRG Flooring ({company})"
+    subject = f"Subcontractor Bid List: Commercial Flooring - CRG Flooring ({company})"
     body = (
         f"Hi {client},\n\n"
-        f"My name is CJ with CRG Flooring. I hope your week is off to a great start.\n\n"
-        f"I'm reaching out to introduce our team and inquire about the process to join {company}'s "
-        f"Approved Subcontractor / Vendor List for upcoming commercial flooring projects in {address}.\n\n"
-        f"We specialize in commercial carpet, LVP, tile, and hardwood installation. We take pride in delivering "
-        f"dependable, top-tier craftsmanship on schedule and within scope.\n\n"
-        f"Would you be open to pointing me toward the right contact or vendor application form? "
-        f"You can also check out our capabilities at {company_website}.\n\n"
-        f"Thanks for your time, and I look forward to connecting!\n\n"
-        f"Best regards,\n\n"
+        f"I'm CJ with CRG Flooring. Reaching out to see how we can get added to {company}'s approved subcontractor / bid list for upcoming commercial flooring jobs in {address}.\n\n"
+        f"We handle commercial carpet, LVP, tile, and hardwood installation across the area. Fully licensed, insured, and focused on hitting schedules without needing to be babysat.\n\n"
+        f"Do you have a preferred vendor application form or estimator contact for bidding upcoming work? You can also check out our past projects at {company_website}.\n\n"
+        f"Best,\n\n"
         f"CJ | CRG Flooring\n"
         f"Direct: {contact_phone}\n"
         f"{company_website}"
