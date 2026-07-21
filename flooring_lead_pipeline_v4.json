@@ -1,0 +1,203 @@
+{
+  "name": "Flooring Lead Inbound Pipeline V4 (Planka CRM + Smart Router)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flooring-lead-capture",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook: Lead Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "flooring-lead-webhook-uuid-v4"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "const lead = $input.item.json.body || $input.item.json.query || {};\n\n// QUALITY GATE: Check if name and address exist\nif (!lead.name && !lead.address) {\n  throw new Error('Invalid lead: Missing both name and address.');\n}\n\n// Normalize data\nreturn {\n  Name: lead.name || 'Unknown Lead',\n  Phone: lead.contractor_phone || lead.phone || 'No Phone',\n  Address: lead.address || 'No Address',\n  Type: lead.work_class || lead.type || 'General Flooring',\n  Value: lead.valuation_est ? `$${lead.valuation_est}` : 'TBD',\n  Notes: lead.description || lead.notes || 'N/A',\n  Score: lead.score ? parseInt(lead.score, 10) : 75\n};"
+      },
+      "id": "2",
+      "name": "Quality Gate (Code)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "list"
+        },
+        "mappingColumnMode": "autoMapInputData",
+        "options": {}
+      },
+      "id": "3",
+      "name": "Save to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.1,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.100.199.127:8001/api/v1/planka/cards",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"name\": \"Lead: \" + $json.Name,\n  \"description\": \"📍 Address: \" + $json.Address + \"\\n📞 Phone: \" + $json.Phone + \"\\n🏷️ Type: \" + $json.Type + \"\\n💰 Value: \" + $json.Value + \"\\n⭐ Score: \" + $json.Score + \"%\\n\\nNotes: \" + $json.Notes,\n  \"type\": \"inbound_lead\"\n}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "4",
+      "name": "Sync to Planka CRM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "number",
+        "value1": "={{ $json.Score }}",
+        "rules": {
+          "rules": [
+            {
+              "operation": "largerEqual",
+              "value2": 80,
+              "outputKey": "Hot Lead"
+            }
+          ]
+        },
+        "fallbackOutput": 1
+      },
+      "id": "5",
+      "name": "Smart Router (Score)",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "your.email@example.com",
+        "subject": "={{ '🚨 HOT LEAD: ' + $json.Name }}",
+        "message": "={{ 'We just received a HOT flooring lead (Score: ' + $json.Score + '%)\\n\\nName: ' + $json.Name + '\\nPhone: ' + $json.Phone + '\\nAddress: ' + $json.Address + '\\nValue: ' + $json.Value + '\\n\\nNotes: ' + $json.Notes }}",
+        "options": {}
+      },
+      "id": "6",
+      "name": "Gmail: VIP Notification",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7",
+      "name": "No Action",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: Lead Input": {
+      "main": [
+        [
+          {
+            "node": "Quality Gate (Code)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Gate (Code)": {
+      "main": [
+        [
+          {
+            "node": "Save to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Sync to Planka CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync to Planka CRM": {
+      "main": [
+        [
+          {
+            "node": "Smart Router (Score)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Smart Router (Score)": {
+      "main": [
+        [
+          {
+            "node": "Gmail: VIP Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
