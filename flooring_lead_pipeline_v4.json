@@ -20,7 +20,7 @@
     },
     {
       "parameters": {
-        "language": "javascript",
+        "language": "javaScript",
         "jsCode": "const lead = $input.item.json.body || $input.item.json.query || {};\n\n// QUALITY GATE: Check if name and address exist\nif (!lead.name && !lead.address) {\n  throw new Error('Invalid lead: Missing both name and address.');\n}\n\n// Normalize data\nreturn {\n  Name: lead.name || 'Unknown Lead',\n  Phone: lead.contractor_phone || lead.phone || 'No Phone',\n  Address: lead.address || 'No Address',\n  Type: lead.work_class || lead.type || 'General Flooring',\n  Value: lead.valuation_est ? `$${lead.valuation_est}` : 'TBD',\n  Notes: lead.description || lead.notes || 'N/A',\n  Score: lead.score ? parseInt(lead.score, 10) : 75\n};"
       },
       "id": "2",
