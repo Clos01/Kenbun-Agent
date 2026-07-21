@@ -22,6 +22,7 @@ class CardCreateSchema(BaseModel):
     listId: Optional[str] = None
     name: str
     description: Optional[str] = ""
+    dueDate: Optional[str] = None
 
 
 class CardUpdateSchema(BaseModel):
