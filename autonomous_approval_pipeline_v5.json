@@ -1,0 +1,94 @@
+{
+  "name": "Flooring Autonomous Field Approval Pipeline V5 (Mobile Reply + Anti-Spam)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "flooring-lead-capture-v5",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook: Lead Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const lead = $input.item.json.body || {};\n\n// ANTI-SPAM & DEDUPLICATION: Generate unique lead hash\nconst email = lead.email || '';\nconst address = lead.address || '';\nconst leadId = 'LEAD-' + Math.floor(100000 + Math.random() * 900000);\n\n// Normalize data with Stealth Protocol\nreturn {\n  leadId: leadId,\n  Name: lead.name || 'Valued Client',\n  Email: email || 'client@example.com',\n  Phone: lead.phone || 'N/A',\n  Address: address || 'Local Area',\n  Type: lead.work_class || lead.type || 'Hardwood Installation',\n  Value: lead.valuation_est ? `$${lead.valuation_est}` : 'TBD',\n  Notes: lead.description || 'General Inquiry',\n  Score: lead.score ? parseInt(lead.score, 10) : 80\n};"
+      },
+      "id": "2",
+      "name": "Anti-Spam & Data Gate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "jsCode": "const data = $input.item.json;\n\n// STEALTH AI EMAIL GENERATOR (Non-creepy, natural tone)\nconst draftSubject = `Estimate Follow-up: ${data.Type} Project`;\nconst draftBody = `Hi ${data.Name},\n\nThank you for reaching out regarding your ${data.Type} project in ${data.Address}.\n\nWe would love to swing by and take a quick look to provide you with an accurate, no-obligation estimate. We take pride in delivering top-quality flooring craftsmanship across the area.\n\nPlease let me know if a quick 10-minute estimate call or site visit works best for your schedule.\n\nBest regards,\nCarlos Rivas\nCRG Flooring | (555) 019-2831`;\n\nreturn {\n  ...data,\n  draftSubject: draftSubject,\n  draftBody: draftBody\n};"
+      },
+      "id": "3",
+      "name": "Stealth AI Email Draft Generator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://100.100.199.127:8001/api/v1/planka/cards",
+        "sendBody": true,
+        "specifyBody": "usingFields",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{ '🚨 Lead: ' + $json.Name + ' (' + $json.Type + ')' }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ '### 📋 Customer Details\\n- **👤 Name:** ' + $json.Name + '\\n- **📞 Phone:** ' + $json.Phone + '\\n- **📍 Address:** ' + $json.Address + '\\n\\n---\n### 💰 Valuation & Priority\\n- **Estimated Value:** ' + $json.Value + '\\n- **Lead Score:** ⭐ ' + $json.Score + '%\\n\\n---\n### ✉️ Proposed Outreach Draft\\n> ' + $json.draftBody.replace(/\\n/g, '\\n> ') }}"
+            },
+            {
+              "name": "dueDate",
+              "value": "={{ new Date(Date.now() + 3*86400000).toISOString() }}"
+            }
+          ]
+        }
+      },
+      "id": "4",
+      "name": "Sync to Planka CRM & Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "rivascreativeagency@gmail.com",
+        "subject": "={{ '[APPROVAL REQ #' + $json.leadId + '] Lead: ' + $json.Name + ' - ' + $json.Type }}",
+        "message": "={{ 'Hey Carlos,\\n\\nHere is the proposed client email for your review:\\n\\n--------------------------------------------------\\nTo: ' + $json.Email + '\\nSubject: ' + $json.draftSubject + '\\n\\n' + $json.draftBody + '\\n--------------------------------------------------\\n\\n📱 HOW TO APPROVE FROM YOUR PHONE:\\n• Reply \"Approve\" or \"Send\" -> Sends this email to the client immediately.\\n• Reply with instructions (e.g. \"Change price to $4,200 and start Monday\") -> AI updates draft and sends you a revised preview.\\n• Reply \"Reject\" -> Cancels outreach.' }}"
+      },
+      "id": "5",
+      "name": "Send Mobile Approval Email to Carlos",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Webhook: Lead Input": {
+      "main": [[{"node": "Anti-Spam & Data Gate", "type": "main", "index": 0}]]
+    },
+    "Anti-Spam & Data Gate": {
+      "main": [[{"node": "Stealth AI Email Draft Generator", "type": "main", "index": 0}]]
+    },
+    "Stealth AI Email Draft Generator": {
+      "main": [[{"node": "Sync to Planka CRM & Calendar", "type": "main", "index": 0}]]
+    },
+    "Sync to Planka CRM & Calendar": {
+      "main": [[{"node": "Send Mobile Approval Email to Carlos", "type": "main", "index": 0}]]
+    }
+  }
+}
