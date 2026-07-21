@@ -11,6 +11,7 @@ import logging
 import hashlib
 import random
 
+from typing import Optional
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
