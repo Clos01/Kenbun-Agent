@@ -1032,15 +1032,15 @@ export default function BoardPage() {
 
       <main className="flex-1 relative z-10 flex flex-col min-w-0 pb-20 lg:pb-0">
         {/* ============ HEADER — single calm row ============ */}
-        <header className="h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-6 lg:px-10 gap-6">
-          <div className="flex items-center gap-4 min-w-0">
+        <header className="h-14 sm:h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-3 sm:px-6 lg:px-10 gap-3 sm:gap-6">
+          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
             {selectedBoard ? (
               <button
                 onClick={() => {
                   selectBoard(null);
                   changeTab("kanban");
                 }}
-                className="p-1.5 -ml-1.5 text-secondary hover:text-primary transition-colors rounded cursor-pointer"
+                className="p-1.5 -ml-1 text-secondary hover:text-primary transition-colors rounded cursor-pointer"
                 aria-label="Back to projects"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -1049,10 +1049,10 @@ export default function BoardPage() {
               <Columns className="w-4 h-4 text-tertiary shrink-0" />
             )}
             <div className="min-w-0">
-              <div className={LABEL_CAPS + " leading-none mb-0.5"}>
+              <div className={LABEL_CAPS + " leading-none mb-0.5 text-[8px] sm:text-[9px]"}>
                 {selectedBoard ? "Kanban Board" : "Workspaces"}
               </div>
-              <h1 className="font-serif italic text-lg font-bold text-primary leading-tight truncate">
+              <h1 className="font-serif italic text-base sm:text-lg font-bold text-primary leading-tight truncate">
                 {selectedBoard ? selectedBoard.name : "Mission Board"}
               </h1>
             </div>

@@ -1059,6 +1059,35 @@ export default function WorkflowView({
     setIsPanning(false);
   };
 
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      const target = e.target as HTMLElement;
+      if (
+        target.closest(".cursor-pointer") || 
+        target.closest("button") || 
+        target.closest("input") || 
+        target.closest("select")
+      ) {
+        return;
+      }
+      setIsPanning(true);
+      setPanStart({ x: e.touches[0].clientX - offset.x, y: e.touches[0].clientY - offset.y });
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (isPanning && e.touches.length === 1) {
+      setOffset({
+        x: e.touches[0].clientX - panStart.x,
+        y: e.touches[0].clientY - panStart.y
+      });
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsPanning(false);
+  };
+
   // Copy code helper
   const handleCopyCode = () => {
     let textToCopy = "";
@@ -1151,7 +1180,7 @@ export default function WorkflowView({
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8.5rem)] relative border border-border rounded-md overflow-hidden select-none bg-neutral">
+    <div className="flex flex-col h-[calc(100vh-10rem)] md:h-[calc(100vh-8.5rem)] relative border border-border rounded-md overflow-hidden select-none bg-neutral">
       <style dangerouslySetInnerHTML={{ __html: `
         /* ---- Flowchart edges & arrows (theme-adaptive, high-visibility) ---- */
         .wf-mode-flowchart .flowchart-link {
@@ -1297,7 +1326,7 @@ export default function WorkflowView({
       ` }} />
       
       {/* ============ HEADER — identity + primary actions ============ */}
-      <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-border shrink-0 z-30 bg-card">
+      <div className="flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-5 py-2 sm:py-3.5 border-b border-border shrink-0 z-30 bg-card">
         <div className="flex items-center gap-3 min-w-0">
           <GitBranch className="w-4 h-4 text-tertiary shrink-0" />
           <div className="min-w-0">
@@ -1422,6 +1451,9 @@ export default function WorkflowView({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           className={`wf-mode-${diagramMode} flex-1 relative flex items-center justify-center overflow-hidden select-none`}
           style={{
             backgroundColor: "var(--neutral)",
