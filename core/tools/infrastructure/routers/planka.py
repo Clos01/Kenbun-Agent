@@ -111,6 +111,8 @@ def create_card(card: CardCreateSchema):
         }
         if card.description and card.description.strip():
             payload["description"] = card.description.strip()
+        if card.dueDate:
+            payload["dueDate"] = card.dueDate
             
         return _planka_request(f"/api/lists/{target_list_id}/cards", "POST", payload)
     except Exception as e:
