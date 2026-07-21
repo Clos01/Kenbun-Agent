@@ -11,7 +11,7 @@ import logging
 import hashlib
 import random
 
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel, Field
 from starlette.concurrency import run_in_threadpool
@@ -32,17 +32,18 @@ class MemoryRetrieveRequest(BaseModel):
     project_path: str = Field(..., description="The directory path of the active project")
     limit: int = Field(8, description="Maximum results to return")
 
+DEFAULT_CRG_WEBSITE = "https://crgflooring.com"
 class B2BOutreachRequest(BaseModel):
-    client_name: str = Field(..., description="Target client or contractor name")
-    company_name: Optional[str] = Field("Commercial Client", description="Target company name")
-    address: Optional[str] = Field("", description="Project address/region")
-    type: Optional[str] = Field("Commercial Flooring", description="Flooring specialty")
+    client_name: str = Field(..., max_length=100, description="Target client or contractor name")
+    company_name: Optional[str] = Field("Commercial Client", max_length=100, description="Target company name")
+    address: Optional[str] = Field("", max_length=150, description="Project address/region")
+    type: Optional[str] = Field("Commercial Flooring", max_length=100, description="Flooring specialty")
 
 
 # ── Intelligence routes ──────────────────────────────────────────────────────
 
 @router.post("/api/v1/intelligence/generate-outreach")
-async def generate_b2b_outreach_email(req: B2BOutreachRequest):
+async def generate_b2b_outreach_email(req: B2BOutreachRequest) -> Dict[str, str]:
     """
     Generates B2B Vendor List Intro Email for CJ at CRG Flooring.
     Enforces strict guardrails:
@@ -50,11 +51,40 @@ async def generate_b2b_outreach_email(req: B2BOutreachRequest):
     2. No creepy property scraping references.
     3. Warm, professional B2B intro inquiring to join Approved Vendor List.
     """
+    import os
     import re
-    # Sanitize inputs against prompt injection
-    client = re.sub(r'[^\w\s\.-]', '', req.client_name).strip() or "Valued Partner"
-    company = re.sub(r'[^\w\s\.-]', '', req.company_name or "Commercial Client").strip()
-    address = re.sub(r'[^\w\s\.-]', '', req.address or "the local area").strip()
+    import urllib.parse
+
+    default_website = "https://crgflooring.com"
+    default_phone = "(555) 019-2831"
+
+    raw_url = os.getenv("CRG_WEBSITE_URL") or default_website
+    if not isinstance(raw_url, str) or not raw_url.strip():
+        raw_url = default_website
+
+    try:
+        parsed = urllib.parse.urlparse(raw_url)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
+            company_website = f"{parsed.scheme}://{parsed.netloc}"
+        else:
+            company_website = default_website
+    except (ValueError, AttributeError, TypeError):
+        company_website = default_website
+
+    raw_phone = os.getenv("CRG_CONTACT_PHONE") or default_phone
+    if not isinstance(raw_phone, str) or not raw_phone.strip():
+        raw_phone = DEFAULT_CRG_PHONE
+    contact_phone = re.sub(r'[^\d\s\(\)\+-]', '', raw_phone).strip() or DEFAULT_CRG_PHONE
+
+    # Strip newlines and sanitize keeping safe ASCII business chars ([a-zA-Z0-9\s\.\-'\&])
+    client = re.sub(r'[\r\n]', ' ', req.client_name)
+    client = re.sub(r"[^a-zA-Z0-9\s\.\-'\&]", '', client).strip() or "Valued Partner"
+
+    company = re.sub(r'[\r\n]', ' ', req.company_name or "Commercial Client")
+    company = re.sub(r"[^a-zA-Z0-9\s\.\-'\&]", '', company).strip()
+
+    address = re.sub(r'[\r\n]', ' ', req.address or "the local area")
+    address = re.sub(r"[^a-zA-Z0-9\s\.\-'\&]", '', address).strip()
 
     subject = f"Vendor Roster Inquiry - CRG Flooring ({company})"
     body = (
@@ -65,13 +95,15 @@ async def generate_b2b_outreach_email(req: B2BOutreachRequest):
         f"We specialize in commercial carpet, LVP, tile, and hardwood installation. We take pride in delivering "
         f"dependable, top-tier craftsmanship on schedule and within scope.\n\n"
         f"Would you be open to pointing me toward the right contact or vendor application form? "
-        f"You can also check out our capabilities at https://crgflooring.com.\n\n"
+        f"You can also check out our capabilities at {company_website}.\n\n"
         f"Thanks for your time, and I look forward to connecting!\n\n"
         f"Best regards,\n\n"
         f"CJ | CRG Flooring\n"
-        f"Direct: (555) 019-2831\n"
-        f"https://crgflooring.com"
+        f"Direct: {contact_phone}\n"
+        f"{company_website}"
     )
+
+    logging.info("Successfully generated B2B Vendor List outreach draft for CJ persona.")
 
     return {
         "status": "success",
