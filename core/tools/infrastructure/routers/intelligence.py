@@ -56,7 +56,7 @@ async def generate_b2b_outreach_email(req: B2BOutreachRequest) -> Dict[str, str]
     import urllib.parse
 
     default_website = "https://crgflooring.com"
-    default_phone = "(555) 019-2831"
+    default_phone = "(984) 212-1721"
 
     raw_url = os.getenv("CRG_WEBSITE_URL") or default_website
     if not isinstance(raw_url, str) or not raw_url.strip():
