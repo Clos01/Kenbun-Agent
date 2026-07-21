@@ -18,6 +18,13 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@router.get("/api/v1/system/storage")
+async def get_storage_telemetry():
+    """Retrieves disk storage usage across local node and p330 server."""
+    from tools.infrastructure.storage_monitor import get_storage_stats
+    return get_storage_stats()
+
+
 @router.get("/api/v1/health/diagnostics")
 async def get_system_diagnostics():
     from tools.memory.honcho_connect import get_project_collection
