@@ -31,6 +31,54 @@ class MemoryRetrieveRequest(BaseModel):
     project_path: str = Field(..., description="The directory path of the active project")
     limit: int = Field(8, description="Maximum results to return")
 
+class B2BOutreachRequest(BaseModel):
+    client_name: str = Field(..., description="Target client or contractor name")
+    company_name: Optional[str] = Field("Commercial Client", description="Target company name")
+    address: Optional[str] = Field("", description="Project address/region")
+    type: Optional[str] = Field("Commercial Flooring", description="Flooring specialty")
+
+
+# ── Intelligence routes ──────────────────────────────────────────────────────
+
+@router.post("/api/v1/intelligence/generate-outreach")
+async def generate_b2b_outreach_email(req: B2BOutreachRequest):
+    """
+    Generates B2B Vendor List Intro Email for CJ at CRG Flooring.
+    Enforces strict guardrails:
+    1. No upfront pricing quotes or material assumptions.
+    2. No creepy property scraping references.
+    3. Warm, professional B2B intro inquiring to join Approved Vendor List.
+    """
+    import re
+    # Sanitize inputs against prompt injection
+    client = re.sub(r'[^\w\s\.-]', '', req.client_name).strip() or "Valued Partner"
+    company = re.sub(r'[^\w\s\.-]', '', req.company_name or "Commercial Client").strip()
+    address = re.sub(r'[^\w\s\.-]', '', req.address or "the local area").strip()
+
+    subject = f"Vendor Roster Inquiry - CRG Flooring ({company})"
+    body = (
+        f"Hi {client},\n\n"
+        f"My name is CJ with CRG Flooring. I hope your week is off to a great start.\n\n"
+        f"I'm reaching out to introduce our team and inquire about the process to join {company}'s "
+        f"Approved Subcontractor / Vendor List for upcoming commercial flooring projects in {address}.\n\n"
+        f"We specialize in commercial carpet, LVP, tile, and hardwood installation. We take pride in delivering "
+        f"dependable, top-tier craftsmanship on schedule and within scope.\n\n"
+        f"Would you be open to pointing me toward the right contact or vendor application form? "
+        f"You can also check out our capabilities at https://crgflooring.com.\n\n"
+        f"Thanks for your time, and I look forward to connecting!\n\n"
+        f"Best regards,\n\n"
+        f"CJ | CRG Flooring\n"
+        f"Direct: (555) 019-2831\n"
+        f"https://crgflooring.com"
+    )
+
+    return {
+        "status": "success",
+        "persona": "CJ (CRG Flooring)",
+        "subject": subject,
+        "body": body
+    }
+
 
 # ── Intelligence routes ──────────────────────────────────────────────────────
 
