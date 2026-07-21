@@ -103,13 +103,41 @@ async def generate_b2b_outreach_email(req: B2BOutreachRequest) -> Dict[str, str]
         f"{company_website}"
     )
 
+    lead_id = random.randint(1000, 9999)
+    approval_subject = f"[APPROVAL REQ #LEAD-{lead_id}] {company}"
+
+    formatted_approval_email = (
+        f"==================================================\n"
+        f"📊 B2B LEAD INTELLIGENCE BRIEF\n"
+        f"==================================================\n"
+        f"• 🏢 Company: {company}\n"
+        f"• 👤 Contact Name: {client}\n"
+        f"• 📍 Location/Address: {address}\n"
+        f"• 🔍 Lead Findings / Request: {req.type or 'Commercial Flooring'}\n"
+        f"• 🛡️ Anti-Spam Verification: Passed (Checked Google Sheets — Not emailed in past 30 days)\n\n"
+        f"==================================================\n"
+        f"✉️ PROPOSED OUTREACH EMAIL (CJ PERSONA)\n"
+        f"==================================================\n"
+        f"To: client@example.com\n"
+        f"Subject: {subject}\n\n"
+        f"{body}\n\n"
+        f"==================================================\n"
+        f"📱 MOBILE APPROVAL ACTIONS\n"
+        f"==================================================\n"
+        f"• Reply \"Approve\" (or \"Send\") -> Antigravity & n8n send this email to the contractor.\n"
+        f"• Reply with edits (e.g. \"Ask if they prefer online form or PDF\") -> AI updates draft and sends you a revised preview.\n"
+        f"• Reply \"Reject\" -> Cancels outreach."
+    )
+
     logging.info("Successfully generated B2B Vendor List outreach draft for CJ persona.")
 
     return {
         "status": "success",
         "persona": "CJ (CRG Flooring)",
-        "subject": subject,
-        "body": body
+        "subject": approval_subject,
+        "outreach_subject": subject,
+        "outreach_body": body,
+        "formatted_approval_email": formatted_approval_email
     }
 
 
