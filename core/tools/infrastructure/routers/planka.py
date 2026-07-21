@@ -89,17 +89,30 @@ def get_board(board_id: str):
 
 @router.post("/cards", dependencies=[Depends(verify_authorization)])
 def create_card(card: CardCreateSchema):
-    """Creates a new card in the specified list."""
+    """Creates a new card in the specified list or default Inbound Leads column."""
     try:
+        target_list_id = card.listId
+        if not target_list_id:
+            projects = _planka_request("/api/projects", "GET")
+            boards = projects.get("included", {}).get("boards", [])
+            if boards:
+                board_data = _planka_request(f"/api/boards/{boards[0]['id']}", "GET")
+                lists = board_data.get("included", {}).get("lists", [])
+                if lists:
+                    target_list_id = lists[0]["id"]
+
+        if not target_list_id:
+            raise HTTPException(status_code=400, detail="No listId provided and no active Planka columns found.")
+
         payload = {
             "name": card.name,
-            "type": "project",
+            "type": "story",
             "position": 65535
         }
         if card.description and card.description.strip():
             payload["description"] = card.description.strip()
             
-        return _planka_request(f"/api/lists/{card.listId}/cards", "POST", payload)
+        return _planka_request(f"/api/lists/{target_list_id}/cards", "POST", payload)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
