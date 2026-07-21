@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/v1/planka", tags=["Planka"])
 # --- Schemas ---
 
 class CardCreateSchema(BaseModel):
-    listId: str
+    listId: Optional[str] = None
     name: str
     description: Optional[str] = ""
 
