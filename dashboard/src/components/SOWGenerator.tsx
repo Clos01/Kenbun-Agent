@@ -214,10 +214,13 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
     }
   };
 
-  useEffect(() => {
     const key = boardId ? `sow_content_v2_${boardId}` : "sow_content_v2_global";
     const saved = localStorage.getItem(key);
-    if (saved && !isBlankHtml(saved) && !saved.includes("Sovereign Stack Overview")) {
+    
+    // Check if the saved content is the generic boilerplate. If so, discard it so the heuristic can run again.
+    const isGeneric = saved && saved.includes("Statement of Work for <strong>Project</strong>") && !saved.includes("NeverMiss");
+
+    if (saved && !isBlankHtml(saved) && !saved.includes("Sovereign Stack Overview") && !isGeneric) {
       setContent(saved);
     } else {
       if (boardId) {
