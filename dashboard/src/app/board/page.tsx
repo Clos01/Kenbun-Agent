@@ -111,11 +111,12 @@ function sanitizeText(input: string): string {
   return input
     .replace(/<[^>]*>?/gm, "")
     .replace(/javascript:/gi, "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;")
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
     .trim();
 }
 
@@ -1085,7 +1086,7 @@ export default function BoardPage() {
 
           <div className="flex items-center gap-2 shrink-0">
             {/* Search and Filters */ }
-            {selectedBoard && (
+            {selectedBoard && activeTab === "kanban" && (
               <div className="flex items-center gap-2 mr-2">
                 <div className="hidden md:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-64 transition-all focus-within:border-tertiary/50">
                   <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
@@ -1221,13 +1222,15 @@ export default function BoardPage() {
             )}
             {selectedBoard ? (
               <>
-                <button
-                  onClick={() => setActiveAddingListForBoard(true)}
-                  className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Column
-                </button>
+                {activeTab === "kanban" && (
+                  <button
+                    onClick={() => setActiveAddingListForBoard(true)}
+                    className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Column
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setEditBoardName(selectedBoard.name);

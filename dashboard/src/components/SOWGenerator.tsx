@@ -397,7 +397,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
           font-size: 2.25rem; /* 36px */
           font-weight: 600;
           letter-spacing: -0.02em;
-          color: var(--primary);
+          color: var(--tertiary);
           margin-bottom: 1.25rem;
           margin-top: 1.5rem;
         }
@@ -406,7 +406,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
           font-size: 1.5rem; /* 24px */
           font-weight: 600;
           letter-spacing: -0.01em;
-          color: var(--primary);
+          color: var(--tertiary);
           margin-bottom: 1rem;
           margin-top: 2rem;
           padding-bottom: 0.5rem;
