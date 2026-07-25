@@ -74,5 +74,44 @@ def simulate_data(iterations=500):
     print(f"🎉 Simulation Complete! Injected {total_injected} total statistical data points.")
     print("Check the Telemetry Dashboard or weights.json!")
 
+def _guard_against_prod():
+    """Refuse to inject synthetic data unless explicitly opted in AND the store
+    has no real telemetry. This exists because a one-off seed run in 2026-06
+    polluted the live intelligence store with ~35k fabricated runs that masked
+    real tool performance for weeks. Never let that happen silently again.
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description="Inject SYNTHETIC Bayesian training data (dev only).")
+    parser.add_argument("--dev-seed", action="store_true",
+                        help="Required flag confirming you intend to write fake data.")
+    parser.add_argument("--force", action="store_true",
+                        help="Seed even if the store already contains real telemetry (dangerous).")
+    args = parser.parse_args()
+
+    if not (args.dev_seed or os.getenv("KENBUN_ALLOW_SEED") == "1"):
+        print("❌ Refusing to run: pass --dev-seed (or KENBUN_ALLOW_SEED=1) to inject synthetic data.")
+        print("   This script writes FABRICATED tool stats and must never touch production silently.")
+        sys.exit(2)
+
+    # Abort if real telemetry already exists, unless --force.
+    if not args.force:
+        try:
+            from tools.memory.postgres_client import get_connection
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT COUNT(*) AS n FROM bayesian_weights WHERE (success_count + failure_count) > 0")
+                    existing = cur.fetchone()["n"]
+            if existing > 0:
+                print(f"❌ Refusing to run: {existing} tool rows already carry real telemetry.")
+                print("   Seeding would contaminate live signal. Use --force only on an empty/dev store.")
+                sys.exit(3)
+        except Exception as e:
+            print(f"❌ Refusing to run: could not verify store is empty ({e}). Aborting for safety.")
+            sys.exit(4)
+
+    return args
+
+
 if __name__ == "__main__":
+    _guard_against_prod()
     simulate_data(500)

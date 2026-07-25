@@ -24,7 +24,60 @@ import threading
 COLD_START_PRIOR = 0.85
 STABLE_PRIOR = 2.0
 DETERMINISTIC_PRIOR = 5.0
-DECAY_HALFLIFE_HOURS = 24
+DECAY_HALFLIFE_HOURS = 24  # default half-life; override with env BAYES_DECAY_HALFLIFE_HOURS
+
+import os as _os
+from datetime import timezone as _timezone
+
+
+def _recency_factor(last_updated, half_life_hours=None):
+    """Exponential recency weight in (0, 1].
+
+    Returns 1.0 when the timestamp is missing, in the future, or unparseable so
+    fresh/unknown data is never penalised. Older evidence decays toward the prior,
+    which is what stops stale rows (e.g. one-off simulated seed data) from
+    dominating the intelligence store forever.
+    """
+    if half_life_hours is None:
+        try:
+            half_life_hours = float(_os.getenv("BAYES_DECAY_HALFLIFE_HOURS", DECAY_HALFLIFE_HOURS))
+        except (TypeError, ValueError):
+            half_life_hours = DECAY_HALFLIFE_HOURS
+    if not last_updated or half_life_hours <= 0:
+        return 1.0
+    try:
+        ts = last_updated
+        if isinstance(ts, (int, float)):
+            ts = datetime.fromtimestamp(float(ts), tz=_timezone.utc)
+        elif isinstance(ts, str):
+            s = ts.strip()
+            if not s:
+                return 1.0
+            try:  # some paths store str(time.time())
+                ts = datetime.fromtimestamp(float(s), tz=_timezone.utc)
+            except ValueError:
+                ts = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=_timezone.utc)
+        age_hours = (datetime.now(_timezone.utc) - ts).total_seconds() / 3600.0
+        if age_hours <= 0:
+            return 1.0
+        return 0.5 ** (age_hours / half_life_hours)
+    except Exception:
+        return 1.0
+
+
+def _decayed_weights(success_count, failure_count, last_updated):
+    """Recency-weighted Beta(1 + s', 1 + f') params derived from raw event counts.
+
+    Uses the true success/failure counts as ground truth (rather than the stored
+    alpha/beta, whose prior base has drifted across code paths) and shrinks them
+    toward the uniform prior as they age.
+    """
+    factor = _recency_factor(last_updated)
+    s = max(0.0, float(success_count or 0)) * factor
+    f = max(0.0, float(failure_count or 0)) * factor
+    return 1.0 + s, 1.0 + f
 
 class PulseStatus(str, Enum):
     STABLE = "STABLE"
@@ -256,15 +309,17 @@ class BayesianGovernor:
             try:
                 with self._lock:
                     cursor = self.local_conn.cursor()
-                    cursor.execute("SELECT alpha, beta, success_count, failure_count FROM intelligence WHERE tool_id = ? AND category = ?", (tool_id, category))
+                    cursor.execute("SELECT alpha, beta, success_count, failure_count, timestamp FROM intelligence WHERE tool_id = ? AND category = ?", (tool_id, category))
                     row = cursor.fetchone()
                     if row:
-                        return float(row[0]), float(row[1]), int(row[2]), int(row[3])
+                        a, b = _decayed_weights(row[2], row[3], row[4])
+                        return a, b, int(row[2]), int(row[3])
                     elif category != 'global':
-                        cursor.execute("SELECT alpha, beta, success_count, failure_count FROM intelligence WHERE tool_id = ? AND category = 'global'", (tool_id,))
+                        cursor.execute("SELECT alpha, beta, success_count, failure_count, timestamp FROM intelligence WHERE tool_id = ? AND category = 'global'", (tool_id,))
                         row = cursor.fetchone()
                         if row:
-                            return float(row[0]), float(row[1]), int(row[2]), int(row[3])
+                            a, b = _decayed_weights(row[2], row[3], row[4])
+                            return a, b, int(row[2]), int(row[3])
             except Exception as e:
                 print(f"Debug: Error getting local stats for {tool_id} ({category}): {e}")
             return 2.0, 2.0, 0, 0
@@ -273,15 +328,17 @@ class BayesianGovernor:
             from tools.memory.postgres_client import get_connection
             with get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT alpha, beta, success_count, failure_count FROM bayesian_weights WHERE tool_id = %s AND category = %s", (tool_id, category))
+                    cur.execute("SELECT alpha, beta, success_count, failure_count, last_updated FROM bayesian_weights WHERE tool_id = %s AND category = %s", (tool_id, category))
                     row = cur.fetchone()
                     if row:
-                        return float(row["alpha"]), float(row["beta"]), int(row["success_count"]), int(row["failure_count"])
+                        a, b = _decayed_weights(row["success_count"], row["failure_count"], row["last_updated"])
+                        return a, b, int(row["success_count"]), int(row["failure_count"])
                     elif category != 'global':
-                        cur.execute("SELECT alpha, beta, success_count, failure_count FROM bayesian_weights WHERE tool_id = %s AND category = 'global'", (tool_id,))
+                        cur.execute("SELECT alpha, beta, success_count, failure_count, last_updated FROM bayesian_weights WHERE tool_id = %s AND category = 'global'", (tool_id,))
                         row = cur.fetchone()
                         if row:
-                            return float(row["alpha"]), float(row["beta"]), int(row["success_count"]), int(row["failure_count"])
+                            a, b = _decayed_weights(row["success_count"], row["failure_count"], row["last_updated"])
+                            return a, b, int(row["success_count"]), int(row["failure_count"])
         except Exception as e:
             print(f"Debug: Error getting remote stats for {tool_id} ({category}): {e}")
             # Fallback to local SQLite if remote query fails
@@ -434,13 +491,15 @@ class BayesianGovernor:
                     rows = cursor.fetchall()
                     for row in rows:
                         t_id, cat, alpha, beta, s, f, ts = row
+                        d_alpha, d_beta = _decayed_weights(s, f, ts)
                         results.append({
                             "tool_id": t_id,
                             "category": cat or "General",
-                            "alpha": round(float(alpha), 2),
-                            "beta": round(float(beta), 2),
+                            "alpha": round(d_alpha, 2),
+                            "beta": round(d_beta, 2),
                             "success_count": s,
                             "failure_count": f,
+                            "recency": round(_recency_factor(ts), 3),
                             "timestamp": ts
                         })
             except Exception as e:
@@ -465,13 +524,15 @@ class BayesianGovernor:
 
                         # We have 'global' and specific categories. Prefer specific categories over 'global'.
                         if t_id not in tool_data or (cat != 'global' and tool_data[t_id]['category'] == 'global'):
+                            d_alpha, d_beta = _decayed_weights(s, f, ts)
                             tool_data[t_id] = {
                                 "tool_id": t_id,
                                 "category": cat,
-                                "alpha": round(float(alpha), 2),
-                                "beta": round(float(beta), 2),
+                                "alpha": round(d_alpha, 2),
+                                "beta": round(d_beta, 2),
                                 "success_count": int(s),
                                 "failure_count": int(f),
+                                "recency": round(_recency_factor(ts), 3),
                                 "timestamp": str(ts)
                             }
             return list(tool_data.values())

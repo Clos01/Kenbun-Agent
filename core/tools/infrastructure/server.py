@@ -1124,8 +1124,9 @@ def get_intelligence_stats() -> str:
                 return "\n".join(stats)
             return "No intelligence data collected yet or store disconnected."
 
-        backend = "\U0001f310 Remote ChromaDB" if not governor.use_local else "\ud83d\uddc4\ufe0f Local SQLite"
+        backend = "\U0001f418 Remote PostgreSQL" if not governor.use_local else "\ud83d\uddc4\ufe0f Local SQLite"
         stats = [f"# \U0001f9e0 System 4: Intelligence Dashboard [{backend}]\n"]
+        stats.append("_Success probability is recency-weighted; \u231b marks stale (decayed) evidence._\n")
 
         # Sort by success_count descending so most-active tools appear first
         sorted_stats = sorted(all_stats, key=lambda x: x.get("success_count", 0), reverse=True)
@@ -1136,12 +1137,158 @@ def get_intelligence_stats() -> str:
             b = float(entry.get("beta", 2.0))
             s = int(entry.get("success_count", 0))
             f = int(entry.get("failure_count", 0))
+            recency = entry.get("recency")
             prob = a / (a + b)
-            stats.append(f"\u2022 **{tool}**: {prob:.2%} success probability ({s}S/{f}F)")
+            stale = ""
+            if recency is not None and recency < 0.25:
+                stale = f"  \u231b stale (recency {recency:.2f})"
+            stats.append(f"\u2022 **{tool}**: {prob:.2%} success probability ({s}S/{f}F){stale}")
 
         return "\n".join(stats)
     except Exception as e:
         return f"ERROR: Failed to retrieve stats. {e}"
+
+@sovereign_tool()
+def telemetry_integrity_audit(post_alert: bool = True) -> str:
+    """Audits the Bayesian intelligence store for the failure modes that silently
+    degraded the swarm: fabricated/simulated seed data, frozen priors that never
+    learn, undecayed stale mass, and a stale brain-health benchmark.
+
+    Run it any time the dashboard "feels off", or on a schedule. When post_alert
+    is True and CRITICAL/WARNING issues are found, it raises a Global Workspace
+    alert so the problem surfaces proactively instead of rotting for weeks.
+
+    Returns a human-readable report with severity and recommended actions.
+    """
+    import os
+    import glob
+    import json
+    from datetime import datetime, timezone
+
+    findings = []          # (severity, message)
+    SEV_RANK = {"CRITICAL": 3, "WARNING": 2, "INFO": 1, "OK": 0}
+
+    # ── 1. Store scan: simulated-batch, frozen priors, undecayed stale mass ──
+    try:
+        from tools.memory.postgres_client import get_connection
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT tool_id, category, success_count, failure_count, last_updated FROM bayesian_weights")
+                rows = cur.fetchall()
+
+        now = datetime.now(timezone.utc)
+        by_minute = {}          # identical-timestamp batches → injection signature
+        frozen_symmetric = []   # success == failure and large → stuck prior
+        stale_heavy = []        # high count but not touched in >30d → undecayed mass
+        for r in rows:
+            s = int(r["success_count"] or 0)
+            f = int(r["failure_count"] or 0)
+            lu = r["last_updated"]
+            total = s + f
+            if lu is not None:
+                # Injection = a batch of rows gaining SUBSTANTIAL fabricated counts at
+                # the same instant. Only heavy rows (total >= 100) count toward the
+                # batch signature, so legitimate admin resets (which zero counts) and
+                # ordinary trickle telemetry never trip the alarm.
+                if total >= 100:
+                    key = str(lu)[:16]  # minute granularity
+                    by_minute.setdefault(key, 0)
+                    by_minute[key] += 1
+                try:
+                    ts = lu if hasattr(lu, "tzinfo") else datetime.fromisoformat(str(lu))
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    age_days = (now - ts).total_seconds() / 86400.0
+                except Exception:
+                    age_days = 0.0
+            else:
+                age_days = 9999.0
+            if s == f and s >= 40:
+                frozen_symmetric.append(f"{r['tool_id']}/{r['category']} ({s}S/{f}F)")
+            if total >= 400 and age_days > 30:
+                stale_heavy.append(f"{r['tool_id']}/{r['category']} ({total} runs, {age_days:.0f}d old)")
+
+        big_batches = {k: n for k, n in by_minute.items() if n >= 15}
+        if big_batches:
+            worst = sorted(big_batches.items(), key=lambda x: -x[1])[:3]
+            detail = ", ".join(f"{n} rows @ {k}" for k, n in worst)
+            findings.append(("CRITICAL",
+                f"Batch-injection signature: {len(big_batches)} timestamp(s) each mutate ≥15 rows at once ({detail}). "
+                f"This is how simulate_bayesian_data.py fabricates data — verify these are real."))
+        if frozen_symmetric:
+            findings.append(("WARNING",
+                f"{len(frozen_symmetric)} frozen symmetric prior(s) (never learned): {', '.join(frozen_symmetric[:6])}"
+                + (" …" if len(frozen_symmetric) > 6 else "")))
+        if stale_heavy:
+            findings.append(("INFO",
+                f"{len(stale_heavy)} heavy row(s) older than 30d (decay neutralises impact, but consider pruning): "
+                + ", ".join(stale_heavy[:6]) + (" …" if len(stale_heavy) > 6 else "")))
+        if not (big_batches or frozen_symmetric or stale_heavy):
+            findings.append(("OK", f"Store clean: {len(rows)} rows, no injection/frozen/stale-mass signatures."))
+    except Exception as e:
+        findings.append(("WARNING", f"Could not scan intelligence store: {e}"))
+
+    # ── 2. Backend / label sanity ──
+    try:
+        from tools.strategy.strategy_manager import governor
+        governor._ensure_db()
+        backend = "Local SQLite (remote unreachable!)" if governor.use_local else "Remote PostgreSQL"
+        sev = "WARNING" if governor.use_local else "OK"
+        findings.append((sev, f"Active backend: {backend}."))
+    except Exception as e:
+        findings.append(("WARNING", f"Could not determine governor backend: {e}"))
+
+    # ── 3. Brain-health benchmark freshness ──
+    try:
+        candidates = [
+            "/app/brain_health/BENCHMARKS.json",
+            os.path.join(os.path.dirname(__file__), "../../../brain_health/BENCHMARKS.json"),
+        ]
+        candidates += glob.glob("/app/**/brain_health/BENCHMARKS.json", recursive=True)
+        bpath = next((p for p in candidates if os.path.exists(p)), None)
+        if bpath:
+            with open(bpath) as fh:
+                data = json.load(fh)
+            hist = data.get("history", [])
+            last_ts = hist[-1].get("timestamp") if hist else None
+            if last_ts:
+                ts = datetime.fromisoformat(last_ts.replace("Z", "+00:00"))
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                age_days = (datetime.now(timezone.utc) - ts).total_seconds() / 86400.0
+                sev = "WARNING" if age_days > 14 else "OK"
+                findings.append((sev, f"Brain-health benchmark last run {age_days:.0f}d ago ({last_ts})."
+                                 + (" Re-run recommended." if age_days > 14 else "")))
+            else:
+                findings.append(("WARNING", "Brain-health benchmark file has no history entries."))
+        else:
+            findings.append(("INFO", "Brain-health benchmark file not found; cannot assess freshness."))
+    except Exception as e:
+        findings.append(("INFO", f"Could not read brain-health benchmark: {e}"))
+
+    # ── Assemble report ──
+    findings.sort(key=lambda x: -SEV_RANK.get(x[0], 0))
+    top = findings[0][0] if findings else "OK"
+    icon = {"CRITICAL": "🔴", "WARNING": "🟡", "INFO": "🔵", "OK": "🟢"}
+    lines = [f"# 🛡️ Telemetry Integrity Audit — overall: {icon.get(top,'')} {top}\n"]
+    for sev, msg in findings:
+        lines.append(f"{icon.get(sev,'')} **{sev}** — {msg}")
+    report = "\n".join(lines)
+
+    # ── Proactive alert so contamination can't rot silently ──
+    if post_alert and SEV_RANK.get(top, 0) >= 2:
+        try:
+            from tools.memory.global_workspace import post_concept
+            post_concept(
+                concept=f"Telemetry integrity: {top} — {findings[0][1][:160]}",
+                salience=0.9 if top == "CRITICAL" else 0.7,
+                agent_id="telemetry_integrity_audit",
+            )
+            report += "\n\n_(alert posted to Global Workspace)_"
+        except Exception as e:
+            report += f"\n\n_(could not post workspace alert: {e})_"
+
+    return report
 
 @sovereign_tool()
 def reflect_on_task(task: str, tool_logs: str) -> str:

@@ -22,8 +22,9 @@ def run_evaluation(full_sweep=False, limit=150):
         test_cases = test_cases[:limit]
         print(f"💡 Limited run: checking first {limit} cases.")
 
-    # Reset router state for a clean benchmark
-    router.reset()
+    # Reset router state for a clean benchmark (no-op if the router exposes no reset)
+    if hasattr(router, "reset"):
+        router.reset()
 
     total_cases = len(test_cases)
     correct = 0
