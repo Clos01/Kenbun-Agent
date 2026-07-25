@@ -1060,7 +1060,7 @@ export default function BoardPage() {
 
             {/* Tabs live in the header — no second nav row */}
             {selectedBoard && (
-              <nav className="hidden md:flex items-center gap-1 ml-6 border-l border-primary/10 pl-6 h-full">
+              <nav className="hidden lg:flex items-center gap-1 ml-6 border-l border-primary/10 pl-6 h-full">
                 {([
                   { key: "kanban", label: "Board", icon: Columns },
                   { key: "calendar", label: "Calendar", icon: Calendar },
@@ -1088,7 +1088,7 @@ export default function BoardPage() {
             {/* Search and Filters */ }
             {selectedBoard && activeTab === "kanban" && (
               <div className="flex items-center gap-2 mr-2">
-                <div className="hidden md:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-64 transition-all focus-within:border-tertiary/50">
+                <div className="hidden md:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-40 md:w-48 lg:w-64 transition-all focus-within:border-tertiary/50">
                   <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
                   <input
                     type="text"
@@ -1255,9 +1255,9 @@ export default function BoardPage() {
           </div>
         </header>
 
-        {/* Mobile tabs (header hides them under md) */}
+        {/* Mobile/Tablet Tab Selector Row */}
         {selectedBoard && (
-          <div className="md:hidden flex border-b border-primary/10 px-6 py-4 gap-2 overflow-x-auto no-scrollbar bg-card/20 backdrop-blur-sm shrink-0">
+          <div className="lg:hidden flex border-b border-primary/10 px-6 py-4 gap-2 overflow-x-auto no-scrollbar bg-card/20 backdrop-blur-sm shrink-0">
             {([
               { key: "kanban", label: "Board", icon: Columns },
               { key: "calendar", label: "Calendar", icon: Calendar },
