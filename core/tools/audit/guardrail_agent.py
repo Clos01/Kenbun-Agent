@@ -20,9 +20,16 @@ _SECURE_ROOT = Path(settings.PROJECT_ROOT).resolve().absolute()
 
 
 # Configuration
-LOCAL_LLM_URL = f"{settings.OLLAMA_URL.rstrip('/')}/api/generate"
-OLLAMA_MODEL = "llama3"
-DEFAULT_TIMEOUT = 30 
+# settings.OLLAMA_URL already points at the /api/generate endpoint; only append it
+# when missing so we never build a doubled ".../api/generate/api/generate" (404 ->
+# silent audit fallback, which auto-approved everything).
+_ollama_base = settings.OLLAMA_URL.rstrip("/")
+LOCAL_LLM_URL = _ollama_base if _ollama_base.endswith("/api/generate") else f"{_ollama_base}/api/generate"
+# Must be a model actually installed in the local Ollama (was "llama3", which is not
+# pulled -> every audit 404'd and fell back to approve). Overridable via env.
+import os as _os
+OLLAMA_MODEL = _os.getenv("GUARDRAIL_OLLAMA_MODEL", "llama3.2:3b")
+DEFAULT_TIMEOUT = 30
 
 class GuardrailAgent:
     def __init__(self):
