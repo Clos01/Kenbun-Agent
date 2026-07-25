@@ -1294,7 +1294,7 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         onDoubleClick={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
         onTouchEnd={(e) => e.stopPropagation()}
-        className="absolute top-16 sm:top-8 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[110] w-auto sm:w-[min(88%,360px)]"
+        className="absolute top-32 sm:top-24 lg:top-8 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-[110] w-auto sm:w-[min(88%,360px)] transition-all"
       >
         <div className="flex items-center gap-2 bg-[var(--background)]/85 border border-[var(--border)]/50 backdrop-blur-xl rounded-xl px-3 py-1.5 sm:py-2 shadow-xl">
           <Search className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
