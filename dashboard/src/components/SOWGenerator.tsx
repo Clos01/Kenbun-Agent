@@ -214,6 +214,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
     }
   };
 
+  useEffect(() => {
     const key = boardId ? `sow_content_v2_${boardId}` : "sow_content_v2_global";
     const saved = localStorage.getItem(key);
     
