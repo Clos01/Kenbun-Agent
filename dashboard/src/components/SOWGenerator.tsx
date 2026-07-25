@@ -205,7 +205,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
     const combined = `${projectName || ""} ${boardName || ""}`.toLowerCase();
     if (combined.includes("claude corps") || combined.includes("take-home assessment")) {
       return getClaudeCorpsSOW();
-    } else if (combined.includes("nevermiss")) {
+    } else if (combined.includes("nevermiss") || combined.includes("backend") || combined.includes("azure") || combined.includes("webhook") || combined.includes("infra")) {
       return getNeverMissSOW();
     } else if (combined.includes("crg")) {
       return getCRGSOW();
