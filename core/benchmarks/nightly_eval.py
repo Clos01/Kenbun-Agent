@@ -34,19 +34,20 @@ def run_evaluation(full_sweep=False, limit=150):
     per_class = {}
     misses = []
     
+    correct_full = 0  # production/full mode (keyword + semantic signal)
+
     for case in test_cases:
         task = case["task"]
         expected = case["expected_path"]
-        
+
         # Initialize class metrics
         if expected not in per_class:
             per_class[expected] = {"n": 0, "correct": 0}
         per_class[expected]["n"] += 1
-        
-        # Run routing
-        # Run routing with fast_mode enabled
+
+        # Keyword-only routing (fast path) — the historical benchmark metric
         actual = router.get_strategy_path(task, fast_mode=True)
-        
+
         if actual == expected:
             correct += 1
             per_class[expected]["correct"] += 1
@@ -58,8 +59,16 @@ def run_evaluation(full_sweep=False, limit=150):
                     "got": actual
                 })
 
+        # Production routing (keyword + semantic signal) — reflects what users hit.
+        # recent_paths is cleared so per-case context bias doesn't leak between cases.
+        router.recent_paths = []
+        actual_full = router.get_strategy_path(task, fast_mode=False)
+        if actual_full == expected or expected in actual_full.split("|"):
+            correct_full += 1
+
     run_seconds = time.time() - start_time
     accuracy = correct / total_cases if total_cases > 0 else 0
+    accuracy_full = correct_full / total_cases if total_cases > 0 else 0
     
     # Format per-class accuracy
     formatted_per_class = {}
@@ -77,6 +86,7 @@ def run_evaluation(full_sweep=False, limit=150):
         "full_sweep": full_sweep,
         "n_cases": total_cases,
         "routing_accuracy": accuracy,
+        "routing_accuracy_full": accuracy_full,
         "median_latency_ms": round((run_seconds / total_cases) * 1000, 4) if total_cases > 0 else 0,
         "per_class_accuracy": formatted_per_class,
         "top_misses": misses[:10] # Save top 10 to file

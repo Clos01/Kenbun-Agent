@@ -504,6 +504,23 @@ class DecisionRouter:
         except Exception as e:
             logging.error(f"Failed to log routing decision: {e}")
 
+        # Also persist the decision as a semantic routing_pattern so _get_semantic_signal
+        # can learn from it. Historically log_decision only wrote the JSONL file above
+        # while the semantic reader queried ChromaDB for type="routing_pattern" records
+        # that nothing ever wrote — leaving the semantic signal permanently empty.
+        # Only concrete routes are stored (never the STANDARD_EXECUTION give-up default).
+        if path and path != "STANDARD_EXECUTION":
+            try:
+                col = get_project_collection("history")
+                for p in path.split("|"):  # dual-signal ensembles store one pattern per path
+                    col.upsert(
+                        ids=[f"rp_{abs(hash((task, p))) & 0xFFFFFFFFFFFF:x}"],
+                        documents=[task],
+                        metadatas=[{"type": "routing_pattern", "assigned_path": p}],
+                    )
+            except Exception as e:
+                logging.error(f"Failed to persist routing_pattern to ChromaDB: {e}")
+
     def get_strategy_path(self, task: str, fast_mode: bool = False) -> str:
         self._ensure_initialized()
         corrected_path = self._check_self_healing(task)
