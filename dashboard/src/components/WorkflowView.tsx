@@ -26,6 +26,7 @@ import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
 import AnalyticsPanel from "./AnalyticsPanel";
+import SOWGenerator from "./SOWGenerator";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -295,11 +296,12 @@ export default function WorkflowView({
   const [copied, setCopied] = useState<boolean>(false);
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
-  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "analytics">("flowchart");
+  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "analytics" | "sow">("flowchart");
   const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
   const [showViewSettings, setShowViewSettings] = useState<boolean>(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const pinchRef = useRef<{ startDist: number; startScale: number } | null>(null);
   const [scale, setScale] = useState<number>(1);
   const [offset, setOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState<boolean>(false);
@@ -1059,6 +1061,12 @@ export default function WorkflowView({
     setIsPanning(false);
   };
 
+  const getPinchDistance = (touches: React.TouchList) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       const target = e.target as HTMLElement;
@@ -1072,6 +1080,12 @@ export default function WorkflowView({
       }
       setIsPanning(true);
       setPanStart({ x: e.touches[0].clientX - offset.x, y: e.touches[0].clientY - offset.y });
+    } else if (e.touches.length === 2) {
+      setIsPanning(false);
+      pinchRef.current = {
+        startDist: getPinchDistance(e.touches),
+        startScale: scale
+      };
     }
   };
 
@@ -1081,11 +1095,25 @@ export default function WorkflowView({
         x: e.touches[0].clientX - panStart.x,
         y: e.touches[0].clientY - panStart.y
       });
+    } else if (e.touches.length === 2 && pinchRef.current) {
+      const newDist = getPinchDistance(e.touches);
+      const zoomDelta = newDist / pinchRef.current.startDist;
+      let newScale = pinchRef.current.startScale * zoomDelta;
+      newScale = Math.min(Math.max(newScale, 0.2), 3); // clamp between 20% and 300%
+      setScale(newScale);
     }
   };
 
-  const handleTouchEnd = () => {
-    setIsPanning(false);
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length === 0) {
+      setIsPanning(false);
+      pinchRef.current = null;
+    } else if (e.touches.length === 1) {
+      // Re-initialize panning if a finger is lifted during a pinch
+      setIsPanning(true);
+      setPanStart({ x: e.touches[0].clientX - offset.x, y: e.touches[0].clientY - offset.y });
+      pinchRef.current = null;
+    }
   };
 
   // Copy code helper
@@ -1326,7 +1354,7 @@ export default function WorkflowView({
       ` }} />
       
       {/* ============ HEADER — identity + primary actions ============ */}
-      <div className="flex items-center justify-between gap-2 sm:gap-4 px-3 sm:px-5 py-2 sm:py-3.5 border-b border-border shrink-0 z-30 bg-card">
+      <div className="flex items-center justify-between gap-4 px-3 sm:px-5 py-2 sm:py-3.5 border-b border-border shrink-0 z-30 bg-card overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-3 min-w-0">
           <GitBranch className="w-4 h-4 text-tertiary shrink-0" />
           <div className="min-w-0">
@@ -1338,11 +1366,11 @@ export default function WorkflowView({
             </h2>
           </div>
           {diagramMode === "mindmap" ? (
-            <span className="hidden sm:inline text-[9px] font-mono text-secondary px-2 py-1">
+            <span className="hidden md:inline text-[9px] font-mono text-secondary px-2 py-1 whitespace-nowrap shrink-0">
               root → columns → cards
             </span>
           ) : (
-            <span className="hidden sm:inline text-[9px] font-mono text-secondary px-2 py-1 bg-primary/[0.04] border border-border rounded-md">
+            <span className="hidden md:inline text-[9px] font-mono text-secondary px-2 py-1 bg-primary/[0.04] border border-border rounded-md whitespace-nowrap shrink-0">
               {parsedCards.length} steps · auto-generated
             </span>
           )}
@@ -1390,7 +1418,8 @@ export default function WorkflowView({
             options={[
               { value: "flowchart", label: "Flowchart" },
               { value: "mindmap", label: "Mindmap" },
-              { value: "analytics", label: "Analytics" }
+              { value: "analytics", label: "Analytics" },
+              { value: "sow", label: "SOW Editor" }
             ]}
           />
 
@@ -1444,6 +1473,8 @@ export default function WorkflowView({
             offset={offset}
             setOffset={setOffset}
           />
+        ) : diagramMode === "sow" ? (
+          <SOWGenerator />
         ) : (
         <div
           ref={canvasRef}
@@ -1456,6 +1487,7 @@ export default function WorkflowView({
           onTouchEnd={handleTouchEnd}
           className={`wf-mode-${diagramMode} flex-1 relative flex items-center justify-center overflow-hidden select-none`}
           style={{
+            touchAction: "none",
             backgroundColor: "var(--neutral)",
             backgroundImage: "radial-gradient(var(--border) 1px, transparent 0)",
             backgroundSize: "20px 20px",
