@@ -45,7 +45,9 @@ def run_evaluation(full_sweep=False, limit=150):
             per_class[expected] = {"n": 0, "correct": 0}
         per_class[expected]["n"] += 1
 
-        # Keyword-only routing (fast path) — the historical benchmark metric
+        # Keyword-only routing (fast path) — the historical benchmark metric.
+        # Clear recent_paths so context bias from prior full-mode calls doesn't leak in.
+        router.recent_paths = []
         actual = router.get_strategy_path(task, fast_mode=True)
 
         if actual == expected:
