@@ -215,7 +215,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
   };
 
   useEffect(() => {
-    const key = boardId ? `sow_content_v2_${boardId}` : "sow_content_v2_global";
+    const key = boardId ? `sow_content_v3_${boardId}` : "sow_content_v3_global";
     const saved = localStorage.getItem(key);
     
     // Check if the saved content is the generic boilerplate. If so, discard it so the heuristic can run again.
@@ -227,6 +227,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
       if (boardId) {
         localStorage.removeItem(`sow_content_${boardId}`);
         localStorage.removeItem(`sow_content_v2_${boardId}`);
+        localStorage.removeItem(`sow_content_v3_${boardId}`);
       }
       const fresh = getDefaultContent();
       setContent(fresh);
