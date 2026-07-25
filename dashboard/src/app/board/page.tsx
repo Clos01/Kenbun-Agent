@@ -1088,7 +1088,7 @@ export default function BoardPage() {
             {/* Search and Filters */ }
             {selectedBoard && activeTab === "kanban" && (
               <div className="flex items-center gap-2 mr-2">
-                <div className="hidden md:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-32 lg:w-48 xl:w-64 transition-all focus-within:border-tertiary/50">
+                <div className="hidden lg:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-48 xl:w-64 transition-all focus-within:border-tertiary/50">
                   <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
                   <input
                     type="text"
@@ -1135,8 +1135,8 @@ export default function BoardPage() {
                           exit={{ opacity: 0, y: 8, scale: 0.95 }}
                           className="absolute top-full right-0 mt-2 w-72 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-4 gap-4"
                         >
-                          {/* Mobile Search - only shows on mobile */}
-                          <div className="md:hidden flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-full">
+                          {/* Mobile/Tablet Search - only shows below desktop */}
+                          <div className="lg:hidden flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-full">
                             <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
                             <input
                               type="text"
