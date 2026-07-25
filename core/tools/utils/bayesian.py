@@ -1,8 +1,47 @@
 import logging
 import time
+from functools import lru_cache
 from tools.memory.postgres_client import get_connection
 
 logger = logging.getLogger(__name__)
+
+# Pipeline stages are legitimate telemetry but are NOT callable tools; they are
+# recorded under this namespace so they never masquerade as tools in the dashboard.
+STEP_PREFIX = "step:"
+
+
+@lru_cache(maxsize=1)
+def _known_tool_ids() -> frozenset:
+    """Real, registered @sovereign_tool names (harvested). Cached once.
+
+    Returns an empty set if the registry cannot be loaded, in which case callers
+    fail OPEN (allow the write) so a transient registry error never drops telemetry.
+    """
+    try:
+        from tools.harvester import harvest_and_register_tools
+        from tools.registry import registry
+        harvest_and_register_tools()
+        return frozenset(registry.get_all_tools().keys())
+    except Exception as e:  # pragma: no cover - defensive
+        logger.error(f"tool_id validation: registry unavailable ({e}); failing open.")
+        return frozenset()
+
+
+def is_valid_tool_id(tool_id) -> bool:
+    """True for a real registered tool or an explicitly namespaced pipeline step.
+
+    This is the choke point that stops LLM-hallucinated tool_ids (invented by the
+    reflection agent, e.g. 'deriveCoords', 'strategy_manager.py') from polluting
+    the intelligence store with fabricated Bayesian rows.
+    """
+    if not tool_id or not isinstance(tool_id, str):
+        return False
+    if tool_id.startswith(STEP_PREFIX):
+        return True
+    known = _known_tool_ids()
+    if not known:            # registry unavailable -> fail open
+        return True
+    return tool_id in known
 
 def load_weights():
     """
@@ -34,6 +73,10 @@ def tune_swarm(tool_id: str, success: bool, category: str = "global"):
     Updates the Bayesian weights for a specific tool natively in Postgres.
     Uses Beta distribution logic: Alpha (successes) and Beta (failures).
     """
+    if not is_valid_tool_id(tool_id):
+        logger.warning(f"tune_swarm: rejecting unknown/hallucinated tool_id '{tool_id}'; skipping write.")
+        return f"REJECTED: '{tool_id}' is not a registered tool"
+
     alpha_inc = 1.0 if success else 0.0
     beta_inc = 0.0 if success else 1.0
     s_inc = 1 if success else 0

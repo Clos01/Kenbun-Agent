@@ -361,6 +361,15 @@ class BayesianGovernor:
 
     def update_intelligence(self, tool_id: str, category: str, success: bool):
         """Updates weights in the remote store or local SQLite fallback."""
+        # Reject hallucinated / unregistered tool_ids so they can't create fake rows.
+        # Pipeline stages must be namespaced (step:) by the caller to be accepted.
+        try:
+            from tools.utils.bayesian import is_valid_tool_id
+            if not is_valid_tool_id(tool_id):
+                logging.warning(f"update_intelligence: rejecting unknown tool_id '{tool_id}'.")
+                return
+        except Exception:
+            pass  # fail open on import/registry error
         self._ensure_db()
         # Clear the lru_cache to reflect new learning
         self.get_tool_stats.cache_clear()

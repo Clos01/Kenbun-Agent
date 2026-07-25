@@ -56,7 +56,20 @@ def reflect_and_distill(task: str, tool_logs: str) -> str:
         
         concepts = data.get("concepts", [])
         tuning = data.get("tuning", [])
-        
+
+        # Gemini frequently invents tool_ids from the log context (source filenames,
+        # JS function names, made-up tools). Drop any tuning entry that doesn't name a
+        # real registered tool so hallucinations never reach the intelligence store.
+        try:
+            from tools.utils.bayesian import is_valid_tool_id
+            filtered = [t for t in tuning if isinstance(t, dict) and is_valid_tool_id(t.get("tool_id"))]
+            dropped = len(tuning) - len(filtered)
+            if dropped:
+                log_reflection(f"Reflection: dropped {dropped} hallucinated tuning target(s) not in the tool registry.")
+            tuning = filtered
+        except Exception as _e:
+            pass
+
         results = []
         for concept in concepts:
             title = concept.get("title")

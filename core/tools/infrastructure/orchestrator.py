@@ -167,6 +167,17 @@ registry.register_pipeline(PipelineEntry(
 HEAVY_WORKFLOWS = {"design_ui", "research_implement", "code_review", "shadow_test", "bug_fix", "agent_self_improve", "sdlc_loop", "git_push_integration"}
 
 
+def _telemetry_id(step_id: str) -> str:
+    """Return the tool_id to record telemetry under: the real tool name when the
+    step maps to a registered tool, otherwise a step:-namespaced stage id so
+    non-tool pipeline stages don't inflate the tool registry/dashboard count."""
+    try:
+        from tools.utils.bayesian import is_valid_tool_id, STEP_PREFIX
+        return step_id if is_valid_tool_id(step_id) else f"{STEP_PREFIX}{step_id}"
+    except Exception:
+        return step_id
+
+
 # ============================================================
 # ANALYSIS LOGIC (Bug Diagnostics & Patching)
 # ============================================================
@@ -828,7 +839,9 @@ async def run_pipeline(
             save_topology(tasks_ref, {"active_system": "execution", "tool": step_id, "status": "success"})
 
             # --- UPDATE INTELLIGENCE & TELEMETRY ---
-            governor.update_intelligence(step_id, workflow, success=True)
+            # Credit real tools by name; record non-tool pipeline stages under a
+            # step: namespace so they never masquerade as tools in the dashboard.
+            governor.update_intelligence(_telemetry_id(step_id), workflow, success=True)
             log_tool_performance(step_id, success=True, duration=duration)
             consecutive_failures = 0 # Reset circuit breaker on success
 
@@ -878,7 +891,7 @@ async def run_pipeline(
             consecutive_failures += 1
 
             # --- UPDATE INTELLIGENCE & TELEMETRY (FAILURE) ---
-            governor.update_intelligence(step_id, workflow, success=False)
+            governor.update_intelligence(_telemetry_id(step_id), workflow, success=False)
             log_tool_performance(step_id, success=False, duration=duration)
 
             # --- PLANKA STEP SYNC (FAILURE) ---
