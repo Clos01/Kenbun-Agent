@@ -195,14 +195,16 @@ interface SOWGeneratorProps {
   boardId?: string;
   boardName?: string;
   projectName?: string;
+  cards?: any[];
 }
 
-export default function SOWGenerator({ boardId, boardName, projectName }: SOWGeneratorProps) {
+export default function SOWGenerator({ boardId, boardName, projectName, cards = [] }: SOWGeneratorProps) {
   const [content, setContent] = useState<string>("");
   const [isAdhdMode, setIsAdhdMode] = useState<boolean>(false);
 
   const getDefaultContent = () => {
-    const combined = `${projectName || ""} ${boardName || ""}`.toLowerCase();
+    const cardText = cards.map(c => c.name || c.title || c.Title || "").join(" ");
+    const combined = `${projectName || ""} ${boardName || ""} ${cardText}`.toLowerCase();
     if (combined.includes("claude corps") || combined.includes("take-home assessment")) {
       return getClaudeCorpsSOW();
     } else if (combined.includes("nevermiss") || combined.includes("backend") || combined.includes("azure") || combined.includes("webhook") || combined.includes("infra")) {
@@ -215,7 +217,7 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
   };
 
   useEffect(() => {
-    const key = boardId ? `sow_content_v3_${boardId}` : "sow_content_v3_global";
+    const key = boardId ? `sow_content_v4_${boardId}` : "sow_content_v4_global";
     const saved = localStorage.getItem(key);
     
     // Check if the saved content is the generic boilerplate. If so, discard it so the heuristic can run again.
@@ -228,12 +230,13 @@ export default function SOWGenerator({ boardId, boardName, projectName }: SOWGen
         localStorage.removeItem(`sow_content_${boardId}`);
         localStorage.removeItem(`sow_content_v2_${boardId}`);
         localStorage.removeItem(`sow_content_v3_${boardId}`);
+        localStorage.removeItem(`sow_content_v4_${boardId}`);
       }
       const fresh = getDefaultContent();
       setContent(fresh);
       localStorage.setItem(key, fresh);
     }
-  }, [boardId, boardName, projectName]);
+  }, [boardId, boardName, projectName, cards]);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const handleDownloadPdf = useReactToPrint({

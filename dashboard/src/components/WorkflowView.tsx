@@ -1474,7 +1474,7 @@ export default function WorkflowView({
             setOffset={setOffset}
           />
         ) : diagramMode === "sow" ? (
-          <SOWGenerator />
+          <SOWGenerator cards={cards} />
         ) : (
         <div
           ref={canvasRef}
