@@ -858,7 +858,10 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
 
       // 2. Draw Constellation Links & Animated Photons
       // Skip the web while filtering so the spotlit matches stand out cleanly.
-      if (currentShowConnections && !filtering && currentData.length > 0) {
+      // Also skip above 2k nodes: the pairwise link scan is O(n^2) and would stall
+      // the canvas now that we render the full (~6k) indexed set. Filtering to a
+      // smaller subset re-enables the constellation web.
+      if (currentShowConnections && !filtering && currentData.length > 0 && currentData.length <= 2000) {
         for (let i = 0; i < currentData.length; i++) {
           const n1 = currentData[i];
           const { x: x1, y: y1 } = getProjectedCoords(n1.x, n1.y);

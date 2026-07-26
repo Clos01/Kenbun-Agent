@@ -102,10 +102,15 @@ async def get_topology_map():
     try:
         collection = get_project_collection("code")
 
-        # Fetch actual records with embeddings
+        # Fetch actual records with embeddings. Was capped at 1500, which made the
+        # dashboard report a fake "1,500 Indexed Nodes" when the real code collection
+        # holds far more (~6k). Use the true collection size so the galaxy shows every
+        # indexed node; the frontend disables the O(n^2) constellation web above 2k
+        # nodes to stay performant.
+        total_count = await run_in_threadpool(collection.count)
         results = await run_in_threadpool(
             collection.get,
-            limit=1500,  # Show all indexed signals as 'Real Nodes'
+            limit=max(total_count, 1),
             include=['embeddings', 'metadatas', 'documents']
         )
 
