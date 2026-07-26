@@ -37,6 +37,9 @@ def build_context(state: dict) -> str:
         parts.append("HISTORIC HIVEMIND LESSONS:\n" + "\n".join(lessons_list))
     if state.get("research_result"):
         parts.append(f"RESEARCH:\n{_prune_log(state['research_result'], 2000)}")
+    # Honcho's reasoned representation of the system + the user (personalization).
+    if state.get("honcho_context"):
+        parts.append(f"ADAPTIVE MEMORY (Honcho):\n{_prune_log(state['honcho_context'], 2000)}")
     parts.append(f"TASK: {state['task']}")
     return "\n\n---\n\n".join(parts)
 

@@ -10,6 +10,14 @@ HONCHO_BASE_URL = os.getenv("HONCHO_BASE_URL", "http://127.0.0.1:8000")
 _HONCHO_CLIENT = None
 _CHROMA_CLIENT = None
 
+# The system self-model peer vs. the human user peer. Previously everything was
+# attributed to the system peer, so Honcho never built a model of the user. The
+# user peer lets the deriver learn Carlos's preferences/decisions over time.
+def _system_peer() -> str:
+    return f"system_{settings.PROJECT_NAME}"
+
+USER_PEER = os.getenv("KENBUN_USER_PEER", "carlos")
+
 def get_honcho_client():
     global _HONCHO_CLIENT
     # If Honcho base URL points to port 8000, it clashes with ChromaDB in local dev
@@ -41,36 +49,45 @@ def get_chroma_client():
             logger.error(f"❌ Failed to connect to ChromaDB client: {e}")
     return _CHROMA_CLIENT
 
-def add_memory(content: str, category: str = "concepts"):
+def add_memory(content: str, category: str = "concepts", peer_name: str = None):
     """
     Sends a message to Honcho so it can reason over the information
     and store it in the peer's representation.
+
+    peer_name defaults to the system self-model peer. Pass USER_PEER (or use
+    add_user_memory) to attribute the message to the human user instead, so the
+    deriver builds a model of the user's preferences.
     """
     client = get_honcho_client()
     if not client:
         return
-    
+
     session = client.session(category)
-    peer_name = f"system_{settings.PROJECT_NAME}"
+    peer_name = peer_name or _system_peer()
     peer = client.peer(peer_name)
-    
+
     try:
         session.add_messages([peer.message(content)])
-        logger.debug("✅ [HONCHO] Added memory successfully.")
+        logger.debug(f"✅ [HONCHO] Added memory for peer '{peer_name}'.")
     except Exception as e:
         logger.warning(f"⚠️ [HONCHO] Failed to add memory: {e}")
 
-def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concepts"):
+def add_user_memory(content: str, category: str = "preferences"):
+    """Attribute a message/decision to the human user peer so Honcho personalizes over time."""
+    return add_memory(content, category=category, peer_name=USER_PEER)
+
+def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concepts", peer_name: str = None):
     """
     Performs a semantic search against Honcho's reasoned representations.
+    peer_name defaults to the system peer; pass USER_PEER for the user's model.
     """
     client = get_honcho_client()
-    if not client: 
+    if not client:
         return []
-        
+
     session = client.session(category)
-    peer_name = f"system_{settings.PROJECT_NAME}"
-    
+    peer_name = peer_name or _system_peer()
+
     try:
         conclusions = session.representation(
             peer_name,
@@ -96,6 +113,10 @@ def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concep
     except Exception as e:
         logger.error(f"⚠️ [HONCHO] Query failed: {e}")
         return []
+
+def retrieve_user_memory(query_text: str, n_results: int = 5, category: str = "preferences"):
+    """Retrieve the human user's reasoned representation (preferences/decisions)."""
+    return retrieve_memory(query_text, n_results=n_results, category=category, peer_name=USER_PEER)
 
 # --- ADAPTERS FOR BACKWARDS COMPATIBILITY ---
 def upsert_embedding(id: str, document: str, metadata: dict, collection_name: str = None):

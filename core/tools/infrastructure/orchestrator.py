@@ -713,6 +713,27 @@ async def run_pipeline(
             report.append(f"- **Project:** {lesson['project']}\n- **Lesson:** {lesson['task']}\n")
         state["memory_result"] = past_lessons
 
+    # --- RECALL (Honcho reasoned representation) ---
+    # Pull the deriver's learned facts about BOTH the system and the user (Carlos)
+    # into the pipeline context so every workflow benefits from what Honcho has
+    # adapted over time — not just the architect/design/supervisor agents.
+    try:
+        from tools.memory.honcho_connect import retrieve_memory, retrieve_user_memory
+        sys_facts = retrieve_memory(task, n_results=4) or []
+        user_facts = retrieve_user_memory(task, n_results=4) or []
+        honcho_parts = []
+        if sys_facts:
+            honcho_parts.append("SYSTEM KNOWLEDGE:\n" + "\n".join(f"- {f}" for f in sys_facts))
+        if user_facts:
+            honcho_parts.append("USER (CARLOS) PREFERENCES:\n" + "\n".join(f"- {f}" for f in user_facts))
+        if honcho_parts:
+            state["honcho_context"] = "\n\n".join(honcho_parts)
+            report.append("## 🧠 Honcho Adaptive Recall")
+            if user_facts:
+                report.append("**User preferences applied:** " + "; ".join(str(f)[:80] for f in user_facts[:3]))
+    except Exception as e:
+        print(f"⚠️ Honcho recall skipped: {e}")
+
     step_count = 0
     consecutive_failures = 0
 

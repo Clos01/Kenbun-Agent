@@ -819,6 +819,21 @@ def save_to_hivemind(title: str, content: str, tags: str, category: str = "conce
         return learn_concept(title, content, tags, category=category)
 
 @sovereign_tool()
+def remember_preference(preference: str, context: str = "") -> str:
+    """Record one of the USER's (Carlos's) preferences, decisions, or working style.
+
+    Unlike save_to_hivemind (which models the system), this attributes the message
+    to the human user peer so Honcho's deriver builds a personalized model of the
+    user over time. Use it whenever the user states a preference, correction, or
+    how they like things done.
+    """
+    with silence_stdout():
+        from tools.memory.honcho_connect import add_user_memory, USER_PEER
+        msg = f"{preference}" + (f"\nContext: {context}" if context else "")
+        add_user_memory(msg)
+        return f"✅ Recorded preference for user '{USER_PEER}'. Honcho will fold it into your personal model."
+
+@sovereign_tool()
 def search_hivemind_concepts(query: str, category: str = "concepts") -> str:
     """
     Use this to pull up past architectural rules or concepts, especially when asked to compare new ideas against old ones.
