@@ -11,9 +11,48 @@ from tools.infrastructure.config import settings
 logger = logging.getLogger("kanban_tools")
 LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
 
+def _ensure_schema(conn):
+    """Create the kanban tables if they don't exist. These were never migrated
+    into the intelligence DB, so every kanban_* call failed with
+    'no such table: kenbun_kanban_tasks'. Self-heal on connect."""
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS kenbun_kanban_tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT,
+            body TEXT,
+            assignee TEXT,
+            tenant TEXT,
+            priority INTEGER DEFAULT 0,
+            parent_id TEXT,
+            status TEXT DEFAULT 'triage',
+            max_retries INTEGER DEFAULT 3,
+            comments TEXT DEFAULT '[]',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+            heartbeat TEXT
+        )
+    ''')
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS kenbun_kanban_runs (
+            id TEXT PRIMARY KEY,
+            task_id TEXT,
+            run_number INTEGER,
+            outcome TEXT,
+            started_at TEXT,
+            ended_at TEXT,
+            duration_seconds REAL,
+            summary TEXT,
+            metadata TEXT,
+            error TEXT
+        )
+    ''')
+    conn.commit()
+
 def get_db_connection():
     conn = sqlite3.connect(LOCAL_DB_PATH, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL;")
+    _ensure_schema(conn)
     return conn
 
 def resolve_task_id(task_id: str) -> str:

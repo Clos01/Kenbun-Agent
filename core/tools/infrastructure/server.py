@@ -1413,55 +1413,79 @@ def audit_package_safety(package_name: str, ecosystem: str = "npm") -> str:
     Audits a package for supply-chain risks (malware, typosquatting, age) before installation.
     Supports: npm, pip.
     """
+    import urllib.request
+    import urllib.error
+
+    def _http_json(url: str):
+        req = urllib.request.Request(url, headers={"User-Agent": "kenbun-supply-audit"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
     try:
-        if ecosystem == "npm":
-            # Check package metadata
-            cmd = ["npm", "view", package_name, "time", "maintainers", "--json"]
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                return f"❌ Package '{package_name}' not found or error querying npm."
-            
-            data = json.loads(result.stdout)
-            created_at = data.get("created")
-            if not created_at:
-                # Some packages have complex time objects
-                created_at = data.get("time", {}).get("created")
-            
-            if not created_at:
-                return f"⚠️ Could not verify creation date for '{package_name}'."
-            
-            created_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            age_days = (datetime.now(created_date.tzinfo) - created_date).days
-            
-            # Risk Analysis
-            risks = []
-            if age_days < 90:
-                risks.append(f"🔴 CRITICAL: Package is only {age_days} days old (High Malware Risk).")
-            
-            # Check for maintainers
-            maintainers = data.get("maintainers", [])
-            if len(maintainers) < 2:
-                risks.append(f"🟡 WARNING: Only {len(maintainers)} maintainer(s).")
-            
-            status = "SECURE ✅" if not risks else "RISKY ⚠️"
-            report = [
-                f"# 🛡️ Supply Chain Audit: {package_name}",
-                f"**Status:** {status}",
-                f"**Age:** {age_days} days",
-                f"**Maintainers:** {len(maintainers)}",
-                "",
-                "## 🔍 Risk Findings"
-            ]
-            if not risks:
-                report.append("- No immediate red flags detected.")
-            else:
-                report.extend([f"- {r}" for r in risks])
+        eco = (ecosystem or "npm").lower()
+
+        # Query package registries over HTTP so no npm/pip CLI binary is required
+        # (the container has neither). npm -> registry.npmjs.org, pip -> pypi.org.
+        if eco == "npm":
+            try:
+                data = _http_json(f"https://registry.npmjs.org/{package_name}")
+            except urllib.error.HTTPError as he:
+                if he.code == 404:
+                    return f"❌ npm package '{package_name}' not found."
+                return f"❌ Error querying npm registry for '{package_name}': HTTP {he.code}"
+            created_at = data.get("time", {}).get("created")
+            maintainers = data.get("maintainers", []) or []
+            latest = data.get("dist-tags", {}).get("latest", "?")
+        elif eco == "pip":
+            try:
+                data = _http_json(f"https://pypi.org/pypi/{package_name}/json")
+            except urllib.error.HTTPError as he:
+                if he.code == 404:
+                    return f"❌ PyPI package '{package_name}' not found."
+                return f"❌ Error querying PyPI for '{package_name}': HTTP {he.code}"
+            info = data.get("info", {})
+            # earliest release timestamp = package age
+            created_at = None
+            for rel in data.get("releases", {}).values():
+                for f in rel:
+                    ut = f.get("upload_time_iso_8601") or f.get("upload_time")
+                    if ut and (created_at is None or ut < created_at):
+                        created_at = ut
+            # PyPI has no maintainer list; treat author/maintainer as a signal
+            maintainers = [m for m in [info.get("author"), info.get("maintainer")] if m]
+            latest = info.get("version", "?")
+        else:
+            return f"Ecosystem '{ecosystem}' not supported. Use 'npm' or 'pip'."
+
+        if not created_at:
+            return f"⚠️ Could not verify creation date for '{package_name}'."
+
+        created_date = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        age_days = (datetime.now(created_date.tzinfo) - created_date).days
+
+        risks = []
+        if age_days < 90:
+            risks.append(f"🔴 CRITICAL: Package is only {age_days} days old (High Malware Risk).")
+        if len(maintainers) < 2:
+            risks.append(f"🟡 WARNING: Only {len(maintainers)} maintainer/author signal(s).")
+
+        status = "SECURE ✅" if not risks else "RISKY ⚠️"
+        report = [
+            f"# 🛡️ Supply Chain Audit: {package_name} ({eco} v{latest})",
+            f"**Status:** {status}",
+            f"**Age:** {age_days} days",
+            f"**Maintainers:** {len(maintainers)}",
+            "",
+            "## 🔍 Risk Findings",
+        ]
+        if not risks:
+            report.append("- No immediate red flags detected.")
+        else:
+            report.extend([f"- {r}" for r in risks])
+            if eco == "npm":
                 report.append("\n**Recommendation:** Use `npm install --ignore-scripts` if installation is mandatory.")
-            
-            return "\n".join(report)
-            
-        return f"Ecosystem '{ecosystem}' not yet supported for deep audit."
-        
+        return "\n".join(report)
+
     except Exception as e:
         return f"ERROR: Audit failed. {str(e)}"
 

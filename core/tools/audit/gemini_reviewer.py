@@ -79,9 +79,14 @@ def _call_gemini(
     else:
         model_to_use = token_governor.get_budget_aware_model(model_override, task_critical=thinking)
 
-    # Map our levels to official SDK values (thinking_budget)
+    # Map our levels to official SDK values (thinking_budget).
+    # Guarded with hasattr: the installed google-genai SDK (0.1.0) has no
+    # types.ThinkingConfig, so an unconditional reference crashed every
+    # thinking=True call (e.g. write_website_content) with
+    # "module 'google.genai.types' has no attribute 'ThinkingConfig'".
+    # Degrade gracefully instead of failing the whole generation.
     thinking_config = None
-    if thinking:
+    if thinking and hasattr(types, "ThinkingConfig"):
         budget_map = {
             "minimal": 1024,
             "low": 2048,
@@ -93,9 +98,9 @@ def _call_gemini(
             thinking_budget=budget
         )
 
-    # Google Search Grounding (Gemini 3 Native)
+    # Google Search Grounding (Gemini 3 Native) — also guarded for old SDKs.
     tools = []
-    if search_grounding:
+    if search_grounding and hasattr(types, "Tool") and hasattr(types, "GoogleSearch"):
         tools.append(types.Tool(
             google_search=types.GoogleSearch()
         ))
