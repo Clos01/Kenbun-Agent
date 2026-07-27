@@ -1306,6 +1306,43 @@ def telemetry_integrity_audit(post_alert: bool = True) -> str:
     return report
 
 @sovereign_tool()
+def generate_wireframe(prompt: str) -> str:
+    """Generate a UI wireframe from a natural-language feature description and push it
+    to the Kenbun /board Wireframe (Excalidraw) canvas.
+
+    The AI designs like a frontend developer: logical screens, labeled components, form
+    fields, navigation, and a primary CTA per screen. It produces a structured spec that
+    is converted deterministically into a valid Excalidraw scene, then written to the board.
+    Example: generate_wireframe("a login screen with email/password and a dashboard").
+    """
+    import urllib.request
+    import json as _json
+    with silence_stdout():
+        try:
+            from tools.craft.wireframe_generator import build_wireframe
+            scene, spec = build_wireframe(prompt)
+        except Exception as e:
+            return f"ERROR: wireframe generation failed: {e}"
+        try:
+            body = _json.dumps(scene).encode("utf-8")
+            req = urllib.request.Request(
+                "http://localhost:3000/api/wireframe", data=body,
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=20) as r:
+                pushed = (r.status == 200)
+        except Exception as e:
+            return (f"⚠️ Wireframe built ({len(scene['elements'])} elements) but push to board failed: {e}. "
+                    f"The dashboard /api/wireframe endpoint may be unreachable.")
+    screens = [s.get("name", "?") for s in spec.get("screens", [])]
+    return (
+        f"✅ Wireframe **{spec.get('title', 'Untitled')}** {'pushed to /board' if pushed else 'built'}.\n"
+        f"• Screens: {', '.join(screens) or '(none)'}\n"
+        f"• Elements: {len(scene['elements'])}\n"
+        f"Open http://100.92.127.1/board → **Wireframe** tab (reload the canvas to view)."
+    )
+
+@sovereign_tool()
 def reflect_on_task(task: str, tool_logs: str) -> str:
     """
     Analyzes tool logs to extract architectural patterns for the Hivemind.
