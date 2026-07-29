@@ -13,6 +13,7 @@ import {
   Minus
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import WeightFormula from "@/components/WeightFormula";
 import { CONFIG } from "@/lib/config";
 import { ToolStat, validateToolStat } from "@/lib/tools";
 import ToolDetailPanel from "@/components/ToolDetailPanel";
@@ -351,9 +352,7 @@ export default function FleetCommand() {
         {/* HEADER */}
         <header className="h-20 lg:h-24 border-b-2 border-[var(--border)] flex items-center justify-between px-6 lg:px-10 bg-[var(--background)]/60 z-20 sticky top-0 backdrop-blur-xl">
           <div className="flex items-center gap-4 lg:gap-8">
-            <span className="ind-header text-[10px] opacity-100 font-black">Node.251649</span>
-            <div className="h-6 w-[2px] bg-[var(--border)]" />
-            <span className="font-serif italic text-lg lg:text-xl">Fleet Command</span>
+            <span className="font-serif italic text-lg lg:text-xl">Agents</span>
           </div>
           <div className="flex items-center gap-3 lg:gap-4">
             <div className="hidden md:flex items-center gap-3 px-4 py-2 border border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow">
@@ -580,6 +579,10 @@ export default function FleetCommand() {
               <span className="text-[10px] sm:text-xs font-mono opacity-30">{tools.length} REGISTERED</span>
             </div>
 
+            <div className="mb-8">
+              <WeightFormula tools={tools} />
+            </div>
+
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {tools.map((tool, i) => (
                 <motion.button
@@ -637,7 +640,7 @@ export default function FleetCommand() {
             <div className="flex items-center gap-[var(--spacing-sm)]">
               <h3 className="ind-header text-[var(--tertiary)] opacity-100 font-serif italic text-lg">Design System & Asset Telemetry</h3>
               <div className="flex-1 h-[2px] bg-[var(--tertiary)] opacity-10" />
-              <span className="text-xs font-mono text-[var(--secondary)] font-bold uppercase">SOVEREIGN_HERITAGE_V1</span>
+              <span className="text-xs font-mono text-[var(--secondary)] font-bold uppercase">KENBUN_BLUEPRINT_V1</span>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-[var(--spacing-md)]">
@@ -668,7 +671,7 @@ export default function FleetCommand() {
                       <span>PUBLIC SANS</span>
                     </div>
                     <div className="text-sm font-sans truncate text-[var(--foreground)] select-all font-semibold">
-                      Limestone Heritage 123 ABC
+                      Blueprint Limestone 123 ABC
                     </div>
                     <p className="text-[10px] text-[var(--secondary)] leading-tight">
                       Used for body text, general labels, and layout headings.

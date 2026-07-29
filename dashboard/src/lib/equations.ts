@@ -2,9 +2,12 @@ export const TOOL_EQUATIONS: Record<string, { math: string; desc: string }> = {
   bayesian_governor: {
     math: `P(θ|D) ∝ P(D|θ)P(θ)
 
-α_{t+1} = α_t + 1
-β_{t+1} = β_t + 1`,
-    desc: "Thompson Sampling updates using a Beta distribution conjugate prior."
+Beta(α₀=1, β₀=1)
+λ = 0.5^(age_hours / 24)
+α = 1 + success_count·λ
+β = 1 + failure_count·λ
+P(success) = α / (α + β)`,
+    desc: "Beta-Bernoulli conjugate prior with a 24h recency half-life. Displayed weights are rebuilt from raw event counts, not the stored alpha/beta columns."
   },
   token_governor: {
     math: `E_t = λx_t + (1-λ)E_{t-1}
@@ -41,7 +44,7 @@ x_{norm} = 50(tanh(x_{raw})+1)`,
   },
   ask_ui_expert: {
     math: `ΔE_{00}^* = √((ΔL' / k_L S_L)^2 + (ΔC' / k_C S_C)^2 + (ΔH' / k_H S_H)^2)`,
-    desc: "CIEDE2000 color difference formula for strict heritage palette matching."
+    desc: "CIEDE2000 color difference formula for strict Blueprint palette matching."
   },
   memory_classifier: {
     math: `D_{KL}(P||Q) = ∑_{x ∈ X} P(x) log(P(x)/Q(x))`,

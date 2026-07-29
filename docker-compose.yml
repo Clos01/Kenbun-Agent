@@ -260,6 +260,14 @@ services:
       timeout: 5s
       retries: 5
 
+  # 11. Excalidraw Wireframing Canvas
+  excalidraw:
+    image: excalidraw/excalidraw:latest
+    container_name: portable_excalidraw
+    ports:
+      - "${BIND_IP:-127.0.0.1}:${EXCALIDRAW_PORT:-8080}:80"
+    restart: unless-stopped
+
 volumes:
   chroma_data:
   ollama_data:

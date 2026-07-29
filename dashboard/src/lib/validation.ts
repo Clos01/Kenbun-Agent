@@ -1,22 +1,18 @@
 import { z } from "zod";
 
 export const SafeStringSchema = z.string().transform((val) => {
-  // Prevent double-escaping by first unescaping entities if they exist
+  // Prevent double-escaping by first unescaping entities if they exist, 
+  // but don't re-escape them since React safely handles strings.
   const unescaped = val
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#x27;/g, "'")
+    .replace(/&#039;/g, "'")
     .replace(/&#x2F;/g, "/");
 
-  return unescaped
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#x27;")
-    .replace(/\//g, "&#x2F;");
+  return unescaped;
 });
 
 // BudgetSchema: Union of number or string (coerce currency strings like "$10,000" to float/number)

@@ -169,6 +169,7 @@ from tools.infrastructure.routers.health import router as health_router
 from tools.infrastructure.routers.intelligence import router as intelligence_router
 from tools.infrastructure.routers.legacy import router as legacy_router
 from tools.infrastructure.routers.planka import router as planka_router
+from tools.infrastructure.routers.sow import router as sow_router
 from tools.infrastructure.routers.supervisor import router as supervisor_router
 from tools.infrastructure.routers.swarm import router as swarm_router
 from tools.infrastructure.routers.telemetry import router as telemetry_router
@@ -182,6 +183,7 @@ app.include_router(swarm_router)
 app.include_router(legacy_router)
 app.include_router(supervisor_router)
 app.include_router(planka_router)
+app.include_router(sow_router)
 app.include_router(logs_router)
 app.include_router(cron_router)
 app.include_router(mcp_router)

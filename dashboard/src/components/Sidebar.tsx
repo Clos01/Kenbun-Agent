@@ -19,7 +19,8 @@ import {
   Layers,
   Menu,
   X,
-  ChevronDown
+  ChevronDown,
+  Mic
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useTenant } from "@/context/TenantContext";
@@ -35,23 +36,23 @@ export default function Sidebar() {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
   const navItems = [
-    { name: "Bridge", href: "/observatory", icon: Compass },
-    { name: "Fleet", href: "/fleet", icon: LayoutGrid },
+    { name: "Build Console", href: "/observatory", icon: Compass },
+    { name: "Agents", href: "/fleet", icon: LayoutGrid },
     { name: "Board", href: "/board", icon: Columns },
-    { name: "Apps", href: "/apps", icon: Layers },
-    { name: "Intel", href: "/telemetry", icon: Activity },
-    { name: "Supervisor", href: "/supervisor", icon: ShieldCheck },
-    { name: "Hivemind", href: "/hivemind", icon: Database },
+    { name: "Services", href: "/apps", icon: Layers },
+    { name: "Metrics", href: "/telemetry", icon: Activity },
+    { name: "Audit", href: "/supervisor", icon: ShieldCheck },
+    { name: "Code Search", href: "/hivemind", icon: Database },
     { name: "Chat", href: "/chat", icon: Terminal },
-    { name: "Controls", href: "/settings", icon: Settings },
+    { name: "Settings", href: "/settings", icon: Settings },
   ];
 
   // Selection of 4 primary pages to display directly on mobile bottom nav
   const mobilePrimaryItems = [
-    { name: "Bridge", href: "/observatory", icon: Compass },
+    { name: "Build Console", href: "/observatory", icon: Compass },
     { name: "Board", href: "/board", icon: Columns },
     { name: "Chat", href: "/chat", icon: Terminal },
-    { name: "Intel", href: "/telemetry", icon: Activity },
+    { name: "Metrics", href: "/telemetry", icon: Activity },
   ];
 
   return (

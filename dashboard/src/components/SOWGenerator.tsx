@@ -1,8 +1,13 @@
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { Download, FileText, Loader2 } from "lucide-react";
+// HMR Refresh Trigger: Whitish Header Theme Updated
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { Download, FileText, Loader2, RotateCcw, Database } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useReactToPrint } from "react-to-print";
 import "react-quill-new/dist/quill.snow.css";
+import { tenantFetch } from "../lib/tenantFetch";
+import { CONFIG } from "../lib/config";
+
+const API_BASE = CONFIG.API_BASE;
 
 // Dynamic import with SSR disabled for Quill editor
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
@@ -184,65 +189,193 @@ const getDefaultSOW = (name: string) => `
     </ul>
 `;
 
+const getBoldNCSOW = () => `
+<h2>1. Executive Summary & Project Identification</h2>
+<p><strong>Project Name:</strong> BOLD NC Project Alpha (Governors Club)</p>
+<p><strong>Client / Location:</strong> Governors Club Residence, Chapel Hill / Pittsboro, NC</p>
+<p><strong>Contractor:</strong> CRG Flooring LLC</p>
+<p><strong>Scope Overview:</strong> Supply, delivery, and turn-key installation of luxury vinyl plank (LVP) flooring for BOLD NC Project Alpha. Includes NC Form E-595E tax exemption handling, Will-Call logistics at MSI Surfaces Knightdale, subfloor moisture mitigation, and NCDOR sales tax compliance.</p>
+
+<h2>2. Material Specifications & Supplier Order</h2>
+<table border="1" cellpadding="8" style="border-collapse: collapse; width: 100%;">
+  <thead>
+    <tr style="background-color: rgba(184, 66, 46, 0.06);">
+      <th style="text-align: left; padding: 10px; font-weight: 700;">Item Description</th>
+      <th style="text-align: left; padding: 10px; font-weight: 700;">SKU / Product Code</th>
+      <th style="text-align: left; padding: 10px; font-weight: 700;">Quantity</th>
+      <th style="text-align: left; padding: 10px; font-weight: 700;">Coverage</th>
+      <th style="text-align: left; padding: 10px; font-weight: 700;">Unit Price</th>
+      <th style="text-align: left; padding: 10px; font-weight: 700;">Line Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="padding: 10px;"><strong>PRESCOTT - HONEYBELLA OAK 7.13X48.03</strong></td>
+      <td style="padding: 10px;"><code>VTRHONBEL7X48-6.5MM-20MIL</code></td>
+      <td style="padding: 10px;">128 Boxes</td>
+      <td style="padding: 10px;">304.26 SF</td>
+      <td style="padding: 10px;">$2.474 / SF</td>
+      <td style="padding: 10px;"><strong>$752.64</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. NC Sales & Use Tax Protocol</h2>
+<p>Material is purchased from MSI with standard NC sales tax included at purchase ($752.64 net + tax). MSI remits state sales tax directly on behalf of CRG Flooring LLC, ensuring 100% legal compliance and zero state tax reporting burden.</p>
+
+<h2>4. Logistics & Milestone Workflows</h2>
+<ol>
+  <li><strong>Order Placement:</strong> Submit PO for 128 boxes Prescott Honeybella Oak to Erandi Alvarez (MSI Knightdale) with tax included (~2.5 week NJ transit lead time).</li>
+  <li><strong>Will-Call Logistics:</strong> Dispatch Will-Call pickup at 385 Spectrum Drive, Suite 100, Knightdale, NC 27545 upon arrival.</li>
+  <li><strong>Subfloor Moisture Audit (Gate):</strong> Conduct relative humidity (RH) and surface moisture testing at Governors Club jobsite prior to installation.</li>
+  <li><strong>Turn-Key Installation:</strong> Acclimate LVP planks 24h, install perimeter expansion gaps, and secure trim/transitions.</li>
+  <li><strong>Close-out & Walkthrough:</strong> Perform final client walkthrough, collect sign-off, and issue final invoice.</li>
+</ol>
+`;
+
 const isBlankHtml = (str: string | null) => {
   if (!str) return true;
   const cleaned = str.replace(/<[^>]*>/g, "").trim();
   return cleaned === "";
 };
 
-
 interface SOWGeneratorProps {
+  projectId?: string;
   boardId?: string;
   boardName?: string;
   projectName?: string;
   cards?: any[];
 }
 
-export default function SOWGenerator({ boardId, boardName, projectName, cards = [] }: SOWGeneratorProps) {
+export default function SOWGenerator({ projectId, boardId, boardName, projectName, cards = [] }: SOWGeneratorProps) {
   const [content, setContent] = useState<string>("");
   const [isAdhdMode, setIsAdhdMode] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [diagLog, setDiagLog] = useState<string>("Initializing...");
+  const [sourceTag, setSourceTag] = useState<string>("LOADING");
+
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const pid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
 
   const getDefaultContent = () => {
-    const cardText = cards.map(c => c.name || c.title || c.Title || "").join(" ");
-    const combined = `${projectName || ""} ${boardName || ""} ${cardText}`.toLowerCase();
-    if (combined.includes("claude corps") || combined.includes("take-home assessment")) {
+    const target = `${projectName || ""} ${boardName || ""}`.toLowerCase();
+    if (target.includes("claude corps") || target.includes("take-home")) {
       return getClaudeCorpsSOW();
-    } else if (combined.includes("nevermiss") || combined.includes("backend") || combined.includes("azure") || combined.includes("webhook") || combined.includes("infra")) {
+    } else if (target.includes("nevermiss") || target.includes("never miss")) {
       return getNeverMissSOW();
-    } else if (combined.includes("crg")) {
+    } else if (target.includes("bold")) {
+      return getBoldNCSOW();
+    } else if (target.includes("crg")) {
       return getCRGSOW();
     } else {
-      return getDefaultSOW(projectName || boardName || "Project");
+      return getDefaultSOW(boardName || projectName || "Project");
     }
   };
 
-  useEffect(() => {
-    const key = boardId ? `sow_content_v4_${boardId}` : "sow_content_v4_global";
-    const saved = localStorage.getItem(key);
-    
-    // Check if the saved content is the generic boilerplate. If so, discard it so the heuristic can run again.
-    const isGeneric = saved && saved.includes("Statement of Work for <strong>Project</strong>") && !saved.includes("NeverMiss");
+  const storageKey = useMemo(() => {
+    const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
+    return `sow_content_v7_${currentPid}`;
+  }, [boardId, projectId, projectName]);
 
-    if (saved && !isBlankHtml(saved) && !saved.includes("Sovereign Stack Overview") && !isGeneric) {
-      setContent(saved);
-    } else {
-      if (boardId) {
-        localStorage.removeItem(`sow_content_${boardId}`);
-        localStorage.removeItem(`sow_content_v2_${boardId}`);
-        localStorage.removeItem(`sow_content_v3_${boardId}`);
-        localStorage.removeItem(`sow_content_v4_${boardId}`);
+  const fetchAndApplySOW = useCallback(async () => {
+    const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "");
+    const logInfo = `PID=${currentPid || "NONE"} | Board="${boardName || ""}" | Proj="${projectName || ""}"`;
+    console.log(`[SOW_DIAGNOSTIC] Fetching SOW. ${logInfo}`);
+
+    if (!currentPid) {
+      setDiagLog(`Waiting for Board Context... (${logInfo})`);
+      setSourceTag("WAITING");
+      return;
+    }
+
+    setIsLoading(true);
+    setDiagLog(`Querying PostgreSQL for ${currentPid}...`);
+
+    try {
+      const res = await tenantFetch(`${API_BASE}/api/v1/sow?project_id=${encodeURIComponent(currentPid)}`, { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        console.log(`[SOW_DIAGNOSTIC] Backend response:`, data);
+        if (data && data.exists && data.content && !isBlankHtml(data.content)) {
+          setContent(data.content);
+          localStorage.setItem(storageKey, data.content);
+          setSourceTag("POSTGRES DB");
+          setDiagLog(`Loaded from DB. Title: "${data.title || "Untitled"}" | Length: ${data.content.length} chars`);
+          setIsLoading(false);
+          return;
+        }
       }
+    } catch (err) {
+      console.warn("[SOW_DIAGNOSTIC] Backend fetch error:", err);
+    }
+
+    const fresh = getDefaultContent();
+    setContent(fresh);
+    localStorage.setItem(storageKey, fresh);
+    setSourceTag("FRESH DEFAULT");
+    setDiagLog(`Generated Fresh Template for "${boardName || projectName || "Project"}"`);
+    setIsLoading(false);
+  }, [boardId, projectId, boardName, projectName, storageKey]);
+
+  useEffect(() => {
+    fetchAndApplySOW();
+  }, [fetchAndApplySOW]);
+
+  const handleForceReset = async () => {
+    if (confirm("Reset SOW for this board to fresh template defaults?")) {
+      localStorage.removeItem(storageKey);
       const fresh = getDefaultContent();
       setContent(fresh);
-      localStorage.setItem(key, fresh);
+      setSourceTag("MANUAL RESET");
+      setDiagLog("Reset to default template.");
+      
+      const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
+      try {
+        await tenantFetch(`${API_BASE}/api/v1/sow`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            project_id: currentPid,
+            project_name: projectName || boardName || "",
+            board_id: boardId || "",
+            content: fresh,
+          }),
+        });
+      } catch (e) {
+        console.error("Failed to reset DB SOW:", e);
+      }
     }
-  }, [boardId, boardName, projectName, cards]);
+  };
+
+  const handleContentChange = (newContent: string) => {
+    setContent(newContent);
+    localStorage.setItem(storageKey, newContent);
+
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(() => {
+      const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
+      tenantFetch(`${API_BASE}/api/v1/sow`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          project_id: currentPid,
+          project_name: projectName || boardName || "",
+          board_id: boardId || "",
+          content: newContent,
+        }),
+      }).catch(err => console.warn("Auto-save to backend SOW failed:", err));
+    }, 1500);
+  };
+  
   const contentRef = useRef<HTMLDivElement>(null);
+  const ReactQuill = useMemo(() => dynamic(() => import("react-quill-new"), { ssr: false }), []);
 
   const handleDownloadPdf = useReactToPrint({
     contentRef,
     documentTitle: `Statement_of_Work_${projectName?.replace(/\s+/g, "_") || "Project"}`,
   });
+  
   const modules = useMemo(() => ({
     toolbar: [
       [{ header: [1, 2, 3, false] }],
@@ -256,40 +389,77 @@ export default function SOWGenerator({ boardId, boardName, projectName, cards = 
 
   return (
     <div className="flex-1 flex flex-col h-full bg-neutral relative overflow-hidden font-sans text-primary">
-      {/* Heritage backdrop — faded drafting grid + matte clay wash, so the editor reads as part of the app */}
       <div aria-hidden="true" className="absolute inset-0 pointer-events-none z-0 print:hidden">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] opacity-30 [mask-image:radial-gradient(ellipse_80%_80%_at_50%_20%,black_20%,transparent_100%)]" />
         <div className="absolute top-[-25%] right-[-15%] w-[50vw] h-[50vw] bg-tertiary/[0.03] rounded-full blur-[130px]" />
       </div>
 
-      {/* Header toolbar — mirrors the board header (label-caps eyebrow + serif-italic title, matte glass) */}
-      <header className="relative z-30 h-12 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm flex items-center justify-between px-4 sm:px-6 shrink-0 print:hidden gap-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <FileText className="w-4 h-4 text-tertiary shrink-0" />
+      <header className="relative z-30 h-16 border-b border-border bg-card/90 backdrop-blur-md shadow-sm flex items-center justify-between px-4 sm:px-6 shrink-0 print:hidden gap-3 text-primary transition-colors">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-tertiary/10 border border-tertiary/30 flex items-center justify-center shrink-0 shadow-sm">
+            <FileText className="w-4 h-4 text-tertiary" />
+          </div>
           <div className="min-w-0">
-            <div className="text-[9px] font-mono text-secondary uppercase tracking-[0.2em] font-bold leading-none mb-0.5">Statement of Work</div>
-            <h2 className="font-serif italic text-sm font-bold text-primary leading-tight truncate">Document Editor</h2>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono text-tertiary uppercase tracking-[0.2em] font-extrabold leading-none">
+                Statement of Work
+              </span>
+              <span className="text-secondary/40 text-xs font-bold">•</span>
+              <span className="text-xs font-mono font-bold text-secondary truncate max-w-[160px] sm:max-w-[280px]">
+                {projectName || boardName || "Default Workspace"}
+              </span>
+            </div>
+            <h2 className="font-serif text-base font-bold text-primary tracking-tight truncate mt-0.5">
+              Document Editor
+            </h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        <div className="flex items-center gap-3">
+          {/* System Connection / Telemetry Badge with Dynamic Card Background */}
+          <div
+            className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-card border border-tertiary/40 rounded-full text-[10.5px] font-mono shadow-sm hover:border-tertiary transition-all cursor-help group relative"
+            title={String(diagLog || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;")}
+          >
+            <span className="h-2 w-2 rounded-full bg-tertiary shadow-[0_0_8px_var(--tertiary,#e0b084)] animate-pulse"></span>
+            <span className="font-bold text-tertiary tracking-wide uppercase text-[9.5px]">
+              {sourceTag === "POSTGRES DB" ? "PostgreSQL Synced" : sourceTag}
+            </span>
+
+            <div className="absolute right-0 top-full mt-2 w-76 p-3 bg-card border border-border rounded-xl shadow-2xl backdrop-blur-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 text-[10.5px] text-secondary font-mono leading-relaxed">
+              <div className="flex items-center gap-2 text-primary font-bold mb-1 border-b border-border pb-1">
+                <Database className="w-3.5 h-3.5 text-tertiary" /> Database Connection Status
+              </div>
+              <p className="text-secondary opacity-90 mt-1">{diagLog}</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleForceReset}
+            className="h-9 px-3 bg-card hover:bg-neutral text-primary border border-border rounded-lg text-xs font-mono font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0 active:scale-95"
+            title="Reset template & clear local storage cache"
+          >
+            <RotateCcw className="w-3.5 h-3.5 text-secondary group-hover:rotate-180 transition-transform" />
+            <span className="hidden sm:inline">Reset</span>
+          </button>
+
           <button
             onClick={handleDownloadPdf}
-          className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-        >
-          <Download className="w-3.5 h-3.5" />
-          Export PDF
-        </button>
+            className="h-9 px-4 bg-tertiary text-white hover:opacity-90 font-sans text-xs font-bold rounded-lg shadow-md shadow-tertiary/20 flex items-center gap-2 transition-all cursor-pointer shrink-0 active:scale-95"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Export PDF</span>
+          </button>
         </div>
       </header>
 
-      {/* Full Page Editor — white "paper" sheet floats over the matte grid */}
       <div className="flex-1 overflow-y-auto print:overflow-visible print:w-full print:bg-white bg-transparent py-8 pb-48 print:py-0 relative z-10">
-        <div ref={contentRef} className="max-w-[816px] mx-auto bg-card artisan-shadow border border-border rounded-sm print:shadow-none print:border-none min-h-[1056px] print:min-h-0 print:w-full relative docs-editor mb-16 sm:mb-24 adhd-mode" style={{ backgroundColor: "var(--card, #121212)" }}>
+        <div ref={contentRef} className="max-w-[816px] mx-auto bg-card artisan-shadow border border-border rounded-sm print:shadow-none print:border-none min-h-[1056px] print:min-h-0 print:w-full relative docs-editor mb-16 sm:mb-24 adhd-mode">
            <div className="p-10 sm:p-16 print:p-0 react-quill-wrapper">
             <ReactQuill
               theme="snow"
               value={content}
-              onChange={setContent}
+              onChange={handleContentChange}
               modules={modules}
             />
            </div>
@@ -337,8 +507,8 @@ export default function SOWGenerator({ boardId, boardName, projectName, cards = 
           }
         }
         
-        /* Heritage-native Quill theme */
-        /* Heritage-native Quill theme */
+        /* Blueprint-native Quill theme */
+        /* Blueprint-native Quill theme */
         .docs-editor, .docs-editor.adhd-mode {
            background-color: var(--card) !important;
            height: max-content !important;
@@ -400,21 +570,23 @@ export default function SOWGenerator({ boardId, boardName, projectName, cards = 
         .docs-editor .ql-editor b {
           color: var(--primary);
         }
-        .docs-editor .ql-editor h1 {
+        .docs-editor .ql-editor h1,
+        .docs-editor .ql-editor h1 span {
           font-family: var(--font-heading) !important;
           font-size: 2.25rem; /* 36px */
           font-weight: 600;
           letter-spacing: -0.02em;
-          color: var(--tertiary);
+          color: var(--tertiary) !important;
           margin-bottom: 1.25rem;
           margin-top: 1.5rem;
         }
-        .docs-editor .ql-editor h2 {
+        .docs-editor .ql-editor h2,
+        .docs-editor .ql-editor h2 span {
           font-family: var(--font-heading) !important;
           font-size: 1.5rem; /* 24px */
           font-weight: 600;
           letter-spacing: -0.01em;
-          color: var(--tertiary);
+          color: var(--tertiary) !important;
           margin-bottom: 1rem;
           margin-top: 2rem;
           padding-bottom: 0.5rem;
@@ -480,6 +652,78 @@ export default function SOWGenerator({ boardId, boardName, projectName, cards = 
         .docs-editor .ql-snow.ql-toolbar .ql-picker-item:hover,
         .docs-editor .ql-snow.ql-toolbar .ql-picker-item.ql-selected {
           color: var(--tertiary) !important;
+        }
+
+        /* Theme-Aware Code Tags, Monospace Elements, and Links */
+        .docs-editor .ql-editor code,
+        .docs-editor .ql-editor pre,
+        .docs-editor .ql-editor var,
+        .docs-editor .ql-editor kbd,
+        .docs-editor .ql-editor samp {
+          background-color: rgba(184, 66, 46, 0.06) !important;
+          color: var(--tertiary) !important;
+          border: 1px solid rgba(184, 66, 46, 0.2) !important;
+          border-radius: 4px !important;
+          padding: 2px 7px !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+          font-size: 0.85em !important;
+          word-break: break-all !important;
+        }
+
+        .light .docs-editor .ql-editor code,
+        .light .docs-editor .ql-editor pre,
+        .light .docs-editor .ql-editor var,
+        .light .docs-editor .ql-editor kbd,
+        .light .docs-editor .ql-editor samp {
+          background-color: rgba(26, 28, 30, 0.05) !important;
+          color: #9E2B1E !important;
+          border: 1px solid rgba(26, 28, 30, 0.15) !important;
+        }
+
+        .docs-editor .ql-editor a {
+          color: var(--tertiary) !important;
+          text-decoration: underline !important;
+          text-underline-offset: 3px !important;
+        }
+
+        .docs-editor .ql-editor a code {
+          color: var(--tertiary) !important;
+          border-color: rgba(184, 66, 46, 0.3) !important;
+        }
+
+        /* High-Contrast Accessible Table Formatting */
+        .docs-editor .ql-editor table {
+          width: 100% !important;
+          border-collapse: collapse !important;
+          margin: 1.5rem 0 !important;
+          font-size: 0.875rem !important;
+          border: 1px solid var(--border) !important;
+          border-radius: 6px !important;
+          overflow: hidden !important;
+        }
+        .docs-editor .ql-editor th,
+        .docs-editor .ql-editor td {
+          padding: 10px 14px !important;
+          border: 1px solid var(--border) !important;
+          text-align: left !important;
+          vertical-align: top !important;
+          color: var(--primary) !important;
+        }
+        .docs-editor .ql-editor th {
+          background-color: var(--sand) !important;
+          color: var(--primary) !important;
+          font-weight: 700 !important;
+          font-family: var(--font-data) !important;
+          text-transform: uppercase !important;
+          font-size: 0.75rem !important;
+          letter-spacing: 0.05em !important;
+          border-bottom: 2px solid var(--border) !important;
+        }
+        .docs-editor .ql-editor tr:nth-child(even) td {
+          background-color: rgba(128, 128, 128, 0.03) !important;
+        }
+        .docs-editor .ql-editor tr:hover td {
+          background-color: var(--sand) !important;
         }
       `}} />
     </div>

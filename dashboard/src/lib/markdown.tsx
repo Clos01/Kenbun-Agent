@@ -14,8 +14,17 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
   });
 }
 
-export function formatMarkdown(text: string): React.ReactNode {
-  if (!text) return "";
+export function formatMarkdown(rawText: string): React.ReactNode {
+  if (!rawText) return "";
+
+  // Decode HTML entities that the backend might have pre-encoded
+  const text = rawText
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
 
   // Split by code blocks first to isolate them in a ReDoS-safe manner
   const parts = text.split(/(```[a-z]*\n[\s\S]*?\n```)/g);

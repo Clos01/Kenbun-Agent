@@ -238,10 +238,8 @@ export default function SupervisorDashboard() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-[10px] font-bold font-mono uppercase tracking-widest text-[var(--foreground)]/40 hidden sm:inline">System.02</span>
-            <div className="h-5 w-[1px] bg-[var(--border)] hidden sm:block" />
             <span className="font-bold text-base uppercase tracking-tighter italic text-[var(--foreground)]">
-              Supervisor <span className="text-[var(--tertiary)]">Auditor</span>
+              Code <span className="text-[var(--tertiary)]">Audit</span>
             </span>
           </div>
 
@@ -275,8 +273,8 @@ export default function SupervisorDashboard() {
             {[
               { label: "Compliance Score", value: "98.8%", icon: ShieldCheck, color: "text-[var(--tertiary)]" },
               { label: "Static Code Audited", value: `${stats.linesAudited} LOC`, icon: FileCode2, color: "text-[var(--foreground)]" },
-              { label: "AST Integrity Laws", value: `${stats.astIntegrity}% Nominal`, icon: Activity, color: "text-[var(--foreground)]" },
-              { label: "Sovereign Checkpoints", value: stats.checkpointsSaved, icon: GitCommit, color: "text-[var(--foreground)]" }
+              { label: "AST Validation Rules", value: `${stats.astIntegrity}% Nominal`, icon: Activity, color: "text-[var(--foreground)]" },
+              { label: "System Checkpoints", value: stats.checkpointsSaved, icon: GitCommit, color: "text-[var(--foreground)]" }
             ].map((stat, i) => (
               <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-2xl flex items-center justify-between group hover:border-[var(--tertiary)] transition-all duration-300 hover:scale-[1.02] hover:bg-card/85">
                 <div className="space-y-1 text-left">
@@ -294,8 +292,8 @@ export default function SupervisorDashboard() {
             {/* Left Block: Sandboxed Code Safety Inspector */}
             <section className="xl:col-span-7 p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
               <div className="space-y-1 text-left">
-                <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--tertiary)]">Real-Time Isolation Vault</span>
-                <h3 className="text-lg font-bold uppercase tracking-tight text-[var(--foreground)]">Code Safety Sandbox Inspector</h3>
+                <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--tertiary)]">Secure Sandbox</span>
+                <h3 className="text-lg font-bold uppercase tracking-tight text-[var(--foreground)]">Sandbox Inspector</h3>
               </div>
 
               <form onSubmit={handleExecuteAudit} className="space-y-4">

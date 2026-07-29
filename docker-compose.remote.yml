@@ -330,6 +330,24 @@ services:
     depends_on:
       tailscale:
         condition: service_started
+  excalidraw:
+    image: excalidraw/excalidraw:latest
+    container_name: portable_excalidraw
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - -qO-
+      - http://127.0.0.1:80
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    network_mode: container:tailscale
+    depends_on:
+      tailscale:
+        condition: service_started
+
 volumes:
   tailscale_data: null
   chroma_data: null

@@ -79,11 +79,11 @@ export default function EntryTerminal() {
       <div className="text-center space-y-6 relative z-10 max-w-xl">
         <div className="space-y-3">
           <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-primary uppercase terminal-text leading-none italic">
-            Kenbun <span className="text-tertiary">Intelligence</span>
+            Kenbun
           </h1>
           <p className="text-primary/40 font-bold text-xs md:text-sm tracking-[0.3em] uppercase flex items-center justify-center gap-2 terminal-text">
             <Activity className="w-4 h-4 text-tertiary/50" />
-            System Node :: Heritage Active
+            Ships working software
           </p>
         </div>
 
@@ -96,7 +96,7 @@ export default function EntryTerminal() {
           </div>
           <div className="bg-card/60 backdrop-blur-sm border border-primary/5 p-5 text-left space-y-1 rounded-sm shadow-sm">
             <div className="flex items-center gap-2 text-[10px] text-primary/40 uppercase font-black tracking-widest">
-              <Zap className="w-3 h-3" /> Swarm Latency
+              <Zap className="w-3 h-3" /> Agent Response Time
             </div>
             <div className="text-sm font-bold text-primary">12.4ms (Bayesian)</div>
           </div>
@@ -106,18 +106,18 @@ export default function EntryTerminal() {
           <button 
             onClick={handleLaunch}
             className="flex-1 py-5 bg-primary hover:bg-primary/95 text-neutral font-black uppercase tracking-[0.3em] text-xs transition-all duration-300 rounded-sm shadow-lg shadow-primary/10 flex items-center justify-center gap-2 cursor-pointer"
-            aria-label="Animate Swarm Launch and Enter"
+            aria-label="Play the intro animation and enter Kenbun"
           >
-            Animate Launch
+            Enter Kenbun
             <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
           </button>
           
           <button 
             onClick={() => router.push("/observatory")}
             className="flex-1 py-5 bg-tertiary hover:bg-tertiary/95 text-white font-black uppercase tracking-[0.3em] text-xs transition-all duration-300 rounded-sm shadow-lg shadow-tertiary/10 flex items-center justify-center gap-2 cursor-pointer"
-            aria-label="Direct access to Observatory dashboard"
+            aria-label="Skip the intro and open the Build Console"
           >
-            Direct Access
+            Open Build Console
             <Zap className="w-4 h-4 text-[#FAF9F6] animate-pulse" />
           </button>
         </div>
@@ -134,7 +134,7 @@ export default function EntryTerminal() {
       {/* Footer Branding */}
       <div className="fixed bottom-10 left-0 right-0 text-center opacity-30 pointer-events-none terminal-text">
         <span className="text-[9px] font-black uppercase tracking-[0.6em] text-primary">
-          Architectural Minimalism :: Heritage v1.0
+          Blueprint Design System v1.0
         </span>
       </div>
     </main>

@@ -25,8 +25,8 @@ const spaceMono = Space_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Neural Observatory | Kenbun Swarm",
-  description: "Real-time visibility into System 4 Bayesian Intelligence and Swarm Learning cycles.",
+  title: "Kenbun — Build Console",
+  description: "Real-time visibility into agent workflows and software delivery.",
 };
 
 export default function RootLayout({

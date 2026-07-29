@@ -31,15 +31,16 @@ const securityHeaders = [
 // script/style/connect permissive enough for the app to run.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://esm.sh",
+  "style-src 'self' 'unsafe-inline' https://esm.sh",
   "img-src 'self' data: blob:",
-  "font-src 'self' data:",
+  "font-src 'self' data: https://esm.sh",
   // 'self' + ws/wss covers same-origin API calls and Turbopack HMR sockets on
   // the Tailscale hostnames the dashboard is reached from.
-  "connect-src 'self' ws: wss:",
+  "connect-src 'self' ws: wss: https://esm.sh",
   "object-src 'none'",
   "base-uri 'self'",
+  "frame-src *",
   "frame-ancestors 'self'",
 ].join("; ");
 

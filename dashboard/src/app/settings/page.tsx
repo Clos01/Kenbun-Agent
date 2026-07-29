@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useId, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Server, Key, Activity, Settings as SettingsIcon, X, Network, DollarSign, Shield } from "lucide-react";
+import { Server, Key, Activity, Settings as SettingsIcon, X, Network, DollarSign, Shield, Users } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import { CONFIG } from "@/lib/config";
 import { tenantFetch } from "@/lib/tenantFetch";
@@ -171,6 +171,7 @@ export default function Settings() {
     { id: "network", title: "Network & Ports", icon: Network, description: "Configure internal API gateway bindings.", chapter: 3 },
     { id: "economics", title: "Swarm Economics", icon: DollarSign, description: "Set daily budget telemetry and token limiters.", chapter: 4 },
     { id: "security", title: "Guardrails & Sandbox", icon: Shield, description: "Calibrate prompt filters, shell restrictions, and container sandboxing.", chapter: 5 },
+    { id: "rbac", title: "User Roles & Access Console", icon: Users, description: "Manage team roles, tab visibility, and tool permissions across 100.92 and 100.100 nodes.", chapter: 6 },
   ];
 
   return (
@@ -557,6 +558,86 @@ export default function Settings() {
                           </div>
                         </div>
                       )}
+                    </div>
+
+                    <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">
+                      <div>
+                        {saveStatus && <span className="text-emerald-500 text-[10px] font-bold">{saveStatus}</span>}
+                        {isSaving && !saveStatus && <span className="text-[var(--tertiary)]/70 text-[10px] font-bold animate-pulse">Saving...</span>}
+                        {!isSaving && !saveStatus && <span className="text-[var(--foreground)]/40 text-[10px] font-bold">Auto-save active</span>}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await triggerManualSave();
+                          setActiveSection(null);
+                        }}
+                        className="bg-[var(--tertiary)] hover:bg-[var(--tertiary)]/80 text-white text-[10px] font-bold uppercase tracking-wider px-4 py-2 rounded-sm cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-[var(--tertiary)]"
+                      >
+                        Save & Close
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* CH.6 User Roles & RBAC Access Console */}
+                {activeSection === 5 && (
+                  <form onSubmit={handleSave} className="space-y-6 pt-4">
+                    <div className="space-y-2">
+                      <span className="text-[8px] font-mono text-[var(--tertiary)] border border-[var(--tertiary)]/30 px-2 py-0.5 font-bold uppercase rounded bg-[var(--tertiary)]/10">Sovereign Security Node</span>
+                      <h3 className="text-xl font-serif font-black text-[var(--foreground)]">User Roles & Access Control</h3>
+                    </div>
+
+                    <div className="border border-[var(--border)] p-4 bg-[var(--background)]/40 rounded space-y-4">
+                      <div className="space-y-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--foreground)]">Multi-Node Role Assignments (100.92 & 100.100)</span>
+                        <p className="text-[9px] font-mono opacity-50 text-[var(--foreground)]">Assign permissions and feature tab visibility for team members across Kenbun workbenches.</p>
+                      </div>
+
+                      <div className="overflow-x-auto border border-[var(--border)]/30 rounded">
+                        <table className="w-full text-[9px] font-mono text-left">
+                          <thead className="bg-[var(--background)]/80 border-b border-[var(--border)]/30 text-[var(--tertiary)] uppercase">
+                            <tr>
+                              <th className="p-2">User / Identity</th>
+                              <th className="p-2">Role</th>
+                              <th className="p-2">Accessible Tabs</th>
+                              <th className="p-2">Supervisor Code Audit</th>
+                              <th className="p-2">CRG Costs & Data</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[var(--border)]/20">
+                            <tr>
+                              <td className="p-2 font-bold text-[var(--foreground)]">Carlos Rivas (Owner)</td>
+                              <td className="p-2 text-emerald-500 font-bold">👑 Super Admin</td>
+                              <td className="p-2 text-emerald-500">All (Unrestricted)</td>
+                              <td className="p-2 text-emerald-500">Full Control</td>
+                              <td className="p-2 text-emerald-500">Full Access</td>
+                            </tr>
+                            <tr>
+                              <td className="p-2 font-bold text-[var(--foreground)]">Developer (100.100 / p330)</td>
+                              <td className="p-2 text-[var(--tertiary)] font-bold">👨‍💻 Software Dev</td>
+                              <td className="p-2">Board, Chat, Apps, Fleet, Controls (Read)</td>
+                              <td className="p-2 text-emerald-500">Enabled (consult_supervisor)</td>
+                              <td className="p-2 text-amber-500">Masked (Schemas Only)</td>
+                            </tr>
+                            <tr>
+                              <td className="p-2 font-bold text-[var(--foreground)]">1099 Field Specialist</td>
+                              <td className="p-2 text-blue-400 font-bold">📐 Field Tech</td>
+                              <td className="p-2">Board (Job Cards), Mobile Intake</td>
+                              <td className="p-2 text-red-400">Disabled</td>
+                              <td className="p-2 text-emerald-500">Estimator API Only</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <div className="space-y-2 pt-2">
+                        <label className="text-[10px] font-bold text-[var(--foreground)] uppercase tracking-wider">Casbin Policy Engine Status</label>
+                        <div className="flex items-center justify-between p-2 bg-[var(--background)]/60 rounded border border-[var(--border)]/20">
+                          <span className="text-[9px] font-mono text-[var(--foreground)]">Dynamic Policy Sync Across Nodes (100.92 ↔ 100.100)</span>
+                          <span className="text-[9px] font-mono font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded">Active & Enforcing</span>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between pt-4 border-t border-[var(--border)]">

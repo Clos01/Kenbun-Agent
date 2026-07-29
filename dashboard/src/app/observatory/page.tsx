@@ -383,7 +383,7 @@ const MISSION_WORKFLOWS: { id: string; label: string; blurb: string }[] = [
   { id: "design_ui", label: "Design UI", blurb: "Draft an interface" },
 ];
 
-export default function HeritageObservatory() {
+export default function BuildConsole() {
   const { tenantId } = useTenant();
   const API_BASE = CONFIG.API_BASE;
   const [stats, setStats] = useState<IntelligenceTool[]>([]);
@@ -773,7 +773,7 @@ export default function HeritageObservatory() {
     { id: "intelligence", label: "Intelligence", icon: BrainCircuit },
     { id: "memory", label: "Memory", icon: Database },
     { id: "workspace", label: "Workspace", icon: Target },
-    { id: "feed", label: "Deep Feed", icon: Activity },
+    { id: "feed", label: "Activity Log", icon: Activity },
   ] as const;
 
   const handleTabKeyDown = (e: React.KeyboardEvent, index: number) => {
@@ -801,12 +801,10 @@ export default function HeritageObservatory() {
       <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden">
         <div className="grain-overlay opacity-20" />
         
-        {/* Heritage Command Header */}
+        {/* Build Console Header */}
         <header className="h-20 lg:h-24 border-b border-primary/5 flex items-center justify-between px-6 lg:px-10 bg-card/40 z-20 sticky top-0 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-2 sm:gap-4 lg:gap-8">
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-30 hidden sm:inline-block">Node.251649</span>
-            <div className="h-6 w-[1px] bg-primary/10 hidden sm:block" />
-            <span className="font-bold text-base sm:text-lg lg:text-xl uppercase tracking-tighter italic">Heritage <span className="text-tertiary">Observatory</span></span>
+            <span className="font-bold text-base sm:text-lg lg:text-xl uppercase tracking-tighter italic">Build <span className="text-tertiary">Console</span></span>
           </div>
           
           <div className="flex items-center gap-4 lg:gap-10">
@@ -879,8 +877,8 @@ export default function HeritageObservatory() {
                   </span>
                   <p className="text-[9px] font-bold text-tertiary/60 uppercase tracking-widest leading-relaxed">
                     {isPaused 
-                      ? `Heritage Control at ${API_BASE} is unreachable. Is this intentional?` 
-                      : `Connection lost with Heritage Control (Reconnecting attempt ${consecutiveFailures} of 5)`}
+                      ? `The Kenbun API server at ${API_BASE} is unreachable. Is this intentional?` 
+                      : `Connection lost with the Kenbun API server (Reconnecting attempt ${consecutiveFailures} of 5)`}
 
                   </p>
                 </div>
@@ -1036,7 +1034,7 @@ export default function HeritageObservatory() {
 
                 <div className="grid grid-cols-2 md:grid-cols-4 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow divide-x divide-primary/5 rounded-xl">
                   {[
-                    { label: missionJob ? "Workflow" : "Domain", value: missionJob?.workflow || activeTask?.project || "Heritage" },
+                    { label: missionJob ? "Workflow" : "Domain", value: missionJob?.workflow || activeTask?.project || "Unassigned" },
                     { label: "Betterment", value: totalSignals > 0 ? `+${((totalSuccess / totalSignals) * 100).toFixed(1)}%` : "+0.0%" },
                     { label: "Indexed Nodes", value: indexedNodes > 0 ? indexedNodes.toLocaleString() : "Not indexed", color: "text-tertiary" },
                     { label: "LLM Spend", value: `$${(budget?.lifetime_spend ?? budget?.daily_usage ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` }
@@ -1051,8 +1049,8 @@ export default function HeritageObservatory() {
                 <div className="w-full min-h-[400px] p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-xl shadow-primary/5 flex flex-col space-y-8 rounded-2xl">
                   <div className="flex items-center justify-between">
                     <div className="space-y-1">
-                      <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Topology</span>
-                      <p className="text-[11px] font-bold opacity-30 uppercase tracking-widest italic">Vector Visualization // Node.251649</p>
+                      <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Dependency Graph</span>
+                      <p className="text-[11px] font-bold opacity-30 uppercase tracking-widest italic">Vector Visualization</p>
                     </div>
                     <div className="flex items-center gap-3 bg-primary/5 px-4 py-2 border border-primary/5 rounded-full">
                       <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
@@ -2137,7 +2135,7 @@ export default function HeritageObservatory() {
         {/* <RoamingMascot /> */}
 
         <footer className="h-16 border-t border-primary/10 flex items-center justify-between px-10 bg-card/60 text-[8px] font-black uppercase tracking-[0.8em] text-primary opacity-40 sticky bottom-0 lg:static backdrop-blur-xl">
-          <span>NODE.251649 // Heritage.HIVE // STATUS: {buildStatus?.status || "HEALTHY"}</span>
+          <span>KENBUN // STATUS: {buildStatus?.status || "HEALTHY"}</span>
           <div className="flex items-center gap-6">
             <span>LOC_127.0.0.1</span>
             <span className="text-tertiary opacity-80">/ ARCH: {pulse?.supervisor || "SYSTEM 2"}</span>

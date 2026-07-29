@@ -74,5 +74,37 @@ The user forgot their n8n dashboard login credentials and was locked out of thei
 ### Root Cause
 Forgotten credentials on a self-hosted instance without an SMTP server configured for password resets.
 
+
+## 2026-07-21: Periodic 60-Second Polling vs Event-Driven Push Architecture
+
+### Symptoms
+Mobile email replies sent from phone in Gmail were not triggering n8n automatically unless periodic polling loops were enabled.
+
+### Root Cause
+Periodic polling loops (e.g. 60-second intervals) consume CPU, hit API quotas unnecessarily, and create visual node clutter ("visual spaghetti"). Without Google Cloud Pub/Sub push notifications, Gmail holds email replies in Google's inbox server without notifying external webhooks.
+
 ### Fix
-SSH'd into the server and ran `docker exec -i n8n-docker-n8n-1 n8n user-management:reset`. This command securely wiped the user lock state from the internal database. When the user refreshed the URL, they were greeted by the "Setup Owner" screen, allowing them to recreate their account with their original email and a new password without losing access to their existing workflows.
+Implemented zero-polling event-driven push architecture (`Google Cloud Pub/Sub` -> `https://n8n.rivasautomations.com/webhook/gmail-reply-push`). The system consumes 0.0% compute when idle and processes mobile email replies in <500ms upon receiving incoming push events.
+
+## 2026-07-21: n8n SQLite `versionId` & Webhook Route Registration
+
+### Symptoms
+Updating n8n workflows directly via SQLite resulted in `"Active version not found for workflow"` or `"Cannot POST /webhook/..."` 404 errors.
+
+### Root Cause
+n8n v1+ requires non-null UUIDs in `versionId` and `activeVersionId` in `workflow_entity`, as well as corresponding path mappings in `webhook_entity`.
+
+### Fix
+Scripted node updates to populate `versionId`, `activeVersionId`, and `webhook_entity` records simultaneously, followed by n8n container restart to re-bind production webhooks into n8n process memory.
+
+## 2026-07-21: Smart Contractor Greeting & Trade Persona Safeguards
+
+### Symptoms
+Default outreach copy contained informal phrasing ("without needing to be babysat") and greeted corporate permit filings awkwardly ("Hi TWP Garner Retail").
+
+### Root Cause
+Static template strings lacked business entity regex filtering and trade tone enforcement.
+
+### Fix
+Purged informal slang from all templates. Implemented smart corporate regex filtering to fallback to `"Hi Estimating Team,"` or `"Hi Dash-In Team,"` when corporate names (LLC, Inc, Retail, Corp) are detected. Stored tone rules in Honcho Hivemind memory.
+

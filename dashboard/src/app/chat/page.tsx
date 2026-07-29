@@ -442,7 +442,7 @@ export default function KenbunChat() {
         // Transient network blip — keep polling.
       }
       if (attempts >= maxAttempts) {
-        updateMessageContent(msgId, `⏱️ "${wf}" is still running (job ${jobId}). Stopped polling after ~10 min — check the Observatory feed.`);
+        updateMessageContent(msgId, `⏱️ "${wf}" is still running (job ${jobId}). Stopped polling after ~10 min — check the Build Console activity log.`);
         return;
       }
       updateMessageContent(msgId, `🔮 "${wf}" running… (${attempts * 3}s elapsed)`);
@@ -502,7 +502,7 @@ export default function KenbunChat() {
         setMessages(prev => [...prev, {
           id: msgId,
           sender: "kenbun",
-          content: "Error: Neural link disconnected. Unable to reach the orchestrator.",
+          content: "Error: connection lost. Unable to reach the orchestrator.",
           timestamp: new Date().toISOString()
         }]);
       } finally {
@@ -542,7 +542,7 @@ export default function KenbunChat() {
       setMessages(prev => [...prev, {
         id: "error-" + Date.now(),
         sender: "kenbun",
-        content: "Error: Neural link disconnected. Unable to reach the orchestrator.",
+        content: "Error: connection lost. Unable to reach the orchestrator.",
         timestamp: new Date().toISOString()
       }]);
     } finally {
@@ -818,10 +818,8 @@ export default function KenbunChat() {
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-30 hidden sm:inline">System.01</span>
-            <div className="h-6 w-[1px] bg-primary/10 hidden sm:block" />
             <span className="font-bold text-lg lg:text-xl uppercase tracking-tighter italic flex items-center gap-3">
-              Kenbun <span className="text-tertiary">Interface</span>
+              Kenbun <span className="text-tertiary">Chat</span>
             </span>
           </div>
 
@@ -1099,7 +1097,7 @@ export default function KenbunChat() {
             <div className="text-center mt-2.5 flex items-center justify-center gap-1.5">
               <CheckCircle className="w-3 h-3 text-tertiary/40" />
               <span className="text-[9px] font-black uppercase tracking-widest text-primary/30">
-                End-to-end Neural Encryption Active
+                End-to-end Encryption Active
               </span>
             </div>
           </div>

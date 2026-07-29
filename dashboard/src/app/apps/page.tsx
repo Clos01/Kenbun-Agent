@@ -119,6 +119,14 @@ const DEFAULT_APPS: WebApp[] = [
     pingPath: "/api/tags",
     hostType: "tailscale",
     icon: Sliders
+  },
+  {
+    id: "excalidraw",
+    name: "Excalidraw",
+    description: "Sovereign wireframing canvas for visual UI design and swarm architecture.",
+    defaultPort: 80,
+    hostType: "tailscale",
+    icon: Layers
   }
 ];
 

@@ -250,12 +250,199 @@ def research_official_docs(tech_key: str, query: str) -> str:
     except Exception as e:
         return f"Research failed: {e}"
 
-# --- 7. TOOL: ARCHITECT (DIRECT DB ACCESS) ---
+# --- 7. TOOL: ARCHITECT (DEFENSIVE MULTI-LAYER REASONING) ---
+
+def _gather_infrastructure_context(query: str) -> str:
+    """Scan project infrastructure files for architectural context.
+    
+    Reads docker-compose files, .env infrastructure keys, STRUCTURE.md,
+    and Dockerfile to build situational awareness when no memories exist.
+    """
+    import glob as _glob
+    context_parts = []
+    
+    # 1. Docker Compose files (all variants)
+    compose_patterns = [
+        str(PROJECT_ROOT / "docker-compose*.yml"),
+        str(PROJECT_ROOT / "docker-compose*.yaml"),
+    ]
+    for pattern in compose_patterns:
+        for f in sorted(_glob.glob(pattern)):
+            try:
+                with open(f, "r") as fh:
+                    content = fh.read()
+                basename = os.path.basename(f)
+                # Truncate large compose files but keep service topology
+                context_parts.append(
+                    f"### {basename}\n```yaml\n{content[:4000]}\n```"
+                )
+            except Exception:
+                pass
+    
+    # 2. Environment variables (infrastructure-relevant keys only)
+    env_file = PROJECT_ROOT / ".env"
+    if env_file.exists():
+        try:
+            infra_keywords = [
+                "TAILSCALE", "BIND_IP", "PORT", "PROJECT_ROOT",
+                "DASHBOARD", "API_", "DOCKER", "HOST", "IP",
+                "SWARM_PC", "LM_STUDIO", "CHROMA",
+            ]
+            with open(env_file, "r") as fh:
+                env_lines = [
+                    line.strip() for line in fh
+                    if line.strip()
+                    and not line.startswith("#")
+                    and any(k in line.upper() for k in infra_keywords)
+                ]
+            if env_lines:
+                # Mask sensitive values (passwords, keys, tokens)
+                safe_lines = []
+                for line in env_lines[:30]:
+                    key = line.split("=", 1)[0].upper() if "=" in line else ""
+                    if any(s in key for s in ["PASSWORD", "SECRET", "TOKEN", "KEY", "AUTH"]):
+                        safe_lines.append(f"{key}=***REDACTED***")
+                    else:
+                        safe_lines.append(line)
+                context_parts.append(
+                    f"### .env (Infrastructure Keys)\n```\n"
+                    + "\n".join(safe_lines)
+                    + "\n```"
+                )
+        except Exception:
+            pass
+    
+    # 3. STRUCTURE.md (project architecture map)
+    structure_file = PROJECT_ROOT / "STRUCTURE.md"
+    if structure_file.exists():
+        try:
+            with open(structure_file, "r") as fh:
+                context_parts.append(
+                    f"### STRUCTURE.md\n{fh.read()[:2500]}"
+                )
+        except Exception:
+            pass
+    
+    # 4. Dockerfile
+    dockerfile = PROJECT_ROOT / "Dockerfile"
+    if dockerfile.exists():
+        try:
+            with open(dockerfile, "r") as fh:
+                context_parts.append(
+                    f"### Dockerfile\n```dockerfile\n{fh.read()[:1500]}\n```"
+                )
+        except Exception:
+            pass
+    
+    # 5. Docker context list (if available)
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["docker", "context", "ls", "--format", "{{.Name}}: {{.DockerEndpoint}}"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            context_parts.append(
+                f"### Docker Contexts\n```\n{result.stdout.strip()}\n```"
+            )
+    except Exception:
+        pass
+    
+    return "\n\n".join(context_parts)
+
+
 @sovereign_tool()
 def ask_architect(query: str) -> str:
-    """Directly queries Vector DB for history."""
+    """Multi-layer architectural reasoning with defensive fallbacks.
+    
+    Layer 1: Vector DB memories (ChromaDB embeddings)
+    Layer 2: Hivemind concept search (Honcho long-term memory)
+    Layer 3: Infrastructure context scan (docker-compose, .env, STRUCTURE.md)
+    Layer 4: LLM synthesis when raw context is found but no memories exist
+    
+    Never returns an empty "No relevant memories found" without first
+    scanning the project's infrastructure files for architectural context.
+    """
+    # ── Layer 1: Vector DB Memories ──
     memories = query_system_3(query, n=5)
-    return "\n\n".join(memories) if memories else "No relevant memories found."
+    
+    # ── Layer 2: Hivemind Concepts ──
+    hivemind_results = []
+    try:
+        with silence_stdout():
+            from tools.memory.knowledge_manager import list_concepts
+            hive_raw = list_concepts(query, category="concepts")
+            if hive_raw and "No concepts found" not in hive_raw and "error" not in hive_raw.lower():
+                hivemind_results = [hive_raw[:4000]]
+    except Exception as e:
+        debug_log(f"⚠️ ask_architect: Hivemind fallback failed: {e}")
+    
+    all_memories = memories + hivemind_results
+    
+    # ── If memories found, return them enriched ──
+    if all_memories:
+        return "\n\n---\n\n".join(all_memories)
+    
+    # ── Layer 3: DEFENSIVE FALLBACK — Infrastructure Context Scan ──
+    debug_log("⚠️ ask_architect: No memories found. Activating infrastructure scan fallback.")
+    
+    infra_context = _gather_infrastructure_context(query)
+    
+    if not infra_context.strip():
+        return (
+            "No relevant memories found.\n\n"
+            "💡 **Defensive Note**: Infrastructure scan also returned empty. "
+            "Consider saving architectural knowledge with `save_to_hivemind` "
+            "or checking if the project has a STRUCTURE.md file."
+        )
+    
+    # ── Layer 4: LLM Synthesis ──
+    try:
+        from tools.audit.supervisor_agent import _call_local_senior
+        
+        system_prompt = (
+            "You are a Senior Infrastructure Architect for the Kenbun project. "
+            "You must analyze infrastructure configuration files (docker-compose, "
+            ".env, Dockerfile) and provide precise, actionable architectural answers. "
+            "Focus on: deployment topology, service locations, port mappings, "
+            "volume mounts, network modes (Tailscale, container networking), "
+            "and how to apply code changes to the correct deployment target. "
+            "Be specific about container names, Docker contexts, and IPs."
+        )
+        
+        user_message = (
+            f"**Developer Question:** {query}\n\n"
+            f"**Infrastructure Context (auto-scanned from project files):**\n\n"
+            f"{infra_context[:6000]}"
+        )
+        
+        llm_answer, llm_error = _call_local_senior(system_prompt, user_message, max_tokens=2000)
+        
+        if llm_answer:
+            return (
+                f"📐 **Architect Analysis** (Defensive Fallback — no prior memories)\n\n"
+                f"{llm_answer}\n\n"
+                f"---\n"
+                f"*Sources: Infrastructure scan of docker-compose files, .env, and project config*\n"
+                f"*💡 Tip: Save key architectural decisions with `save_to_hivemind` "
+                f"so this knowledge is available instantly next time.*"
+            )
+        else:
+            # LLM failed but we still have raw context — return it
+            debug_log(f"⚠️ ask_architect: LLM synthesis failed: {llm_error}")
+            return (
+                f"📐 **Infrastructure Context** (Raw — LLM synthesis unavailable)\n\n"
+                f"{infra_context[:5000]}\n\n"
+                f"---\n*LLM Error: {llm_error}*"
+            )
+    except Exception as e:
+        # Even if everything fails, return the raw context — never return empty
+        debug_log(f"⚠️ ask_architect: Full fallback triggered: {e}")
+        return (
+            f"📐 **Infrastructure Context** (Raw — fallback mode)\n\n"
+            f"{infra_context[:5000]}\n\n"
+            f"---\n*Note: LLM synthesis unavailable ({e}). Returning raw infrastructure scan.*"
+        )
 
 @sovereign_tool()
 def ask_ui_expert(query: str) -> str:
@@ -1306,21 +1493,24 @@ def telemetry_integrity_audit(post_alert: bool = True) -> str:
     return report
 
 @sovereign_tool()
-def generate_wireframe(prompt: str) -> str:
-    """Generate a UI wireframe from a natural-language feature description and push it
-    to the Kenbun /board Wireframe (Excalidraw) canvas.
+def generate_wireframe(prompt: str, detail: str = "") -> str:
+    """Generate a UI + backend architecture wireframe from a natural-language feature
+    description and push it to the Kenbun /board Wireframe (Excalidraw) canvas.
 
-    The AI designs like a frontend developer: logical screens, labeled components, form
-    fields, navigation, and a primary CTA per screen. It produces a structured spec that
-    is converted deterministically into a valid Excalidraw scene, then written to the board.
-    Example: generate_wireframe("a login screen with email/password and a dashboard").
+    Designs like a full-stack team: a 3-layer diagram — FRONTEND (UI screens) → BACKEND
+    (API endpoints + data models) → EXTERNAL INTEGRATIONS — with element-bound orthogonal
+    connectors. A structured spec is converted deterministically into a valid Excalidraw scene.
+
+    detail: "" (default) = clean structural view; "contracts" = also attach dark IDE-style
+    JSON payload cards next to webhook/integration endpoints (semantic zoom).
+    Example: generate_wireframe("appointment booking with voice agents", detail="contracts").
     """
     import urllib.request
     import json as _json
     with silence_stdout():
         try:
             from tools.craft.wireframe_generator import build_wireframe
-            scene, spec = build_wireframe(prompt)
+            scene, spec = build_wireframe(prompt, detail=detail)
         except Exception as e:
             return f"ERROR: wireframe generation failed: {e}"
         try:

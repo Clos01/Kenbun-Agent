@@ -52,10 +52,16 @@ const DOT: Record<Status, string> = {
 // Geometry
 const ROOT_W = 152, ROOT_H = 46;
 const LIST_W = 178, LIST_H = 34;
+const GROUP_W = 176, GROUP_H = 32;
 const CARD_W = 216, CARD_H = 52;
-const ROW = 76, GAP1 = 180, GAP2 = 240;
+const ROW = 70, GAP1 = 140, GAP2 = 180, GAP3 = 220;
 
-interface MNode { kind: "root" | "list" | "card"; id: string; name: string; status: Status;  cx: number;
+interface MNode { 
+  kind: "root" | "list" | "group" | "card"; 
+  id: string; 
+  name: string; 
+  status: Status;  
+  cx: number;
   cy: number;
   w: number;
   h: number;
@@ -75,7 +81,31 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
     return cards.find(c => c.id === selectedCardId)?.listId || null;
   }, [selectedCardId, cards]);
   
-  const [expandedLists, setExpandedLists] = useState<Set<string>>(new Set());
+  const SMART_CARD_THRESHOLD = 15;
+
+  const [expandedLists, setExpandedLists] = useState<Set<string>>(() => {
+    const active = cards.filter(c => !c.isClosed);
+    const smartIds = lists
+      .filter(l => {
+        const count = active.filter(c => c.listId === l.id).length;
+        return count > 0 && count <= SMART_CARD_THRESHOLD;
+      })
+      .map(l => l.id);
+    return new Set(smartIds);
+  });
+
+  useEffect(() => {
+    if (lists.length > 0 && cards.length > 0) {
+      const active = cards.filter(c => !c.isClosed);
+      const smartIds = lists
+        .filter(l => {
+          const count = active.filter(c => c.listId === l.id).length;
+          return count > 0 && count <= SMART_CARD_THRESHOLD;
+        })
+        .map(l => l.id);
+      setExpandedLists(new Set(smartIds));
+    }
+  }, [lists, cards]);
 
   const toggleCollapse = (e: React.MouseEvent, listId: string) => {
     e.stopPropagation();
@@ -112,12 +142,12 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
       let maxCy = 0;
 
       const buildGrid = (cardsArr: typeof lc, isRight: boolean) => {
-        const numCols = cardsArr.length > 12 ? 3 : cardsArr.length > 6 ? 2 : 1;
-        const numRows = Math.ceil(cardsArr.length / numCols) || 1;
+        const numCols = 1;
+        const numRows = cardsArr.length;
         
         cardsArr.forEach((card, i) => {
-          const col = Math.floor(i / numRows);
-          const row = i % numRows;
+          const col = 0;
+          const row = i;
           const cy = row * ROW;
           if (cy > maxCy) maxCy = cy;
           
@@ -128,20 +158,9 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
               
           nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
           
-          if (col === 0) {
-            const e1 = isRight ? (LIST_W/2) : (-LIST_W/2);
-            const e2 = isRight ? cardX : (cardX + CARD_W);
-            edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
-          } else {
-            const prevCardXOffset = (col - 1) * (CARD_W + 40);
-            const prevCardX = isRight 
-                ? (LIST_W/2 + GAP2 + prevCardXOffset) 
-                : (-LIST_W/2 - GAP2 - CARD_W - prevCardXOffset);
-                
-            const e1 = isRight ? (prevCardX + CARD_W) : prevCardX;
-            const e2 = isRight ? cardX : (cardX + CARD_W);
-            edges.push({ id: `card_link_${card.id}`, x1: e1, y1: cy, x2: e2, y2: cy });
-          }
+          const e1 = isRight ? (LIST_W/2) : (-LIST_W/2);
+          const e2 = isRight ? cardX : (cardX + CARD_W);
+          edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
         });
         return cardsArr.length > 0 ? numRows : 1;
       };
@@ -187,46 +206,84 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
       const isCollapsed = !expandedLists.has(list.id);
       
       const visibleCards = isCollapsed ? [] : lc;
-      const numCols = visibleCards.length > 12 ? 3 : visibleCards.length > 6 ? 2 : 1;
-      const numRows = visibleCards.length > 0 ? Math.ceil(visibleCards.length / numCols) : 1;
       
-      visibleCards.forEach((card, i) => {
-        const col = Math.floor(i / numRows);
-        const row = i % numRows;
-        const cy = (startSlot + row) * ROW;
-        if (isRight) allCyRight.push(cy); else allCyLeft.push(cy);
-        
-        const cardXOffset = col * (CARD_W + 40);
-        const cardX = isRight 
-            ? (listX + LIST_W + GAP2 + cardXOffset) 
-            : (listX - GAP2 - CARD_W - cardXOffset);
-            
-        nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
-        
-        if (col === 0) {
-          const e1 = isRight ? (listX + LIST_W) : listX;
-          const e2 = isRight ? cardX : (cardX + CARD_W);
-          edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
-        } else {
-          const prevCardXOffset = (col - 1) * (CARD_W + 40);
-          const prevCardX = isRight 
-              ? (listX + LIST_W + GAP2 + prevCardXOffset) 
-              : (listX - GAP2 - CARD_W - prevCardXOffset);
-              
-          const e1 = isRight ? (prevCardX + CARD_W) : prevCardX;
-          const e2 = isRight ? cardX : (cardX + CARD_W);
-          edges.push({ id: `card_link_${card.id}`, x1: e1, y1: cy, x2: e2, y2: cy });
+      // Group visible cards by Phase sub-categories
+      const groupsMap = new Map<string, typeof lc>();
+      visibleCards.forEach(card => {
+        const n = card.name.toLowerCase();
+        let cat = "General Tasks";
+        if (n.includes("phase 1") || /^[1-6]\.\s*\[/.test(card.name)) {
+          cat = "Phase 1 — Discovery & Audit";
+        } else if (n.includes("phase 2")) {
+          cat = "Phase 2 — Evals & Fleet Build";
         }
+        if (!groupsMap.has(cat)) groupsMap.set(cat, []);
+        groupsMap.get(cat)!.push(card);
       });
-      
-      const listCy = visibleCards.length ? (startSlot + (numRows - 1) / 2) * ROW : startSlot * ROW;
+
+      const groups = Array.from(groupsMap.entries());
+      const hasSubGroups = groups.length > 1;
+      let currentSlot = startSlot;
+
+      groups.forEach(([groupName, groupCards], gIdx) => {
+        const groupKey = `group_${list.id}_${gIdx}`;
+        const groupX = isRight 
+          ? (listX + LIST_W + GAP2) 
+          : (listX - GAP2 - GROUP_W);
+
+        const groupStartSlot = currentSlot;
+
+        groupCards.forEach((card, i) => {
+          const cy = (currentSlot + i) * ROW;
+          if (isRight) allCyRight.push(cy); else allCyLeft.push(cy);
+
+          const cardX = hasSubGroups
+            ? (isRight ? (groupX + GROUP_W + GAP3) : (groupX - GAP3 - CARD_W))
+            : (isRight ? (listX + LIST_W + GAP2) : (listX - GAP2 - CARD_W));
+
+          nodes.push({ kind: "card", id: card.id, name: card.name, status: st, cx: cardX + CARD_W / 2, cy, w: CARD_W, h: CARD_H });
+
+          if (hasSubGroups) {
+            // Group -> Card edge
+            const e1 = isRight ? (groupX + GROUP_W) : groupX;
+            const e2 = isRight ? cardX : (cardX + CARD_W);
+            edges.push({ id: `${groupKey}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy }); // y1 updated later
+          } else {
+            // List -> Card edge
+            const e1 = isRight ? (listX + LIST_W) : listX;
+            const e2 = isRight ? cardX : (cardX + CARD_W);
+            edges.push({ id: `${listId}_${card.id}`, x1: e1, y1: 0, x2: e2, y2: cy });
+          }
+        });
+
+        const groupCy = (groupStartSlot + (groupCards.length - 1) / 2) * ROW;
+
+        if (hasSubGroups) {
+          nodes.push({ kind: "group", id: groupKey, name: groupName, status: st, cx: groupX + GROUP_W / 2, cy: groupCy, w: GROUP_W, h: GROUP_H });
+          
+          // Update group -> card edges y1
+          edges.forEach(e => {
+            if (e.id.startsWith(groupKey)) e.y1 = groupCy;
+          });
+
+          // List -> Group edge
+          const e1 = isRight ? (listX + LIST_W) : listX;
+          const e2 = isRight ? groupX : (groupX + GROUP_W);
+          edges.push({ id: `${listId}_${groupKey}`, x1: e1, y1: 0, x2: e2, y2: groupCy });
+        }
+
+        currentSlot += groupCards.length + 0.5;
+      });
+
+      const totalRows = Math.max(currentSlot - startSlot, 1);
+      const listCy = (startSlot + (totalRows - 1) / 2) * ROW;
       nodes.push({ kind: "list", id: listId, name: list.name.toUpperCase(), status: st, cx: listX + LIST_W / 2, cy: listCy, w: LIST_W, h: LIST_H, isCollapsed, isRightSide: isRight });
       
       edges.forEach(e => {
         if (e.id.startsWith(listId)) e.y1 = listCy;
       });
       
-      if (isRight) slotRight = startSlot + numRows; else slotLeft = startSlot + numRows;
+      if (isRight) slotRight = currentSlot; else slotLeft = currentSlot;
     });
 
     const rootCyRight = allCyRight.length ? allCyRight.reduce((a, b) => a + b, 0) / allCyRight.length : 0;
@@ -438,6 +495,22 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
                       >
                         <Icon className="w-3 h-3" />
                       </button>
+                    </motion.div>
+                  );
+                }
+                if (n.kind === "group") {
+                  return (
+                    <motion.div key={n.id} data-node style={nodeStyle(n)}
+                      initial={{ x, y, opacity: 0, scale: 0.8 }}
+                      animate={{ x, y, opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.5 }}
+                      transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
+                      className="rounded-md select-none shadow-sm pointer-events-none"
+                    >
+                      <div className="w-full h-full flex items-center justify-center rounded-md border px-2.5"
+                        style={{ backgroundColor: "color-mix(in srgb, var(--tertiary) 20%, var(--card))", borderColor: "color-mix(in srgb, var(--tertiary) 50%, transparent)" }}>
+                        <span className="font-mono text-[8.5px] font-bold uppercase tracking-wider text-primary truncate">{n.name}</span>
+                      </div>
                     </motion.div>
                   );
                 }

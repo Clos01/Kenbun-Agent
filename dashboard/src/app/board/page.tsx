@@ -24,7 +24,8 @@ import {
   Tag,
   AlertTriangle,
   RefreshCw,
-  Filter
+  Filter,
+  PenTool
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -311,7 +312,7 @@ function parseDrillContent(description: string) {
   };
 }
 
-// Shared class fragments (Heritage: hairlines, matte surfaces, label-caps)
+// Shared class fragments (Blueprint: hairlines, matte surfaces, label-caps)
 const LABEL_CAPS = "text-[9px] font-mono text-secondary uppercase tracking-[0.2em] font-bold";
 const FIELD =
   "w-full bg-neutral border border-border rounded p-2.5 text-xs text-primary placeholder-secondary/50 focus:outline-none focus:border-tertiary transition-colors";
@@ -329,10 +330,10 @@ export default function BoardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Active view tab: kanban | calendar | messaging | workflow
-  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow">(() => {
+  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow" | "wireframe">(() => {
     if (typeof window !== "undefined") {
       const savedTab = localStorage.getItem("board_active_tab");
-      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow") {
+      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow" || savedTab === "wireframe") {
         return savedTab;
       }
     }
@@ -351,7 +352,7 @@ export default function BoardPage() {
   }, []);
 
   // Persistence helpers
-  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow") => {
+  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow" | "wireframe") => {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       localStorage.setItem("board_active_tab", tab);
@@ -531,28 +532,50 @@ export default function BoardPage() {
   const fetchBoardComments = useCallback(async (silent = false) => {
     if (!selectedBoard || cards.length === 0) return;
     if (!silent) setLoadingComments(true);
+
     try {
-      const allCommentsPromises = cards.map(async (card) => {
+      const allCommentsPromises = cards.map(async (card: Card): Promise<Record<string, unknown>[]> => {
+        const cardController = new AbortController();
+        const cardTimeout = setTimeout(() => cardController.abort(), 5000);
+        const safeCardId = encodeURIComponent(String(card.id));
+
         try {
-          const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${card.id}/comments`, { cache: "no-store" });
+          const res = await tenantFetch(`${API_BASE}/api/v1/planka/cards/${safeCardId}/comments`, { 
+            cache: "no-store",
+            signal: cardController.signal 
+          });
           if (!res.ok) return [];
           const data = await res.json();
-          return (data.items || []).map((c: Record<string, string | number | boolean | null | undefined>) => ({
+          return (data.items || []).map((c: Record<string, unknown>) => ({
             ...c,
             cardName: card.name,
             cardId: card.id,
           }));
-        } catch {
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name !== "AbortError") {
+            console.warn("[BOARD_FEED] Card comments load issue encountered.");
+          }
           return [];
+        } finally {
+          clearTimeout(cardTimeout);
         }
       });
+
       const results = await Promise.all(allCommentsPromises);
-      const aggregated = (results.flat() as { createdAt: string }[]).sort(
+      const aggregated = (results.flat() as { id: string; text: string; createdAt: string }[]).sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       );
-      setBoardComments(aggregated as BoardComment[]);
+
+      // Shallow array comparison: only trigger React re-render if comments actually changed!
+      setBoardComments(prev => {
+        if (prev.length !== aggregated.length) return aggregated as BoardComment[];
+        const hasChange = aggregated.some((item, i) => 
+          item.id !== prev[i]?.id || item.text !== prev[i]?.text || item.createdAt !== prev[i]?.createdAt
+        );
+        return hasChange ? (aggregated as BoardComment[]) : prev;
+      });
     } catch (err) {
-      console.error("Error loading board feed:", err);
+      console.error("[BOARD_FEED] Global feed load error:", err);
     } finally {
       if (!silent) setLoadingComments(false);
     }
@@ -602,10 +625,10 @@ export default function BoardPage() {
       setTimeout(() => {
         fetchBoardComments();
       }, 0);
-      // Live signal feed: silently re-poll comments on the board's cadence
+      // Live signal feed: poll comments on a smooth, non-intrusive 30-second cadence
       const timer = setInterval(() => {
         fetchBoardComments(true);
-      }, 7000);
+      }, 30000);
       return () => clearInterval(timer);
     }
   }, [activeTab, selectedBoard, fetchBoardComments]);
@@ -1022,7 +1045,7 @@ export default function BoardPage() {
 
   return (
     <div className="min-h-screen bg-neutral text-primary flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
-      {/* Heritage backdrop — static drafting grid, faded at the edges, with two matte washes */}
+      {/* Blueprint backdrop — static drafting grid, faded at the edges, with two matte washes */}
       <div aria-hidden="true" className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] opacity-30 [mask-image:radial-gradient(ellipse_80%_80%_at_50%_30%,black_25%,transparent_100%)]" />
         <div className="absolute top-[-25%] left-[-15%] w-[55vw] h-[55vw] bg-tertiary/[0.04] rounded-full blur-[140px]" />
@@ -1066,6 +1089,7 @@ export default function BoardPage() {
                   { key: "calendar", label: "Calendar", icon: Calendar },
                   { key: "messaging", label: "Feed", icon: MessageSquare },
                   { key: "workflow", label: "Workflow", icon: GitFork },
+                  { key: "wireframe", label: "Wireframe", icon: PenTool },
                 ] as const).map(t => (
                   <button
                     key={t.key}
@@ -1263,6 +1287,7 @@ export default function BoardPage() {
               { key: "calendar", label: "Calendar", icon: Calendar },
               { key: "messaging", label: "Feed", icon: MessageSquare },
               { key: "workflow", label: "Workflow", icon: GitFork },
+              { key: "wireframe", label: "Wireframe", icon: PenTool },
             ] as const).map(t => (
               <button
                 key={t.key}
@@ -2042,6 +2067,9 @@ export default function BoardPage() {
                   <WorkflowView
                     cards={filteredCards}
                     lists={lists}
+                    boardId={selectedBoard?.id}
+                    boardName={selectedBoard?.name}
+                    projectName={projects.find(p => p.id === selectedBoard?.projectId)?.name || selectedBoard?.name}
                     onOpenCard={handleOpenCard}
                     onUpdateCardDesc={async (cardId, newDesc) => {
                       try {
@@ -2089,6 +2117,23 @@ export default function BoardPage() {
                     onMoveCard={handleMoveCard}
                   />
                 </motion.div>
+              ) : activeTab === "wireframe" ? (
+                <motion.div
+                  key="board-wireframe"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-full h-[calc(100vh-5rem)] min-h-[480px]"
+                >
+                  <div className="w-full h-full bg-transparent relative">
+                    <iframe
+                      src="/custom_excalidraw.html"
+                      className="w-full h-full border-none"
+                      title="Excalidraw Wireframe Canvas"
+                    />
+                  </div>
+                </motion.div>
               ) : (
                 /* ---- FEED (mail & messaging) ---- */
                 <motion.div
@@ -2116,7 +2161,7 @@ export default function BoardPage() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
-                      {loadingComments ? (
+                      {loadingComments && boardComments.length === 0 ? (
                         <div className="h-60 flex flex-col items-center justify-center gap-2">
                           <RefreshCw className="w-5 h-5 text-tertiary animate-spin" />
                           <span className={LABEL_CAPS}>Loading Feed</span>

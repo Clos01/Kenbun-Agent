@@ -175,9 +175,7 @@ export default function HivemindMemory() {
         {/* Header */}
           <header className="h-20 lg:h-24 border-b border-primary/5 flex items-center justify-between px-6 lg:px-10 bg-card/40 z-20 sticky top-0 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-4 lg:gap-8">
-            <span className="text-[10px] font-black uppercase tracking-widest opacity-30">System.03</span>
-            <div className="h-6 w-[1px] bg-primary/10" />
-            <span className="font-bold text-lg lg:text-xl uppercase tracking-tighter italic">Hivemind <span className="text-tertiary">Memory</span></span>
+            <span className="font-bold text-lg lg:text-xl uppercase tracking-tighter italic">Code <span className="text-tertiary">Search</span></span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -203,10 +201,10 @@ export default function HivemindMemory() {
           {/* Quick Metrics Grid */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
             {[
-              { label: "Total Vectors Mapped", value: stats.totalVectors, icon: Database, color: "text-tertiary" },
+              { label: "Total Files Indexed", value: stats.totalVectors, icon: Database, color: "text-tertiary" },
               { label: "Indexed Source Files", value: stats.indexedFiles, icon: FileCode, color: "text-primary" },
-              { label: "Search Retrieval Latency", value: stats.searchLatency, icon: Clock, color: "text-primary" },
-              { label: "Last Neural Sync", value: stats.lastIndexTime, icon: RefreshCw, color: "text-primary" }
+              { label: "Search Response Time", value: stats.searchLatency, icon: Clock, color: "text-primary" },
+              { label: "Last Index Update", value: stats.lastIndexTime, icon: RefreshCw, color: "text-primary" }
             ].map((stat, i) => (
               <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-2xl flex items-center justify-between group hover:border-tertiary/30 hover:scale-[1.02] hover:bg-card/85 transition-all duration-300">
                 <div className="space-y-2">
@@ -222,7 +220,7 @@ export default function HivemindMemory() {
           <section className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Sovereign Vector Engine</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Vector Search Engine</span>
                 <h3 className="text-lg font-bold uppercase tracking-tight">Codebase Semantic Search</h3>
               </div>
               <Sliders className="w-4 h-4 opacity-30 hover:opacity-100 transition-opacity cursor-pointer text-primary" />
@@ -284,7 +282,7 @@ export default function HivemindMemory() {
             <div className="xl:col-span-7 space-y-6">
               <div className="flex items-center gap-4">
                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary/40">
-                  {searchResults !== null ? "Search Matches" : "Neural Concept Catalog"}
+                  {searchResults !== null ? "Search Matches" : "Concept Catalog"}
                 </span>
                 <div className="flex-1 h-[1px] bg-primary/5" />
                 {searchResults !== null && (
@@ -474,7 +472,7 @@ export default function HivemindMemory() {
               <div className="flex items-center justify-between border-b border-primary/5 pb-4">
                 <div className="space-y-1">
                   <span className="text-[8px] font-mono font-black tracking-widest text-tertiary uppercase">Information Node</span>
-                  <h3 className="font-serif font-black text-xl uppercase tracking-tight leading-none text-primary">Hivemind Memory Guide</h3>
+                  <h3 className="font-serif font-black text-xl uppercase tracking-tight leading-none text-primary">Code Search Guide</h3>
                 </div>
                 <button
                   onClick={() => setShowInfoModal(false)}
@@ -486,9 +484,9 @@ export default function HivemindMemory() {
 
               <div className="space-y-4 text-xs leading-relaxed text-secondary">
                 <div className="space-y-1">
-                  <h4 className="font-serif font-bold text-sm text-primary uppercase">What is Hivemind Memory?</h4>
+                  <h4 className="font-serif font-bold text-sm text-primary uppercase">What is Code Search?</h4>
                   <p>
-                    The Hivemind Memory is a semantic vector database (powered by ChromaDB and local embedding engines). It translates code symbols, documentation, and logic structures from your project into high-dimensional vector coordinates (embeddings) representing their semantic meaning.
+                    Code Search is a semantic vector database (powered by ChromaDB and local embedding engines). It translates code symbols, documentation, and logic structures from your project into high-dimensional vector coordinates (embeddings) representing their semantic meaning.
                   </p>
                 </div>
 
@@ -500,7 +498,7 @@ export default function HivemindMemory() {
                 </div>
 
                 <div className="space-y-1">
-                  <h4 className="font-serif font-bold text-sm text-primary uppercase">Neural Concepts</h4>
+                  <h4 className="font-serif font-bold text-sm text-primary uppercase">Indexed Concepts</h4>
                   <p>
                     The Swarm automatically groups related code blocks, variables, and API routers into <strong>Concepts</strong>. Selecting a concept from the list displays its matching accuracy, absolute file coordinates, and specific dimensions inside the vector space.
                   </p>

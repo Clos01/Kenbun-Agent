@@ -581,7 +581,7 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
   useEffect(() => { isDarkRef.current = isDark; }, [isDark]);
   useEffect(() => { activeJobsRef.current = activeJobs; }, [activeJobs]);
 
-  // Heritage Design System Dynamic Theme colors (Synchronized from actual CSS Variables)
+  // Blueprint Design System Dynamic Theme colors (Synchronized from actual CSS Variables)
   const [themeColors, setThemeColors] = useState({
     foreground: '#FFFFFF',
     background: '#0A0A0A',

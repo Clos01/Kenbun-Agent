@@ -68,7 +68,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   sovereignty_engine: {
     system: "System 6 (Self-Healing)",
-    role: "AST Law Enforcer & Logic Sentinel",
+    role: "Static Analysis Checker",
     desc: "Runs the Sovereign Verification Engine (SVE) to identify regressions or logical codebase hallucinations, validating changes against the project's source of truth."
   },
   memory_classifier: {
@@ -88,7 +88,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   scan_repo: {
     system: "System 1 (Execution)",
-    role: "Sovereign Repository Scanner",
+    role: "Repository Scanner",
     desc: "Crawls the workspace hierarchy to analyze project structure, file types, package dependencies, and codebase composition prior to semantic indexing."
   },
   run_code_safely: {
@@ -103,7 +103,7 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   index_codebase: {
     system: "System 3 (Memory)",
-    role: "Cognitive Vector Compiler",
+    role: "Context Compiler",
     desc: "Processes project files to construct high-density parent-child code chunk relationships, generating and updating semantic embeddings in ChromaDB."
   },
   delete_from_hivemind: {
@@ -128,12 +128,12 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   ask_ui_expert: {
     system: "System 5 (Design Discovery)",
-    role: "Heritage Layout Auditor",
+    role: "UI Layout Auditor",
     desc: "Validates visual elements against DESIGN.md to guarantee harmonious color tokens, fluid spacing grids, sharp high-DPI scaling, and responsive layout styling."
   },
   consult_supervisor: {
     system: "System 2 (Reasoning & Ethics)",
-    role: "Executive Swarm Council Gatekeeper",
+    role: "Release Manager",
     desc: "Coordinates local LLM voting pools (Gemma/Llama) and cloud-grounded models to review security metrics and code commits before final approval."
   },
   audit_guardrail: {
@@ -158,12 +158,12 @@ export const TOOL_DESCRIPTIONS: Record<string, ToolDescription> = {
   },
   research_with_gemini: {
     system: "System 1 (Execution)",
-    role: "Sovereign Cloud Intelligence Researcher",
+    role: "Cloud Research Agent",
     desc: "Executes broad developer search queries backed by high-capacity cloud intelligence to solve complex system integration roadblocks."
   },
   remember_fix: {
     system: "System 5 (Reflection)",
-    role: "Post-Mortem Memory Synapser",
+    role: "Post-Deployment Analyzer",
     desc: "Logs fixed issues and code regressions into the error memory bank in ChromaDB, creating permanent post-mortem lessons."
   },
   recall_fix: {

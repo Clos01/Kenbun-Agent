@@ -76,6 +76,9 @@ interface List {
 interface WorkflowViewProps {
   cards: Card[];
   lists: List[];
+  boardId?: string;
+  boardName?: string;
+  projectName?: string;
   onOpenCard: (card: Card) => void;
   onUpdateCardDesc: (cardId: string, newDescription: string) => Promise<void>;
   onCreateCard: (name: string, listId: string, x: number, y: number) => Promise<void>;
@@ -283,6 +286,9 @@ function getCardIcons(card: any) {
 export default function WorkflowView({
   cards,
   lists,
+  boardId,
+  boardName,
+  projectName,
   onOpenCard,
   onUpdateCardDesc,
   onCreateCard,
@@ -354,19 +360,20 @@ export default function WorkflowView({
         if (metadata.shape) {
           shape = metadata.shape as ShapeType;
         } else {
+          const rawName = typeof card?.name === "string" ? card.name.trim().toLowerCase() : "";
+
           const isGate = 
-            card.name.toLowerCase().startsWith("gate:") || 
-            card.name.toLowerCase().startsWith("decision:") || 
-            card.name.toLowerCase().includes("gate") || 
-            card.name.toLowerCase().includes("audit") || 
-            card.name.toLowerCase().includes("check") ||
-            card.name.toLowerCase().includes("decision");
+            rawName.startsWith("gate:") || 
+            rawName.startsWith("decision:") || 
+            rawName.startsWith("[gate]") || 
+            rawName.startsWith("[decision]");
 
           const isTerminal = 
-            card.name.toLowerCase().startsWith("start:") || 
-            card.name.toLowerCase().startsWith("end:") || 
-            card.name.toLowerCase().includes("milestone") ||
-            status === "completed" && card.name.toLowerCase().includes("done");
+            rawName.startsWith("start:") || 
+            rawName.startsWith("end:") || 
+            rawName.startsWith("[start]") ||
+            rawName.startsWith("[end]") ||
+            rawName.startsWith("milestone:");
 
           if (isGate) shape = "decision";
           else if (isTerminal) shape = "terminal";
@@ -1362,12 +1369,16 @@ export default function WorkflowView({
               Workflow
             </div>
             <h2 className="font-mono text-xs uppercase tracking-widest font-bold text-primary leading-none truncate">
-              {diagramMode === "mindmap" ? "Mind Map" : diagramMode === "analytics" ? "Analytics" : "Flowchart"}
+              {diagramMode === "sow" ? "SOW Editor" : diagramMode === "mindmap" ? "Mind Map" : diagramMode === "analytics" ? "Analytics" : "Flowchart"}
             </h2>
           </div>
           {diagramMode === "mindmap" ? (
             <span className="hidden md:inline text-[9px] font-mono text-secondary px-2 py-1 whitespace-nowrap shrink-0">
               root → columns → cards
+            </span>
+          ) : diagramMode === "sow" ? (
+            <span className="hidden md:inline text-[9px] font-mono text-tertiary px-2.5 py-1 bg-tertiary/10 border border-tertiary/20 rounded-md whitespace-nowrap shrink-0 font-bold">
+              {projectName || boardName || "Statement of Work"}
             </span>
           ) : (
             <span className="hidden md:inline text-[9px] font-mono text-secondary px-2 py-1 bg-primary/[0.04] border border-border rounded-md whitespace-nowrap shrink-0">
@@ -1423,22 +1434,26 @@ export default function WorkflowView({
             ]}
           />
 
-          <button
-            onClick={handleCopyCode}
-            className="px-2.5 py-1.5 bg-primary/[0.04] hover:bg-primary/[0.08] border border-border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Copy diagram source"
-          >
-            <Copy className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">{copied ? "Copied!" : "Copy"}</span>
-          </button>
+          {diagramMode !== "sow" && (
+            <button
+              onClick={handleCopyCode}
+              className="px-2.5 py-1.5 bg-primary/[0.04] hover:bg-primary/[0.08] border border-border rounded-md text-[9px] font-mono font-bold uppercase tracking-wider text-secondary hover:text-primary transition-all flex items-center gap-1.5 cursor-pointer"
+              title="Copy diagram source"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">{copied ? "Copied!" : "Copy"}</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setIsAddingStep(true)}
-            className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded-md text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Add step</span>
-          </button>
+          {(diagramMode === "flowchart" || diagramMode === "mindmap") && (
+            <button
+              onClick={() => setIsAddingStep(true)}
+              className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded-md text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Add step</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1474,7 +1489,7 @@ export default function WorkflowView({
             setOffset={setOffset}
           />
         ) : diagramMode === "sow" ? (
-          <SOWGenerator cards={cards} />
+          <SOWGenerator projectId={boardId} boardId={boardId} boardName={boardName} projectName={projectName} cards={cards} />
         ) : (
         <div
           ref={canvasRef}
@@ -2269,13 +2284,13 @@ export default function WorkflowView({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-base/80 backdrop-blur-xs flex items-center justify-center p-6 z-50"
+            className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-6 z-[9999]"
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-sm bg-card border border-border p-6 rounded-2xl shadow-xl flex flex-col"
+              className="w-full max-w-md min-w-[320px] bg-card border border-border p-6 rounded-2xl shadow-2xl flex flex-col relative z-[10000]"
             >
               <div className="flex justify-between items-center pb-4 border-b border-border mb-4">
                 <h3 className="font-mono text-xs uppercase tracking-widest text-primary font-bold">

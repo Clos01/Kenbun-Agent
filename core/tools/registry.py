@@ -131,12 +131,18 @@ def sovereign_tool(
                 # inside async tool bodies (or their awaited internals) gets
                 # routed to stderr so the MCP JSON-RPC channel stays clean.
                 with _silence_stdout_during_tool_call():
-                    return await func(*args, **kwargs)
+                    res = await func(*args, **kwargs)
+                    if isinstance(res, str):
+                        res = res.encode("utf-8", "replace").decode("utf-8")
+                    return res
         else:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 with _silence_stdout_during_tool_call():
-                    return func(*args, **kwargs)
+                    res = func(*args, **kwargs)
+                    if isinstance(res, str):
+                        res = res.encode("utf-8", "replace").decode("utf-8")
+                    return res
 
         return wrapper
     return decorator

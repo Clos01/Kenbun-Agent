@@ -746,7 +746,7 @@ export default function IntelStream() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-gold animate-pulse shrink-0" />
           <Terminal className="w-4 h-4 text-gold shrink-0" />
-          <span className="ind-header text-[10px] uppercase tracking-wider font-bold mr-2 shrink-0">Neural Signal Log Streamer</span>
+          <span className="ind-header text-[10px] uppercase tracking-wider font-bold mr-2 shrink-0">System Log Streamer</span>
           
           {/* Dual-View Mode Selector Button Group */}
           <div className="flex border border-border/60 rounded-lg overflow-hidden p-0.5 bg-background/55 shadow-[inset_0_1px_3px_rgba(0,0,0,0.2)]">
@@ -837,7 +837,7 @@ export default function IntelStream() {
         <div className="hidden md:flex flex-col w-56 border-l border-border/40 pl-6 gap-6 self-stretch justify-between shrink-0 font-mono select-none">
           <div className="space-y-5">
             <div className="space-y-1">
-              <span className="text-[7px] text-foreground/45 uppercase tracking-widest block font-bold">Telemetry Link</span>
+              <span className="text-[7px] text-foreground/45 uppercase tracking-widest block font-bold">Metrics Connection</span>
               <div className="flex items-center gap-2 border border-emerald-500/20 bg-emerald-500/5 px-2.5 py-1.5 rounded">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
                 <span className="text-[8px] font-bold text-emerald-500 tracking-wider">SSE_FLOW // LIVE</span>
@@ -845,7 +845,7 @@ export default function IntelStream() {
             </div>
 
             <div className="space-y-1">
-              <span className="text-[7px] text-foreground/45 uppercase tracking-widest block font-bold">Batch Throttle</span>
+              <span className="text-[7px] text-foreground/45 uppercase tracking-widest block font-bold">Rate Limiter</span>
               <div className="border border-border/60 bg-foreground/[0.02] px-2.5 py-1.5 rounded text-[8px] font-bold text-foreground/80 tracking-wide">
                 100ms BUFFER DELAY
               </div>
@@ -865,7 +865,7 @@ export default function IntelStream() {
             </div>
 
             <div className="space-y-1">
-              <span className="text-[7px] text-foreground/45 uppercase tracking-widest block font-bold">Safety Seal</span>
+              <span className="text-[7px] text-foreground/45 uppercase tracking-widest block font-bold">Security Verification</span>
               <div className="flex items-center gap-1.5 text-[8px] text-gold/80 font-bold border border-gold/20 bg-gold/5 px-2.5 py-1.5 rounded">
                 <span className="text-[7px]">🔒</span>
                 <span>XSS_SHIELD // SECURE</span>
@@ -889,7 +889,7 @@ export default function IntelStream() {
 
   return (
     <div className="min-h-screen bg-background flex selection:bg-gold selection:text-white max-w-[100vw] overflow-x-hidden relative">
-      {/* Dynamic Heritage Grid Grain */}
+      {/* Dynamic Blueprint Grid Grain */}
       <div className="grain-overlay" />
 
       <Sidebar />
@@ -905,7 +905,7 @@ export default function IntelStream() {
           </div>
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-4 px-4 py-2 border border-border bg-background/40 artisan-shadow rounded-xl">
-              <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest">Swarm Pulse</span>
+              <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest">Agent Activity</span>
               <span className={`text-xs font-mono font-bold flex items-center gap-2 ${error ? 'text-red-500' : 'text-gold'}`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
                 {error ? 'DISCONNECTED' : 'STABLE'}
@@ -1099,16 +1099,16 @@ export default function IntelStream() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {/* Widget 1: Link Status */}
                   <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
-                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Telemetry Link</span>
+                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Metrics Connection</span>
                     <div className="flex items-center gap-1.5 mt-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
                       <span className="text-[8px] font-bold text-emerald-500 tracking-wider">SSE_FLOW // LIVE</span>
                     </div>
                   </SpotlightCard>
 
-                  {/* Widget 2: Batch Throttle */}
+                  {/* Widget 2: Rate Limiter */}
                   <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
-                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Batch Throttle</span>
+                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Rate Limiter</span>
                     <span className="text-[8px] font-bold text-foreground/80 mt-2">100ms BUFFER DELAY</span>
                   </SpotlightCard>
 
@@ -1128,9 +1128,9 @@ export default function IntelStream() {
                     </div>
                   </SpotlightCard>
 
-                  {/* Widget 4: Safety Seal */}
+                  {/* Widget 4: Security Verification */}
                   <SpotlightCard className="p-4 bg-card/45 rounded-xl flex flex-col justify-between min-h-[85px] font-mono">
-                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Safety Seal</span>
+                    <span className="text-[7px] opacity-45 uppercase font-bold tracking-widest">Security Verification</span>
                     <div className="flex items-center gap-1.5 text-[8px] text-gold/80 font-bold mt-2">
                       <span className="text-[7px]">🔒</span>
                       <span>XSS_SHIELD // SECURE</span>

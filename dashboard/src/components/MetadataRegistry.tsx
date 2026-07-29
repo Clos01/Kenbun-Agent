@@ -35,7 +35,7 @@ export const MetadataCardContainer = ({
       whileHover={{ scale: 1.01, translateY: -2 }}
       className={`${colSpan} bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm`}
     >
-      {/* Heritage premium hover mesh/wash overlay */}
+      {/* Blueprint premium hover mesh/wash overlay */}
       <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
       
       <div className="flex items-center justify-between">
