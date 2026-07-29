@@ -90,6 +90,41 @@ class SovereignRegistry:
 # Thread-safe global registry instance
 registry = SovereignRegistry()
 
+_TELEMETRY_POOL = None
+
+
+def _record_tool_outcome(tool_name: str, category: str, success: bool) -> None:
+    """Record one tool invocation in the intelligence store.
+
+    Runs on a single background worker so a Postgres round-trip never lands on
+    the tool's own latency path, and swallows everything: telemetry must not be
+    able to slow down or break the tool it is measuring.
+
+    KNOWN LIMITATION: success is inferred from "did not raise". Tools in this
+    codebase that report failure by RETURNING an error string (rather than
+    raising) are still counted as successes. Narrowing that requires the tools
+    to raise, and is deliberately not papered over with string-sniffing here --
+    a measurement layer that guesses is what this change exists to replace.
+    """
+    def _write():
+        try:
+            from tools.utils.bayesian import tune_swarm
+            tune_swarm(tool_name, success, category)
+        except Exception:
+            pass
+
+    global _TELEMETRY_POOL
+    try:
+        if _TELEMETRY_POOL is None:
+            from concurrent.futures import ThreadPoolExecutor
+            _TELEMETRY_POOL = ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="tool-telemetry"
+            )
+        _TELEMETRY_POOL.submit(_write)
+    except Exception:
+        pass
+
+
 def sovereign_tool(
     name: Optional[str] = None, 
     category: str = "General", 
@@ -112,17 +147,6 @@ def sovereign_tool(
         description = "\n".join(doc_lines)
         
         is_async = inspect.iscoroutinefunction(func)
-        
-        entry = ToolEntry(
-            name=tool_name,
-            category=category,
-            description=description,
-            handler=func,
-            is_async=is_async,
-            requires_env=requires_env or []
-        )
-        
-        registry.register_tool(entry)
 
         if is_async:
             @functools.wraps(func)
@@ -131,18 +155,50 @@ def sovereign_tool(
                 # inside async tool bodies (or their awaited internals) gets
                 # routed to stderr so the MCP JSON-RPC channel stays clean.
                 with _silence_stdout_during_tool_call():
-                    res = await func(*args, **kwargs)
+                    try:
+                        res = await func(*args, **kwargs)
+                    except Exception:
+                        _record_tool_outcome(tool_name, category, False)
+                        raise
                     if isinstance(res, str):
                         res = res.encode("utf-8", "replace").decode("utf-8")
+                    _record_tool_outcome(tool_name, category, True)
                     return res
         else:
             @functools.wraps(func)
             def wrapper(*args, **kwargs):
                 with _silence_stdout_during_tool_call():
-                    res = func(*args, **kwargs)
+                    try:
+                        res = func(*args, **kwargs)
+                    except Exception:
+                        _record_tool_outcome(tool_name, category, False)
+                        raise
                     if isinstance(res, str):
                         res = res.encode("utf-8", "replace").decode("utf-8")
+                    _record_tool_outcome(tool_name, category, True)
                     return res
+
+        # Register the WRAPPER, not the bare function.
+        #
+        # server.py exposes every tool to FastMCP via
+        # ``mcp.tool(...)(tool_entry.handler)``, so whatever lands in this entry
+        # is what actually serves MCP traffic. Registering ``func`` here meant
+        # every MCP call bypassed all three guarantees the wrapper exists to
+        # provide: the stdout guard that keeps stray print() out of the JSON-RPC
+        # framing, the surrogate sanitisation of str returns, and outcome
+        # telemetry. functools.wraps sets __wrapped__, so inspect.signature()
+        # still resolves the real signature and FastMCP's schema generation is
+        # unaffected.
+        entry = ToolEntry(
+            name=tool_name,
+            category=category,
+            description=description,
+            handler=wrapper,
+            is_async=is_async,
+            requires_env=requires_env or []
+        )
+
+        registry.register_tool(entry)
 
         return wrapper
     return decorator
