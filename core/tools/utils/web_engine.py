@@ -35,12 +35,46 @@ def ddgs_search(query: str, limit: int = 5) -> List[Dict[str, str]]:
         resp = requests.get(url, headers=headers, timeout=15)
         if resp.status_code == 200:
             body = resp.text
-            blocks = re.split(r'<div class="result body[^"]*"', body)
-            for block in blocks[1:limit+1]:
-                title_match = re.search(r'<a class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, re.DOTALL)
-                snippet_match = re.search(r'<a class="result__snippet"[^>]*>(.*?)</a>', block, re.DOTALL)
+            # Result blocks are `<div class="result results_links results_links_deep
+            # web-result ">`. The previous pattern looked for `result body`, which
+            # matches nothing on the current markup -- so this returned [] on every
+            # query while the caller still reported success. Sponsored blocks carry
+            # `result--ad` in the same class attribute and are skipped.
+            starts = [
+                (m.start(), m.group(1))
+                for m in re.finditer(r'<div class="(result results_links[^"]*)"', body)
+            ]
+            blocks = []
+            for i, (pos, class_attr) in enumerate(starts):
+                if "result--ad" in class_attr:
+                    continue
+                end = starts[i + 1][0] if i + 1 < len(starts) else len(body)
+                blocks.append(body[pos:end])
+
+            if not blocks:
+                logger.warning(
+                    "DuckDuckGo returned %d bytes but no parseable result blocks "
+                    "-- the page layout likely changed, or the request was "
+                    "challenged. Returning no results.", len(body)
+                )
+
+            # Match on the class attribute wherever it sits in the tag. The real
+            # markup is `<a rel="nofollow" class="result__a" href="...">`, so the
+            # old `<a class="result__a"` prefix match never fired even once the
+            # blocks were split correctly.
+            title_re = re.compile(
+                r'<a\b([^>]*\bclass="[^"]*\bresult__a\b[^"]*"[^>]*)>(.*?)</a>', re.DOTALL)
+            snippet_re = re.compile(
+                r'<a\b[^>]*\bclass="[^"]*\bresult__snippet\b[^"]*"[^>]*>(.*?)</a>', re.DOTALL)
+
+            for block in blocks[:limit]:
+                title_match = title_re.search(block)
+                snippet_match = snippet_re.search(block)
                 if title_match:
-                    raw_url = title_match.group(1)
+                    href_match = re.search(r'href="([^"]+)"', title_match.group(1))
+                    if not href_match:
+                        continue
+                    raw_url = href_match.group(1)
                     # Parse ddg redirects
                     if "uddg=" in raw_url:
                         redirect_match = re.search(r'uddg=([^&]+)', raw_url)

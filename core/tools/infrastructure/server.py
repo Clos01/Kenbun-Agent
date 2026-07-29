@@ -244,8 +244,13 @@ def research_official_docs(tech_key: str, query: str) -> str:
     site = OFFICIAL_DOCS[tech_key]
     try:
         debug_log(f"🔍 Researching: {query} site:{site}")
-        from duckduckgo_search import DDGS
-        results = DDGS().text(f"{query} site:{site}", max_results=3)
+        # Was duckduckgo_search.DDGS, pinned at 3.8.5, which passes `proxies=` to
+        # httpx.Client -- removed in httpx 0.28. Every call died with
+        # "Client.__init__() got an unexpected keyword argument 'proxies'".
+        # Reuse the same keyless scraper web_search already relies on so there is
+        # one search path to keep working instead of two.
+        from tools.utils.web_engine import ddgs_search
+        results = ddgs_search(f"{query} site:{site}", limit=3)
         return str(results) if results else "No results."
     except Exception as e:
         return f"Research failed: {e}"
@@ -455,6 +460,10 @@ def get_design_tokens() -> str:
     """Returns the current Design System tokens from DESIGN.md."""
     from tools.design.oracle import DesignOracle
     rules = DesignOracle.get_rules()
+    if "error" in rules:
+        # An empty {} looked like "this design system has no tokens" rather than
+        # "the source could not be found" -- surface the real reason instead.
+        return json.dumps({"error": rules["error"], "tokens": {}}, indent=2)
     return json.dumps(rules.get("tokens", {}), indent=2)
 
 # --- 9. TOOL: GEMINI CODE REVIEWER (Cloud AI) ---
@@ -1591,7 +1600,17 @@ def get_brain_health() -> str:
             # Check for history (Paradigm 1)
             if "history" in data and isinstance(data["history"], list) and data["history"]:
                 latest_history = data["history"][-1]
-                routing_acc = latest_history.get("routing_accuracy", 0.0)
+                # `routing_accuracy` is the KEYWORD-ONLY fast path that
+                # nightly_eval records as a historical baseline; production
+                # routing runs fast_mode=False and is recorded separately as
+                # `routing_accuracy_full`. Headlining the keyword number
+                # reported 36.67% while the router users actually hit was at
+                # 80.67% -- it hid the semantic-pipeline fix entirely. Show the
+                # production path, and keep the baseline visible beside it.
+                routing_acc = latest_history.get(
+                    "routing_accuracy_full", latest_history.get("routing_accuracy", 0.0)
+                )
+                routing_acc_keyword = latest_history.get("routing_accuracy", 0.0)
                 latency = latest_history.get("median_latency_ms", 0.0)
                 n_cases = latest_history.get("n_cases", 0)
                 date = latest_history.get("date", last_updated)
@@ -1604,7 +1623,8 @@ def get_brain_health() -> str:
                     return (
                         f"# 📊 Brain Health Dashboard (v{latest_version})\n\n"
                         f"## 🎯 Routing Benchmark\n"
-                        f"• **Routing Accuracy:** {routing_acc:.2%}\n"
+                        f"• **Routing Accuracy (production):** {routing_acc:.2%}\n"
+                        f"• **Routing Accuracy (keyword-only baseline):** {routing_acc_keyword:.2%}\n"
                         f"• **Median Latency:** {latency:.2f}ms\n"
                         f"• **Test Cases:** {n_cases}\n\n"
                         f"## ⚙️ Execution Telemetry\n"
@@ -1617,7 +1637,8 @@ def get_brain_health() -> str:
                 else:
                     return (
                         f"# 📊 Brain Health Dashboard (v{latest_version})\n\n"
-                        f"• **Routing Accuracy:** {routing_acc:.2%}\n"
+                        f"• **Routing Accuracy (production):** {routing_acc:.2%}\n"
+                        f"• **Routing Accuracy (keyword-only baseline):** {routing_acc_keyword:.2%}\n"
                         f"• **Median Latency:** {latency:.2f}ms\n"
                         f"• **Test Cases:** {n_cases}\n"
                         f"• **Last Updated:** {date}\n"

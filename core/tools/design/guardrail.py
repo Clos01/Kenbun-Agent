@@ -13,6 +13,14 @@ class DesignGuardrail:
     def get_dynamic_patterns(cls):
         rules = DesignOracle.get_rules()
         if "error" in rules:
+            # Returning [] here means "no patterns", which reads downstream as
+            # "nothing violated the design system" -- a guardrail that silently
+            # passes everything. Say so on stderr rather than auto-approving.
+            print(
+                f"⚠️ DesignGuardrail DISABLED: {rules['error']} "
+                "No design rules are being enforced.",
+                file=sys.stderr,
+            )
             return []
 
         tokens = rules.get("tokens", {})

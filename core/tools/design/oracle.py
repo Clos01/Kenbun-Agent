@@ -8,19 +8,49 @@ class DesignOracle:
     """
     
     from tools.infrastructure.config import settings
-    DESIGN_FILE = settings.PROJECT_ROOT / "DESIGN.md"
+
+    # Ordered candidates for the tokenised design source, most specific first.
+    #
+    # PROJECT_ROOT is the repo root (/app in the portable container), and there
+    # is no DESIGN.md there -- the tokenised system lives in dashboard/. The old
+    # single hardcoded PROJECT_ROOT/"DESIGN.md" therefore never resolved in any
+    # deployment, which silently emptied get_design_tokens() and disabled
+    # DesignGuardrail. core/DESIGN.md is kept as a fallback but carries no YAML
+    # front matter, so it yields prose rules with no tokens.
+    DESIGN_CANDIDATES = ("dashboard/DESIGN.md", "DESIGN.md", "core/DESIGN.md")
+
+    # Set by get_rules() once a source resolves; referenced by get_prompt_segment().
+    DESIGN_FILE = None
+
+    @classmethod
+    def resolve_design_file(cls):
+        """First existing candidate, preferring one that actually has tokens."""
+        found = [
+            p for p in (cls.settings.PROJECT_ROOT / rel for rel in cls.DESIGN_CANDIDATES)
+            if p.exists()
+        ]
+        for path in found:
+            try:
+                if path.read_text().lstrip().startswith("---"):
+                    return path
+            except OSError:
+                continue
+        return found[0] if found else None
 
     @classmethod
     def get_rules(cls):
-        if not cls.DESIGN_FILE.exists():
-            # Fallback to legacy structure if root DESIGN.md is missing
-            legacy_path = cls.settings.PROJECT_ROOT / "design_systems" / "sovereign-sharp" / "DESIGN.md"
-            if legacy_path.exists():
-                with open(legacy_path, 'r') as f:
-                    return {"name": "Sovereign Sharp (Legacy)", "rules": f.read(), "tokens": {}}
-            return {"error": "Design system source (DESIGN.md) not found."}
-            
-        with open(cls.DESIGN_FILE, 'r') as f:
+        design_file = cls.resolve_design_file()
+        if design_file is None:
+            # Loud and specific: a missing design source silently disables the
+            # guardrail and strips tokens out of every design prompt, so say
+            # exactly where we looked instead of returning an empty dict.
+            searched = ", ".join(
+                str(cls.settings.PROJECT_ROOT / rel) for rel in cls.DESIGN_CANDIDATES
+            )
+            return {"error": f"Design system source (DESIGN.md) not found. Searched: {searched}"}
+
+        cls.DESIGN_FILE = design_file
+        with open(design_file, 'r') as f:
             content = f.read()
 
         # Parse YAML front matter
