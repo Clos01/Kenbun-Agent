@@ -35,7 +35,20 @@ def debug_log(msg):
         f.write(f"[{datetime.now().isoformat()}] {msg}\n")
     sys.stderr.write(msg + "\n")
 
-# Override builtins.print to write to sys.stderr for MCP safety.
+# Route stray print() to stderr so it cannot corrupt MCP's JSON-RPC framing.
+#
+# This used to be applied at import time, unconditionally and irreversibly: any
+# process that imported this module — a CLI, a test, api_server, a daemon — had
+# every print() in the entire interpreter silently redirected to stderr, whether
+# or not stdout was an MCP channel. It is why `kenbun list-tools` emitted its 88
+# names on stderr and returned an empty stdout, and the symptom is nasty to
+# diagnose because sys.stdout itself is untouched (still fd 1, still writable);
+# only the print builtin is swapped.
+#
+# The override is now opt-in: install it when stdout genuinely IS the protocol
+# channel (see the __main__ block below, before mcp.run()). Tool bodies are
+# already covered by _silence_stdout_during_tool_call in registry.py, which
+# scopes the redirect to a single call instead of the whole process.
 import builtins
 _original_print = builtins.print
 
@@ -48,7 +61,15 @@ def mcp_safe_print(*args, sep=' ', end='\n', file=None, flush=False):
     else:
         _original_print(*args, sep=sep, end=end, file=file, flush=flush)
 
-builtins.print = mcp_safe_print
+
+def install_mcp_safe_print():
+    """Redirect print() to stderr process-wide. Only for the stdio MCP server."""
+    builtins.print = mcp_safe_print
+
+
+def restore_print():
+    """Undo install_mcp_safe_print(). Safe to call when it was never installed."""
+    builtins.print = _original_print
 
 # --- 2. CONFIGURATION ---
 
@@ -1934,6 +1955,12 @@ for name, tool_entry in registry.get_all_tools().items():
 if __name__ == "__main__":
     import signal
     import os
+
+    # From here on stdout IS the MCP JSON-RPC channel, so a stray print() would
+    # corrupt the framing. This is the one place that override belongs; importing
+    # this module no longer imposes it on unrelated processes.
+    install_mcp_safe_print()
+
     def handle_sigterm(*args):
         _STOP_TAIL.set()
         os._exit(0)
