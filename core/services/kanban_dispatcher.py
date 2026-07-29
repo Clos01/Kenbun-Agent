@@ -17,7 +17,7 @@ def log_event(level: str, event: str, **kwargs):
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "level": level.upper(),
         "event": event,
-        "theme": "Heritage",
+        "theme": "Blueprint",
         "component": "kanban_dispatcher",
         **{k: str(v) for k, v in kwargs.items()}
     }

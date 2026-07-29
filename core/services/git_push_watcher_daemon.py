@@ -9,12 +9,12 @@ from tools.infrastructure.orchestrator import orchestrate
 logger = logging.getLogger("git_push_watcher_daemon")
 
 def log_event(level: str, event: str, **kwargs):
-    # Heritage-compliant metadata
+    # Blueprint-compliant metadata
     entry = {
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "level": level.upper(),
         "event": event,
-        "theme": "Heritage",  # Token compliance
+        "theme": "Blueprint",  # Token compliance
         **{k: str(v) for k, v in kwargs.items()}  # Robust string sanitization
     }
     try:

@@ -252,8 +252,8 @@ def _step_1_initial_review(code_snippet: str, review_context: str, thinking: boo
         "### 🟢 Senior Logic Critique\n"
         "- SOLID principles, separation of concerns\n"
         "- Scalability (Will this work at 1M users?)\n\n"
-        "### 🎨 Heritage Design Compliance\n"
-        "- Check for adherence to the Heritage tokens (DESIGN.md).\n"
+        "### 🎨 Blueprint Design Compliance\n"
+        "- Check for adherence to the Blueprint tokens (DESIGN.md).\n"
         f"- Constraints: {DesignOracle.get_rules().get('constraints', {}).get('mandates', [])}\n\n"
         "End with a VERDICT: APPROVED ✅ | NEEDS_CHANGES ⚠️ | REJECTED 🔴"
     )
@@ -281,7 +281,7 @@ def _step_4_consensus(gemini_review: str, supervisor_review: str, docs_context: 
         "3. Flag any issues that NEITHER reviewer caught\n"
         "4. Give a FINAL VERDICT: APPROVED ✅ | NEEDS_MINOR_CHANGES 🟡 | REJECTED 🔴\n\n"
         "Be concise. Focus on actionable insights.\n"
-        "MANDATORY: Ensure the code complies with the Heritage Design System tokens.\n"
+        "MANDATORY: Ensure the code complies with the Blueprint Design System tokens.\n"
         f"TOKENS: {json.dumps(DesignOracle.get_rules().get('tokens', {}))}"
     )
     consensus_input = (

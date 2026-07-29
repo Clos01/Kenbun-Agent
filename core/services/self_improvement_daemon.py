@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_PROMPTS = {
     "coder": "You are a professional software engineer agent. Write clean, modular, and well-tested code.",
     "auditor": "You are a security auditor. Inspect code for vulnerabilities, syntax errors, and style compliance.",
-    "designer": "You are a Heritage UI designer. Adhere strictly to Limestone and Boston Clay palette tokens."
+    "designer": "You are a Blueprint UI designer. Adhere strictly to Limestone and Boston Clay palette tokens."
 }
 
 def get_agent_prompt(agent_id: str) -> str:
@@ -65,7 +65,7 @@ EVALUATION VERDICT (Score: {eval_score:.2%}):
 INSTRUCTIONS FOR OPTIMIZATION:
 1. Analyze the failure and the auditor feedback.
 2. Incorporate best practices from state-of-the-art agent architectures (e.g., Nous Hermes reasoning cues, Figure AI Helix step-by-step physical action grounding, explicit XML tags, strict boundary rules).
-3. Do NOT weaken any safety, security, or Heritage design guidelines.
+3. Do NOT weaken any safety, security, or Blueprint design guidelines.
 4. Output the new, complete optimized system prompt. It should replace the old system prompt.
 5. Provide ONLY the system prompt text inside a code block marked with ```markdown, with no extra text before or after the code block.
 

@@ -550,10 +550,10 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     
     if category == "UI_STYLE":
         print("🎨 [SYSTEM 2] UI/STYLE Detected. Running Fast-Track Style Audit...")
-        # NEW: Integrate Heritage Design Guardrail
+        # NEW: Integrate Blueprint Design Guardrail
         style_res = DesignGuardrail.validate(code_snippet)
         if style_res["status"] == "REJECTED":
-            print(f"🚩 [SYSTEM 2] Heritage Design Violation: {style_res['reason']}")
+            print(f"🚩 [SYSTEM 2] Blueprint Design Violation: {style_res['reason']}")
             res_style = {
                 "status": "REJECTED",
                 "critique": f"Design Compliance Failure: {style_res['reason']}",
@@ -567,7 +567,7 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
                 "output": res_style["critique"]
             })
             return res_style
-        print("✅ [SYSTEM 2] Heritage Design Compliance Verified.")
+        print("✅ [SYSTEM 2] Blueprint Design Compliance Verified.")
 
     # Parallelize Tier 1a (Adversarial LLM Court) and Tier 1 (Local Ensemble)
     court_task = None

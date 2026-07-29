@@ -14,12 +14,12 @@ logger = logging.getLogger("scheduler_daemon")
 LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
 
 def log_event(level: str, event: str, **kwargs):
-    # Heritage-compliant metadata
+    # Blueprint-compliant metadata
     entry = {
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
         "level": level.upper(),
         "event": event,
-        "theme": "Heritage",  # Token compliance
+        "theme": "Blueprint",  # Token compliance
         "component": "scheduler_daemon",
         **{k: str(v) for k, v in kwargs.items()}  # Robust string sanitization
     }

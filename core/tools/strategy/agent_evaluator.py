@@ -40,7 +40,7 @@ IS UI TASK: {is_ui_task}
 Evaluate the following criteria:
 1. **Correctness**: Did the agent fully address and solve the task description? (Weight: 60%)
 2. **Quality & Formatting**: Is the code clean, well-formatted, and free of syntax/logic errors? (Weight: 20%)
-3. **Heritage Compliance**: If this is a UI task, does it strictly adhere to the Heritage Design System tokens (e.g. Limestone/Boston Clay palettes, Inter/Outfit typography, specific border radii)? (Weight: 20%)
+3. **Blueprint Compliance**: If this is a UI task, does it strictly adhere to the Blueprint Design System tokens (e.g. Limestone/Boston Clay palettes, Inter/Outfit typography, specific border radii)? (Weight: 20%)
 
 Return your evaluation STRICTLY as a JSON object with the following keys:
 - "correctness_score": float between 0.0 and 1.0
