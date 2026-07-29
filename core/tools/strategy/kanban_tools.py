@@ -538,7 +538,18 @@ def kanban_comment(task_id: str = "", comment: str = "") -> str:
         task_id: The ID of the task. Defaults to KENBUN_KANBAN_TASK env var.
         comment: The comment message to append.
     """
-    return kanban_heartbeat(task_id, comment)
+    # Shares kanban_heartbeat's storage (both append to the task's comments
+    # array), but relabel the response: replying "Heartbeat recorded" to a
+    # comment call reads as though the comment text was dropped.
+    raw = kanban_heartbeat(task_id, comment)
+    try:
+        payload = json.loads(raw)
+    except Exception:
+        return raw
+    if payload.get("status") == "success":
+        payload["message"] = payload.get("message", "").replace(
+            "Heartbeat recorded", "Comment recorded")
+    return json.dumps(payload, indent=2)
 
 @sovereign_tool(name="kanban_link", category="Strategy")
 def kanban_link(task_id: str, parent_id: str) -> str:

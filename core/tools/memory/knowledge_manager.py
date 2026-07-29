@@ -90,10 +90,22 @@ def patch_concept(concept_id: str, title: str = None, content: str = None, tags:
 
 def prune_hivemind(min_relevance_score: float = 0.5) -> str:
     """
-    Honcho performs autonomous consolidation ('Dreaming') in the background
-    to deduplicate and merge concepts. We simply trigger a dream cycle.
+    NO-OP. Deletes nothing.
+
+    Honcho performs autonomous consolidation ('Dreaming') in the background to
+    deduplicate and merge concepts, so there is nothing for this to do. It is
+    kept only so existing callers do not break. min_relevance_score is ignored.
+
+    The name and the old docstring both claimed this removed concepts, which
+    meant an agent could "prune" the store, get a success string, and believe
+    stale knowledge had been cleared when nothing had happened.
     """
-    return "Neural Pruning is handled autonomously by Honcho's background 'Dreaming' process. Redundant concepts will be merged automatically."
+    return (
+        "NO-OP: prune_hivemind deletes nothing. Consolidation is handled "
+        "autonomously by Honcho's background 'Dreaming' process, which merges "
+        "redundant concepts on its own. To remove a specific concept, use "
+        "delete_from_hivemind(concept_id)."
+    )
 
 def record_post_mortem(task: str, error: str, solution: str, tags: str = "auto-lesson"):
     """Distills a task completion into a permanent lesson in the Hivemind."""

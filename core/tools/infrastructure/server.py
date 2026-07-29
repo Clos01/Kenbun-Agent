@@ -1294,7 +1294,12 @@ def ingest_file_to_hivemind(file_path: str, tags: str = "file,ingested") -> str:
 
 @sovereign_tool()
 def prune_hivemind() -> str:
-    """Removes outdated or redundant concepts from the Hivemind to maintain precision."""
+    """NO-OP: deletes nothing. Honcho's background 'Dreaming' process consolidates
+    and merges redundant concepts on its own. Kept for callers that still invoke it.
+    To remove one concept, use delete_from_hivemind(concept_id).
+
+    The previous description ("Removes outdated or redundant concepts") was not
+    true of the implementation, so a caller could believe a prune had happened."""
     with silence_stdout():
         from tools.memory import knowledge_manager
         return knowledge_manager.prune_hivemind()

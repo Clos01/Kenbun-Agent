@@ -193,6 +193,16 @@ def analyze_push_changes(repo_url: str, commit_data: str, project_path: str = ".
     except Exception:
         return json.dumps({"status": "error", "message": "Failed to parse commit data JSON."}, indent=2)
 
+    # Valid JSON that is not an object (a bare list, string or number) used to
+    # sail past the parse guard and die on .get() with an AttributeError, which
+    # the caller sees as a crashed tool rather than bad input.
+    if not isinstance(data, dict):
+        return json.dumps({
+            "status": "error",
+            "message": f"Expected a JSON object, got {type(data).__name__}. "
+                       "Pass the fetch_git_pushes payload verbatim.",
+        }, indent=2)
+
     status = data.get("status")
     if status in ("no_new_pushes", "initialized", "no_commits", "error"):
         return json.dumps({"status": "skip", "message": f"Skipping analysis. Reason: {data.get('message', 'No new commits.')}"}, indent=2)
@@ -282,6 +292,13 @@ def apply_git_patch(changes_json: str) -> str:
         data = json.loads(changes_json)
     except Exception:
         return "❌ Error: Failed to parse integration changes JSON."
+
+    # As in analyze_push_changes: a bare JSON array parses fine and then breaks
+    # on .get(). Reject it as bad input instead of raising AttributeError.
+    if not isinstance(data, dict):
+        return (f"❌ Error: Expected a JSON object, got {type(data).__name__}. "
+                "Pass the analyze_push_changes payload verbatim "
+                '(e.g. {"status": "ok", "changes": [...]}).')
 
     status = data.get("status")
     if status == "skip":
