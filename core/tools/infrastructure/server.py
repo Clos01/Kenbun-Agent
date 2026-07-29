@@ -1565,7 +1565,7 @@ def generate_wireframe(prompt: str, detail: str = "") -> str:
         try:
             body = _json.dumps(scene).encode("utf-8")
             req = urllib.request.Request(
-                "http://localhost:3000/api/wireframe", data=body,
+                "http://100.92.127.1:3000/api/wireframe", data=body,
                 headers={"Content-Type": "application/json"}, method="POST",
             )
             with urllib.request.urlopen(req, timeout=20) as r:
@@ -1948,6 +1948,18 @@ def session_search(
 # ========================================================
 # DYNAMIC MCP REGISTRATION FROM CENTRAL REGISTRY
 # ========================================================
+# Populate the registry BEFORE reading it.
+#
+# This loop only ever saw the tools that happened to be registered as a side
+# effect of importing this module -- the 44 defined here plus the handful pulled
+# in transitively (planka, etc). Every tool living in a module server.py does not
+# import was therefore invisible to every MCP client: browser_*, kanban_*,
+# web_search/web_extract, execute_code, delegate_task, cronjob, blueprint,
+# codex_runtime, vision/voice, and the git_watcher tools. 38 of 88, silently
+# absent, because the harvester that sweeps those modules was never called here.
+from tools.harvester import harvest_and_register_tools
+harvest_and_register_tools()
+
 for name, tool_entry in registry.get_all_tools().items():
     # Use FastMCP's tool decorator directly on the handler
     mcp.tool(name=tool_entry.name, description=tool_entry.description)(tool_entry.handler)

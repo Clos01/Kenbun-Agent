@@ -77,9 +77,19 @@ def harvest_and_register_tools(tools_dir: Optional[Path] = None) -> List[str]:
                 importlib.import_module(mod_name)
                 imported_modules.append(mod_name)
                 logger.info(f"✅ Harvester: Dynamically registered tools from module: {mod_name}")
-            except Exception as e:
-                logger.error(f"❌ Harvester: Failed to dynamically import {path}: {e}")
-                
+            except BaseException as e:
+                # BaseException, not Exception: a module that calls sys.exit() at
+                # import time raises SystemExit, which is NOT an Exception and
+                # would otherwise propagate out of the sweep and kill the host
+                # process. native_ears.py does exactly that when the native macOS
+                # Speech libs are absent; it has no @sovereign_tool so it is not
+                # swept today, but the harvester must not be one refactor away
+                # from taking down the MCP server on startup.
+                logger.error(
+                    f"❌ Harvester: Failed to dynamically import {path}: "
+                    f"{type(e).__name__}: {e}"
+                )
+
     return imported_modules
 
 if __name__ == "__main__":
