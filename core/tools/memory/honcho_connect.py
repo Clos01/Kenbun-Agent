@@ -114,6 +114,36 @@ def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concep
         logger.error(f"⚠️ [HONCHO] Query failed: {e}")
         return []
 
+def search_messages(query_text: str, n_results: int = 5, category: str = "concepts"):
+    """Search the RAW stored messages, not the derived representation.
+
+    retrieve_memory() returns Honcho's synthesized conclusions, which are useful
+    prose but have dropped the CONCEPT_ID marker that learn_concept writes in.
+    Callers that need to address a concept (patch/forget) need the stored text,
+    which is what session.search returns.
+    """
+    client = get_honcho_client()
+    if not client:
+        return []
+
+    try:
+        results = client.session(category).search(query_text)
+    except Exception as e:
+        logger.error(f"⚠️ [HONCHO] Message search failed: {e}")
+        return []
+
+    contents = []
+    for msg in results:
+        content = getattr(msg, "content", None)
+        if content is None and isinstance(msg, dict):
+            content = msg.get("content")
+        if content:
+            contents.append(content)
+        if len(contents) >= n_results:
+            break
+    return contents
+
+
 def retrieve_user_memory(query_text: str, n_results: int = 5, category: str = "preferences"):
     """Retrieve the human user's reasoned representation (preferences/decisions)."""
     return retrieve_memory(query_text, n_results=n_results, category=category, peer_name=USER_PEER)

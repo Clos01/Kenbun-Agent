@@ -10,7 +10,7 @@ HIVEMIND_PORT = settings.CHROMA_PORT
 HIVEMIND_HOST = settings.SWARM_PC_IP
 HIVEMIND_PORT = settings.CHROMA_PORT
 
-from tools.memory.honcho_connect import add_memory, retrieve_memory
+from tools.memory.honcho_connect import add_memory, retrieve_memory, search_messages
 
 def _chunk_text_safely(text: str, max_chars: int = 3000, overlap: int = 300) -> list[str]:
     if len(text) <= max_chars:
@@ -84,31 +84,76 @@ def learn_concept(title: str, content: str, tags: str, category: str = "concepts
     except Exception as e:
         return f"ERROR: Failed to save concept. {str(e)}"
 
-def list_concepts(query_text: str, n_results: int = 5, category: str = "concepts") -> str:
-    """Searches Honcho for related concepts."""
-    try:
-        results = retrieve_memory(query_text, n_results=n_results, category=category)
-        
-        if not results:
-            return "No matching concepts found in Honcho's representation."
-            
-        formatted_results = []
-        for i, doc in enumerate(results):
-            # Prefer the real CONCEPT_ID written in at save time. The positional
-            # "honcho_conclusion_{i}" fallback is not an identifier -- it is the
-            # index of this result in this query, so it names a different concept
-            # on the next search and is useless for patch/forget. Label it as such
-            # rather than passing it off as an id.
-            found = re.findall(r"CONCEPT_ID:\s*(kc_[0-9a-f]+)", str(doc))
-            formatted_results.append({
-                "id": found[0] if found else None,
-                "all_concept_ids": sorted(set(found)),
-                "addressable": bool(found),
-                "position": f"result_{i}",
-                "content": doc,
-            })
+def _parse_stored_concept(text: str) -> dict:
+    """Pull the CONCEPT_ID / TITLE / TAGS header off a stored concept message."""
+    def field(name):
+        m = re.search(rf"^{name}:\s*(.+)$", text, re.MULTILINE)
+        return m.group(1).strip() if m else None
 
-        return json.dumps(formatted_results, indent=2)
+    body = text.split("\nCONTENT:\n", 1)
+    return {
+        "id": field("CONCEPT_ID"),
+        "title": field("TITLE"),
+        "tags": field("TAGS"),
+        "chunk": field("CHUNK"),
+        "content": body[1] if len(body) > 1 else text,
+    }
+
+
+def list_concepts(query_text: str, n_results: int = 5, category: str = "concepts") -> str:
+    """Searches Honcho for related concepts.
+
+    Searches the STORED MESSAGES first, so every hit carries the CONCEPT_ID that
+    patch_hivemind_concept and delete_from_hivemind require. Honcho's derived
+    representation is synthesized prose that has dropped those markers, so it is
+    only used as a fallback and is flagged addressable:false — it is good for
+    reading, useless for addressing.
+    """
+    try:
+        stored = search_messages(query_text, n_results=n_results * 4, category=category)
+
+        # One concept is stored as N chunk messages sharing a CONCEPT_ID; merge
+        # them back into a single addressable result rather than returning the
+        # same concept several times.
+        merged = {}
+        order = []
+        for raw in stored:
+            parsed = _parse_stored_concept(raw)
+            key = parsed["id"] or parsed["title"] or raw[:60]
+            if key not in merged:
+                merged[key] = {
+                    "id": parsed["id"],
+                    "title": parsed["title"],
+                    "tags": parsed["tags"],
+                    "addressable": bool(parsed["id"]),
+                    "source": "stored_message",
+                    "content": parsed["content"],
+                }
+                order.append(key)
+            elif parsed["content"] not in merged[key]["content"]:
+                merged[key]["content"] += "\n" + parsed["content"]
+
+        results = [merged[k] for k in order[:n_results]]
+        if results:
+            return json.dumps(results, indent=2)
+
+        # Nothing in the raw store matched; fall back to the reasoned view.
+        representation = retrieve_memory(query_text, n_results=n_results, category=category)
+        if not representation:
+            return "No matching concepts found in Honcho."
+
+        return json.dumps([
+            {
+                "id": None,
+                "addressable": False,
+                "source": "derived_representation",
+                "note": "Synthesized by Honcho; carries no CONCEPT_ID, so it "
+                        "cannot be passed to patch/delete. Save the concept to "
+                        "get an addressable id.",
+                "content": doc,
+            }
+            for doc in representation
+        ], indent=2)
     except Exception as e:
         return f"ERROR: Failed to query Honcho. {str(e)}"
 
