@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, Sigma } from "lucide-react";
 
@@ -26,6 +26,7 @@ interface ToolLike {
 }
 
 const HALF_LIFE_H = 24;
+const STORAGE_KEY = "kenbun_weight_formula_open";
 
 const STEPS = [
   {
@@ -85,7 +86,30 @@ const STEPS = [
 ];
 
 export default function WeightFormula({ tools }: { tools: ToolLike[] }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored !== null) {
+        setOpen(stored === "true");
+      }
+    } catch {
+      // Ignore SSR / localStorage disabled
+    }
+  }, []);
+
+  const toggleOpen = () => {
+    setOpen((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(STORAGE_KEY, String(next));
+      } catch {
+        // Ignore localStorage errors
+      }
+      return next;
+    });
+  };
 
   // Worked example uses the most-observed real tool so the numbers on screen
   // are the ones actually in the store rather than invented.
@@ -108,7 +132,7 @@ export default function WeightFormula({ tools }: { tools: ToolLike[] }) {
   return (
     <section className="border-2 border-[var(--border-muted)] bg-[var(--background)]/40 artisan-shadow rounded-xl overflow-hidden">
       <button
-        onClick={() => setOpen(!open)}
+        onClick={toggleOpen}
         aria-expanded={open}
         className="w-full flex items-center gap-4 p-5 text-left hover:bg-[var(--sand)]/50 transition-colors cursor-pointer"
       >
