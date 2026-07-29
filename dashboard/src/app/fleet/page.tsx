@@ -183,6 +183,9 @@ function formatTokens(n: number): string {
 export default function FleetCommand() {
   const API_BASE = CONFIG.API_BASE;
   const [tools, setTools] = useState<ToolStat[]>([]);
+  // Distinguishes "not fetched yet" from "fetched, genuinely empty" so the
+  // empty state never renders during SSR or first paint.
+  const [toolsLoaded, setToolsLoaded] = useState(false);
   const [budget, setBudget] = useState<BudgetData | null>(null);
   const [workers, setWorkers] = useState<WorkerStatus[]>([]);
   const [selectedTool, setSelectedTool] = useState<ToolStat | null>(null);
@@ -217,26 +220,21 @@ export default function FleetCommand() {
       if (!statsRes.ok) throw new Error("API_ERROR");
       const statsData = await statsRes.json();
       
-      // Zen Fallback: If intelligence is empty, seed core system tools to prevent "Dead UI"
-      const liveTools = (statsData.intelligence && statsData.intelligence.length > 0) 
-        ? statsData.intelligence 
-        : [
-            { tool_id: "token_governor", success_rate: 0.978, confidence: "HIGH", delta: -1.9, entropy: -0.019, alpha: 178, beta: 4, mom_delta: -1.9, history_trend: [] },
-            { tool_id: "telemetry_pulse", success_rate: 0.968, confidence: "HIGH", delta: -1.4, entropy: -0.014, alpha: 151, beta: 5, mom_delta: -1.4, history_trend: [] },
-            { tool_id: "fleet_monitor", success_rate: 0.958, confidence: "HIGH", delta: -1.0, entropy: -0.010, alpha: 137, beta: 6, mom_delta: -1.0, history_trend: [] },
-            { tool_id: "topology_mapper", success_rate: 0.943, confidence: "HIGH", delta: -2.4, entropy: -0.024, alpha: 115, beta: 7, mom_delta: -2.4, history_trend: [] },
-            { tool_id: "audit_supervisor", success_rate: 0.938, confidence: "HIGH", delta: -2.9, entropy: -0.029, alpha: 97, beta: 6, mom_delta: -2.9, history_trend: [] },
-            { tool_id: "background_sync", success_rate: 0.925, confidence: "HIGH", delta: -0.8, entropy: -0.008, alpha: 86, beta: 7, mom_delta: -0.8, history_trend: [] },
-            { tool_id: "vector_sync_worker", success_rate: 0.909, confidence: "HIGH", delta: -4.0, entropy: -0.040, alpha: 78, beta: 8, mom_delta: -4.0, history_trend: [] },
-            { tool_id: "bayesian_governor", success_rate: 0.904, confidence: "HIGH", delta: -4.1, entropy: -0.041, alpha: 65, beta: 7, mom_delta: -4.1, history_trend: [] },
-            { tool_id: "sovereignty_engine", success_rate: 0.887, confidence: "HIGH", delta: -3.9, entropy: -0.039, alpha: 55, beta: 7, mom_delta: -3.9, history_trend: [] },
-            { tool_id: "memory_classifier", success_rate: 0.882, confidence: "HIGH", delta: -2.6, entropy: -0.026, alpha: 45, beta: 6, mom_delta: -2.6, history_trend: [] },
-            { tool_id: "neural_classifier", success_rate: 0.848, confidence: "HIGH", delta: -0.9, entropy: -0.009, alpha: 39, beta: 7, mom_delta: -0.9, history_trend: [] },
-            { tool_id: "intelligence_engine", success_rate: 0.822, confidence: "HIGH", delta: 0.0, entropy: 0.0, alpha: 32, beta: 7, mom_delta: 0.0, history_trend: [] }
-          ];
+      // No fabricated fallback here, deliberately. This page's entire claim is
+      // that it reports measured behaviour, so an empty store must read as
+      // empty rather than as twelve confident-looking invented tools.
+      const liveTools: unknown[] = Array.isArray(statsData.intelligence)
+        ? statsData.intelligence
+        : [];
+      if (liveTools.length === 0) {
+        console.warn(
+          "[Agents] intelligence store returned no rows - showing empty state, not seed data."
+        );
+      }
 
       const validatedTools = liveTools.map((t: unknown) => validateToolStat(t));
       setTools(validatedTools.sort((a: ToolStat, b: ToolStat) => b.success_rate - a.success_rate));
+      setToolsLoaded(true);
 
       // Extract budget
       if (statsData.budget) {
@@ -292,6 +290,7 @@ export default function FleetCommand() {
     } catch (err) {
       console.warn("FLEET_FETCH_ERROR:", err);
       setError(true);
+      setToolsLoaded(true);
     }
   }, [API_BASE]);
 
@@ -582,6 +581,18 @@ export default function FleetCommand() {
             <div className="mb-8">
               <WeightFormula tools={tools} />
             </div>
+
+            {toolsLoaded && tools.length === 0 && (
+              <div className="border-2 border-dashed border-[var(--border-muted)] rounded-xl p-10 text-center space-y-2">
+                <p className="font-serif italic text-lg text-[var(--foreground)]/70">
+                  No tool telemetry recorded yet
+                </p>
+                <p className="text-xs font-mono opacity-40 max-w-md mx-auto leading-relaxed">
+                  The intelligence store returned no rows. Weights appear here once tools
+                  have actually run — nothing is estimated or filled in on their behalf.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {tools.map((tool, i) => (

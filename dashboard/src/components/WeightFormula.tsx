@@ -243,6 +243,18 @@ export default function WeightFormula({ tools }: { tools: ToolLike[] }) {
                 </div>
               )}
 
+              {!sample && (
+                <div className="border-t border-[var(--border-muted)] pt-5">
+                  <div className="text-[10px] font-bold uppercase tracking-widest opacity-40 mb-2">
+                    Worked example
+                  </div>
+                  <p className="text-xs leading-relaxed opacity-60">
+                    Unavailable — no tool has recorded a run yet, so there are no measured
+                    weights to work through. Nothing is estimated here on a tool&apos;s behalf.
+                  </p>
+                </div>
+              )}
+
               <p className="text-[10px] font-mono opacity-30 pt-1">
                 Stored in Postgres · bayesian_weights (tool_id, category, alpha, beta, success_count,
                 failure_count, last_updated) · SQLite `intelligence` table is the fallback path.
