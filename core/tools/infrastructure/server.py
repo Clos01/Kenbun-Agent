@@ -1009,6 +1009,11 @@ def orchestrate_status(job_id: str) -> str:
 def save_to_hivemind(title: str, content: str, tags: str, category: str = "concepts") -> str:
     """
     Use this when the user says 'Save this to the Hivemind' or wants to store a new architectural rule, pattern, or concept.
+
+    Returns a CONCEPT_ID (e.g. kc_1a2b3c4d5e6f). Keep it: it is the only handle
+    that patch_hivemind_concept and delete_from_hivemind accept. The id is
+    derived from the title, so re-saving the same title addresses the same
+    concept.
     """
     with silence_stdout():
         from tools.memory.knowledge_manager import learn_concept
@@ -1042,6 +1047,11 @@ def search_hivemind_concepts(query: str, category: str = "concepts") -> str:
 def delete_from_hivemind(concept_id: str, category: str = "concepts") -> str:
     """
     Use this to delete outdated concepts from the database when the user explicitly asks to forget them.
+
+    concept_id must be a CONCEPT_ID returned by save_to_hivemind, or one of the
+    ids in search_hivemind_concepts' "all_concept_ids". Honcho stores no
+    deletable rows, so this posts a retraction instruction that the background
+    dreaming process reconciles -- it is not an immediate hard delete.
     """
     with silence_stdout():
         from tools.memory.knowledge_manager import forget_concept
@@ -1231,7 +1241,11 @@ def think_about_tools(task: str) -> str:
 # --- Tool Registrations Continue ---
 @sovereign_tool()
 def patch_hivemind_concept(concept_id: str, title: str = None, content: str = None, tags: str = None) -> str:
-    """Updates an existing concept in the Hivemind. Only provided fields will be updated."""
+    """Updates an existing concept in the Hivemind. Only provided fields will be updated.
+
+    concept_id must be a CONCEPT_ID from save_to_hivemind or
+    search_hivemind_concepts. As with deletion, this posts a correction that the
+    dreaming process folds in rather than rewriting a stored row in place."""
     with silence_stdout():
         from tools.memory.knowledge_manager import patch_concept
         return patch_concept(concept_id, title, content, tags)

@@ -1,3 +1,5 @@
+import hashlib
+import re
 import uuid
 import json
 from tools.infrastructure.config import settings
@@ -40,17 +42,45 @@ def _chunk_text_safely(text: str, max_chars: int = 3000, overlap: int = 300) -> 
         
     return chunks
 
+def concept_id_for(title: str) -> str:
+    """Stable handle for a concept, derived from its title.
+
+    Honcho has no per-document primary key: retrieve_memory returns a single
+    synthesized representation, not the stored messages, so there is nothing to
+    hand back that the storage layer would recognise later. Instead we mint a
+    deterministic id from the title and WRITE IT INTO the message body, so the
+    token survives into the representation and the forget/patch instructions
+    that reference it are actually about something the memory layer has seen.
+
+    Deriving from the title (not the content) keeps the id stable when a concept
+    is re-saved with edited text, so it addresses the same logical concept.
+    """
+    digest = hashlib.sha1(title.strip().lower().encode("utf-8")).hexdigest()[:12]
+    return f"kc_{digest}"
+
+
 def learn_concept(title: str, content: str, tags: str, category: str = "concepts") -> str:
-    """Saves a discrete concept into the Honcho memory layer."""
+    """Saves a discrete concept into the Honcho memory layer.
+
+    Returns the concept id, which is required by patch_concept/forget_concept.
+    """
     try:
         chunks = _chunk_text_safely(content)
-        
+        concept_id = concept_id_for(title)
+
         for i, chunk in enumerate(chunks):
-            meta = f"TITLE: {title}\nTAGS: {tags}\nCHUNK: {i+1}/{len(chunks)}"
+            meta = (f"CONCEPT_ID: {concept_id}\nTITLE: {title}\n"
+                    f"TAGS: {tags}\nCHUNK: {i+1}/{len(chunks)}")
             formatted_msg = f"{meta}\n\nCONTENT:\n{chunk}"
             add_memory(content=formatted_msg, category=category)
-            
-        return f"SUCCESS: Concept '{title}' saved to Honcho. The background dreaming process will consolidate it."
+
+        return (
+            f"SUCCESS: Concept '{title}' saved to Honcho.\n"
+            f"CONCEPT_ID: {concept_id}\n"
+            "Pass that id to patch_hivemind_concept or delete_from_hivemind to "
+            "amend or retract this concept. The background dreaming process will "
+            "consolidate it."
+        )
     except Exception as e:
         return f"ERROR: Failed to save concept. {str(e)}"
 
@@ -64,11 +94,20 @@ def list_concepts(query_text: str, n_results: int = 5, category: str = "concepts
             
         formatted_results = []
         for i, doc in enumerate(results):
+            # Prefer the real CONCEPT_ID written in at save time. The positional
+            # "honcho_conclusion_{i}" fallback is not an identifier -- it is the
+            # index of this result in this query, so it names a different concept
+            # on the next search and is useless for patch/forget. Label it as such
+            # rather than passing it off as an id.
+            found = re.findall(r"CONCEPT_ID:\s*(kc_[0-9a-f]+)", str(doc))
             formatted_results.append({
-                "id": f"honcho_conclusion_{i}",
-                "content": doc
+                "id": found[0] if found else None,
+                "all_concept_ids": sorted(set(found)),
+                "addressable": bool(found),
+                "position": f"result_{i}",
+                "content": doc,
             })
-            
+
         return json.dumps(formatted_results, indent=2)
     except Exception as e:
         return f"ERROR: Failed to query Honcho. {str(e)}"
