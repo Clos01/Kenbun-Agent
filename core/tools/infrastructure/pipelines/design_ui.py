@@ -1,4 +1,9 @@
+import inspect
 from tools.infrastructure.design_bridge import spawn_design_agent, detect_available_agents
+
+# Keys consumed only by the design bridge; the Gemini fallback never takes them.
+_BRIDGE_ONLY_KWARGS = frozenset({"agent_id", "task", "design_system", "skill"})
+
 
 def run_design_agent_with_fallback(tools, **kwargs):
     """
@@ -23,8 +28,36 @@ def run_design_agent_with_fallback(tools, **kwargs):
         else:
             return result
 
-    # Fallback to Cloud AI (review_code_with_gemini)
-    return tools["review_code_with_gemini"](**kwargs)
+    # Fallback to Cloud AI (review_code_with_gemini). The bridge-only kwargs
+    # (agent_id, task, design_system, skill) are not part of that signature, so
+    # forward only the arguments it actually accepts.
+    fallback = tools["review_code_with_gemini"]
+    try:
+        params = inspect.signature(fallback).parameters
+        takes_var_kwargs = any(
+            p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+        if not takes_var_kwargs:
+            # Dropping the bridge-only keys is the whole point, so that stays quiet.
+            # Anything else means the signature is not what we think it is (e.g. a
+            # decorator without functools.wraps), which would silently starve the
+            # callee of a real argument. Say so loudly instead.
+            unexpected = sorted(
+                k for k in kwargs if k not in params and k not in _BRIDGE_ONLY_KWARGS
+            )
+            if unexpected:
+                print(
+                    f"WARNING: design_ui fallback dropped unexpected kwargs {unexpected} "
+                    f"before calling {getattr(fallback, '__name__', fallback)!r}. "
+                    "Check for a decorator hiding the real signature."
+                )
+            kwargs = {k: v for k, v in kwargs.items() if k in params}
+    except (TypeError, ValueError) as e:
+        print(
+            f"WARNING: design_ui could not introspect the fallback signature ({e}); "
+            "forwarding kwargs unfiltered."
+        )
+    return fallback(**kwargs)
 
 
 def build_design_ui_pipeline(tools):
