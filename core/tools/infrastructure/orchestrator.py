@@ -225,12 +225,16 @@ def _analyze_bug(
         )
 
 
-def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", fast: bool = False):
+def build_pipeline_tools(project_path: str = "."):
+    """The canonical name -> callable map that pipeline builders index.
+
+    Pipeline builders in tools/infrastructure/pipelines/ reference tools by
+    string key (tools["recall_fix"], tools["guardrail_audit"], ...). Any caller
+    that assembles its own partial dict starves them, so this is the one place
+    that mapping is defined and every caller should start here.
+
+    project_path scopes view_file's jail to the repo under work.
     """
-    Synchronous entry point for the Pro Stack.
-    Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
-    """
-    import asyncio
     from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
     from tools.audit.supervisor_agent import run_supervisor_audit
     from tools.memory.repo_mapper import scan_repo
@@ -247,6 +251,10 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         kanban_create, kanban_show, kanban_list, kanban_complete,
         kanban_block, kanban_unblock, kanban_heartbeat, kanban_comment, kanban_link
     )
+    # Required by the self_improve pipeline. These were wired only into the tool
+    # dict inside server.py, so the pipeline could never resolve them from here.
+    from tools.memory.hardware_bridge import hardware_bridge
+    from services.self_improvement_daemon import run_self_improvement_cycle
 
     def _local_view_file(AbsolutePath: str) -> str:
         path = Path(AbsolutePath).resolve()
@@ -259,7 +267,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
             return f.read()
 
     # Map actual functions to the tool registry
-    tools = {
+    return {
         "scan_repo": scan_repo,
         "review_code_with_gemini": gemini_code_review,
         "research_with_gemini": gemini_research,
@@ -293,7 +301,19 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         "kanban_heartbeat": kanban_heartbeat,
         "kanban_comment": kanban_comment,
         "kanban_link": kanban_link,
+        "detect_hardware": hardware_bridge.detect_capabilities,
+        "run_self_improvement_cycle": run_self_improvement_cycle,
     }
+
+
+def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", fast: bool = False):
+    """
+    Synchronous entry point for the Pro Stack.
+    Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
+    """
+    import asyncio
+    tools = build_pipeline_tools(project_path)
+
 
     # Run the async pipeline
     try:
@@ -653,7 +673,19 @@ async def run_pipeline(
     }
 
     # --- BUILD PIPELINE ---
-    steps = pipeline_def.builder(tools)
+    # Pipeline builders index `tools["name"]` directly, so a caller that passes a
+    # narrower tool dict than the pipeline needs dies on a bare KeyError with no
+    # indication of which tool was missing or who should have supplied it. That is
+    # how delegate_task failed for every objective routed to a pipeline: it builds
+    # its own 10-tool dict while the pipelines between them require 20.
+    try:
+        steps = pipeline_def.builder(tools)
+    except KeyError as missing:
+        return (
+            f"❌ Pipeline `{workflow}` requires the tool {missing} but the caller "
+            f"did not supply it.\nAvailable tools: {sorted(tools.keys())}\n"
+            "This is a wiring bug in whoever built the tool dict, not a task failure."
+        )
 
     # --- PLANKA WORKFLOW SYNC ---
     planka_ctx = None

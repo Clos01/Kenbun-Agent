@@ -40,6 +40,15 @@ def get_tools_for_toolsets(toolsets: Any, is_orchestrator: bool = False) -> Dict
         "autofix_linter": ("terminal", autofix_linter),
         "save_checkpoint": ("terminal", save_checkpoint),
         "restore_checkpoint": ("terminal", restore_checkpoint),
+
+        # Error memory. Both were imported at the top of this function but never
+        # mapped, so they resolved for nobody: spawn_swarm hands this dict
+        # straight to run_pipeline, and pipelines/research.py indexes
+        # tools["recall_fix"], so every delegate_task run routed to a pipeline
+        # died on KeyError('recall_fix') before doing any work. Grouped with
+        # "file" to match consult_hivemind, the other memory-ish read.
+        "recall_fix": ("file", recall_fix),
+        "remember_fix": ("file", remember_fix),
     }
     
     # Resolve toolsets list
@@ -58,11 +67,21 @@ def get_tools_for_toolsets(toolsets: Any, is_orchestrator: bool = False) -> Dict
     else:
         toolsets_list = ["terminal", "file", "web"]
         
-    selected_tools = {}
+    # Start from the canonical pipeline map. spawn_swarm passes this dict
+    # straight to run_pipeline and nowhere else -- it is never handed to a
+    # free-roaming child agent -- so a toolset filter here restricted nothing
+    # and only starved the pipelines, which index tools by string key. Every
+    # delegate_task run that reached a pipeline died on a KeyError for a tool
+    # this function had simply never mapped.
+    from tools.infrastructure.orchestrator import build_pipeline_tools
+    selected_tools = build_pipeline_tools(str(settings.PROJECT_ROOT))
+
+    # The toolset selection still decides which tools are ADVERTISED to the
+    # child as its own callable surface.
     for name, (category, func) in all_tool_mappings.items():
         if category in toolsets_list:
             selected_tools[name] = func
-            
+
     if is_orchestrator:
         from tools.strategy.delegation_tool import delegate_task
         selected_tools["delegate_task"] = delegate_task
