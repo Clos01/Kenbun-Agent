@@ -15,6 +15,9 @@ import urllib.request
 import time
 from pathlib import Path
 
+# Upper bound on any single step full output appended to the report.
+MAX_FULL_OUTPUT_CHARS = 24000
+
 # Import centralized settings
 from tools.infrastructure.config import settings
 
@@ -668,6 +671,10 @@ async def run_pipeline(
         f"**Remaining Budget:** ${token_governor.get_remaining_budget():.4f}",
         "",
     ]
+    # Steps whose result was clipped for the inline log. Their full text is
+    # appended at the end, otherwise the pipeline's actual deliverable is
+    # generated, paid for, and then discarded.
+    full_outputs: list = []
     
     # --- SAFE PRE-FLIGHT LINTER ---
     if workflow in ["bug_fix", "code_review"] and (file_path or code_snippet):
@@ -879,6 +886,8 @@ async def run_pipeline(
             # Truncate result for report (keep it readable) - SAFELY
             safe_result = str(result) if result is not None else "None"
             result_preview = safe_result[:800] if len(safe_result) > 800 else safe_result
+            if len(safe_result) > 800:
+                full_outputs.append((label, safe_result))
             report.append(f"```\n{result_preview}\n```")
             report.append("")
 
@@ -1048,6 +1057,20 @@ async def run_pipeline(
             sync_pipeline_end(planka_ctx, pipeline_success, "\n".join(summary_lines))
         except Exception as e:
             print(f"⚠️ Planka end sync failed: {e}")
+
+    if full_outputs:
+        report.append("\n---\n\n## 📎 Full step outputs")
+        report.append(
+            "_The step log above is clipped to 800 characters per step; "
+            "the complete text of each clipped step follows._"
+        )
+        for label, text in full_outputs:
+            if len(text) > MAX_FULL_OUTPUT_CHARS:
+                text = text[:MAX_FULL_OUTPUT_CHARS] + (
+                    f"\n\n[... truncated at {MAX_FULL_OUTPUT_CHARS} chars ...]"
+                )
+            report.append(f"### {label}")
+            report.append(text)
 
     return "\n\n".join(report)
 
