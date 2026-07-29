@@ -153,37 +153,95 @@ def _validate(command: str) -> list[str]:
                 f"{binary} {subcommand!r} is denied by policy"
             )
 
-    # 5. Dynamic Alias Mapping for 'kenbun' CLI subcommands
+    # 5. Dynamic alias mapping for 'kenbun' CLI subcommands.
     if binary == "kenbun":
-        import sys
-        sub = argv[1] if len(argv) > 1 else ""
-        arg = argv[2] if len(argv) > 2 else ""
-        if sub in ("recall", "search", "ask"):
-            return [
-                sys.executable, "-c",
-                "import sys, os; sys.path.insert(0, 'core'); from tools.infrastructure.server import ask_architect; print(ask_architect(sys.argv[1]))",
-                arg or "general"
-            ]
-        elif sub in ("list-tools", "tools"):
-            return [
-                sys.executable, "-c",
-                "import sys, os; sys.path.insert(0, 'core'); from tools.registry import registry; print('\\n'.join(registry.get_all_tools().keys()))"
-            ]
-        elif sub in ("list-boards", "kanban", "boards"):
-            return [sys.executable, "get_all_boards_detail.py"]
-        elif sub in ("get-board", "board"):
-            return [
-                sys.executable, "-c",
-                "import sys, os; sys.path.insert(0, 'core'); from tools.infrastructure.planka import planka_get_board; print(planka_get_board(sys.argv[1]))",
-                arg
-            ]
-        else:
-            return [
-                sys.executable, "-c",
-                "import sys, os; sys.path.insert(0, 'core'); from tools.infrastructure.planka import planka_get_structure; print(planka_get_structure())"
-            ]
+        return _map_kenbun_subcommand(argv)
 
     return argv
+
+
+# Absolute path to the importable package root (…/core) so mapped commands do
+# not depend on the caller's working directory: a relative sys.path entry of
+# "core" only resolves when cwd happens to be the repo root.
+_CORE_ROOT = Path(__file__).resolve().parents[2]
+
+# These snippets write to sys.__stdout__ rather than using print().
+#
+# server.py used to swap builtins.print at import time, so importing any tool
+# module rerouted every print() in the process to stderr -- which is why
+# `kenbun list-tools` emitted its 88 names on the wrong stream. That root cause
+# is fixed (the override is now opt-in, installed only by the stdio MCP server),
+# but writing to sys.__stdout__ keeps this entry point correct even when the
+# override IS legitimately installed, so the CLI never depends on who else has
+# touched print.
+_BOOTSTRAP = (
+    f"import sys; sys.path.insert(0, {str(_CORE_ROOT)!r}); "
+    "out = lambda s: (sys.__stdout__.write(str(s) + chr(10)), "
+    "sys.__stdout__.flush()); "
+)
+
+# alias -> (python snippet appended to the bootstrap, requires an argument)
+_KENBUN_SUBCOMMANDS: dict[str, tuple[str, bool]] = {
+    "recall": ("from tools.infrastructure.server import ask_architect; "
+               "out(ask_architect(sys.argv[1]))", True),
+    # The registry is populated by the harvester; without this a fresh process
+    # holds an empty registry and the command prints nothing at all.
+    "list-tools": ("from tools.harvester import harvest_and_register_tools; "
+                   "from tools.registry import registry; "
+                   "harvest_and_register_tools(); "
+                   "out(chr(10).join(sorted(registry.get_all_tools())))", False),
+    # Was `python get_all_boards_detail.py` -- an untracked scratch file at the
+    # repo root, referenced relatively. Call the tool directly instead.
+    "list-boards": ("from tools.infrastructure.planka import planka_get_structure; "
+                    "out(planka_get_structure())", False),
+    "get-board": ("from tools.infrastructure.planka import planka_get_board; "
+                  "out(planka_get_board(sys.argv[1]))", True),
+}
+
+_KENBUN_ALIASES = {
+    "search": "recall", "ask": "recall",
+    "tools": "list-tools",
+    "kanban": "list-boards", "boards": "list-boards", "structure": "list-boards",
+    "board": "get-board",
+}
+
+
+def _supported_kenbun() -> str:
+    return ", ".join(sorted(set(_KENBUN_SUBCOMMANDS) | set(_KENBUN_ALIASES)))
+
+
+def _map_kenbun_subcommand(argv: list[str]) -> list[str]:
+    """Translate ``kenbun <subcommand> [arg]`` into a concrete python invocation.
+
+    There is no ``kenbun`` executable on PATH; the binary is allowlisted purely
+    so these aliases can be rewritten into in-process calls.
+    """
+    import sys
+
+    if len(argv) < 2:
+        raise UnsafeCommandError(
+            f"kenbun requires a subcommand. Supported: {_supported_kenbun()}")
+
+    sub = _KENBUN_ALIASES.get(argv[1], argv[1])
+    if sub not in _KENBUN_SUBCOMMANDS:
+        # Any unrecognised subcommand used to fall through to
+        # planka_get_structure(), so `kenbun anything-at-all` printed the board
+        # structure and looked like it had done what was asked.
+        raise UnsafeCommandError(
+            f"unknown kenbun subcommand {argv[1]!r}. "
+            f"Supported: {_supported_kenbun()}")
+
+    snippet, takes_arg = _KENBUN_SUBCOMMANDS[sub]
+    cmd = [sys.executable, "-c", _BOOTSTRAP + snippet]
+
+    if takes_arg:
+        # `recall` previously defaulted a missing query to the string "general";
+        # `get-board` passed "" straight through to planka_get_board.
+        if len(argv) < 3 or not argv[2].strip():
+            raise UnsafeCommandError(f"kenbun {sub} requires an argument")
+        cmd.append(argv[2])
+
+    return cmd
 
 
 def parse_argv(command: str) -> list[str]:
