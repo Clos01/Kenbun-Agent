@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 import uuid
 from honcho import Honcho
 from tools.infrastructure.config import settings
@@ -49,6 +50,25 @@ def get_chroma_client():
             logger.error(f"❌ Failed to connect to ChromaDB client: {e}")
     return _CHROMA_CLIENT
 
+_SESSION_SAFE = re.compile(r"[^a-zA-Z0-9_-]+")
+
+
+def safe_session_name(category: str, fallback: str = "concepts") -> str:
+    """Coerce a caller-supplied category into a legal Honcho session id.
+
+    Honcho requires session ids to match ^[a-zA-Z0-9_-]+$ and rejects anything
+    else with a Pydantic string_pattern_mismatch on body.id. `category` reaches
+    us straight from tool arguments, so any caller passing a space, a slash or a
+    human-readable phrase blew up with a raw validation dump instead of saving.
+    Two independent stress drivers (a local llama3.2 and Gemini) both hit this
+    within a handful of calls by passing category=" ".
+    """
+    if not isinstance(category, str):
+        return fallback
+    cleaned = _SESSION_SAFE.sub("_", category.strip()).strip("_")
+    return cleaned or fallback
+
+
 def add_memory(content: str, category: str = "concepts", peer_name: str = None):
     """
     Sends a message to Honcho so it can reason over the information
@@ -62,7 +82,7 @@ def add_memory(content: str, category: str = "concepts", peer_name: str = None):
     if not client:
         return
 
-    session = client.session(category)
+    session = client.session(safe_session_name(category))
     peer_name = peer_name or _system_peer()
     peer = client.peer(peer_name)
 
@@ -85,7 +105,7 @@ def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concep
     if not client:
         return []
 
-    session = client.session(category)
+    session = client.session(safe_session_name(category))
     peer_name = peer_name or _system_peer()
 
     try:
@@ -127,7 +147,7 @@ def search_messages(query_text: str, n_results: int = 5, category: str = "concep
         return []
 
     try:
-        results = client.session(category).search(query_text)
+        results = client.session(safe_session_name(category)).search(query_text)
     except Exception as e:
         logger.error(f"⚠️ [HONCHO] Message search failed: {e}")
         return []
