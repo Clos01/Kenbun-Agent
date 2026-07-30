@@ -38,6 +38,60 @@ ZONE_GAP = 150
 def _snap(v):
     return round(v / 10) * 10
 
+
+# ── Text fitting ────────────────────────────────────────────────────────────
+# Excalidraw text elements do not wrap or clip on their own: the declared width is
+# metadata, and the string renders at whatever width it wants. Anything longer than
+# the space between its neighbours simply runs under them and gets visually chopped
+# mid-word by the enclosing panel — "Market Scanners" rendering as "Market Sca".
+# Every sc.text() caller already passes the available width, so measure against it.
+#
+# Average glyph advance as a fraction of font size, per Excalidraw font family
+# (1 = hand-drawn, 2 = normal/Helvetica, 3 = code). Deliberately a touch generous:
+# over-estimating trims a character early, under-estimating puts us back to clipping.
+_CHAR_W = {1: 0.56, 2: 0.52, 3: 0.60}
+
+
+def _text_w(s: str, size: int, family: int = 2) -> float:
+    return len(str(s)) * size * _CHAR_W.get(family, 0.54)
+
+
+def _max_chars(max_w: float, size: int, family: int = 2) -> int:
+    return max(1, int(max_w / (size * _CHAR_W.get(family, 0.54))))
+
+
+def _fit_line(s: str, max_w: float, size: int, family: int = 2) -> str:
+    """Ellipsise a single line so it fits max_w pixels."""
+    s = str(s)
+    if max_w <= 0 or _text_w(s, size, family) <= max_w:
+        return s
+    n = _max_chars(max_w, size, family) - 1
+    return s[:max(1, n)].rstrip() + "…" if n >= 1 else "…"
+
+
+def _wrap_lines(s: str, max_w: float, size: int, family: int = 2, max_lines: int = 3):
+    """Word-wrap to at most max_lines, ellipsising the last if it still overflows."""
+    words = str(s).split()
+    if not words:
+        return [""]
+    lines, cur = [], ""
+    for w in words:
+        cand = f"{cur} {w}".strip()
+        if not cur or _text_w(cand, size, family) <= max_w:
+            cur = cand
+        else:
+            lines.append(cur)
+            cur = w
+            if len(lines) >= max_lines:
+                break
+    if cur and len(lines) < max_lines:
+        lines.append(cur)
+    if len(lines) == max_lines:
+        consumed = len(" ".join(lines).split())
+        if consumed < len(words):
+            lines[-1] = _fit_line(lines[-1] + " …", max_w, size, family)
+    return lines or [""]
+
 # HTTP-method colors mapped to Excalidraw's default stroke swatches (green/blue/orange/red).
 METHOD_COLOR = {"GET": "#2f9e44", "POST": "#1971c2", "PUT": "#f08c00", "PATCH": "#f08c00", "DELETE": "#e03131"}
 
@@ -98,8 +152,19 @@ class Scene:
         self.els.append(e)
         return e
 
-    def text(self, x, y, w, s, size=15, color=INK, align="left", family=2, h=None):
-        lines = str(s).count("\n") + 1
+    def text(self, x, y, w, s, size=15, color=INK, align="left", family=2, h=None,
+             fit=True, wrap=False, max_lines=3):
+        """Emit a text element that actually fits the width it was given.
+
+        fit=True (default) ellipsises each line to w. wrap=True word-wraps instead,
+        for places with vertical room. Pass fit=False for pre-measured strings.
+        """
+        s = str(s)
+        if wrap:
+            s = "\n".join(_wrap_lines(s, w, size, family, max_lines))
+        elif fit:
+            s = "\n".join(_fit_line(ln, w, size, family) for ln in s.split("\n"))
+        lines = s.count("\n") + 1
         e = _mk(self._id("t"), type="text", x=x, y=y, width=w,
                 height=h if h is not None else int(size * 1.3 * lines),
                 text=s, fontSize=size, fontFamily=family, strokeColor=color, textAlign=align)
@@ -123,53 +188,37 @@ class Scene:
                 points=[[p[0] - pts[0][0], p[1] - pts[0][1]] for p in pts],
                 startBinding={"elementId": a["id"], "focus": 0, "gap": 6},
                 endBinding={"elementId": b["id"], "focus": 0, "gap": 6})
-        e["roundness"] = None            # crisp right-angle corners
-        e["endArrowhead"] = "arrow" if arrowhead else None
         a["boundElements"].append({"id": e["id"], "type": kind})
         b["boundElements"].append({"id": e["id"], "type": kind})
         self.els.append(e)
         return e
 
-    def connect_v(self, a, b, color=MUTED, trunk=None):
-        """Vertical bus arrow (a.bottom -> shared horizontal trunk -> b.top). All arrows
-        sharing a `trunk` y ride the same channel, so parallel flows bundle instead of
-        spreading into many separate lanes."""
-        ax, ay = a["x"] + a["width"] / 2, a["y"] + a["height"]
-        bx, by = b["x"] + b["width"] / 2, b["y"]
-        ty = trunk if trunk is not None else ay + 26
-        e = self._linear("arrow", a, b, [[ax, ay], [ax, ty], [bx, ty], [bx, by]], color, 3, True)
-        e["roundness"] = {"type": 2}   # rounded elbow corners
-        return e
-
-    def connect_down(self, a, b, color=MUTED, trunk=None):
-        """Vertical bus arrow dropping from a.bottom to a shared trunk y just above the
-        target, then across and down — keeps the long drop in the source column so
-        endpoint->integration lines never cut through the data-model column."""
-        ax, ay = a["x"] + a["width"] / 2, a["y"] + a["height"]
-        bx, by = b["x"] + b["width"] / 2, b["y"]
-        ty = trunk if trunk is not None else by - 30
-        e = self._linear("arrow", a, b, [[ax, ay], [ax, ty], [bx, ty], [bx, by]], color, 3, True)
-        e["roundness"] = {"type": 2}
-        return e
-
-    def connect_h(self, a, b, color=MUTED, trunk=None):
-        """Horizontal bus arrow (a.right -> shared vertical trunk -> b.left). All arrows
-        sharing a `trunk` x ride the same channel between the columns."""
-        ax, ay = a["x"] + a["width"], a["y"] + a["height"] / 2
-        bx, by = b["x"], b["y"] + b["height"] / 2
-        tx = trunk if trunk is not None else ax + 28
-        e = self._linear("arrow", a, b, [[ax, ay], [tx, ay], [tx, by], [bx, by]], color, 3, True)
-        e["roundness"] = {"type": 2}
+    def connect_direct(self, a, b, color=MUTED, dashed=False, offset_index=0):
+        """Direct bezier arrow from a to b, with staggered anchor points."""
+        ax = a["x"] + a["width"] / 2
+        ay = a["y"] + a["height"]
+        
+        # Stagger the target X anchor to prevent "yarn ball" bundling
+        bx = b["x"] + (b["width"] * 0.2) + (offset_index * 20)
+        bx = min(bx, b["x"] + b["width"] * 0.8)
+        by = b["y"]
+        
+        pts = [[ax, ay], [bx, by]]
+        
+        e = self._linear("arrow", a, b, pts, color, 3 if not dashed else 2, True)
+        e["roundness"] = {"type": 3}   # Native Excalidraw Architectural Elbow Routing
+        if dashed:
+            e["strokeStyle"] = "dashed"
+            e["endArrowhead"] = None
         return e
 
     def relate(self, a, b, lane=0):
-        """Orthogonal DASHED line (no arrowhead) for a data-model relationship, routed on
-        the right side of the data column — dashed so it reads as a schema link, not flow."""
+        """Data-model relationship line."""
         ax, ay = a["x"] + a["width"], a["y"] + a["height"] / 2
         bx, by = b["x"] + b["width"], b["y"] + b["height"] / 2
-        lx = max(a["x"] + a["width"], b["x"] + b["width"]) + 30 + lane * 20
-        e = self._linear("line", a, b, [[ax, ay], [lx, ay], [lx, by], [bx, by]], "#7048e8", 2, False)
+        e = self._linear("line", a, b, [[ax, ay], [bx, by]], "#7048e8", 2, False)
         e["strokeStyle"] = "dashed"
+        e["roundness"] = {"type": 2}
         return e
 
 
@@ -308,15 +357,14 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
     sc.els.insert(2, _mk("lbl-frontend", type="text", x=fz_x + 18, y=fz_y + 14, width=400, height=18,
                          text="FRONTEND · UI SCREENS", fontSize=12, strokeColor=MUTED))
 
-    # ── BACKEND ZONE ────────────────────────────────────────────────────────
+    # ── BACKEND ZONE (TOP-TO-BOTTOM DAG) ────────────────────────────────────
     endpoint_els = {}
     endpoint_color = {}              # id(endpoint card) -> its HTTP-method color
     entity_els = {}
     if endpoints or entities:
         bz_y = fz_y + fz_h + ZONE_GAP
 
-        # Order endpoints by the x-position of the UI button that calls them, so the
-        # UI->API arrows run roughly parallel and don't cross each other.
+        # Order endpoints by the x-position of the UI button that calls them
         flows = backend.get("flows", []) or []
         to_srcx = {}
         for fl in flows:
@@ -329,15 +377,23 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
                                        to_srcx.get(f"{str(ep.get('method','GET')).upper()} {ep.get('path','/')}".lower(), 9e9)),
         )
 
-        ep_x = fz_x + 40
-        ep_y = bz_y + 60
         ep_w = 320
-        ent_x = ep_x + ep_w + 250
-        col_gap = 78
+        col_y = {}  # Tracks the next available Y for each X-column
+        max_ep_bottom = bz_y + 60
+        
+        # ROW 2: API Endpoints (Vertical Stacks per feature)
         for ep in endpoints:
             method = str(ep.get("method", "GET")).upper()
             path = ep.get("path", "/")
             desc = ep.get("desc", "")
+            
+            # Align directly beneath the UI button that calls it
+            raw_x = to_srcx.get(str(path).strip().lower(), 
+                               to_srcx.get(f"{method} {path}".lower(), fz_x + 40))
+            ep_x = _snap(raw_x - ep_w / 2)
+            
+            ep_y = col_y.get(ep_x, bz_y + 60)
+            
             col = METHOD_COLOR.get(method, MUTED)
             card = sc.rect(ep_x, ep_y, ep_w, 60, backgroundColor="transparent", strokeColor=col, strokeWidth=2, roundness={"type": 3})
             sc.rect(ep_x, ep_y, 58, 60, backgroundColor=col, strokeColor=col)
@@ -347,17 +403,52 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
                 sc.text(ep_x + 70, ep_y + 34, ep_w - 80, desc, size=11, color=MUTED)
             endpoint_els[f"{method} {path}".lower()] = card
             endpoint_els[path.lower()] = card
-            endpoint_color[id(card)] = col      # color-thread each flow end-to-end by method
-            ep_y += col_gap
+            endpoint_color[id(card)] = col
 
-        ent_y = bz_y + 60
-        if level >= 1:                       # data models only from the "data" detail level up
+            card_bottom = ep_y + 60
+
+            # Attach JSON Contract directly underneath if it exists
+            if str(detail).lower() == "contracts":
+                payload = ep.get("payload")
+                if payload:
+                    lines = _payload_lines(payload)
+                    cw = 320
+                    ch = 34 + len(lines) * 18 + 16
+                    cc_y = ep_y + 80
+                    pcard = sc.rect(ep_x, cc_y, cw, ch, backgroundColor="#1e1e1e", strokeColor="#1e1e1e", roundness={"type": 3})
+                    sc.rect(ep_x, cc_y, cw, 28, backgroundColor="#2d2d2d", strokeColor="#2d2d2d")
+                    sc.text(ep_x + 12, cc_y + 7, cw - 70, f"{method} {path}", size=11, color="#9cdcfe")
+                    sc.rect(ep_x + cw - 52, cc_y + 5, 42, 18, backgroundColor="#0ca678", strokeColor="#0ca678", roundness={"type": 3})
+                    sc.text(ep_x + cw - 48, cc_y + 7, 42, "JSON", size=9, color="#ffffff")
+                    sc.text(ep_x + 14, cc_y + 38, cw - 24, "\n".join(lines), size=12, color="#d4d4d4", family=3, h=len(lines) * 18)
+                    sc.dashed_link(pcard, card)
+                    card_bottom = cc_y + ch
+
+            # Increment the column's Y position so the next endpoint in this column stacks below
+            col_y[ep_x] = card_bottom + 40
+            max_ep_bottom = max(max_ep_bottom, card_bottom)
+
+        # ROW 4: Data Models & Integrations (Vertical Stacks per feature)
+        max_ent_bottom = max_ep_bottom + 120
+        ent_col_y = {}
+        if level >= 1:
             for ent in entities:
                 name = ent.get("name", "Entity")
                 fields = ent.get("fields", []) or []
                 ew = 260
+                
+                # Align directly beneath the first endpoint that uses it
+                raw_x = fz_x + 40
+                for ep in endpoints:
+                    if name in (ep.get("reads", []) or []) or name in (ep.get("writes", []) or []):
+                        ep_card = endpoint_els.get(f"{str(ep.get('method', 'GET')).upper()} {ep.get('path', '/')}".lower())
+                        if ep_card:
+                            raw_x = ep_card["x"] + ep_card["width"] / 2
+                            break
+                ent_x = _snap(raw_x - ew / 2)
+                ent_y = ent_col_y.get(ent_x, max_ep_bottom + 120)
+
                 eh = 42 + len(fields) * 24 + 12
-                # data-layer accent (purple) distinguishes storage from the API layer
                 ent_card = sc.rect(ent_x, ent_y, ew, eh, backgroundColor=ENTITY_FILL, strokeColor="#7048e8", strokeWidth=2, roundness={"type": 3})
                 sc.rect(ent_x, ent_y, ew, 36, backgroundColor=ENTITY_HDR, strokeColor="#7048e8")
                 sc.text(ent_x + 12, ent_y + 9, ew - 20, name, size=14, color=INK)
@@ -366,47 +457,63 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
                     sc.text(ent_x + 12, fy, ew - 20, str(f), size=12, color="#495057")
                     fy += 24
                 entity_els[name.lower()] = ent_card
-                ent_y += eh + 40
+                
+                ent_col_y[ent_x] = ent_y + eh + 40
+                max_ent_bottom = max(max_ent_bottom, ent_y + eh)
 
-        # faint backend-layer band behind the backend elements (~18% opacity: subtle).
-        # Overview: band hugs the API column only; data+: it spans out to the model column.
-        if level >= 1:
-            bz_w = (ent_x + 260) - fz_x + 120
-            bz_label = "BACKEND · API & DATA MODELS"
-        else:
-            bz_w = (ep_x + ep_w) - fz_x + 80
-            bz_label = "BACKEND · API ENDPOINTS"
-        bz_h = max(ep_y, ent_y) - bz_y + 30
+        # External Integrations
+        integrations = backend.get("integrations", []) or [] if level >= 2 else []
+        integ_els = {}
+        if integrations:
+            iw, ih = 240, 78
+            for ig in integrations:
+                name = ig.get("name", "Service")
+                kind = ig.get("kind", "")
+                
+                # Align beneath the endpoint that uses it
+                raw_x = fz_x + 40
+                for ep_path in (ig.get("via", []) or []):
+                    eb = endpoint_els.get(str(ep_path).strip().lower())
+                    if eb is not None:
+                        raw_x = eb["x"] + eb["width"] / 2
+                        break
+                ix = _snap(raw_x - iw / 2)
+                iy = ent_col_y.get(ix, max_ep_bottom + 120)
+
+                card = sc.rect(ix, iy, iw, ih, backgroundColor="#e6fcf5", strokeColor="#0ca678", strokeWidth=2, roundness={"type": 3})
+                sc.rect(ix, iy, iw, 34, backgroundColor="#c3fae8", strokeColor="#0ca678")
+                sc.text(ix + 14, iy + 9, iw - 24, name, size=14, color=INK)
+                if kind:
+                    sc.text(ix + 14, iy + 46, iw - 24, kind, size=11, color="#0b7285")
+                integ_els[name.lower()] = card
+                
+                ent_col_y[ix] = iy + ih + 40
+                max_ent_bottom = max(max_ent_bottom, iy + ih)
+
+        # Background Zone Block
+        all_xs = list(col_y.keys()) + list(ent_col_y.keys())
+        max_x = max(all_xs) if all_xs else fz_x
+        bz_w = max(max_x - fz_x + 400, fz_w)
+        bz_h = max_ent_bottom - bz_y + 60
+
         sc.els.insert(1, _mk("zone-backend", type="rectangle", x=fz_x, y=bz_y, width=bz_w, height=bz_h,
                              backgroundColor="#b197fc", strokeColor="#e5dbff", opacity=18, roundness={"type": 3}))
         sc.els.insert(2, _mk("lbl-backend", type="text", x=fz_x + 18, y=bz_y + 16, width=400, height=18,
-                             text=bz_label, fontSize=12, strokeColor=MUTED))
+                             text="BACKEND · API, DATA & INTEGRATIONS", fontSize=12, strokeColor=MUTED))
 
-        # Execution flow (arrowheads) routed onto SHARED BUS channels so parallel flows
-        # bundle instead of spreading: UI->endpoint rides one horizontal trunk just above
-        # the API column; endpoint->model rides one vertical trunk between the columns.
-        ui_trunk_y = bz_y + 34
+        # Connections (Staggered Anchors)
+        inbound_counts = {}
+        
         for flow in flows:
             a = button_els.get(str(flow.get("from", "")).strip().lower())
             b = endpoint_els.get(str(flow.get("to", "")).strip().lower())
             if a is not None and b is not None:
-                # thread the whole flow in the endpoint's method color so a single path is traceable
-                sc.connect_v(a, b, color=endpoint_color.get(id(b), PRIMARY), trunk=ui_trunk_y)
-        if level >= 1:                        # endpoint->data-model access only at data+ levels
-            data_trunk_x = ep_x + ep_w + (ent_x - (ep_x + ep_w)) / 2
-            for ep in endpoints:
-                method = str(ep.get("method", "GET")).upper()
-                eb = endpoint_els.get(f"{method} {ep.get('path','/')}".lower())
-                if eb is None:
-                    continue
-                col = METHOD_COLOR.get(method, MUTED)   # data-access line carries the method color
-                for ent_name in (ep.get("writes", []) or []) + (ep.get("reads", []) or []):
-                    tb = entity_els.get(str(ent_name).lower())
-                    if tb is not None:
-                        sc.connect_h(eb, tb, color=col, trunk=data_trunk_x)
-
-        # Data-model RELATIONSHIPS (no arrowheads, orthogonal, right-side lanes):
-        # infer FKs like "<name>_id" -> entity
+                idx = inbound_counts.get(id(b), 0)
+                sc.connect_direct(a, b, color=endpoint_color.get(id(b), PRIMARY), offset_index=idx)
+                inbound_counts[id(b)] = idx + 1
+                
+        # Cross-column lines omitted for clarity
+        # Data-model relationships
         drawn = set()
         k = 0
         for ent in (entities if level >= 1 else []):
@@ -424,68 +531,6 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
                                 drawn.add(key)
                                 k += 1
                             break
-
-        # ── EXTERNAL INTEGRATIONS ZONE (third layer, below backend) ─────────
-        integrations = backend.get("integrations", []) or [] if level >= 2 else []
-        if integrations:
-            iz_y = bz_y + bz_h + 100
-            ix = fz_x + 40
-            iw, ih = 240, 78
-            integ_els = {}
-            for ig in integrations:
-                name = ig.get("name", "Service")
-                kind = ig.get("kind", "")
-                card = sc.rect(ix, iz_y + 52, iw, ih, backgroundColor="#e6fcf5", strokeColor="#0ca678", strokeWidth=2, roundness={"type": 3})
-                sc.rect(ix, iz_y + 52, iw, 34, backgroundColor="#c3fae8", strokeColor="#0ca678")
-                sc.text(ix + 14, iz_y + 61, iw - 24, name, size=14, color=INK)
-                if kind:
-                    sc.text(ix + 14, iz_y + 98, iw - 24, kind, size=11, color="#0b7285")
-                integ_els[name.lower()] = card
-                ix += iw + 50
-            iz_w = (ix - 50) - fz_x + 40
-            iz_h = ih + 90
-            sc.els.insert(1, _mk("zone-integ", type="rectangle", x=fz_x, y=iz_y, width=max(iz_w, 400), height=iz_h,
-                                 backgroundColor="#63e6be", strokeColor="#c3fae8", opacity=15, roundness={"type": 3}))
-            sc.els.insert(2, _mk("lbl-integ", type="text", x=fz_x + 18, y=iz_y + 16, width=460, height=18,
-                                 text="EXTERNAL INTEGRATIONS · 3RD-PARTY SERVICES", fontSize=12, strokeColor="#0b7285"))
-            # endpoint -> external service: shared horizontal bus just above the integ cards
-            integ_trunk_y = iz_y + 34
-            for ig in integrations:
-                ib = integ_els.get(ig.get("name", "").lower())
-                for ep_path in (ig.get("via", []) or []):
-                    eb = endpoint_els.get(str(ep_path).strip().lower())
-                    if eb is not None and ib is not None:
-                        sc.connect_down(eb, ib, color="#0ca678", trunk=integ_trunk_y)
-
-        # ── CONTRACT CARDS (detail="contracts"): dark IDE-style JSON payload nodes ──
-        # Anchored (dashed) beside their endpoint for spatial locality; stacked in a
-        # left column so they never overlap the architecture. Only endpoints with a
-        # `payload` in the spec get one (typically webhooks / integration calls).
-        if str(detail).lower() == "contracts":
-            cc_x = fz_x - 430
-            cc_y = bz_y + 40
-            for ep in endpoints:
-                payload = ep.get("payload")
-                if not payload:
-                    continue
-                method = str(ep.get("method", "GET")).upper()
-                path = ep.get("path", "/")
-                eb = endpoint_els.get(f"{method} {path}".lower())
-                if eb is None:
-                    continue
-                lines = _payload_lines(payload)
-                cw = 380
-                ch = 34 + len(lines) * 18 + 16
-                card = sc.rect(cc_x, cc_y, cw, ch, backgroundColor="#1e1e1e", strokeColor="#1e1e1e", roundness={"type": 3})
-                sc.rect(cc_x, cc_y, cw, 28, backgroundColor="#2d2d2d", strokeColor="#2d2d2d")  # title strip
-                sc.text(cc_x + 12, cc_y + 7, cw - 70, f"{method} {path}", size=11, color="#9cdcfe")  # IDE blue
-                sc.rect(cc_x + cw - 52, cc_y + 5, 42, 18, backgroundColor="#0ca678", strokeColor="#0ca678", roundness={"type": 3})
-                sc.text(cc_x + cw - 48, cc_y + 7, 42, "JSON", size=9, color="#ffffff")
-                # monospace body (soft off-white, IDE tone)
-                sc.text(cc_x + 14, cc_y + 38, cw - 24, "\n".join(lines), size=12, color="#d4d4d4", family=3,
-                        h=len(lines) * 18)
-                sc.dashed_link(card, eb)
-                cc_y += ch + 30
 
     return {
         "type": "excalidraw", "version": 2, "source": "kenbun-ai-wireframe",
@@ -534,13 +579,18 @@ def generate_spec(prompt: str, detail: str = "") -> dict:
         sysprompt += ("\nCONTRACTS MODE: you MUST include a concise `payload` JSON object for EVERY "
                       "webhook, every integration-facing endpoint, and every POST/PUT/PATCH that "
                       "accepts a body. Do not omit payloads.")
-    raw = call_llm_gateway(sysprompt, f"Feature request: {prompt}", max_tokens=3500)
-    txt = re.sub(r"^```(json)?", "", raw.strip()).strip()
-    txt = re.sub(r"```$", "", txt).strip()
-    m = re.search(r"\{.*\}", txt, re.DOTALL)
-    if not m:
-        raise ValueError(f"LLM did not return JSON spec. Got: {raw[:200]}")
-    return json.loads(m.group(0))
+    for attempt in range(3):
+        raw = call_llm_gateway(sysprompt, f"Feature request: {prompt}", max_tokens=8192)
+        txt = re.sub(r"^```(json)?", "", raw.strip()).strip()
+        txt = re.sub(r"```$", "", txt).strip()
+        m = re.search(r"\{.*\}", txt, re.DOTALL)
+        if not m:
+            continue
+        try:
+            return json.loads(m.group(0))
+        except Exception:
+            continue
+    raise ValueError(f"LLM failed to return valid JSON spec after 3 attempts. Last output: {raw[:200]}")
 
 
 def build_wireframe(prompt: str, detail: str = ""):
