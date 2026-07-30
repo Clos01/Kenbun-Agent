@@ -1542,20 +1542,34 @@ def telemetry_integrity_audit(post_alert: bool = True) -> str:
     return report
 
 @sovereign_tool()
-def generate_wireframe(prompt: str, detail: str = "") -> str:
+def generate_wireframe(prompt: str, project_id: str = "", detail: str = "") -> str:
     """Generate a UI + backend architecture wireframe from a natural-language feature
-    description and push it to the Kenbun /board Wireframe (Excalidraw) canvas.
+    description and push it to that PROJECT'S Wireframe (Excalidraw) canvas.
 
     Designs like a full-stack team: a 3-layer diagram — FRONTEND (UI screens) → BACKEND
     (API endpoints + data models) → EXTERNAL INTEGRATIONS — with element-bound orthogonal
     connectors. A structured spec is converted deterministically into a valid Excalidraw scene.
 
+    project_id: REQUIRED — the Planka project id this wireframe belongs to (same key
+    the per-project SOW uses). A wireframe is scoped to one project and is not visible
+    from any other; use planka_get_structure() to look the id up. Without it there is
+    nowhere to file the result, so generation is refused rather than overwriting a
+    shared canvas.
+
     detail: "" (default) = clean structural view; "contracts" = also attach dark IDE-style
     JSON payload cards next to webhook/integration endpoints (semantic zoom).
-    Example: generate_wireframe("appointment booking with voice agents", detail="contracts").
+    Example: generate_wireframe("appointment booking", project_id="1821314860437210840").
     """
     import urllib.request
     import json as _json
+    import urllib.parse as _urlparse
+
+    project_id = str(project_id or "").strip()
+    if not project_id:
+        return ("ERROR: project_id is required. A wireframe belongs to exactly one project "
+                "and is not visible from any other. Run planka_get_structure() to find the "
+                "project id, then pass it as project_id.")
+
     with silence_stdout():
         try:
             from tools.craft.wireframe_generator import build_wireframe
@@ -1565,7 +1579,9 @@ def generate_wireframe(prompt: str, detail: str = "") -> str:
         try:
             body = _json.dumps(scene).encode("utf-8")
             req = urllib.request.Request(
-                "http://100.92.127.1:3000/api/wireframe", data=body,
+                "http://100.92.127.1:3000/api/wireframe?project_id="
+                + _urlparse.quote(project_id),
+                data=body,
                 headers={"Content-Type": "application/json"}, method="POST",
             )
             with urllib.request.urlopen(req, timeout=20) as r:
@@ -1578,7 +1594,8 @@ def generate_wireframe(prompt: str, detail: str = "") -> str:
         f"✅ Wireframe **{spec.get('title', 'Untitled')}** {'pushed to /board' if pushed else 'built'}.\n"
         f"• Screens: {', '.join(screens) or '(none)'}\n"
         f"• Elements: {len(scene['elements'])}\n"
-        f"Open http://100.92.127.1/board → **Wireframe** tab (reload the canvas to view)."
+        f"• Project: {project_id}\n"
+        f"Open the board for THIS project → **Wireframe** tab (reload the canvas to view)."
     )
 
 @sovereign_tool()

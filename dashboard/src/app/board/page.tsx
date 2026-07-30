@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import WorkflowView from "@/components/WorkflowView";
+import CustomDropdown from "@/components/CustomDropdown";
 import { formatMarkdown } from "@/lib/markdown";
 import { computeWorkOrder } from "@/lib/prioritize";
 import {
@@ -1204,16 +1205,15 @@ export default function BoardPage() {
 
                           <div className="flex items-center gap-2 w-full">
                             <Tag className="w-3.5 h-3.5 text-secondary shrink-0" />
-                            <select
+                            <CustomDropdown
                               value={selectedCollection}
-                              onChange={(e) => setSelectedCollection(e.target.value)}
-                              className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2.5 py-1 w-full"
-                            >
-                              <option value="" className="bg-card text-primary">Collections</option>
-                              {allCollections.map(col => (
-                                <option key={col} value={col} className="bg-card text-primary">{col}</option>
-                              ))}
-                            </select>
+                              onChange={(val) => setSelectedCollection(val)}
+                              options={[
+                                { value: "", label: "Collections" },
+                                ...allCollections.map(col => ({ value: col, label: col }))
+                              ]}
+                              size="sm"
+                            />
                           </div>
 
                           {hasActiveFilters && (
@@ -1442,7 +1442,7 @@ export default function BoardPage() {
                     return (
                       <div
                         key={list.id}
-                        className="w-[290px] sm:w-[320px] shrink-0 flex flex-col px-4 py-5 bg-card/45 backdrop-blur-xs border border-border/80 rounded-md transition-all duration-300 max-h-[calc(100vh-12rem)] snap-center md:snap-none"
+                        className="w-[85vw] sm:w-[320px] max-w-[340px] shrink-0 flex flex-col px-4 py-5 bg-card/45 backdrop-blur-xs border border-border/80 rounded-md transition-all duration-300 max-h-[calc(100vh-12rem)] snap-center md:snap-none"
                       >
                         {/* Column header — label-caps + count */}
                         <div className="flex items-center justify-between mb-4 px-1 group/column">
@@ -2127,8 +2127,18 @@ export default function BoardPage() {
                   className="w-full h-[calc(100vh-5rem)] min-h-[480px]"
                 >
                   <div className="w-full h-full bg-transparent relative">
+                    {/* A wireframe belongs to one project. Pass the selected
+                        project through so the canvas loads that project's
+                        wireframe and no other; keying the iframe on the id also
+                        forces a remount when the user switches project, instead
+                        of leaving the previous app's design on screen. */}
                     <iframe
-                      src="/custom_excalidraw.html"
+                      key={selectedBoard?.projectId ?? "no-project"}
+                      src={
+                        selectedBoard?.projectId
+                          ? `/custom_excalidraw.html?project_id=${encodeURIComponent(selectedBoard.projectId)}`
+                          : "/custom_excalidraw.html"
+                      }
                       className="w-full h-full border-none"
                       title="Excalidraw Wireframe Canvas"
                     />
@@ -2215,17 +2225,15 @@ export default function BoardPage() {
                     <form onSubmit={handleAddFeedComment} className="space-y-4">
                       <div className="space-y-1.5">
                         <label htmlFor="feed_card_select" className={LABEL_CAPS}>Target Card</label>
-                        <select
+                        <CustomDropdown
                           id="feed_card_select"
                           value={feedSelectedCardId}
-                          onChange={(e) => setFeedSelectedCardId(e.target.value)}
-                          className={FIELD + " cursor-pointer bg-card"}
-                        >
-                          <option value="" className="bg-card text-primary">— Choose active card —</option>
-                          {cards.map(c => (
-                            <option key={c.id} value={c.id} className="bg-card text-primary">{c.name}</option>
-                          ))}
-                        </select>
+                          onChange={(val) => setFeedSelectedCardId(val)}
+                          options={[
+                            { value: "", label: "— Choose active card —" },
+                            ...cards.map(c => ({ value: c.id, label: c.name }))
+                          ]}
+                        />
                       </div>
 
                       <div className="space-y-1.5">
@@ -2446,13 +2454,13 @@ export default function BoardPage() {
               onClick={() => setSelectedCard(null)}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
             />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-10 pointer-events-none">
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-6 md:p-10 pointer-events-none">
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                className="w-full max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl max-h-[90dvh] md:max-h-[85dvh] bg-neutral border border-primary/15 rounded-2xl flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
+                className="w-full max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl h-full sm:h-auto max-h-full sm:max-h-[85dvh] bg-neutral border-0 sm:border border-primary/15 rounded-none sm:rounded-2xl flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
               >
                 {/* Panel header */}
                 <div className="px-6 pt-5 pb-4 border-b border-primary/10 shrink-0">
@@ -2608,17 +2616,17 @@ export default function BoardPage() {
                             <RefreshCw className="w-3 h-3" />
                             Recurrence
                           </label>
-                          <select
+                          <CustomDropdown
                             id="card_recur"
                             value={cardRecurrence}
-                            onChange={(e) => setCardRecurrence(e.target.value as "none" | "daily" | "weekly" | "monthly")}
-                            className={FIELD + " cursor-pointer"}
-                          >
-                            <option value="none">None</option>
-                            <option value="daily">Daily</option>
-                            <option value="weekly">Weekly</option>
-                            <option value="monthly">Monthly</option>
-                          </select>
+                            onChange={(val) => setCardRecurrence(val as "none" | "daily" | "weekly" | "monthly")}
+                            options={[
+                              { value: "none", label: "None" },
+                              { value: "daily", label: "Daily" },
+                              { value: "weekly", label: "Weekly" },
+                              { value: "monthly", label: "Monthly" }
+                            ]}
+                          />
                         </div>
 
                         <div className="space-y-1.5">
