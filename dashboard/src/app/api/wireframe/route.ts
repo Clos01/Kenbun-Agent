@@ -19,6 +19,19 @@ const dataDir = path.join(process.cwd(), "src/data");
 const wireframeDir = path.join(dataDir, "wireframes");
 const legacyPath = path.join(dataDir, "wireframe.json");
 
+/**
+ * Parked home for the pre-scoping wireframe.
+ *
+ * The filename deliberately contains a "." — a character no valid project_id can
+ * contain (see projectFile below) — so this file is UNADDRESSABLE through the API
+ * by construction. An earlier version parked it at "_unassigned.json", which does
+ * match the id charset, so `?project_id=_unassigned` served it to anyone who
+ * guessed the name. Making it structurally unreachable is stronger than adding it
+ * to a blocklist, which is only ever as good as the list.
+ */
+const legacyParkedPath = path.join(wireframeDir, "legacy.unassigned.json");
+const oldParkedPath = path.join(wireframeDir, "_unassigned.json");
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -33,20 +46,35 @@ const EMPTY_SCENE = { type: "excalidraw", version: 2, elements: [], appState: {}
  * rewriting it would map two different callers onto the same file — the exact
  * cross-project bleed this route exists to prevent. Also blocks path traversal,
  * since this value becomes a filename.
+ *
+ * Note the charset excludes "." — that is load-bearing, not incidental. It is what
+ * makes any file whose name contains a dot (see legacyParkedPath) impossible to
+ * reach through this API, and it independently rules out traversal, extensions and
+ * hidden files.
  */
 function projectFile(projectId: string): string | null {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(projectId)) return null;
-  return path.join(wireframeDir, `${projectId}.json`);
+  const file = path.join(wireframeDir, `${projectId}.json`);
+  // Defence in depth: even with the charset check, never hand back a path that
+  // escaped the intended directory.
+  if (path.dirname(path.resolve(file)) !== path.resolve(wireframeDir)) return null;
+  return file;
 }
 
 function migrateLegacy(): void {
-  // Preserve the pre-scoping wireframe rather than orphaning it. It has no project
-  // of its own, so it is parked under a reserved id and remains reachable.
-  if (!fs.existsSync(legacyPath)) return;
-  const target = path.join(wireframeDir, "_unassigned.json");
-  if (fs.existsSync(target)) return;
   fs.mkdirSync(wireframeDir, { recursive: true });
-  fs.copyFileSync(legacyPath, target);
+
+  // Relocate anything parked under the old, guessable name.
+  if (fs.existsSync(oldParkedPath)) {
+    if (!fs.existsSync(legacyParkedPath)) fs.renameSync(oldParkedPath, legacyParkedPath);
+    else fs.rmSync(oldParkedPath);
+  }
+
+  // Preserve the pre-scoping wireframe rather than orphaning it. It belongs to no
+  // project, so it is parked out of reach rather than assigned to one by guesswork.
+  if (!fs.existsSync(legacyPath)) return;
+  if (fs.existsSync(legacyParkedPath)) return;
+  fs.copyFileSync(legacyPath, legacyParkedPath);
 }
 
 export async function OPTIONS() {
