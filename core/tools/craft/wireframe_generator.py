@@ -346,13 +346,38 @@ def _render_component(sc, cp, cx, cy, inner_w):
         sc.text(cx + inner_w / 2 - 30, cy + 48, 80, label or "image", size=12, color=MUTED, align="center")
         h = 110
     elif t in ("list", "table"):
-        rows = 4
-        sc.rect(cx, cy, inner_w, 30 + rows * 26, backgroundColor="transparent", strokeColor=FAINT, roundness={"type": 3})
-        sc.rect(cx, cy, inner_w, 30, backgroundColor=SURFACE, strokeColor=FAINT)
-        sc.text(cx + 12, cy + 8, inner_w - 20, label or ("Table" if t == "table" else "List"), size=12, color=INK)
-        for i in range(rows):
-            sc.text(cx + 12, cy + 40 + i * 26, inner_w - 24, "· ————————", size=12, color=FAINT)
-        h = 30 + rows * 26
+        # Real column headers when the spec supplies them. A table drawn as four
+        # identical "· ————" rows conveys nothing about the data; the columns are
+        # usually the most informative thing about a screen.
+        cols = [str(c) for c in (cp.get("columns") or []) if str(c).strip()]
+        rows = int(cp.get("rows") or 4)
+        rows = max(1, min(rows, 8))
+        head_h = 30
+        title = label or ("Table" if t == "table" else "List")
+
+        body_h = head_h + (26 if cols else 0) + rows * 26
+        sc.rect(cx, cy, inner_w, body_h, backgroundColor="transparent",
+                strokeColor=FAINT, roundness={"type": 3})
+        sc.rect(cx, cy, inner_w, head_h, backgroundColor=SURFACE, strokeColor=FAINT)
+        sc.text(cx + 12, cy + 8, inner_w - 20, title, size=12, color=INK)
+
+        if cols:
+            colw = (inner_w - 24) / len(cols)
+            for ci, col in enumerate(cols):
+                sc.text(cx + 12 + ci * colw, cy + head_h + 6, colw - 8, col,
+                        size=11, color=MUTED)
+            sc.rect(cx, cy + head_h + 25, inner_w, 1,
+                    backgroundColor=FAINT, strokeColor=FAINT)
+            for r in range(rows):
+                ry = cy + head_h + 32 + r * 26
+                for ci in range(len(cols)):
+                    sc.text(cx + 12 + ci * colw, ry, colw - 8, "————",
+                            size=11, color=FAINT)
+        else:
+            for i in range(rows):
+                sc.text(cx + 12, cy + head_h + 10 + i * 26, inner_w - 24,
+                        "· ————————", size=12, color=FAINT)
+        h = body_h
     elif t in ("checkbox", "radio"):
         sc.rect(cx, cy, 18, 18, strokeColor=INK, backgroundColor="transparent",
                 roundness={"type": 3} if t == "radio" else None)
@@ -367,6 +392,67 @@ def _render_component(sc, cp, cx, cy, inner_w):
     else:
         sc.text(cx, cy, inner_w, label or t, size=14)
     return h, btn
+
+
+CONTAINER_TYPES = {"row", "column", "stack", "region", "group", "panel", "section"}
+
+
+def _render_node(sc, node, x, y, w, ctx=None):
+    """Render a component OR a container, recursively. Returns the height used.
+
+    This is what lets a spec describe a REAL interface instead of a single flat
+    column of widgets. A "row" splits its width among its children (honouring an
+    optional per-child `span` weight) and returns the tallest; anything else with
+    children stacks them. Leaves fall through to _render_component.
+
+    The LLM chooses the composition; every coordinate is still computed here, so
+    a nested layout cannot overlap or overflow any more than a flat one could.
+    """
+    t = str(node.get("type") or "").lower()
+    children = node.get("components") or node.get("children") or []
+
+    if t == "row" and children:
+        weights = [max(0.01, float(c.get("span", 1) or 1)) for c in children]
+        total = sum(weights)
+        avail = w - GAP * (len(children) - 1)
+        cx = x
+        heights = []
+        for child, wt in zip(children, weights):
+            cw = max(40.0, avail * (wt / total))
+            heights.append(_render_node(sc, child, cx, y, cw, ctx))
+            cx += cw + GAP
+        return max(heights) if heights else 0.0
+
+    if (t in CONTAINER_TYPES or (children and t not in COMP_H)) and children:
+        cy = y
+        label = node.get("label")
+        if label and t in ("region", "panel", "section"):
+            sc.text(x, cy, w, label, size=12, color=MUTED)
+            cy += 22
+        for child in children:
+            cy += _render_node(sc, child, x, cy, w, ctx) + GAP
+        return max(0.0, cy - y - GAP)
+
+    used, btn = _render_component(sc, node, x, y, w)
+    if btn is not None and ctx is not None:
+        lbl = str(node.get("label", "")).strip().lower()
+        ctx["button_els"][lbl] = btn
+        ctx["button_order"][lbl] = ctx["screen_cx"]
+    return used
+
+
+def _screen_width(screen) -> int:
+    """A screen showing side-by-side regions needs room to breathe.
+
+    Rendering a sidebar + main panel into the single-column 350px frame is what
+    made real layouts look cramped and forced labels to ellipsise.
+    """
+    regions = screen.get("regions") or []
+    if len(regions) >= 3:
+        return SCREEN_W * 2 + 120
+    if len(regions) == 2:
+        return SCREEN_W + 210
+    return SCREEN_W
 
 
 def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
@@ -389,17 +475,24 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
     SLOT = SCREEN_W + GRID           # 50px gutter between screens
     fz_x, fz_y = 50, 90
     n_screens = max(len(screens), 1)
-    fz_w = n_screens * SLOT + 50
+    # Screens are now variable width (a sidebar+main screen is wider than a
+    # single-column one), so the band is measured from what was actually laid
+    # out, not from n_screens * a fixed SLOT.
+    fz_w = sum(_screen_width(s) + GRID for s in screens) + 50 if screens else SLOT + 50
     button_els = {}                  # label(lower) -> button rect element
     button_order = {}                # label(lower) -> center x (for endpoint ordering)
     screen_bottoms = []
 
     inner_x = fz_x + 40
+    cursor_x = inner_x                  # screens are no longer a fixed width each
     for si, screen in enumerate(screens):
         comps = screen.get("components", []) or []
-        sx = inner_x + si * SLOT
-        inner_w = SCREEN_W - 2 * PAD
-        sc.text(sx, fz_y + 46, SCREEN_W, screen.get("name", f"Screen {si+1}"), size=17, color=INK)
+        regions = screen.get("regions") or []
+        screen_w = _screen_width(screen)
+        sx = cursor_x
+        cursor_x += screen_w + GRID
+        inner_w = screen_w - 2 * PAD
+        sc.text(sx, fz_y + 46, screen_w, screen.get("name", f"Screen {si+1}"), size=17, color=INK)
 
         # MEASURE BY RENDERING, then fit the frame to what was actually drawn.
         #
@@ -414,21 +507,50 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
         # source of truth for a component's height — the code that draws it.
         frame_top = fz_y + 76
         frame_index = len(sc.els)          # frame goes here, behind the body
-        cy = frame_top + PAD
-        for cp in comps:
-            used, btn = _render_component(sc, cp, sx + PAD, cy, inner_w)
-            if btn is not None:
-                lbl = str(cp.get("label", "")).strip().lower()
-                button_els[lbl] = btn
-                button_order[lbl] = sx + SCREEN_W / 2
-            cy += used + GAP
-        # cy overshot by one GAP after the final component; reclaim it.
-        content_bottom = cy - GAP if comps else frame_top + PAD
+        ctx = {"button_els": button_els, "button_order": button_order,
+               "screen_cx": sx + screen_w / 2}
+        body_top = frame_top + PAD
+
+        if regions:
+            # Side-by-side regions (sidebar + main, three-pane, …). Widths are
+            # relative weights, so a spec can say sidebar 0.3 / main 0.7 without
+            # knowing anything about pixels.
+            weights = [max(0.01, float(r.get("width", 1) or 1)) for r in regions]
+            total = sum(weights)
+            avail = inner_w - GAP * (len(regions) - 1)
+            rx = sx + PAD
+            bottoms = []
+            for region, wt in zip(regions, weights):
+                rw = max(80.0, avail * (wt / total))
+                # A sidebar reads as a distinct surface, not just a column of text.
+                if str(region.get("role", "")).lower() in ("sidebar", "nav", "rail"):
+                    reg_index = len(sc.els)
+                    used = _render_node(sc, dict(region, type="region"),
+                                        rx + 12, body_top + 12, rw - 24, ctx)
+                    sc.els.insert(reg_index, _mk(
+                        sc._id("r"), type="rectangle", x=rx, y=body_top,
+                        width=rw, height=used + 24,
+                        backgroundColor=SURFACE, strokeColor=FAINT,
+                        roundness={"type": 3}))
+                    used += 24
+                else:
+                    used = _render_node(sc, dict(region, type="region"),
+                                        rx, body_top, rw, ctx)
+                bottoms.append(body_top + used)
+                rx += rw + GAP
+            content_bottom = max(bottoms) if bottoms else body_top
+        else:
+            cy = body_top
+            for cp in comps:
+                cy += _render_node(sc, cp, sx + PAD, cy, inner_w, ctx) + GAP
+            # cy overshot by one GAP after the final component; reclaim it.
+            content_bottom = cy - GAP if comps else body_top
+
         frame_h = max(content_bottom + PAD - frame_top, MIN_SCREEN_H)
 
         sc.els.insert(frame_index, _mk(
             sc._id("r"), type="rectangle", x=sx, y=frame_top,
-            width=SCREEN_W, height=frame_h,
+            width=screen_w, height=frame_h,
             backgroundColor=UI_FRAME, strokeColor=INK, strokeWidth=2,
             roundness={"type": 3}))
         screen_bottoms.append(frame_top + frame_h)
@@ -648,6 +770,20 @@ WIREFRAME_SYSTEM_PROMPT = (
     "Frontend (think like a frontend dev): logical screens, clear labels, a primary CTA per screen, "
     "realistic form fields and navigation. Allowed component types: header, subheader, text, input, "
     "textarea, button, link, nav, card, image, list, table, checkbox, radio, divider, badge, avatar.\n"
+    "LAYOUT — describe the real composition, not one flat column of widgets:\n"
+    "  * A screen may use `regions` instead of `components` for side-by-side areas:\n"
+    '    "regions": [ {"role":"sidebar","width":0.28,"components":[...]},'
+    ' {"role":"main","width":0.72,"components":[...]} ]\n'
+    "    role is sidebar|main|aside; width is a RELATIVE weight, not pixels.\n"
+    '  * Place components beside each other with {"type":"row","components":[{...},{...}]};'
+    ' give a child {"span":2} to make it twice as wide as its siblings.\n'
+    '  * Group related widgets with {"type":"section","label":"Filters","components":[...]}.\n'
+    '  * A table SHOULD carry its real columns:'
+    ' {"type":"table","label":"Recent Calls","columns":["Call ID","Client","Status"],"rows":5}.\n'
+    '  * A card may carry body text: {"type":"card","label":"Pass rate","value":"92%"}.\n'
+    "Use regions whenever the UI genuinely has a sidebar, split pane or toolbar — a flat stack "
+    "for such a screen is inaccurate. Never invent x/y coordinates or pixel sizes; the layout "
+    "engine computes all geometry from the structure you describe.\n"
     "Backend (think like a backend dev): the data models the feature needs (typed fields), the REST "
     "endpoints powering UI actions, and flows connecting each primary button to the endpoint path it "
     "calls (use the EXACT button label in flow.from and the EXACT endpoint path in flow.to). Make "
