@@ -46,27 +46,63 @@ def _snap(v):
 # mid-word by the enclosing panel — "Market Scanners" rendering as "Market Sca".
 # Every sc.text() caller already passes the available width, so measure against it.
 #
-# Average glyph advance as a fraction of font size, per Excalidraw font family
-# (1 = hand-drawn, 2 = normal/Helvetica, 3 = code). Deliberately a touch generous:
-# over-estimating trims a character early, under-estimating puts us back to clipping.
-_CHAR_W = {1: 0.56, 2: 0.52, 3: 0.60}
+# PROPORTIONAL glyph advances, as a fraction of font size.
+#
+# A single average per font is wrong in both directions on real labels: "Illinois"
+# and "Mammogram" are the same length but nowhere near the same width, so a flat
+# factor either clips the wide one or ellipsises the narrow one early. These are
+# per-character advances for a humanist sans (Excalidraw's default text font),
+# grouped by the widths that actually differ.
+_NARROW = "ijlIt.,:;'\"|!`()[]{}"      # ~0.28
+_WIDE = "mwMW@%"                        # ~0.90
+_UPPER = "ABCDEFGHKLNOPQRSTUVXYZ"       # ~0.68
+_DIGIT = "0123456789"                   # tabular, uniform ~0.55
+
+# Family multiplier: 1 = hand-drawn (looser), 2 = normal, 3 = code (monospace).
+_FAMILY_K = {1: 1.08, 2: 1.0, 3: 1.15}
+
+
+def _glyph_w(ch: str) -> float:
+    if ch in _NARROW:
+        return 0.28
+    if ch in _WIDE:
+        return 0.90
+    if ch in _UPPER:
+        return 0.68
+    if ch in _DIGIT:
+        return 0.55
+    if ch == " ":
+        return 0.26
+    return 0.52                          # lowercase and everything else
 
 
 def _text_w(s: str, size: int, family: int = 2) -> float:
-    return len(str(s)) * size * _CHAR_W.get(family, 0.54)
-
-
-def _max_chars(max_w: float, size: int, family: int = 2) -> int:
-    return max(1, int(max_w / (size * _CHAR_W.get(family, 0.54))))
+    k = _FAMILY_K.get(family, 1.0)
+    return sum(_glyph_w(c) for c in str(s)) * size * k
 
 
 def _fit_line(s: str, max_w: float, size: int, family: int = 2) -> str:
-    """Ellipsise a single line so it fits max_w pixels."""
+    """Ellipsise a single line so it fits max_w pixels.
+
+    Trims by measured width rather than a character count, so a wide string loses
+    more characters than a narrow one — which is the whole point of measuring.
+    """
     s = str(s)
     if max_w <= 0 or _text_w(s, size, family) <= max_w:
         return s
-    n = _max_chars(max_w, size, family) - 1
-    return s[:max(1, n)].rstrip() + "…" if n >= 1 else "…"
+    ell_w = _text_w("…", size, family)
+    budget = max_w - ell_w
+    if budget <= 0:
+        return "…"
+    acc = 0.0
+    out = []
+    for ch in s:
+        w = _glyph_w(ch) * size * _FAMILY_K.get(family, 1.0)
+        if acc + w > budget:
+            break
+        acc += w
+        out.append(ch)
+    return ("".join(out).rstrip() or s[:1]) + "…"
 
 
 def _wrap_lines(s: str, max_w: float, size: int, family: int = 2, max_lines: int = 3):
@@ -95,6 +131,13 @@ def _wrap_lines(s: str, max_w: float, size: int, family: int = 2, max_lines: int
 # HTTP-method colors mapped to Excalidraw's default stroke swatches (green/blue/orange/red).
 METHOD_COLOR = {"GET": "#2f9e44", "POST": "#1971c2", "PUT": "#f08c00", "PATCH": "#f08c00", "DELETE": "#e03131"}
 
+# Floor for a screen frame. Small enough that a two-component screen does not sit
+# in a sea of grey; the frame otherwise grows to fit whatever was drawn.
+MIN_SCREEN_H = 120
+
+# Nominal component heights. ADVISORY ONLY — the frame is sized from what
+# _render_component actually draws, not from this table. Keeping a second set of
+# numbers in sync with the renderer is what caused content to overflow its frame.
 COMP_H = {
     "header": 34, "subheader": 26, "text": 24, "input": 58, "textarea": 90,
     "button": 44, "link": 24, "card": 84, "nav": 52, "image": 120,
@@ -271,10 +314,33 @@ def _render_component(sc, cp, cx, cy, inner_w):
         sc.text(cx + 14, cy + 16, inner_w - 24, label or "Navigation", size=14, color=INK)
         h = 48
     elif t in ("card", "avatar"):
-        sc.rect(cx, cy, inner_w, 80, backgroundColor="transparent", strokeColor=FAINT, roundness={"type": 3})
-        sc.text(cx + 14, cy + 12, inner_w - 24, label or "Card", size=12, color=MUTED)
-        sc.text(cx + 14, cy + 38, inner_w - 24, "—", size=22, color=INK)
-        h = 80
+        # A card used to be a fixed 80px box holding its label and a lone "—",
+        # which read as an empty container with a void under the title. Wrap the
+        # label into the space it has and size the box to the result, so a short
+        # label gets a compact card and a long one is legible instead of clipped.
+        card_index = len(sc.els)     # the box is inserted here, behind its contents
+        body = cp.get("value") or cp.get("text") or ""
+        title_lines = _wrap_lines(label or "Card", inner_w - 28, 13, max_lines=2)
+        sc.text(cx + 14, cy + 12, inner_w - 28, "\n".join(title_lines),
+                size=13, color=MUTED, fit=False)
+        used = 12 + len(title_lines) * 17
+
+        if body:
+            body_lines = _wrap_lines(str(body), inner_w - 28, 14, max_lines=3)
+            sc.text(cx + 14, cy + used + 4, inner_w - 28, "\n".join(body_lines),
+                    size=14, color=INK, fit=False)
+            used += 4 + len(body_lines) * 18
+        else:
+            # No value supplied: a short placeholder rule reads as "content goes
+            # here" without pretending to be data, and without a tall empty void.
+            sc.rect(cx + 14, cy + used + 10, min(120, inner_w - 28), 2,
+                    backgroundColor=FAINT, strokeColor=FAINT)
+            used += 20
+
+        h = used + 14
+        sc.els.insert(card_index, _mk(
+            sc._id("r"), type="rectangle", x=cx, y=cy, width=inner_w, height=h,
+            backgroundColor="transparent", strokeColor=FAINT, roundness={"type": 3}))
     elif t == "image":
         sc.rect(cx, cy, inner_w, 110, backgroundColor=SURFACE, strokeColor=FAINT, fillStyle="hachure", roundness={"type": 3})
         sc.text(cx + inner_w / 2 - 30, cy + 48, 80, label or "image", size=12, color=MUTED, align="center")
@@ -333,14 +399,22 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
         comps = screen.get("components", []) or []
         sx = inner_x + si * SLOT
         inner_w = SCREEN_W - 2 * PAD
-        body_h = PAD
-        for cp in comps:
-            body_h += COMP_H.get(cp.get("type", "text"), 24) + GAP
-        frame_h = max(body_h + PAD, 220)
         sc.text(sx, fz_y + 46, SCREEN_W, screen.get("name", f"Screen {si+1}"), size=17, color=INK)
-        # generic UI container = neutral gray
-        sc.rect(sx, fz_y + 76, SCREEN_W, frame_h, backgroundColor=UI_FRAME, strokeColor=INK, strokeWidth=2, roundness={"type": 3})
-        cy = fz_y + 76 + PAD
+
+        # MEASURE BY RENDERING, then fit the frame to what was actually drawn.
+        #
+        # The frame used to be sized from the COMP_H table while the components
+        # were drawn at whatever height _render_component returned, and the two
+        # disagreed: input 58 vs 62, list 130 vs 134, avatar 60 vs 80 (content
+        # spilled out of the frame and collided with what came after), while
+        # table 150 vs 134 and image 120 vs 110 left dead space. A fixed
+        # `max(..., 220)` floor added more emptiness on short screens.
+        #
+        # Rendering first and inserting the frame behind afterwards leaves ONE
+        # source of truth for a component's height — the code that draws it.
+        frame_top = fz_y + 76
+        frame_index = len(sc.els)          # frame goes here, behind the body
+        cy = frame_top + PAD
         for cp in comps:
             used, btn = _render_component(sc, cp, sx + PAD, cy, inner_w)
             if btn is not None:
@@ -348,7 +422,16 @@ def spec_to_excalidraw(spec: dict, detail: str = "") -> dict:
                 button_els[lbl] = btn
                 button_order[lbl] = sx + SCREEN_W / 2
             cy += used + GAP
-        screen_bottoms.append(fz_y + 76 + frame_h)
+        # cy overshot by one GAP after the final component; reclaim it.
+        content_bottom = cy - GAP if comps else frame_top + PAD
+        frame_h = max(content_bottom + PAD - frame_top, MIN_SCREEN_H)
+
+        sc.els.insert(frame_index, _mk(
+            sc._id("r"), type="rectangle", x=sx, y=frame_top,
+            width=SCREEN_W, height=frame_h,
+            backgroundColor=UI_FRAME, strokeColor=INK, strokeWidth=2,
+            roundness={"type": 3}))
+        screen_bottoms.append(frame_top + frame_h)
 
     fz_h = (max(screen_bottoms) if screen_bottoms else fz_y + 300) - fz_y + 30
     # faint frontend-layer band behind the screens (inserted after title so it's in back)
