@@ -747,6 +747,7 @@ def _execute_orchestration(
     file_path: str = "",
     code_snippet: str = "",
     tech_key: str = "",
+    project_id: str = "",
 ) -> str:
     """Run a pipeline to completion synchronously and return the report string."""
     from tools.infrastructure.orchestrator import run_pipeline
@@ -775,7 +776,7 @@ def _run_orchestrate_job(
 ) -> None:
     """Background worker: run the pipeline and record the outcome in the job store."""
     try:
-        result = _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key)
+        result = _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key, project_id)
         with _ORCHESTRATE_JOBS_LOCK:
             if job_id in _ORCHESTRATE_JOBS:
                 _ORCHESTRATE_JOBS[job_id].update(status="completed", result=result)
@@ -833,7 +834,8 @@ def _dispatch_orchestrate_http(
             "project_path": project_path,
             "file_path": file_path,
             "code_snippet": code_snippet,
-            "tech_key": tech_key
+            "tech_key": tech_key,
+            "project_id": project_id
         }).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
@@ -883,6 +885,7 @@ def orchestrate(
     file_path: str = "",
     code_snippet: str = "",
     tech_key: str = "",
+    project_id: str = "",
     wait: bool = False,
     fast: bool = False,
 ) -> str:
@@ -919,7 +922,7 @@ def orchestrate(
         # First attempt: cached token
         try:
             data = _dispatch_orchestrate_http(
-                workflow, task, project_path, file_path, code_snippet, tech_key,
+                workflow, task, project_path, file_path, code_snippet, tech_key, project_id,
                 token=_get_config_token()
             )
             job_id = data.get("job_id")
@@ -938,7 +941,7 @@ def orchestrate(
             if http_err.code in (401, 403):
                 try:
                     data = _dispatch_orchestrate_http(
-                        workflow, task, project_path, file_path, code_snippet, tech_key,
+                        workflow, task, project_path, file_path, code_snippet, tech_key, project_id,
                         token=_get_config_token(force_fresh=True)
                     )
                     job_id = data.get("job_id")
@@ -975,7 +978,7 @@ def orchestrate(
         # runs" forever; the dashboard never learns the async path is broken.
         _record_dispatch_fallback(workflow, fallback_reason)
         inline_result = _execute_orchestration(
-            workflow, task, project_path, file_path, code_snippet, tech_key
+            workflow, task, project_path, file_path, code_snippet, tech_key, project_id
         )
         return (
             f"_⚠️ Persistent-server dispatch unavailable; ran inline instead._ "
@@ -984,7 +987,7 @@ def orchestrate(
         )
 
     # Light workflow, or the caller explicitly asked to block.
-    return _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key)
+    return _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key, project_id)
 
 
 @sovereign_tool()

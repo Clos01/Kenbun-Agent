@@ -43,6 +43,7 @@ ORCHESTRATE_WORKFLOWS = {
     "research_implement",
     "shadow_test",
     "design_ui",
+    "wireframe",
 }
 
 _HTTP_ORCHESTRATE_JOBS: OrderedDict = OrderedDict()
@@ -55,11 +56,13 @@ _MAX_HTTP_ORCHESTRATE_JOBS = 50
 
 
 def _run_http_orchestrate_job(
-    job_id, workflow, task, file_path, project_path, code_snippet, tech_key
+    job_id, workflow, task, file_path, project_path, code_snippet, tech_key,
+    project_id=""
 ):
     try:
         result = orchestrate(
-            workflow, task, file_path, project_path, code_snippet, tech_key
+            workflow, task, file_path, project_path, code_snippet, tech_key,
+            project_id
         )
         with _HTTP_ORCHESTRATE_JOBS_LOCK:
             if job_id in _HTTP_ORCHESTRATE_JOBS:
@@ -110,7 +113,8 @@ async def trigger_swarm(payload: dict):
 async def run_orchestrate(payload: dict):
     """Launch an orchestrator workflow from the dashboard Run button.
 
-    Body: {workflow, task, project_path?, file_path?, code_snippet?, tech_key?}
+    Body: {workflow, task, project_path?, file_path?, code_snippet?, tech_key?,
+           project_id?}   project_id is the Planka project a wireframe belongs to.
     Always dispatches in the background and returns a job_id; poll
     GET /orchestrate/status/{job_id} for status + the final report.
     """
@@ -179,6 +183,7 @@ async def run_orchestrate(payload: dict):
         incoming_project_path,
         payload.get("code_snippet", ""),
         payload.get("tech_key", ""),
+        payload.get("project_id", ""),
     )
 
     return {

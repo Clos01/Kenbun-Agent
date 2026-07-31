@@ -38,6 +38,7 @@ from tools.infrastructure.pipelines.code_review import build_code_review_pipelin
 from tools.infrastructure.pipelines.research import build_research_pipeline
 from tools.infrastructure.pipelines.shadow_test import build_shadow_test_pipeline
 from tools.infrastructure.pipelines.design_ui import build_design_ui_pipeline
+from tools.infrastructure.pipelines.wireframe import build_wireframe_pipeline
 from tools.infrastructure.pipelines.self_improve import build_self_improve_pipeline
 from tools.infrastructure.pipelines.sdlc_loop import build_sdlc_loop_pipeline
 from tools.infrastructure.pipelines.git_push_integration import build_git_push_integration_pipeline
@@ -144,6 +145,11 @@ registry.register_pipeline(PipelineEntry(
     description="Background testing: read → analyze → draft → supervisor → sandbox",
 ))
 registry.register_pipeline(PipelineEntry(
+    name="wireframe",
+    builder=build_wireframe_pipeline,
+    description="Accurate wireframe: LLM designs structure/layout intent → deterministic layout → schema+geometry validation → LLM accuracy critique → repair loop → push to that project's canvas",
+))
+registry.register_pipeline(PipelineEntry(
     name="design_ui",
     builder=build_design_ui_pipeline,
     description="Strategic UI Design: discovery → research → artifact generation → 5D audit",
@@ -167,7 +173,7 @@ registry.register_pipeline(PipelineEntry(
 # Workflows whose Gemini-heavy pipelines routinely exceed a synchronous client's
 # request timeout. The MCP tool (server.py) uses this set to decide which workflows
 # should return an immediate Job ID instead of running inline.
-HEAVY_WORKFLOWS = {"design_ui", "research_implement", "code_review", "shadow_test", "bug_fix", "agent_self_improve", "sdlc_loop", "git_push_integration"}
+HEAVY_WORKFLOWS = {"wireframe", "design_ui", "research_implement", "code_review", "shadow_test", "bug_fix", "agent_self_improve", "sdlc_loop", "git_push_integration"}
 
 
 def _telemetry_id(step_id: str) -> str:
@@ -306,7 +312,7 @@ def build_pipeline_tools(project_path: str = "."):
     }
 
 
-def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", fast: bool = False):
+def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", project_id: str = "", fast: bool = False):
     """
     Synchronous entry point for the Pro Stack.
     Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
@@ -625,6 +631,7 @@ async def run_pipeline(
     file_path: str = "",
     code_snippet: str = "",
     tech_key: str = "",
+    project_id: str = "",
     fast: bool = False,
     tasks_ref: list = None,
     task_index: int = -1
@@ -660,6 +667,9 @@ async def run_pipeline(
         "file_path": file_path,
         "code_snippet": code_snippet,
         "tech_key": tech_key,
+        # Tenancy key for pipelines that write to a per-project destination
+        # (the wireframe canvas). Not a filesystem path — see project_path.
+        "project_id": project_id,
         "repo_map": None,
         "past_fixes": None,
         "research_result": None,
@@ -1191,7 +1201,7 @@ def _analyze_bug(
         )
 
 
-def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", fast: bool = False):
+def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", project_id: str = "", fast: bool = False):
     """
     Synchronous entry point for the Pro Stack.
     Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
@@ -1257,6 +1267,7 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         file_path=file_path,
         code_snippet=code_snippet,
         tech_key=tech_key,
+        project_id=project_id,
         fast=fast
     ))
 
