@@ -1,203 +1,199 @@
 "use client";
 
 /**
- * The board's Wireframe tab.
+ * The board's Wireframe tab: a drafting sheet.
  *
- * Replaces the previous `<iframe src="/custom_excalidraw.html">`. Beyond the
- * layout problems that motivated the change, the iframe had two defects it could
- * not fix from inside: it followed the OS colour scheme (`prefers-color-scheme`)
- * rather than the app's own theme, so the canvas could sit in dark mode inside a
- * light dashboard; and it opened at whatever viewport the saved scene happened to
- * carry, which on a wide diagram meant landing on empty space. Rendering in-tree
- * fixes the first by construction and the second with a fit-to-content pass once
- * the real node sizes are known.
+ * History matters for why this is a scrolling document and not a canvas.
+ *
+ * It was an <iframe> around self-hosted Excalidraw rendering a scene whose every
+ * coordinate had been computed in Python — which drew backend cards on top of
+ * one another and placed un-flowed endpoints outside the band meant to contain
+ * them. Replacing that with a React Flow node graph fixed the overlaps, but kept
+ * the shape of the problem: a wireframe presented as a web of colour-coded nodes
+ * and connector arrows, where the screens compete with the wiring.
+ *
+ * A wireframe is read for the screens. So the backend is demoted to annotation —
+ * an endpoint is named in mono under the button that calls it — and once there
+ * are no arrows, there is no graph, and once there is no graph a pan-and-zoom
+ * canvas is the wrong container. This is a sheet you scroll.
+ *
+ * Two properties fall out of that, both of which had to be engineered before:
+ * nothing can overlap, because normal document flow does not permit it; and
+ * nothing can escape its frame, because flexbox does not permit that either.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  MarkerType,
-  MiniMap,
-  ReactFlow,
-  ReactFlowProvider,
-  useNodesInitialized,
-  useReactFlow,
-  type Edge,
-  type Node,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { AlertTriangle, Download, Maximize2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Download, FileWarning, Minus, Plus } from "lucide-react";
 
-import { NODE_TYPES } from "./wireframe/nodes";
-import { EDGE_STYLE, LAYER_OF, layeredLayout, type WDoc, type WEdge, type WNode } from "./wireframe/layout";
+import { ComponentTree, HatchDefs } from "./wireframe/ScreenMock";
+import { buildSheet, type SheetModel } from "./wireframe/sheet";
+import { PAPER, type WDoc } from "./wireframe/types";
 
-const LEGEND: { kind: WEdge["kind"]; label: string }[] = [
-  { kind: "flow", label: "UI action → endpoint" },
-  { kind: "writes", label: "writes data" },
-  { kind: "reads", label: "reads data" },
-  { kind: "relation", label: "model relation" },
-  { kind: "integration", label: "external service" },
-];
+const mono = "var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace)";
 
-function toFlowNodes(doc: WDoc): Node[] {
-  return doc.nodes.map((n: WNode) => ({
-    id: n.id,
-    type: n.kind,
-    position: { x: 0, y: 0 },
-    data: { ...n },
-    draggable: true,
-    // Sorted so a node is never rendered behind the band that labels its layer.
-    zIndex: 10 + (LAYER_OF[n.kind] ?? 0),
-  }));
+function Marker({ n }: { n: number }) {
+  return (
+    <div style={{ fontFamily: mono, fontSize: 11, color: PAPER.inkMuted, minWidth: 20, paddingTop: 2 }}>
+      {String(n).padStart(2, "0")}
+    </div>
+  );
 }
 
-function toFlowEdges(doc: WDoc): Edge[] {
-  return doc.edges.map((e: WEdge) => {
-    const s = EDGE_STYLE[e.kind] ?? EDGE_STYLE.reads;
-    // A relation runs sideways within the data layer; anchoring it to the same
-    // top/bottom handles the vertical edges use makes it loop around the card.
-    const sideways = e.kind === "relation";
-    return {
-      id: e.id,
-      source: e.source,
-      target: e.target,
-      sourceHandle: e.sourceHandle ?? (sideways ? "rel-out" : undefined),
-      targetHandle: sideways ? "rel-in" : undefined,
-      type: "smoothstep",
-      animated: s.animated,
-      label: e.kind === "flow" ? e.label : undefined,
-      labelBgPadding: [4, 2] as [number, number],
-      labelBgBorderRadius: 3,
-      labelStyle: { fontSize: 9, fill: s.stroke },
-      labelBgStyle: { fill: "var(--card, #fff)", fillOpacity: 0.9 },
-      style: {
-        stroke: s.stroke,
-        strokeWidth: 1.5,
-        strokeDasharray: s.dashed ? "4 3" : undefined,
-      },
-      markerEnd: { type: MarkerType.ArrowClosed, color: s.stroke, width: 14, height: 14 },
-    };
-  });
+function EndpointNote({ method, path }: { method: string; path: string }) {
+  return (
+    <div style={{ fontFamily: mono, fontSize: 10, color: PAPER.inkMuted, whiteSpace: "nowrap" }}>
+      &rarr; {method} {path}
+    </div>
+  );
 }
 
-function Canvas({ doc }: { doc: WDoc }) {
-  const [nodes, setNodes] = useState<Node[]>(() => toFlowNodes(doc));
-  const [edges] = useState<Edge[]>(() => toFlowEdges(doc));
-  const [laidOut, setLaidOut] = useState(false);
-  const initialized = useNodesInitialized();
-  const { getNodes, fitView } = useReactFlow();
-  const done = useRef(false);
+function Sheet({ model, doc }: { model: SheetModel; doc: WDoc }) {
+  const [zoom, setZoom] = useState(1);
 
-  useEffect(() => {
-    if (!initialized || done.current) return;
-    done.current = true;
-
-    // Lay out from MEASURED sizes only. A node React Flow has not measured yet is
-    // left out rather than guessed at — an assumed size is precisely how the old
-    // engine produced boxes drawn on top of one another.
-    const sizes = new Map(
-      getNodes()
-        .filter((n) => n.type !== "band" && n.measured?.width && n.measured?.height)
-        .map((n) => [n.id, { width: n.measured!.width!, height: n.measured!.height! }]),
-    );
-
-    const { positions, bands } = layeredLayout(doc.nodes, doc.edges, sizes);
-
-    const bandNodes: Node[] = bands.map((b) => ({
-      id: `band-${b.layer}`,
-      type: "band",
-      position: { x: b.x, y: b.y },
-      data: { label: b.label, width: b.width, height: b.height },
-      draggable: false,
-      selectable: false,
-      zIndex: 0,
-    }));
-
-    setNodes([
-      ...bandNodes,
-      ...toFlowNodes(doc).map((n) => ({ ...n, position: positions.get(n.id) ?? { x: 0, y: 0 } })),
-    ]);
-    setLaidOut(true);
-    // fitView needs the new positions committed first.
-    requestAnimationFrame(() => fitView({ padding: 0.12, duration: 400 }));
-  }, [initialized, doc, getNodes, fitView]);
-
-  const download = useCallback(() => {
+  const download = () => {
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${doc.title.replace(/[^a-z0-9]+/gi, "_") || "wireframe"}.wireframe.json`;
+    a.download = `${(doc.title || "wireframe").replace(/[^a-z0-9]+/gi, "_")}.wireframe.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [doc]);
+  };
+
+  const btn: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "4px 9px",
+    borderRadius: 3,
+    border: `0.5px solid ${PAPER.ruleStrong}`,
+    background: PAPER.sheet,
+    color: PAPER.inkSoft,
+    fontSize: 10,
+    fontFamily: mono,
+    cursor: "pointer",
+  };
 
   return (
-    <div className="relative h-full w-full" style={{ opacity: laidOut ? 1 : 0, transition: "opacity 200ms" }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={NODE_TYPES}
-        onNodesChange={(changes) =>
-          // Position changes only: the diagram is generated, so a node can be
-          // nudged for readability but not added, removed or rewired by hand.
-          setNodes((ns) =>
-            ns.map((n) => {
-              const c = changes.find((ch) => "id" in ch && ch.id === n.id && ch.type === "position");
-              return c && "position" in c && c.position ? { ...n, position: c.position } : n;
-            }),
-          )
-        }
-        proOptions={{ hideAttribution: true }}
-        minZoom={0.05}
-        maxZoom={2}
-        nodesConnectable={false}
-        elementsSelectable
-        fitView
-      >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border)" />
-        <Controls showInteractive={false} className="!bottom-4 !left-4" />
-        <MiniMap pannable zoomable className="!bottom-4 !right-4 !h-24 !w-40" />
-      </ReactFlow>
+    <div style={{ position: "relative", height: "100%", width: "100%", overflow: "auto", background: PAPER.sheetEdge }}>
+      <HatchDefs />
 
-      <div className="pointer-events-none absolute left-0 right-0 top-0 flex items-start justify-between gap-3 p-3">
-        <div className="pointer-events-auto rounded-lg border border-border bg-card/90 px-3 py-2 backdrop-blur">
-          <div className="truncate text-[11px] font-bold uppercase tracking-[0.15em] text-primary">
-            {doc.title}
-          </div>
-          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
-            {LEGEND.map((l) => (
-              <span key={l.kind} className="flex items-center gap-1.5 text-[9px] text-secondary">
-                <span
-                  className="inline-block h-0 w-4 border-t-2"
-                  style={{
-                    borderColor: EDGE_STYLE[l.kind].stroke,
-                    borderTopStyle: EDGE_STYLE[l.kind].dashed ? "dashed" : "solid",
-                  }}
-                />
-                {l.label}
-              </span>
-            ))}
-          </div>
-        </div>
+      <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", justifyContent: "flex-end", gap: 6, padding: "10px 14px 0" }}>
+        <button onClick={() => setZoom((z) => Math.max(0.6, +(z - 0.1).toFixed(2)))} style={btn} aria-label="Zoom out">
+          <Minus style={{ width: 11, height: 11 }} />
+        </button>
+        <button onClick={() => setZoom(1)} style={btn}>{Math.round(zoom * 100)}%</button>
+        <button onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.1).toFixed(2)))} style={btn} aria-label="Zoom in">
+          <Plus style={{ width: 11, height: 11 }} />
+        </button>
+        <button onClick={download} style={btn}>
+          <Download style={{ width: 11, height: 11 }} /> JSON
+        </button>
+      </div>
 
-        <div className="pointer-events-auto flex items-center gap-2">
-          <button
-            onClick={() => fitView({ padding: 0.12, duration: 400 })}
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2.5 py-1.5 text-[10px] font-semibold text-primary backdrop-blur transition-colors hover:bg-card"
-            title="Fit to content"
-          >
-            <Maximize2 className="h-3 w-3" /> Fit
-          </button>
-          <button
-            onClick={download}
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-card/90 px-2.5 py-1.5 text-[10px] font-semibold text-primary backdrop-blur transition-colors hover:bg-card"
-            title="Download the wireframe document"
-          >
-            <Download className="h-3 w-3" /> JSON
-          </button>
+      <div style={{ padding: "14px 24px 48px", display: "flex", justifyContent: "center" }}>
+        <div
+          style={{
+            width: 860,
+            transform: `scale(${zoom})`,
+            transformOrigin: "top center",
+            background: PAPER.sheet,
+            border: `0.5px solid ${PAPER.rule}`,
+            borderRadius: 4,
+            padding: "30px 36px 34px",
+          }}
+        >
+          <div style={{ fontSize: 19, color: PAPER.ink, marginBottom: 4 }}>{model.title}</div>
+          <div style={{ fontFamily: mono, fontSize: 10, color: PAPER.inkMuted, letterSpacing: "0.07em" }}>
+            {model.counts.screens} screens · {model.counts.endpoints} endpoints · {model.counts.models} models
+            {model.counts.integrations > 0 ? ` · ${model.counts.integrations} integrations` : ""}
+          </div>
+
+          <div style={{ height: 1, background: PAPER.rule, margin: "18px 0 22px" }} />
+
+          {model.sections.map((s) => (
+            <div key={s.id} style={{ display: "flex", gap: 14, marginBottom: 30 }}>
+              <Marker n={s.index} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, color: PAPER.ink }}>{s.title}</div>
+                <div style={{ fontSize: 11, color: PAPER.inkMuted, marginBottom: 10 }}>{s.caption}</div>
+                <div style={{ border: `0.5px solid ${PAPER.ruleStrong}`, borderRadius: 4, padding: "14px 16px", background: "#FBF9F5" }}>
+                  {s.screen.body ? (
+                    <ComponentTree
+                      c={s.screen.body}
+                      annotate={(h) => {
+                        const notes = s.annotations.get(h);
+                        if (!notes?.length) return null;
+                        return (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                            {notes.map((n, i) => (
+                              <EndpointNote key={i} method={n.method} path={n.path} />
+                            ))}
+                          </div>
+                        );
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          <div style={{ height: 1, background: PAPER.rule, margin: "4px 0 14px" }} />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, fontFamily: mono, fontSize: 10, color: PAPER.inkMuted, lineHeight: 1.6 }}>
+            {model.models.length > 0 && (
+              <div>
+                <span style={{ letterSpacing: "0.07em" }}>Data&nbsp;&nbsp;</span>
+                {model.models.map((m, i) => (
+                  <span key={m.label}>
+                    {i > 0 && " · "}
+                    <span style={{ color: PAPER.inkSoft }} title={m.fields.join(", ")}>
+                      {m.label}
+                    </span>
+                    <span>({m.fields.length})</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {model.integrations.length > 0 && (
+              <div>
+                <span style={{ letterSpacing: "0.07em" }}>External&nbsp;&nbsp;</span>
+                {model.integrations.map((g, i) => (
+                  <span key={g.label}>
+                    {i > 0 && " · "}
+                    <span style={{ color: PAPER.inkSoft }}>{g.label}</span>
+                    {g.service ? ` (${g.service})` : ""}
+                  </span>
+                ))}
+              </div>
+            )}
+            {model.standaloneEndpoints.length > 0 && (
+              <div>
+                {/* Endpoints no button calls are legitimate — a list GET that
+                    populates a table triggers no click. They are listed rather
+                    than dropped, and rather than floating unattached as they did
+                    on the old canvas. */}
+                <span style={{ letterSpacing: "0.07em" }}>Also&nbsp;&nbsp;</span>
+                {model.standaloneEndpoints.map((e, i) => (
+                  <span key={`${e.method}${e.path}`}>
+                    {i > 0 && " · "}
+                    <span style={{ color: PAPER.inkSoft }}>
+                      {e.method} {e.path}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {model.unplaced.length > 0 && (
+            <div style={{ marginTop: 14, paddingTop: 10, borderTop: `0.5px solid ${PAPER.rule}`, fontFamily: mono, fontSize: 10, color: PAPER.accent, lineHeight: 1.6 }}>
+              {model.unplaced.map((u, i) => (
+                <div key={i}>! {u}</div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -206,9 +202,9 @@ function Canvas({ doc }: { doc: WDoc }) {
 
 function Notice({ title, body }: { title: string; body: string }) {
   return (
-    <div className="flex h-full w-full items-center justify-center p-8">
+    <div style={{ display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center", padding: 32 }}>
       <div className="max-w-md rounded-lg border border-border bg-card/60 p-5 text-center">
-        <AlertTriangle className="mx-auto mb-3 h-5 w-5 text-secondary" />
+        <FileWarning className="mx-auto mb-3 h-5 w-5 text-secondary" />
         <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">{title}</div>
         <p className="mt-2 text-xs leading-relaxed text-secondary">{body}</p>
       </div>
@@ -216,10 +212,10 @@ function Notice({ title, body }: { title: string; body: string }) {
   );
 }
 
+type State = { status: "loading" | "ok" | "empty" | "legacy" | "error"; doc?: WDoc; msg?: string };
+
 function Loader({ projectId }: { projectId: string }) {
-  const [state, setState] = useState<{ status: "loading" | "ok" | "empty" | "legacy" | "error"; doc?: WDoc; msg?: string }>(
-    { status: "loading" },
-  );
+  const [state, setState] = useState<State>({ status: "loading" });
 
   useEffect(() => {
     let cancelled = false;
@@ -229,14 +225,15 @@ function Loader({ projectId }: { projectId: string }) {
       .then((data) => {
         if (cancelled) return;
         // Wireframes saved before the move off Excalidraw are a different format
-        // entirely. Say so plainly instead of rendering an empty canvas, which
-        // looks identical to "generation failed".
+        // entirely, and cannot be converted — that file is finished pixels with
+        // the semantic structure already discarded. Say so plainly rather than
+        // rendering an empty sheet, which looks identical to "generation failed".
         if (data?.type === "excalidraw") {
           setState({
             status: "legacy",
             msg:
               "This project's wireframe was saved in the old Excalidraw format. " +
-              "Re-run generate_wireframe for this project to rebuild it on the new canvas.",
+              "Re-run generate_wireframe for this project to rebuild it on the new sheet.",
           });
           return;
         }
@@ -255,26 +252,20 @@ function Loader({ projectId }: { projectId: string }) {
     };
   }, [projectId]);
 
-  const body = useMemo(() => {
-    switch (state.status) {
-      case "loading":
-        return <div className="flex h-full items-center justify-center text-xs text-secondary">Loading wireframe…</div>;
-      case "ok":
-        return (
-          <ReactFlowProvider>
-            <Canvas doc={state.doc!} />
-          </ReactFlowProvider>
-        );
-      case "legacy":
-        return <Notice title="Old format" body={state.msg!} />;
-      case "error":
-        return <Notice title="Could not load" body={state.msg!} />;
-      default:
-        return <Notice title="Nothing here yet" body={state.msg!} />;
-    }
-  }, [state]);
+  const model = useMemo(() => (state.doc ? buildSheet(state.doc) : null), [state.doc]);
 
-  return <div className="h-full w-full">{body}</div>;
+  switch (state.status) {
+    case "loading":
+      return <div className="flex h-full items-center justify-center text-xs text-secondary">Loading wireframe…</div>;
+    case "ok":
+      return <Sheet model={model!} doc={state.doc!} />;
+    case "legacy":
+      return <Notice title="Old format" body={state.msg!} />;
+    case "error":
+      return <Notice title="Could not load" body={state.msg!} />;
+    default:
+      return <Notice title="Nothing here yet" body={state.msg!} />;
+  }
 }
 
 export default function WireframeCanvas({ projectId }: { projectId?: string }) {
@@ -282,7 +273,7 @@ export default function WireframeCanvas({ projectId }: { projectId?: string }) {
     return <Notice title="No project selected" body="Select a project to view its wireframe." />;
   }
   // Keyed on the project so switching boards REMOUNTS rather than leaving the
-  // previous app's design on screen — the same guarantee the old iframe key gave.
+  // previous app's design on screen — the guarantee the old iframe key gave.
   // It also resets the loader's state without an effect having to do it.
   return <Loader key={projectId} projectId={projectId} />;
 }

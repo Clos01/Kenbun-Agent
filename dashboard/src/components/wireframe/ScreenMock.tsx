@@ -1,31 +1,54 @@
 "use client";
 
 /**
- * Renders one screen's component tree as real HTML.
+ * Renders one screen's component tree as real HTML, in ink on paper.
  *
- * This file is the reason the wireframe stopped looking broken. The previous
- * engine drew each widget as an absolutely-positioned Excalidraw rectangle and
- * hand-summed the heights in Python: a table's height came from one expression,
- * the frame that was supposed to contain it from another, and whenever the two
- * drifted the content spilled out of its frame and collided with the next screen.
- * Text had the same problem in the other axis — Excalidraw text does not wrap or
- * clip, so a label simply ran under its neighbour and the generator had to carry
- * a hand-built table of per-glyph advance widths to guess when to ellipsise.
+ * Two things this file is doing, and they are separate.
  *
- * Flexbox already solves both, exactly and for every component type at once. A
- * child cannot escape its parent, `truncate` clips a label at whatever width it
- * really has, and adding a new component type cannot desynchronise anything
- * because there is no second height calculation to keep in sync.
+ * FIRST, flexbox. The previous engine drew each widget as an absolutely
+ * positioned Excalidraw rectangle and hand-summed the heights in Python: a
+ * table's height came from one expression, the frame meant to contain it from
+ * another, and whenever the two drifted the content spilled out and collided
+ * with the next screen. Text had the mirror problem — Excalidraw text does not
+ * wrap or clip, so a label ran under its neighbour and the generator carried a
+ * hand-built table of per-glyph advance widths to guess when to ellipsise.
+ * Flexbox settles both, exactly, for every component type at once, and a new
+ * component type cannot desynchronise anything because there is no second
+ * height calculation to keep in sync.
+ *
+ * SECOND, the palette. Colours are fixed values from PAPER rather than the app's
+ * theme tokens. A wireframe is a document, not a panel of the dashboard, and it
+ * stays on paper when the app is dark. Colour is not used to encode meaning
+ * anywhere here: the Excalidraw version coloured endpoints by HTTP method and
+ * models by layer, which made the wiring louder than the screens people
+ * actually read the wireframe for. One accent exists and is used sparingly.
  */
 
 import React from "react";
-import { Handle, Position } from "@xyflow/react";
-import type { WComponent } from "./layout";
+import { PAPER, type WComponent } from "./types";
 
 const CONTAINERS = new Set(["row", "column", "stack", "region", "group", "panel", "section"]);
 
-function Label({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={`truncate ${className ?? ""}`}>{children}</div>;
+const truncate: React.CSSProperties = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const rule = `0.5px solid ${PAPER.rule}`;
+
+/** Diagonal hatching, the sketch convention for "a chart goes here". Defined
+ *  once and referenced by id so a sheet with twenty charts carries one pattern. */
+export function HatchDefs() {
+  return (
+    <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
+      <defs>
+        <pattern id="wf-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="6" stroke={PAPER.ruleStrong} strokeWidth="1.1" />
+        </pattern>
+      </defs>
+    </svg>
+  );
 }
 
 function Leaf({ c }: { c: WComponent }) {
@@ -33,105 +56,97 @@ function Leaf({ c }: { c: WComponent }) {
 
   switch (c.type) {
     case "header":
-      return <Label className="text-[15px] font-semibold text-primary">{label}</Label>;
+      return <div style={{ ...truncate, fontSize: 15, color: PAPER.ink }}>{label}</div>;
 
     case "subheader":
-      return <Label className="text-[12px] text-secondary">{label}</Label>;
+      return <div style={{ ...truncate, fontSize: 12, color: PAPER.inkSoft }}>{label}</div>;
 
     case "text":
-      return <div className="text-[11px] leading-snug text-secondary line-clamp-3">{label}</div>;
+      return (
+        <div style={{ fontSize: 11, lineHeight: 1.5, color: PAPER.inkSoft, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {label}
+        </div>
+      );
 
     case "link":
-      return <Label className="text-[11px] text-tertiary underline underline-offset-2">{label}</Label>;
+      return (
+        <div style={{ ...truncate, fontSize: 11, color: PAPER.inkSoft, textDecoration: "underline", textUnderlineOffset: 2 }}>
+          {label}
+        </div>
+      );
 
     case "input":
     case "textarea":
       return (
-        <div className="flex flex-col gap-1">
-          {label && <Label className="text-[9px] uppercase tracking-wider text-secondary/70">{label}</Label>}
-          <div
-            className={`rounded border border-border bg-neutral/60 ${
-              c.type === "textarea" ? "h-12" : "h-6"
-            }`}
-          />
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {label && <div style={{ ...truncate, fontSize: 10, color: PAPER.inkMuted }}>{label}</div>}
+          <div style={{ height: c.type === "textarea" ? 46 : 22, border: rule, borderRadius: 3, background: "#FBF9F5" }} />
         </div>
       );
 
     case "button": {
       const primary = (c.variant ?? "primary") === "primary";
       return (
-        <div className="relative inline-flex">
-          <div
-            className={`relative rounded px-3 py-1.5 text-[11px] font-semibold truncate max-w-full ${
-              primary
-                ? "bg-tertiary text-white"
-                : "border border-border bg-card text-primary"
-            }`}
-          >
-            {label}
-          </div>
-          {/* The flow arrow leaves from the button itself, not the screen's
-              outline. When every arrow started at the same point the diagram
-              read as a bundle of yarn and you could not tell which control
-              called which endpoint. */}
-          {c.handleId && (
-            <Handle
-              type="source"
-              position={Position.Bottom}
-              id={c.handleId}
-              className="!h-1.5 !w-1.5 !border-0 !bg-tertiary"
-            />
-          )}
+        <div
+          style={{
+            ...truncate,
+            display: "inline-block",
+            maxWidth: "100%",
+            fontSize: 11,
+            padding: "5px 14px",
+            borderRadius: 3,
+            border: primary ? `1px solid ${PAPER.ink}` : rule,
+            color: PAPER.ink,
+            background: primary ? PAPER.fill : "transparent",
+          }}
+        >
+          {label}
         </div>
       );
     }
 
     case "nav":
       return (
-        <div className="rounded border border-dashed border-border px-2 py-1.5">
-          <Label className="text-[10px] text-primary">{label || "Navigation"}</Label>
+        <div style={{ ...truncate, fontSize: 11, color: PAPER.inkSoft, padding: "4px 8px", borderRadius: 3 }}>
+          {label || "Navigation"}
         </div>
       );
 
     case "badge":
       return (
-        <span className="inline-block max-w-full truncate rounded-full border border-tertiary/40 bg-tertiary/10 px-2 py-0.5 text-[9px] font-semibold text-tertiary">
+        <span style={{ ...truncate, display: "inline-block", maxWidth: "100%", fontSize: 10, padding: "2px 8px", borderRadius: 9, border: `0.5px solid ${PAPER.ruleStrong}`, color: PAPER.inkSoft }}>
           {label}
         </span>
       );
 
     case "divider":
-      return <div className="h-px w-full bg-border" />;
+      return <div style={{ height: 1, background: PAPER.rule }} />;
 
     case "checkbox":
     case "radio":
       return (
-        <div className="flex items-center gap-2">
-          <span
-            className={`h-3 w-3 shrink-0 border border-secondary/60 ${
-              c.type === "radio" ? "rounded-full" : "rounded-[2px]"
-            }`}
-          />
-          <Label className="text-[11px] text-primary">{label}</Label>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ width: 11, height: 11, flexShrink: 0, border: `0.5px solid ${PAPER.ruleStrong}`, borderRadius: c.type === "radio" ? "50%" : 2 }} />
+          <div style={{ ...truncate, fontSize: 11, color: PAPER.ink }}>{label}</div>
         </div>
       );
 
     case "image":
       return (
-        <div className="flex h-16 items-center justify-center rounded border border-dashed border-border bg-neutral/40 text-[9px] uppercase tracking-wider text-secondary/60">
-          {label || "image"}
-        </div>
+        <svg viewBox="0 0 100 46" preserveAspectRatio="none" style={{ width: "100%", height: 62, display: "block" }} role="img" aria-label={label || "image placeholder"}>
+          <rect x="0.5" y="0.5" width="99" height="45" fill="url(#wf-hatch)" stroke={PAPER.rule} strokeWidth="0.5" />
+        </svg>
       );
 
     case "avatar":
     case "card":
       return (
-        <div className="min-w-0 rounded border border-border bg-card/60 px-2.5 py-2">
-          <Label className="text-[9px] uppercase tracking-wider text-secondary/70">{label || "Card"}</Label>
+        <div style={{ minWidth: 0, border: rule, borderRadius: 3, padding: "7px 9px" }}>
+          <div style={{ ...truncate, fontSize: 10, color: PAPER.inkMuted }}>{label || "Card"}</div>
           {c.value ? (
-            <div className="mt-1 truncate text-[13px] font-semibold text-primary">{c.value}</div>
+            <div style={{ ...truncate, marginTop: 2, fontSize: 15, color: PAPER.ink }}>{c.value}</div>
           ) : (
-            <div className="mt-1.5 h-px w-2/3 bg-border" />
+            <div style={{ marginTop: 6, height: 2, width: "60%", background: PAPER.rule }} />
           )}
         </div>
       );
@@ -141,21 +156,16 @@ function Leaf({ c }: { c: WComponent }) {
       const cols = c.columns ?? [];
       const rows = Math.max(1, Math.min(c.rows ?? 4, 8));
       return (
-        <div className="overflow-hidden rounded border border-border">
-          <div className="border-b border-border bg-neutral/60 px-2 py-1">
-            <Label className="text-[10px] font-semibold text-primary">
-              {label || (c.type === "table" ? "Table" : "List")}
-            </Label>
+        <div style={{ border: rule, borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ ...truncate, borderBottom: rule, padding: "4px 9px", fontSize: 10, color: PAPER.inkMuted }}>
+            {label || (c.type === "table" ? "Table" : "List")}
           </div>
           {cols.length > 0 ? (
-            <table className="w-full table-fixed border-collapse">
+            <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
                   {cols.map((col, i) => (
-                    <th
-                      key={i}
-                      className="truncate border-b border-border px-2 py-1 text-left text-[9px] font-medium uppercase tracking-wide text-secondary/80"
-                    >
+                    <th key={i} style={{ ...truncate, textAlign: "left", padding: "4px 9px", borderBottom: rule, fontSize: 10, fontWeight: 400, color: PAPER.inkMuted }}>
                       {col}
                     </th>
                   ))}
@@ -165,8 +175,8 @@ function Leaf({ c }: { c: WComponent }) {
                 {Array.from({ length: rows }).map((_, r) => (
                   <tr key={r}>
                     {cols.map((_, ci) => (
-                      <td key={ci} className="px-2 py-[3px]">
-                        <div className="h-1 w-full rounded-full bg-border" />
+                      <td key={ci} style={{ padding: "5px 9px" }}>
+                        <div style={{ height: 2, background: ci === 0 ? PAPER.ruleStrong : PAPER.rule }} />
                       </td>
                     ))}
                   </tr>
@@ -174,9 +184,9 @@ function Leaf({ c }: { c: WComponent }) {
               </tbody>
             </table>
           ) : (
-            <div className="flex flex-col gap-1.5 px-2 py-2">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "7px 9px" }}>
               {Array.from({ length: rows }).map((_, r) => (
-                <div key={r} className="h-1 rounded-full bg-border" style={{ width: `${90 - r * 7}%` }} />
+                <div key={r} style={{ height: 2, background: PAPER.rule, width: `${92 - r * 8}%` }} />
               ))}
             </div>
           )}
@@ -187,11 +197,18 @@ function Leaf({ c }: { c: WComponent }) {
     default:
       // An unrecognised type renders as its label rather than disappearing. A
       // silently dropped component is a wrong wireframe you cannot see is wrong.
-      return <Label className="text-[11px] text-secondary">{label || c.type}</Label>;
+      return <div style={{ ...truncate, fontSize: 11, color: PAPER.inkSoft }}>{label || c.type}</div>;
   }
 }
 
-export function ComponentTree({ c, depth = 0 }: { c: WComponent; depth?: number }) {
+export function ComponentTree({
+  c,
+  annotate,
+}: {
+  c: WComponent;
+  /** renders the endpoint note that belongs under a given control */
+  annotate?: (handleId: string) => React.ReactNode;
+}) {
   const children = c.children ?? [];
 
   if (CONTAINERS.has(c.type) && children.length > 0) {
@@ -199,33 +216,40 @@ export function ComponentTree({ c, depth = 0 }: { c: WComponent; depth?: number 
     const isSidebar = ["sidebar", "nav", "rail"].includes(c.role ?? "");
 
     const inner = (
-      <div className={`flex min-w-0 ${horizontal ? "flex-row items-start gap-3" : "flex-col gap-2"}`}>
+      <div
+        style={{
+          display: "flex",
+          minWidth: 0,
+          flexDirection: horizontal ? "row" : "column",
+          alignItems: horizontal ? "flex-start" : undefined,
+          gap: horizontal ? 12 : 9,
+        }}
+      >
         {children.map((child, i) => (
           <div
             key={i}
-            className="min-w-0"
             style={
               horizontal
-                ? // flexBasis 0 + grow makes span/width behave as the RELATIVE
-                  // weight the spec promises, regardless of content size. Without
-                  // basis:0 a long table would quietly win the whole row.
-                  { flexGrow: child.span ?? child.width ?? 1, flexBasis: 0 }
-                : undefined
+                ? // basis 0 + grow makes span/width behave as the RELATIVE weight
+                  // the spec promises. Without basis 0 a long table quietly wins
+                  // the whole row regardless of the weights.
+                  { minWidth: 0, flexGrow: child.span ?? child.width ?? 1, flexBasis: 0 }
+                : { minWidth: 0 }
             }
           >
-            <ComponentTree c={child} depth={depth + 1} />
+            <ComponentTree c={child} annotate={annotate} />
           </div>
         ))}
       </div>
     );
 
     if (isSidebar) {
-      return <div className="rounded border border-border bg-neutral/50 p-2">{inner}</div>;
+      return <div style={{ borderRight: rule, paddingRight: 12, minWidth: 0 }}>{inner}</div>;
     }
     if (["section", "panel", "region"].includes(c.type) && c.label) {
       return (
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-[9px] uppercase tracking-[0.15em] text-secondary/60">{c.label}</Label>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+          <div style={{ ...truncate, fontSize: 10, color: PAPER.inkMuted, letterSpacing: "0.06em" }}>{c.label}</div>
           {inner}
         </div>
       );
@@ -233,17 +257,14 @@ export function ComponentTree({ c, depth = 0 }: { c: WComponent; depth?: number 
     return inner;
   }
 
-  return <Leaf c={c} />;
-}
-
-/** How wide to render a screen: a sidebar+main layout genuinely needs more room
- *  than a single stack, and cramming it into one fixed width is what forced every
- *  label in a split screen to ellipsise. */
-export function screenWidth(body?: WComponent): number {
-  const top = body?.children ?? [];
-  if (body?.type === "row") {
-    if (top.length >= 3) return 720;
-    if (top.length === 2) return 560;
+  const note = c.handleId && annotate ? annotate(c.handleId) : null;
+  if (note) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 0 }}>
+        <Leaf c={c} />
+        {note}
+      </div>
+    );
   }
-  return 340;
+  return <Leaf c={c} />;
 }
