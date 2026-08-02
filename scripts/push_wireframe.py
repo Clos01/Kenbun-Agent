@@ -19,11 +19,15 @@ def main():
         sys.exit(1)
 
     url = "http://100.92.127.1:3000/api/wireframe"
-    
-    # Ensure it looks like Excalidraw schema
-    if "type" not in data or data["type"] != "excalidraw":
-        print("Warning: JSON does not appear to be a valid Excalidraw scene (missing type='excalidraw').")
-        
+
+    if data.get("type") == "excalidraw":
+        print("Error: this is an Excalidraw scene. The board no longer renders that "
+              "format — regenerate with generate_wireframe() instead of pushing.")
+        sys.exit(1)
+    if data.get("type") != "kenbun-wireframe":
+        print("Warning: JSON does not look like a wireframe document "
+              "(expected type='kenbun-wireframe').")
+
     req = urllib.request.Request(url, method="POST")
     req.add_header('Content-Type', 'application/json')
     

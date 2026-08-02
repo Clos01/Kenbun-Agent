@@ -1,0 +1,345 @@
+{
+ "type": "kenbun-wireframe",
+ "version": 1,
+ "title": "Wide",
+ "detail": "contracts",
+ "nodes": [
+  {
+   "id": "screen:s0",
+   "kind": "screen",
+   "label": "S0",
+   "order": 0,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Go 0",
+      "variant": "primary",
+      "handleId": "screen:s0#btn:go-0"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:s1",
+   "kind": "screen",
+   "label": "S1",
+   "order": 1,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Go 1",
+      "variant": "primary",
+      "handleId": "screen:s1#btn:go-1"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:s2",
+   "kind": "screen",
+   "label": "S2",
+   "order": 2,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Go 2",
+      "variant": "primary",
+      "handleId": "screen:s2#btn:go-2"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:s3",
+   "kind": "screen",
+   "label": "S3",
+   "order": 3,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Go 3",
+      "variant": "primary",
+      "handleId": "screen:s3#btn:go-3"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:s4",
+   "kind": "screen",
+   "label": "S4",
+   "order": 4,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Go 4",
+      "variant": "primary",
+      "handleId": "screen:s4#btn:go-4"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:s5",
+   "kind": "screen",
+   "label": "S5",
+   "order": 5,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Go 5",
+      "variant": "primary",
+      "handleId": "screen:s5#btn:go-5"
+     }
+    ]
+   }
+  },
+  {
+   "id": "endpoint:post-api-e0",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/e0",
+   "label": "POST /api/e0",
+   "desc": "x"
+  },
+  {
+   "id": "endpoint:post-api-e1",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/e1",
+   "label": "POST /api/e1",
+   "desc": "x"
+  },
+  {
+   "id": "endpoint:post-api-e2",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/e2",
+   "label": "POST /api/e2",
+   "desc": "x"
+  },
+  {
+   "id": "endpoint:post-api-e3",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/e3",
+   "label": "POST /api/e3",
+   "desc": "x"
+  },
+  {
+   "id": "endpoint:post-api-e4",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/e4",
+   "label": "POST /api/e4",
+   "desc": "x"
+  },
+  {
+   "id": "endpoint:post-api-e5",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/e5",
+   "label": "POST /api/e5",
+   "desc": "x"
+  },
+  {
+   "id": "entity:e0",
+   "kind": "entity",
+   "label": "E0",
+   "fields": [
+    "id: uuid",
+    "e0_id: uuid"
+   ]
+  },
+  {
+   "id": "entity:e1",
+   "kind": "entity",
+   "label": "E1",
+   "fields": [
+    "id: uuid",
+    "e0_id: uuid"
+   ]
+  },
+  {
+   "id": "entity:e2",
+   "kind": "entity",
+   "label": "E2",
+   "fields": [
+    "id: uuid",
+    "e1_id: uuid"
+   ]
+  },
+  {
+   "id": "entity:e3",
+   "kind": "entity",
+   "label": "E3",
+   "fields": [
+    "id: uuid",
+    "e2_id: uuid"
+   ]
+  },
+  {
+   "id": "entity:e4",
+   "kind": "entity",
+   "label": "E4",
+   "fields": [
+    "id: uuid",
+    "e3_id: uuid"
+   ]
+  },
+  {
+   "id": "entity:e5",
+   "kind": "entity",
+   "label": "E5",
+   "fields": [
+    "id: uuid",
+    "e4_id: uuid"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1:flow",
+   "source": "screen:s0",
+   "target": "endpoint:post-api-e0",
+   "kind": "flow",
+   "label": "Go 0",
+   "sourceHandle": "screen:s0#btn:go-0"
+  },
+  {
+   "id": "e2:flow",
+   "source": "screen:s1",
+   "target": "endpoint:post-api-e1",
+   "kind": "flow",
+   "label": "Go 1",
+   "sourceHandle": "screen:s1#btn:go-1"
+  },
+  {
+   "id": "e3:flow",
+   "source": "screen:s2",
+   "target": "endpoint:post-api-e2",
+   "kind": "flow",
+   "label": "Go 2",
+   "sourceHandle": "screen:s2#btn:go-2"
+  },
+  {
+   "id": "e4:flow",
+   "source": "screen:s3",
+   "target": "endpoint:post-api-e3",
+   "kind": "flow",
+   "label": "Go 3",
+   "sourceHandle": "screen:s3#btn:go-3"
+  },
+  {
+   "id": "e5:flow",
+   "source": "screen:s4",
+   "target": "endpoint:post-api-e4",
+   "kind": "flow",
+   "label": "Go 4",
+   "sourceHandle": "screen:s4#btn:go-4"
+  },
+  {
+   "id": "e6:flow",
+   "source": "screen:s5",
+   "target": "endpoint:post-api-e5",
+   "kind": "flow",
+   "label": "Go 5",
+   "sourceHandle": "screen:s5#btn:go-5"
+  },
+  {
+   "id": "e7:writes",
+   "source": "endpoint:post-api-e0",
+   "target": "entity:e0",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e8:writes",
+   "source": "endpoint:post-api-e1",
+   "target": "entity:e1",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e9:writes",
+   "source": "endpoint:post-api-e2",
+   "target": "entity:e2",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e10:writes",
+   "source": "endpoint:post-api-e3",
+   "target": "entity:e3",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e11:writes",
+   "source": "endpoint:post-api-e4",
+   "target": "entity:e4",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e12:writes",
+   "source": "endpoint:post-api-e5",
+   "target": "entity:e5",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e13:relation",
+   "source": "entity:e1",
+   "target": "entity:e0",
+   "kind": "relation",
+   "label": "e0_id"
+  },
+  {
+   "id": "e14:relation",
+   "source": "entity:e2",
+   "target": "entity:e1",
+   "kind": "relation",
+   "label": "e1_id"
+  },
+  {
+   "id": "e15:relation",
+   "source": "entity:e3",
+   "target": "entity:e2",
+   "kind": "relation",
+   "label": "e2_id"
+  },
+  {
+   "id": "e16:relation",
+   "source": "entity:e4",
+   "target": "entity:e3",
+   "kind": "relation",
+   "label": "e3_id"
+  },
+  {
+   "id": "e17:relation",
+   "source": "entity:e5",
+   "target": "entity:e4",
+   "kind": "relation",
+   "label": "e4_id"
+  }
+ ]
+}

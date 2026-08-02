@@ -1,0 +1,187 @@
+{
+ "type": "kenbun-wireframe",
+ "version": 1,
+ "title": "Edge cases",
+ "detail": "contracts",
+ "nodes": [
+  {
+   "id": "screen:only-orphan-gets",
+   "kind": "screen",
+   "label": "Only orphan GETs",
+   "order": 0,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "header",
+      "label": "No CTA here at all"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:duplicate-button-labels",
+   "kind": "screen",
+   "label": "Duplicate button labels",
+   "order": 1,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "button",
+      "label": "Save",
+      "variant": "primary",
+      "handleId": "screen:duplicate-button-labels#btn:save"
+     },
+     {
+      "type": "button",
+      "label": "Save",
+      "variant": "secondary",
+      "handleId": "screen:duplicate-button-labels#btn:save-2"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:deep-nesting",
+   "kind": "screen",
+   "label": "Deep nesting",
+   "order": 2,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "section",
+      "label": "Filters",
+      "children": [
+       {
+        "type": "row",
+        "label": "",
+        "children": [
+         {
+          "type": "input",
+          "label": "From"
+         },
+         {
+          "type": "input",
+          "label": "To",
+          "span": 2.0
+         },
+         {
+          "type": "section",
+          "label": "Nested",
+          "children": [
+           {
+            "type": "badge",
+            "label": "beta"
+           },
+           {
+            "type": "divider",
+            "label": ""
+           }
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "endpoint:get-api-orphan0",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan0",
+   "label": "GET /api/orphan0",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan1",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan1",
+   "label": "GET /api/orphan1",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan2",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan2",
+   "label": "GET /api/orphan2",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan3",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan3",
+   "label": "GET /api/orphan3",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan4",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan4",
+   "label": "GET /api/orphan4",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan5",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan5",
+   "label": "GET /api/orphan5",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan6",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan6",
+   "label": "GET /api/orphan6",
+   "desc": "unflowed"
+  },
+  {
+   "id": "endpoint:get-api-orphan7",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/orphan7",
+   "label": "GET /api/orphan7",
+   "desc": "unflowed"
+  },
+  {
+   "id": "entity:thing",
+   "kind": "entity",
+   "label": "Thing",
+   "fields": [
+    "id: uuid",
+    "parent_id: uuid"
+   ]
+  },
+  {
+   "id": "integration:ghost",
+   "kind": "integration",
+   "label": "Ghost",
+   "service": "none"
+  }
+ ],
+ "edges": [],
+ "warnings": [
+  {
+   "from": "Nonexistent Button",
+   "to": "/api/orphan0",
+   "reason": "unknown button"
+  },
+  {
+   "from": "Save",
+   "to": "/api/nope",
+   "reason": "unknown endpoint"
+  }
+ ]
+}

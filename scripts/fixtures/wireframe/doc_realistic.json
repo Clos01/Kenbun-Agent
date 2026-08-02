@@ -1,0 +1,325 @@
+{
+ "type": "kenbun-wireframe",
+ "version": 1,
+ "title": "NeverMiss AI",
+ "detail": "contracts",
+ "nodes": [
+  {
+   "id": "screen:dashboard",
+   "kind": "screen",
+   "label": "Dashboard",
+   "order": 0,
+   "body": {
+    "type": "row",
+    "label": "",
+    "children": [
+     {
+      "type": "region",
+      "label": "",
+      "children": [
+       {
+        "type": "nav",
+        "label": "Calls"
+       },
+       {
+        "type": "nav",
+        "label": "Clients"
+       },
+       {
+        "type": "nav",
+        "label": "Settings"
+       }
+      ],
+      "width": 0.28,
+      "role": "sidebar"
+     },
+     {
+      "type": "region",
+      "label": "",
+      "children": [
+       {
+        "type": "header",
+        "label": "Recent Activity"
+       },
+       {
+        "type": "row",
+        "label": "",
+        "children": [
+         {
+          "type": "card",
+          "label": "Pass rate",
+          "value": "92%"
+         },
+         {
+          "type": "card",
+          "label": "Missed",
+          "value": "3"
+         }
+        ]
+       },
+       {
+        "type": "table",
+        "label": "Recent Calls",
+        "columns": [
+         "Call ID",
+         "Client",
+         "Status"
+        ],
+        "rows": 5
+       },
+       {
+        "type": "button",
+        "label": "Sync Now",
+        "variant": "primary",
+        "handleId": "screen:dashboard#btn:sync-now"
+       }
+      ],
+      "width": 0.72,
+      "role": "main"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:client-detail",
+   "kind": "screen",
+   "label": "Client Detail",
+   "order": 1,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "header",
+      "label": "Client"
+     },
+     {
+      "type": "input",
+      "label": "Name"
+     },
+     {
+      "type": "input",
+      "label": "Phone"
+     },
+     {
+      "type": "button",
+      "label": "Save Client",
+      "variant": "primary",
+      "handleId": "screen:client-detail#btn:save-client"
+     }
+    ]
+   }
+  },
+  {
+   "id": "screen:settings",
+   "kind": "screen",
+   "label": "Settings",
+   "order": 2,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "header",
+      "label": "Settings"
+     },
+     {
+      "type": "checkbox",
+      "label": "Enable voice"
+     },
+     {
+      "type": "button",
+      "label": "Update Settings",
+      "variant": "primary",
+      "handleId": "screen:settings#btn:update-settings"
+     }
+    ]
+   }
+  },
+  {
+   "id": "endpoint:post-api-sync",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/sync",
+   "label": "POST /api/sync",
+   "desc": "Trigger sync",
+   "payload": "{\n  \"since\": \"2026-01-01\",\n  \"full\": false\n}"
+  },
+  {
+   "id": "endpoint:post-api-clients",
+   "kind": "endpoint",
+   "method": "POST",
+   "path": "/api/clients",
+   "label": "POST /api/clients",
+   "desc": "Create client"
+  },
+  {
+   "id": "endpoint:patch-api-settings",
+   "kind": "endpoint",
+   "method": "PATCH",
+   "path": "/api/settings",
+   "label": "PATCH /api/settings",
+   "desc": "Update settings"
+  },
+  {
+   "id": "endpoint:get-api-calls",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/calls",
+   "label": "GET /api/calls",
+   "desc": "List calls"
+  },
+  {
+   "id": "endpoint:get-api-clients",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/clients",
+   "label": "GET /api/clients",
+   "desc": "List clients"
+  },
+  {
+   "id": "endpoint:get-api-health",
+   "kind": "endpoint",
+   "method": "GET",
+   "path": "/api/health",
+   "label": "GET /api/health",
+   "desc": "Healthcheck"
+  },
+  {
+   "id": "entity:client",
+   "kind": "entity",
+   "label": "Client",
+   "fields": [
+    "id: uuid",
+    "name: str",
+    "phone: str"
+   ]
+  },
+  {
+   "id": "entity:call",
+   "kind": "entity",
+   "label": "Call",
+   "fields": [
+    "id: uuid",
+    "client_id: uuid",
+    "status: str"
+   ]
+  },
+  {
+   "id": "entity:setting",
+   "kind": "entity",
+   "label": "Setting",
+   "fields": [
+    "id: uuid",
+    "client_id: uuid",
+    "voice_enabled: bool"
+   ]
+  },
+  {
+   "id": "integration:twilio",
+   "kind": "integration",
+   "label": "Twilio",
+   "service": "telephony"
+  },
+  {
+   "id": "integration:elevenlabs",
+   "kind": "integration",
+   "label": "ElevenLabs",
+   "service": "voice"
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1:flow",
+   "source": "screen:dashboard",
+   "target": "endpoint:post-api-sync",
+   "kind": "flow",
+   "label": "Sync Now",
+   "sourceHandle": "screen:dashboard#btn:sync-now"
+  },
+  {
+   "id": "e2:flow",
+   "source": "screen:client-detail",
+   "target": "endpoint:post-api-clients",
+   "kind": "flow",
+   "label": "Save Client",
+   "sourceHandle": "screen:client-detail#btn:save-client"
+  },
+  {
+   "id": "e3:flow",
+   "source": "screen:settings",
+   "target": "endpoint:patch-api-settings",
+   "kind": "flow",
+   "label": "Update Settings",
+   "sourceHandle": "screen:settings#btn:update-settings"
+  },
+  {
+   "id": "e4:reads",
+   "source": "endpoint:post-api-sync",
+   "target": "entity:call",
+   "kind": "reads",
+   "label": "reads"
+  },
+  {
+   "id": "e5:writes",
+   "source": "endpoint:post-api-sync",
+   "target": "entity:call",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e6:writes",
+   "source": "endpoint:post-api-clients",
+   "target": "entity:client",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e7:writes",
+   "source": "endpoint:patch-api-settings",
+   "target": "entity:setting",
+   "kind": "writes",
+   "label": "writes"
+  },
+  {
+   "id": "e8:reads",
+   "source": "endpoint:get-api-calls",
+   "target": "entity:call",
+   "kind": "reads",
+   "label": "reads"
+  },
+  {
+   "id": "e9:reads",
+   "source": "endpoint:get-api-clients",
+   "target": "entity:client",
+   "kind": "reads",
+   "label": "reads"
+  },
+  {
+   "id": "e10:relation",
+   "source": "entity:call",
+   "target": "entity:client",
+   "kind": "relation",
+   "label": "client_id"
+  },
+  {
+   "id": "e11:relation",
+   "source": "entity:setting",
+   "target": "entity:client",
+   "kind": "relation",
+   "label": "client_id"
+  },
+  {
+   "id": "e12:integration",
+   "source": "endpoint:post-api-sync",
+   "target": "integration:twilio",
+   "kind": "integration"
+  },
+  {
+   "id": "e13:integration",
+   "source": "endpoint:post-api-sync",
+   "target": "integration:elevenlabs",
+   "kind": "integration"
+  }
+ ]
+}

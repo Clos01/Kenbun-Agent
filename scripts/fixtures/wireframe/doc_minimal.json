@@ -1,0 +1,25 @@
+{
+ "type": "kenbun-wireframe",
+ "version": 1,
+ "title": "Tiny",
+ "detail": "contracts",
+ "nodes": [
+  {
+   "id": "screen:one",
+   "kind": "screen",
+   "label": "One",
+   "order": 0,
+   "body": {
+    "type": "column",
+    "label": "",
+    "children": [
+     {
+      "type": "text",
+      "label": "hi"
+     }
+    ]
+   }
+  }
+ ],
+ "edges": []
+}

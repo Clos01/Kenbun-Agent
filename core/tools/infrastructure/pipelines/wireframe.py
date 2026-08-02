@@ -1,30 +1,36 @@
-"""Wireframe pipeline: spec -> layout -> validate -> critique -> repair -> push.
+"""Wireframe pipeline: spec -> graph -> validate -> critique -> repair -> push.
 
 Why this exists as a pipeline rather than a single tool call:
 
 The generator is a HYBRID by design. An LLM decides the semantic structure and
-the layout INTENT (regions, rows, spans, table columns); the deterministic engine
-computes every coordinate. Asking a model to emit x/y/width/height for a couple
-of hundred elements produces overlapping boxes and invalid scenes — spatial
-arithmetic is the one part of this it is worst at, and the part code is best at.
+the layout INTENT (regions, rows, spans, table columns); code turns that into a
+graph of what connects to what. Asking a model to emit x/y/width/height for a
+couple of hundred elements produces overlapping boxes — spatial arithmetic is the
+one part of this it is worst at.
+
+Note that the emitter no longer produces coordinates either. It used to, and that
+was the source of the overlapping cards on the board: hand-rolled 2D packing with
+no collision test drifts back into overlap however carefully the constants are
+tuned. Geometry now belongs to the renderer, which has measured sizes to work
+from. See tools/craft/wireframe_graph.py for the full account.
 
 What the model IS good at is judging whether the resulting diagram actually
 represents the thing that was asked for. So the accuracy loop is:
 
   1. spec      — LLM designs structure + layout intent
-  2. layout    — deterministic engine emits the scene
-  3. validate  — code checks the scene is structurally valid Excalidraw
-  4. geometry  — code checks nothing overflows, escapes or wastes space
-  5. critique  — LLM compares the RENDERED structure back to the request
-  6. repair    — feed the critique back into a new spec, re-layout, re-check
+  2. graph     — code emits nodes + typed edges, no coordinates
+  3. validate  — code checks the document is structurally well-formed
+  4. audit     — code checks nothing is stranded, unwired or unrenderable
+  5. critique  — LLM compares the resulting structure back to the request
+  6. repair    — feed the critique back into a new spec, re-emit, re-check
 
 Steps 3 and 4 are deterministic on purpose: they are facts, not judgements, and
-there is no sense paying a model to notice a duplicate element id.
+there is no sense paying a model to notice a duplicate node id.
 """
 import json
 
 from tools.craft.wireframe_audit import (
-    audit_geometry,
+    audit_graph,
     summarize_for_critic,
     validate_scene,
 )
@@ -32,16 +38,22 @@ from tools.craft.wireframe_audit import (
 MAX_REPAIR_ROUNDS = 2
 
 
-def _build(prompt: str, detail: str, feedback: str = ""):
-    from tools.craft.wireframe_generator import build_wireframe
+def _build(prompt: str, detail: str, feedback: str = "", prior_spec: dict = None):
+    """Round 1 designs; later rounds AMEND the previous spec.
+
+    Redesigning from scratch each round is why the loop used to oscillate rather
+    than converge — round two would fix what it was told about and quietly lose
+    something round one had got right, so the issue count moved sideways.
+    """
+    from tools.craft.wireframe_graph import build_wireframe
     ask = prompt if not feedback else (
-        f"{prompt}\n\nA previous attempt at this wireframe was reviewed. Fix these "
-        f"specific problems in the structure you produce:\n{feedback}"
+        f"{prompt}\n\nA previous attempt at this wireframe was reviewed. Correct ONLY "
+        f"these specific problems and change nothing else:\n{feedback}"
     )
-    return build_wireframe(ask, detail=detail)
+    return build_wireframe(ask, detail=detail, prior_spec=prior_spec)
 
 
-def _critique(tools, prompt: str, scene: dict, geom: dict) -> dict:
+def _critique(tools, prompt: str, doc: dict, geom: dict) -> dict:
     """Ask a model whether the rendered structure matches the request."""
     reviewer = tools.get("review_code_with_gemini") or tools.get("consult_supervisor")
     if reviewer is None:
@@ -50,15 +62,17 @@ def _critique(tools, prompt: str, scene: dict, geom: dict) -> dict:
     question = (
         "You are reviewing a WIREFRAME for accuracy, not for code quality.\n\n"
         f"IT WAS ASKED TO DEPICT:\n{prompt}\n\n"
-        f"WHAT WAS ACTUALLY DRAWN (structural summary):\n{summarize_for_critic(scene)}\n\n"
-        f"AUTOMATED GEOMETRY REPORT:\n{json.dumps(geom, indent=2)[:1500]}\n\n"
+        f"WHAT WAS ACTUALLY BUILT (structural summary):\n{summarize_for_critic(doc)}\n\n"
+        f"AUTOMATED STRUCTURE REPORT:\n{json.dumps(geom, indent=2)[:1500]}\n\n"
         "Answer ONLY with JSON: {\"accurate\": bool, \"issues\": [\"...\"]}\n"
         "An issue is something MISSING or MISREPRESENTED versus the request — a "
         "screen that was asked for and is absent, a table without its columns, a "
-        "sidebar rendered as a flat list, a label that says something different "
-        "from what was requested. Do NOT comment on colours, spacing or style; the "
-        "layout engine owns those. If it faithfully depicts the request, say "
-        "accurate: true with an empty issues list."
+        "sidebar rendered as a flat list, a button with no flow to the endpoint it "
+        "obviously calls, a label that says something different from what was "
+        "requested. Do NOT comment on colours, spacing, positions or style: there "
+        "are no coordinates in this document and the renderer owns all geometry. "
+        "If it faithfully depicts the request, say accurate: true with an empty "
+        "issues list."
     )
     try:
         raw = reviewer(question)
@@ -90,28 +104,31 @@ def run_wireframe_loop(tools, task: str = "", detail: str = "", project_id: str 
 
     report = ["# 🖼️ Wireframe pipeline", f"**Request:** {prompt[:300]}", ""]
     feedback = ""
-    scene = spec = None
+    doc = spec = None
     geom = {}
 
     for round_no in range(MAX_REPAIR_ROUNDS + 1):
-        scene, spec = _build(prompt, detail, feedback)
+        doc, spec = _build(prompt, detail, feedback, prior_spec=spec)
 
-        invalid = validate_scene(scene)
-        geom = audit_geometry(scene)
+        invalid = validate_scene(doc)
+        geom = audit_graph(doc)
         report.append(f"## Round {round_no + 1}")
-        report.append(f"- elements: {geom['elements']}, screens: {geom['frames']}")
+        report.append(f"- {geom['screens']} screens, {geom['endpoints']} endpoints, "
+                      f"{geom['entities']} models, {geom['integrations']} integrations, "
+                      f"{geom['edges']} connections")
         report.append(f"- schema problems: {len(invalid)}")
-        report.append(f"- text overflow: {len(geom['text_overflow'])}, "
-                      f"escaped frame: {len(geom['escaped_frame'])}")
+        report.append(f"- unresolved flows: {len(geom['unresolved_flows'])}, "
+                      f"unwired buttons: {len(geom['unwired_buttons'])}, "
+                      f"stranded endpoints: {len(geom['stranded_endpoints'])}")
 
         if invalid:
             # Structural invalidity is an engine bug, not something a respin of the
             # spec will fix. Surface it instead of burning rounds on it.
-            report.append("- ⚠️ INVALID SCENE — not pushed:")
+            report.append("- ⚠️ INVALID DOCUMENT — not pushed:")
             report.extend(f"    - {p}" for p in invalid[:10])
             return "\n".join(report)
 
-        verdict = _critique(tools, prompt, scene, geom)
+        verdict = _critique(tools, prompt, doc, geom)
         issues = verdict.get("issues") or []
         if verdict.get("note"):
             report.append(f"- critic: {verdict['note']}")
@@ -127,10 +144,18 @@ def run_wireframe_loop(tools, task: str = "", detail: str = "", project_id: str 
             report.append("- ⚠️ accepted after exhausting repair rounds "
                           "(remaining issues listed above)")
             break
-        feedback = "\n".join(f"- {i}" for i in issues) or \
-            "- text or elements did not fit their containers"
+        # A deterministic finding is worth more to the repair round than the
+        # critic's prose, because it names the exact button or flow at fault.
+        auto = [f"flow '{w.get('from')}' -> '{w.get('to')}' does not resolve "
+                f"({w.get('reason')}); use the EXACT button label and endpoint path"
+                for w in geom["unresolved_flows"][:6]]
+        auto += [f"screen '{s}' has no components" for s in geom["empty_screens"][:4]]
+        auto += [f"component type '{t}' is not a supported type"
+                 for t in geom["unknown_components"][:4]]
+        feedback = "\n".join(f"- {i}" for i in (issues + auto)) or \
+            "- the diagram did not fully represent the request"
 
-    pushed = _push(scene, project_id)
+    pushed = _push(doc, project_id)
     report.append("")
     report.append(f"**Push:** {pushed}")
     report.append(f"**Screens:** {', '.join(s.get('name', '?') for s in spec.get('screens', []))}")
@@ -138,14 +163,14 @@ def run_wireframe_loop(tools, task: str = "", detail: str = "", project_id: str 
     return "\n".join(report)
 
 
-def _push(scene: dict, project_id: str) -> str:
+def _push(doc: dict, project_id: str) -> str:
     import urllib.parse
     import urllib.request
     try:
         req = urllib.request.Request(
             "http://100.92.127.1:3000/api/wireframe?project_id="
             + urllib.parse.quote(str(project_id)),
-            data=json.dumps(scene).encode("utf-8"),
+            data=json.dumps(doc).encode("utf-8"),
             headers={"Content-Type": "application/json"}, method="POST")
         with urllib.request.urlopen(req, timeout=20) as r:
             return "pushed" if r.status == 200 else f"HTTP {r.status}"

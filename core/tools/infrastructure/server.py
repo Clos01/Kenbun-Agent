@@ -1547,11 +1547,13 @@ def telemetry_integrity_audit(post_alert: bool = True) -> str:
 @sovereign_tool()
 def generate_wireframe(prompt: str, project_id: str = "", detail: str = "") -> str:
     """Generate a UI + backend architecture wireframe from a natural-language feature
-    description and push it to that PROJECT'S Wireframe (Excalidraw) canvas.
+    description and push it to that PROJECT'S Wireframe canvas on /board.
 
     Designs like a full-stack team: a 3-layer diagram — FRONTEND (UI screens) → BACKEND
-    (API endpoints + data models) → EXTERNAL INTEGRATIONS — with element-bound orthogonal
-    connectors. A structured spec is converted deterministically into a valid Excalidraw scene.
+    (API endpoints + data models) → EXTERNAL INTEGRATIONS. The LLM produces a structured
+    spec; this emits a layout-free graph of what connects to what, and the board lays it
+    out with measured sizes. Nothing here computes coordinates — that is deliberate, and
+    is why cards no longer overlap.
 
     project_id: REQUIRED — the Planka project id this wireframe belongs to (same key
     the per-project SOW uses). A wireframe is scoped to one project and is not visible
@@ -1559,8 +1561,9 @@ def generate_wireframe(prompt: str, project_id: str = "", detail: str = "") -> s
     nowhere to file the result, so generation is refused rather than overwriting a
     shared canvas.
 
-    detail: "" (default) = clean structural view; "contracts" = also attach dark IDE-style
-    JSON payload cards next to webhook/integration endpoints (semantic zoom).
+    detail: "" (default) = screens, endpoints and flows only; "data" = also data models and
+    which endpoint reads/writes each; "contracts" = also external integrations and JSON
+    payloads on the endpoint cards (semantic zoom).
     Example: generate_wireframe("appointment booking", project_id="1821314860437210840").
     """
     import urllib.request
@@ -1575,12 +1578,12 @@ def generate_wireframe(prompt: str, project_id: str = "", detail: str = "") -> s
 
     with silence_stdout():
         try:
-            from tools.craft.wireframe_generator import build_wireframe
-            scene, spec = build_wireframe(prompt, detail=detail)
+            from tools.craft.wireframe_graph import build_wireframe
+            doc, spec = build_wireframe(prompt, detail=detail)
         except Exception as e:
             return f"ERROR: wireframe generation failed: {e}"
         try:
-            body = _json.dumps(scene).encode("utf-8")
+            body = _json.dumps(doc).encode("utf-8")
             req = urllib.request.Request(
                 "http://100.92.127.1:3000/api/wireframe?project_id="
                 + _urlparse.quote(project_id),
@@ -1590,13 +1593,13 @@ def generate_wireframe(prompt: str, project_id: str = "", detail: str = "") -> s
             with urllib.request.urlopen(req, timeout=20) as r:
                 pushed = (r.status == 200)
         except Exception as e:
-            return (f"⚠️ Wireframe built ({len(scene['elements'])} elements) but push to board failed: {e}. "
+            return (f"⚠️ Wireframe built ({len(doc['nodes'])} nodes) but push to board failed: {e}. "
                     f"The dashboard /api/wireframe endpoint may be unreachable.")
     screens = [s.get("name", "?") for s in spec.get("screens", [])]
     return (
         f"✅ Wireframe **{spec.get('title', 'Untitled')}** {'pushed to /board' if pushed else 'built'}.\n"
         f"• Screens: {', '.join(screens) or '(none)'}\n"
-        f"• Elements: {len(scene['elements'])}\n"
+        f"• Nodes: {len(doc['nodes'])}, connections: {len(doc['edges'])}\n"
         f"• Project: {project_id}\n"
         f"Open the board for THIS project → **Wireframe** tab (reload the canvas to view)."
     )

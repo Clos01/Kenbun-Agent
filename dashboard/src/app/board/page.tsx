@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import WorkflowView from "@/components/WorkflowView";
+import WireframeCanvas from "@/components/WireframeCanvas";
 import CustomDropdown from "@/components/CustomDropdown";
 import { formatMarkdown } from "@/lib/markdown";
 import { computeWorkOrder } from "@/lib/prioritize";
@@ -2129,19 +2130,18 @@ export default function BoardPage() {
                   <div className="w-full h-full bg-transparent relative">
                     {/* A wireframe belongs to one project. Pass the selected
                         project through so the canvas loads that project's
-                        wireframe and no other; keying the iframe on the id also
-                        forces a remount when the user switches project, instead
-                        of leaving the previous app's design on screen. */}
-                    <iframe
-                      key={selectedBoard?.projectId ?? "no-project"}
-                      src={
-                        selectedBoard?.projectId
-                          ? `/custom_excalidraw.html?project_id=${encodeURIComponent(selectedBoard.projectId)}`
-                          : "/custom_excalidraw.html"
-                      }
-                      className="w-full h-full border-none"
-                      title="Excalidraw Wireframe Canvas"
-                    />
+                        wireframe and no other; the component keys itself on the
+                        id so switching project remounts, instead of leaving the
+                        previous app's design on screen.
+
+                        This used to be an <iframe> around a self-hosted
+                        Excalidraw build. It rendered a scene whose every
+                        coordinate had been computed in Python, which is where
+                        the overlapping cards came from; it also followed the OS
+                        colour scheme rather than the app's theme. Rendering
+                        in-tree lets the layout use measured sizes and inherit
+                        the dashboard's own theme tokens. */}
+                    <WireframeCanvas projectId={selectedBoard?.projectId} />
                   </div>
                 </motion.div>
               ) : (

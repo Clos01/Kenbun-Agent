@@ -38,7 +38,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
-const EMPTY_SCENE = { type: "excalidraw", version: 2, elements: [], appState: {} };
+/**
+ * The "no wireframe yet" answer. Note the shape: this route is format-agnostic —
+ * it stores whatever the generator posts — but the empty case has to name a
+ * format, and naming the current one keeps the canvas on its normal empty path
+ * rather than its legacy-format path.
+ *
+ * Files still on disk in the old Excalidraw shape are served back as-is; the
+ * canvas detects `type: "excalidraw"` and asks the user to regenerate. Migrating
+ * them automatically is not possible in either direction: the old format is
+ * finished pixels with the semantic structure already discarded.
+ */
+const EMPTY_SCENE = {
+  type: "kenbun-wireframe",
+  version: 1,
+  title: "",
+  detail: "overview",
+  nodes: [],
+  edges: [],
+};
 
 /**
  * Project ids come from Planka and are numeric strings. Validate rather than
