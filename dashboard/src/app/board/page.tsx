@@ -1,14 +1,21 @@
 "use client";
 
+/* Docmost wiki. Opens in a new tab -- it sends X-Frame-Options:
+   SAMEORIGIN and cannot be embedded the way the wireframe canvas is. */
+const DOCMOST_URL = process.env.NEXT_PUBLIC_DOCMOST_URL ?? "http://100.104.211.61:3006";
+
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import Sidebar from "@/components/Sidebar";
 import WorkflowView from "@/components/WorkflowView";
+import DocsView from "@/components/DocsView";
 import WireframeCanvas from "@/components/WireframeCanvas";
 import CustomDropdown from "@/components/CustomDropdown";
 import { formatMarkdown } from "@/lib/markdown";
 import { computeWorkOrder } from "@/lib/prioritize";
 import {
   Columns,
+  BookOpen,
+  ExternalLink,
   GitFork,
   Plus,
   Folder,
@@ -332,7 +339,7 @@ export default function BoardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Active view tab: kanban | calendar | messaging | workflow
-  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow" | "wireframe">(() => {
+  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs">(() => {
     if (typeof window !== "undefined") {
       const savedTab = localStorage.getItem("board_active_tab");
       if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow" || savedTab === "wireframe") {
@@ -354,7 +361,7 @@ export default function BoardPage() {
   }, []);
 
   // Persistence helpers
-  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow" | "wireframe") => {
+  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs") => {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       localStorage.setItem("board_active_tab", tab);
@@ -1092,6 +1099,7 @@ export default function BoardPage() {
                   { key: "messaging", label: "Feed", icon: MessageSquare },
                   { key: "workflow", label: "Workflow", icon: GitFork },
                   { key: "wireframe", label: "Wireframe", icon: PenTool },
+                  { key: "docs", label: "Docs", icon: BookOpen },
                 ] as const).map(t => (
                   <button
                     key={t.key}
@@ -1106,6 +1114,16 @@ export default function BoardPage() {
                     {t.label}
                   </button>
                 ))}
+                <a
+                  href={DOCMOST_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
+                  title="Open the Docmost wiki in a new tab"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Wiki
+                </a>
               </nav>
             )}
           </div>
@@ -1289,6 +1307,7 @@ export default function BoardPage() {
               { key: "messaging", label: "Feed", icon: MessageSquare },
               { key: "workflow", label: "Workflow", icon: GitFork },
               { key: "wireframe", label: "Wireframe", icon: PenTool },
+              { key: "docs", label: "Docs", icon: BookOpen },
             ] as const).map(t => (
               <button
                 key={t.key}
@@ -2116,6 +2135,23 @@ export default function BoardPage() {
                     }}
                     onDeleteCard={handleCloseCard}
                     onMoveCard={handleMoveCard}
+                  />
+                </motion.div>
+              ) : activeTab === "docs" ? (
+                <motion.div
+                  key="board-docs"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-full basis-full grow min-w-0"
+                >
+                  {/* Docs are per-PROJECT, not per-board: a project's runbook does
+                      not change because you switched to a different board of the
+                      same project. */}
+                  <DocsView
+                    projectId={selectedBoard?.projectId || ""}
+                    projectName={projects.find(p => p.id === selectedBoard?.projectId)?.name}
                   />
                 </motion.div>
               ) : activeTab === "wireframe" ? (
