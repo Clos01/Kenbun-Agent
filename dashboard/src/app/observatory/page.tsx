@@ -1542,37 +1542,101 @@ export default function BuildConsole() {
                 </div>
               </section>
 
+              {/* ---- TOOL MATRIX — honest scoring ------------------------------
+                   The score is recency-weighted (see strategy_manager
+                   ._decayed_weights): alpha = 1 + successes * 0.5^(age/half_life).
+                   An idle tool with a perfect record therefore scores near 50%.
+                   Showing that number alone reads as "unreliable" when the truth
+                   is "reliable but not used lately", so the raw record and a
+                   staleness marker are shown next to it. Nodes prefixed `step:`
+                   are pipeline steps, not tools, and are grouped separately. */}
               <section>
-                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow space-y-10 rounded-2xl">
-                    <div className="flex items-center justify-between border-b border-primary/5 pb-6">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Tool Matrix</span>
-                        <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Neural Capability Topology</p>
-                      </div>
-                      <span className="px-3 py-1 border border-primary/10 text-[9px] font-black opacity-40 uppercase tracking-widest rounded-full">{stats.length} Nodes Active</span>
-                    </div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                       {stats.map((tool: IntelligenceTool, idx: number) => (
-                         <div 
-                           key={idx}
-                           onClick={() => {
-                             setSelectedTool(tool);
-                             setActiveToolModal(tool);
-                           }}
-                           className={`p-6 border transition-all cursor-pointer group rounded-xl ${selectedTool?.tool_id === tool.tool_id ? 'border-tertiary bg-card shadow-xl shadow-tertiary/5' : 'border-primary/5 bg-card/40 hover:border-tertiary/20'}`}
-                         >
-                           <div className="flex items-center justify-between mb-4">
-                             <span className="text-[10px] font-black text-primary/40 truncate pr-2 uppercase tracking-tighter">{tool.tool_id.replace(/_/g, ' ')}</span>
-                             {parseFloat(tool.delta || "0") > 0 ? (
-                               <ArrowUpRight className="w-3 h-3 text-green-600" />
-                             ) : (
-                               <ArrowDownRight className="w-3 h-3 text-red-600" />
-                             )}
-                           </div>
-                           <div className="text-2xl font-black italic tracking-tighter text-primary">{Math.round(tool.success_rate * 100)}%</div>
-                         </div>
-                       ))}
-                    </div>
+                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl artisan-shadow space-y-8 rounded-2xl">
+                    {(() => {
+                      const toolNodes = stats.filter((t: IntelligenceTool) => !t.tool_id.startsWith("step:"));
+                      const stepNodes = stats.filter((t: IntelligenceTool) => t.tool_id.startsWith("step:"));
+
+                      const Tile = ({ tool }: { tool: IntelligenceTool }) => {
+                        const s = tool.success_count ?? 0;
+                        const fCount = tool.failure_count ?? 0;
+                        const n = s + fCount;
+                        // Evidence actually carried by the posterior, after decay.
+                        const effN = Math.max(0, (tool.alpha ?? 1) - 1) + Math.max(0, (tool.beta ?? 1) - 1);
+                        const decayed = n > 0 && effN < n * 0.5;
+                        const thin = n < 5;
+                        const rawPct = n > 0 ? Math.round((s / n) * 100) : null;
+                        const shown = Math.round((tool.success_rate ?? 0) * 100);
+                        return (
+                          <div
+                            onClick={() => { setSelectedTool(tool); setActiveToolModal(tool); }}
+                            title={decayed
+                              ? `Recency-weighted. Raw record ${s}/${n}; evidence has decayed with age.`
+                              : `Raw record ${s}/${n}.`}
+                            className={`p-5 border transition-all cursor-pointer group rounded-xl ${
+                              selectedTool?.tool_id === tool.tool_id
+                                ? "border-tertiary bg-card shadow-xl shadow-tertiary/5"
+                                : "border-primary/5 bg-card/40 hover:border-tertiary/20"
+                            } ${thin ? "opacity-50" : ""}`}
+                          >
+                            <div className="flex items-center justify-between mb-3 gap-1">
+                              <span className="text-[10px] font-black text-primary/40 truncate uppercase tracking-tighter">
+                                {tool.tool_id.replace(/^step:/, "").replace(/_/g, " ")}
+                              </span>
+                              {parseFloat(tool.delta || "0") > 0
+                                ? <ArrowUpRight className="w-3 h-3 text-green-600 shrink-0" />
+                                : <ArrowDownRight className="w-3 h-3 text-red-600 shrink-0" />}
+                            </div>
+                            <div className="flex items-baseline gap-1.5">
+                              <span className="text-2xl font-black italic tracking-tighter text-primary">{shown}%</span>
+                              {decayed && <span className="text-[11px] opacity-60" title="Stale — evidence decayed by age">⌛</span>}
+                            </div>
+                            <div className="mt-2 text-[9px] font-mono uppercase tracking-wider opacity-50 leading-tight">
+                              {n === 0
+                                ? "no observations"
+                                : <>n={n} · {s}✓/{fCount}✗{rawPct !== null && rawPct !== shown && <> · raw {rawPct}%</>}</>}
+                            </div>
+                          </div>
+                        );
+                      };
+
+                      return (
+                        <>
+                          <div className="flex items-start justify-between border-b border-primary/5 pb-6 gap-4 flex-wrap">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Tool Matrix</span>
+                              <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Neural Capability Topology</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="px-3 py-1 border border-primary/10 text-[9px] font-black opacity-50 uppercase tracking-widest rounded-full">{toolNodes.length} Tools</span>
+                              <span className="px-3 py-1 border border-primary/10 text-[9px] font-black opacity-30 uppercase tracking-widest rounded-full">{stepNodes.length} Pipeline Steps</span>
+                            </div>
+                          </div>
+
+                          <p className="text-[10px] font-mono leading-relaxed opacity-40 -mt-2">
+                            Scores are recency-weighted — evidence decays with age, so an idle tool with a
+                            perfect record reads lower than one exercised recently. ⌛ marks decayed evidence,
+                            n is the raw observation count, and tiles with fewer than 5 observations are dimmed
+                            because there is not yet enough evidence to read.
+                          </p>
+
+                          <div>
+                            <div className="text-[9px] font-black uppercase tracking-[0.3em] opacity-30 mb-4">Tools</div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                              {toolNodes.map((t: IntelligenceTool, idx: number) => <Tile key={`t${idx}`} tool={t} />)}
+                            </div>
+                          </div>
+
+                          {stepNodes.length > 0 && (
+                            <div>
+                              <div className="text-[9px] font-black uppercase tracking-[0.3em] opacity-30 mb-4 mt-8">Pipeline Steps</div>
+                              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                                {stepNodes.map((t: IntelligenceTool, idx: number) => <Tile key={`s${idx}`} tool={t} />)}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
               </section>              <AnimatePresence>
                 {selectedDecision && (
