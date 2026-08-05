@@ -241,9 +241,9 @@ export default function DocsView({
   }
 
   return (
-    <div className="w-full min-w-0 flex flex-col lg:flex-row gap-6 px-6 py-6">
+    <div className="w-full min-w-0 flex flex-col lg:flex-row gap-8 px-6 lg:px-10 py-6">
       {/* ---- index ---- */}
-      <aside className="lg:w-80 shrink-0 space-y-4">
+      <aside className="lg:w-64 xl:w-72 shrink-0 space-y-4">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-secondary absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -389,7 +389,7 @@ export default function DocsView({
             </div>
           </div>
         ) : active ? (
-          <div className="bg-card/30 border border-primary/10 rounded-sm p-6 lg:p-8">
+          <div className="bg-card/30 border border-primary/10 rounded-sm p-6 lg:p-10">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0">
                 <h2 className="text-lg font-bold text-primary break-words">{active.title}</h2>
@@ -420,7 +420,7 @@ export default function DocsView({
                 </button>
               </div>
             </div>
-            <div className="markdown-content text-xs text-primary leading-relaxed break-words max-w-3xl mt-6">
+            <div className="markdown-content text-sm text-primary leading-relaxed break-words max-w-5xl mt-6">
               {formatMarkdown(active.body || "_This document is empty._")}
             </div>
           </div>

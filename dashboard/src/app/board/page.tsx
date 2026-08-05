@@ -1092,7 +1092,7 @@ export default function BoardPage() {
 
             {/* Tabs live in the header — no second nav row */}
             {selectedBoard && (
-              <nav className="hidden xl:flex items-center gap-1 ml-6 border-l border-primary/10 pl-6 h-full">
+              <nav className="hidden xl:flex items-center gap-1 ml-6 border-l border-primary/10 pl-6 h-full min-w-0 overflow-x-auto no-scrollbar">
                 {([
                   { key: "kanban", label: "Board", icon: Columns },
                   { key: "calendar", label: "Calendar", icon: Calendar },
@@ -1104,7 +1104,7 @@ export default function BoardPage() {
                   <button
                     key={t.key}
                     onClick={() => changeTab(t.key)}
-                    className={`px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors ${
+                    className={`shrink-0 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors ${
                       activeTab === t.key
                         ? "text-tertiary bg-tertiary/10"
                         : "text-secondary hover:text-primary"
@@ -1118,7 +1118,7 @@ export default function BoardPage() {
                   href={DOCMOST_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
+                  className="shrink-0 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
                   title="Open the Docmost wiki in a new tab"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
@@ -1128,7 +1128,7 @@ export default function BoardPage() {
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 ml-2">
             {/* Search and Filters */ }
             {selectedBoard && activeTab === "kanban" && (
               <div className="flex items-center gap-2 mr-2">
