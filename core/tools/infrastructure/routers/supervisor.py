@@ -121,7 +121,15 @@ def execute_audit(req: AuditRequest):
                     "status": status,
                     "score": score,
                     "violations": violations,
-                    "remedy": parsed.get("fixed_code") or parsed.get("remedy") or "Please review the violations and adjust the code."
+                    # The supervisor's reasoning lives in `critique` and is the
+                    # whole point of asking. It was previously surfaced ONLY on a
+                    # rejection, so an APPROVED audit returned a bare score with the
+                    # analysis discarded - indistinguishable from a rubber stamp.
+                    "critique": parsed.get("critique") or parsed.get("explanation") or "",
+                    # Don't tell the caller to review violations when there are none.
+                    "remedy": (parsed.get("fixed_code") or parsed.get("remedy")
+                               or ("Please review the violations and adjust the code."
+                                   if violations else "No changes required."))
                 }
             }
         except json.JSONDecodeError:
