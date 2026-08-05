@@ -821,6 +821,7 @@ def _dispatch_orchestrate_http(
     file_path: str,
     code_snippet: str,
     tech_key: str,
+    project_id: str,
     token: str,
 ) -> dict:
     """POST the orchestration to the persistent FastAPI server. Raises HTTPError on auth."""
