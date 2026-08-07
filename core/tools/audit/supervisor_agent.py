@@ -31,6 +31,40 @@ except ImportError:
 from tools.infrastructure.config import settings
 from tools.design.guardrail import DesignGuardrail
 from tools.infrastructure.topology_manager import log_swarm_event
+from tools.audit.calibration import calibration, categorize
+
+# Calibration tier identifiers. Each cheap rung earns auto-approve rights
+# separately, per category.
+TIER_COURT = "court_2a"
+TIER_ENSEMBLE = "ensemble_t1"
+
+
+def _may_short_circuit(tier: str, category: str, verdict: str) -> tuple:
+    """Decide whether a cheap rung's verdict may end the review here.
+
+    Returns (allowed, reason).
+
+    Rejections always end it: fail-closed is free, and a wrong rejection costs an
+    escalation or a heal loop rather than a breach. Approvals must be earned —
+    the rung may only close the review in a category where paired observations
+    show it does not falsely approve.
+
+    When an approval is blocked, the audit continues to Tier 2. That escalation
+    is not wasted: it produces exactly the paired observation the category needs
+    to graduate. The ladder pays for its own calibration.
+    """
+    if str(verdict).upper() != "APPROVED":
+        return True, "rejection — fail-closed, no calibration required"
+
+    gate = calibration.may_autoapprove(tier, category)
+    if not gate.trusted:
+        return False, gate.reason
+    if calibration.should_drift_check(tier, category):
+        return False, (
+            f"drift check ({settings.AUDIT_CALIBRATION_SAMPLE_RATE:.0%} of trusted "
+            f"approvals are re-verified) — {gate.reason}"
+        )
+    return True, gate.reason
 
 def _call_local_senior(system_prompt: str, user_message: str, max_tokens: int = 3000):
     """Call the hardware-agnostic LLM gateway.
@@ -175,9 +209,14 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
         
     context = f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}{rules_context}"
     
-    # --- TWO-PASS CLOUD AUDIT (Anthropic Claude 3.5 Sonnet) ---
-    AUDIT_MODEL = "claude-3-5-sonnet-20241022"
-    AUDIT_URL = "https://api.anthropic.com/v1"
+    # --- TWO-PASS CLOUD AUDIT (Anthropic) ---
+    # Read from settings, never hardcoded. This is the strong rung of the
+    # oversight ladder: pinning it to a fixed model id means it silently ages
+    # behind the executors it audits, inverting the supervisor/student gap the
+    # whole tier exists to maintain.
+    AUDIT_MODEL = settings.AUDIT_LLM_MODEL
+    AUDIT_URL = settings.AUDIT_LLM_URL
+    print(f"🏛️ [SYSTEM 2] Tier 2 audit model: {AUDIT_MODEL}")
     
     pass_1_prompt = (
         "You are a code security auditor. Perform a QUICK initial scan of the code.\n"
@@ -352,10 +391,89 @@ async def _tier_3_fallback(user_proposal: str, code_snippet: str, memory_context
                 "tier": "Tier 3: Local Senior Fallback (parse failure, cloud unavailable)"
             }
 
-async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = "", recovery_attempts_left: int = 2, iterative_mode: bool = False):
+def _is_appealable(res: dict) -> bool:
+    """May the executor contest this rejection?
+
+    Not everything is arguable. Deterministic pattern hits, design-guardrail
+    violations and security-gateway blocks are facts about the artifact, not
+    judgments to be weighed — there is nothing for a court to reconsider. Only
+    model-formed verdicts can be appealed.
+    """
+    if not settings.AUDIT_APPEALS_ENABLED or adversarial_court is None:
+        return False
+    if res.get("appealable") is False:
+        return False
+    tier = str(res.get("tier", ""))
+    if "Gateway" in tier or "Design Guardrail" in tier:
+        return False
+    return True
+
+
+async def _run_appeal(user_proposal: str, code_snippet: str, critique: str):
+    """Give the executor one chance to refute a rejection instead of mutating code.
+
+    The weak-to-strong analogue: a strong student that must accept every label
+    from a weak supervisor inherits the supervisor's mistakes; one allowed to
+    discount labels it can show are wrong does better. The Ralph loop as written
+    was the first case — it re-wrote code until the critique stopped firing,
+    which "fixes" a false finding by damaging working code.
+
+    Returns (upheld, appeal_entry) — or (False, None) if no appeal was attempted.
+    """
+    contest_system = (
+        "You are the engineer who wrote a code snippet that a security audit REJECTED.\n"
+        "Decide honestly whether the finding is correct.\n\n"
+        "If the critique is FACTUALLY WRONG about this specific code — it cites a line that does "
+        "not do what it claims, describes an input that cannot reach the code, or calls a guard "
+        "missing that is visibly present — begin your reply with the single word CONTEST on its "
+        "own line, then quote the exact lines that disprove it and address every finding raised.\n\n"
+        "In every other case — the critique is correct, you are unsure, or your defence would "
+        "amount to 'the risk is acceptable' / 'that is the convention' / 'I intended it that "
+        "way' — reply with exactly the single word: CONCEDE\n\n"
+        "Conceding is the correct answer most of the time. A contest that fails wastes a review "
+        "cycle and the code still has to be fixed."
+    )
+    contest_user = (
+        f"ORIGINAL PROPOSAL: {user_proposal}\n\n"
+        f"YOUR CODE:\n```python\n{code_snippet}\n```\n\n"
+        f"AUDIT CRITIQUE:\n{critique}\n\n"
+        f"Write your CONTEST brief, or respond CONCEDE:"
+    )
+
+    brief, err = _call_local_senior(contest_system, contest_user)
+    if err or not brief:
+        print(f"⚠️ [APPEAL] Could not obtain a contest brief ({err}). Proceeding to heal.")
+        return False, None
+
+    # Contesting is explicit opt-in, and anything else concedes. The inverse
+    # default — treat any non-CONCEDE text as a contest — would convene a court
+    # on every rejection, and would let a rambling executor argue its way past a
+    # stronger auditor simply by not saying the magic word. The party with the
+    # weaker claim should not benefit from ambiguity.
+    stripped = brief.strip()
+    if not stripped.upper().startswith("CONTEST") or len(stripped) < 40:
+        print("🤝 [APPEAL] Executor conceded the finding. Proceeding to heal.")
+        return False, None
+
+    print("⚖️ [APPEAL] Executor contests the rejection. Convening appeal...")
+    try:
+        entry = await asyncio.wait_for(
+            adversarial_court.run_appeal(user_proposal, code_snippet, critique, brief),
+            timeout=float(settings.SUPERVISOR_COURT_TIMEOUT),
+        )
+    except Exception as e:
+        print(f"⚠️ [APPEAL] Appeal failed or timed out ({e}). Rejection stands.")
+        return False, None
+
+    return entry.get("ruling") == "UPHELD", entry
+
+
+async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memory_context: str = "", tech_key: str = "", recovery_attempts_left: int = 2, iterative_mode: bool = False, appeal_used: bool = False):
     """
     Executes a high-fidelity System 2 Executive Audit.
-    Includes the Autonomic "Ralph-Loop" Recovery Engine for self-healing rejected snippets.
+    Includes the Autonomic "Ralph-Loop" Recovery Engine for self-healing rejected snippets,
+    fronted by a single-use appeal: the executor may contest a rejection with evidence
+    before it is required to rewrite the code.
     Respects Hook Gateway settings in ~/.kenbun/config.yaml.
     """
     import sys
@@ -476,9 +594,39 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
         # If the verdict is REJECTED, and we have recovery attempts left, and the code snippet is not empty:
         if res and res.get("status") == "REJECTED" and code_snippet.strip() and recovery_attempts_left > 0 and iterative_mode:
             critique = res.get("critique", "No critique details provided.")
+
+            # --- APPEAL (once per audit chain, before any code is touched) ---
+            if not appeal_used and _is_appealable(res):
+                appeal_used = True
+                upheld, appeal_entry = await _run_appeal(user_proposal, code_snippet, critique)
+                if upheld:
+                    print(f"⚖️ [APPEAL] UPHELD (confidence {appeal_entry['confidence']:.2f}). "
+                          f"Rejection overturned — original code stands, unmodified.")
+                    return {
+                        "status": "APPROVED",
+                        "critique": (
+                            f"[APPEAL UPHELD] The original rejection was overturned on appeal. "
+                            f"Court reasoning: {appeal_entry['critique']}\n\n"
+                            f"Overturned finding: {critique}"
+                        ),
+                        "confidence": appeal_entry["confidence"],
+                        "appeal": appeal_entry,
+                        "tier": "System 2a: Adversarial LLM Court (Appellate)",
+                    }
+                if appeal_entry:
+                    # A dismissed appeal is not wasted: the judge's rebuttal states
+                    # precisely why the defence failed, which is sharper healing
+                    # input than the original critique on its own.
+                    print("⚖️ [APPEAL] DISMISSED. Rejection stands — proceeding to heal.")
+                    critique = (
+                        f"{critique}\n\n[APPEAL DISMISSED] Your defence was heard and rejected: "
+                        f"{appeal_entry['critique']}\nDo not re-argue it — fix the code."
+                    )
+                    res["appeal"] = appeal_entry
+
             print("🔄 [RALPH-LOOP] Security/Compliance audit rejected the snippet. Initiating autonomic healing loop...")
             print(f"🔄 [RALPH-LOOP] Critique: {critique}")
-            
+
             # Speculatively adjust the prompt and ask the Local Senior/Defendant to correct the code
             system_prompt = (
                 "You are the autonomic 'Ralph-Loop' self-healing agent in Kenbun-Agent.\n"
@@ -516,6 +664,8 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
                         tech_key=tech_key,
                         recovery_attempts_left=recovery_attempts_left - 1,
                         iterative_mode=iterative_mode,
+                        # One appeal per chain — healed code cannot re-litigate.
+                        appeal_used=appeal_used,
                     )
                     if recovery_res and recovery_res.get("status") == "APPROVED":
                         print("🌸 [RALPH-LOOP] Autonomic recovery SUCCESSFUL! Healed code passed security audit.")
@@ -546,8 +696,14 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     Automatically triages between CRITICAL and UI_STYLE.
     """
     category = TriageManager.triage(user_proposal, code_snippet)
-    print(f"🏛️ [SYSTEM 2] Initiating Executive Supervisor Audit ({category})...")
-    
+    # Finer-grained than the triage split, and used only for calibration: a rung
+    # can be trustworthy on ui_style while being useless on shell_exec, and one
+    # CRITICAL bucket cannot express that.
+    calib_category = categorize(user_proposal, code_snippet)
+    # Cheap-rung verdicts awaiting a strong verdict to be scored against.
+    pending_pairs: dict = {}
+    print(f"🏛️ [SYSTEM 2] Initiating Executive Supervisor Audit ({category} / {calib_category})...")
+
     if category == "UI_STYLE":
         print("🎨 [SYSTEM 2] UI/STYLE Detected. Running Fast-Track Style Audit...")
         # NEW: Integrate Blueprint Design Guardrail
@@ -557,6 +713,8 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
             res_style = {
                 "status": "REJECTED",
                 "critique": f"Design Compliance Failure: {style_res['reason']}",
+                # Deterministic token check — nothing to weigh on appeal.
+                "appealable": False,
                 "tier": "System 2c: Design Guardrail"
             }
             log_swarm_event("DECISION", {
@@ -572,13 +730,19 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     # Parallelize Tier 1a (Adversarial LLM Court) and Tier 1 (Local Ensemble)
     court_task = None
     if adversarial_court:
-        # 300s: the trial is 3 LLM calls (2 briefs + judge) that serialize on
+        # The trial is 3 LLM calls (2 briefs + judge) that serialize on
         # Ollama (OLLAMA_NUM_PARALLEL=1), plus a possible cold model load for
         # the 8B court model; the judge additionally reasons with thinking
         # enabled. 60s starved it into constant timeout-failures.
-        court_task = asyncio.create_task(asyncio.wait_for(adversarial_court.run_trial(user_proposal, code_snippet), timeout=300.0))
-        
-    ensemble_task = asyncio.create_task(asyncio.wait_for(_tier_1_local(user_proposal, code_snippet), timeout=60.0))
+        court_task = asyncio.create_task(asyncio.wait_for(
+            adversarial_court.run_trial(user_proposal, code_snippet),
+            timeout=float(settings.SUPERVISOR_COURT_TIMEOUT),
+        ))
+
+    ensemble_task = asyncio.create_task(asyncio.wait_for(
+        _tier_1_local(user_proposal, code_snippet),
+        timeout=float(settings.SUPERVISOR_ENSEMBLE_TIMEOUT),
+    ))
     
     tasks = [t for t in [court_task, ensemble_task] if t is not None]
     res = None
@@ -597,40 +761,66 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
                         if "Fallback: Failed to parse Judge JSON" in res_court.get("critique", ""):
                             print("⚠️ [COURT] Trial returned fallback result due to JSON parse failure. Bypassing court short-circuit.")
                         else:
-                            print(f"✅ [COURT] Verdict rendered: {res_court['verdict']} (Confidence: {res_court['confidence']:.2f})")
-                            res_court_formatted = {
-                                "status": res_court["verdict"],
-                                "critique": f"[ADVERSARIAL COURT] Verdict: {res_court['verdict']}\n"
-                                            f"Critique: {res_court['critique']}",
-                                "confidence": res_court["confidence"],
-                                "tier": "System 2a: Adversarial LLM Court"
-                            }
-                            log_swarm_event("DECISION", {
-                                "tool": "supervisor_agent", 
-                                "confidence": res_court["confidence"], 
-                                "result": res_court["verdict"], 
-                                "logic": "System 2a: Adversarial LLM Court",
-                                "output": res_court_formatted["critique"]
-                            })
-                            for p in pending: p.cancel()
-                            return res_court_formatted
+                            # Evaluate the gate exactly once: it contains a
+                            # sampling roll, so calling it twice would decide on
+                            # one roll and report the reason from another.
+                            allowed, gate_reason = _may_short_circuit(
+                                TIER_COURT, calib_category, res_court["verdict"]
+                            )
+                            if not allowed:
+                                print(f"🎓 [CALIBRATION] Court APPROVED but may not close the review "
+                                      f"in '{calib_category}': {gate_reason}. Escalating to Tier 2.")
+                                pending_pairs[TIER_COURT] = res_court["verdict"]
+                            else:
+                                print(f"✅ [COURT] Verdict rendered: {res_court['verdict']} (Confidence: {res_court['confidence']:.2f})")
+                                res_court_formatted = {
+                                    "status": res_court["verdict"],
+                                    "critique": f"[ADVERSARIAL COURT] Verdict: {res_court['verdict']}\n"
+                                                f"Critique: {res_court['critique']}",
+                                    "confidence": res_court["confidence"],
+                                    "appealable": True,
+                                    "calibration": {"category": calib_category, "reason": gate_reason},
+                                    "tier": "System 2a: Adversarial LLM Court"
+                                }
+                                log_swarm_event("DECISION", {
+                                    "tool": "supervisor_agent",
+                                    "confidence": res_court["confidence"],
+                                    "result": res_court["verdict"],
+                                    "logic": "System 2a: Adversarial LLM Court",
+                                    "output": res_court_formatted["critique"]
+                                })
+                                for p in pending: p.cancel()
+                                return res_court_formatted
                 except Exception as e:
                     print(f"⚠️ [COURT] Trial failed or timed out: {e}")
                     
             elif task == ensemble_task:
                 try:
                     res = task.result()
-                    if isinstance(res, dict):
-                        log_swarm_event("DECISION", {
-                            "tool": "supervisor_agent", 
-                            "confidence": res.get("confidence", 0.5), 
-                            "result": res.get("status", "UNKNOWN"), 
-                            "logic": "Tier 1: Local Ensemble",
-                            "output": res.get("critique", "No critique details provided.")
-                        })
-                        for p in pending: p.cancel()
-                        return res
-                    local_verdict = res # HUNG_JURY or None
+                    if isinstance(res, dict) and "_tier_error" not in res:
+                        allowed, gate_reason = _may_short_circuit(
+                            TIER_ENSEMBLE, calib_category, res.get("status", "")
+                        )
+                        if not allowed:
+                            print(f"🎓 [CALIBRATION] Ensemble APPROVED but may not close the review "
+                                  f"in '{calib_category}': {gate_reason}. Escalating to Tier 2.")
+                            pending_pairs[TIER_ENSEMBLE] = res.get("status")
+                            # Feed the escalation's consensus check, same as a hung jury would.
+                            local_verdict = res.get("status")
+                        else:
+                            res["appealable"] = True
+                            res["calibration"] = {"category": calib_category, "reason": gate_reason}
+                            log_swarm_event("DECISION", {
+                                "tool": "supervisor_agent",
+                                "confidence": res.get("confidence", 0.5),
+                                "result": res.get("status", "UNKNOWN"),
+                                "logic": "Tier 1: Local Ensemble",
+                                "output": res.get("critique", "No critique details provided.")
+                            })
+                            for p in pending: p.cancel()
+                            return res
+                    else:
+                        local_verdict = res # HUNG_JURY, None, or {_tier_error: ...}
                 except Exception as e:
                     print(f"⚠️ [ENSEMBLE] Audit failed or timed out: {e}")
  
@@ -641,6 +831,21 @@ async def _run_supervisor_audit_raw(user_proposal: str, code_snippet: str = "", 
     try:
         res = await asyncio.wait_for(_tier_2_cloud(user_proposal, code_snippet, memory_context, tech_key, local_verdict), timeout=45.0)
         if res:
+            # The escalation we just paid for is also the calibration evidence.
+            # Every cheap verdict that was blocked from short-circuiting now gets
+            # scored against the strong tier that replaced it.
+            for tier_name, cheap_verdict in pending_pairs.items():
+                if calibration.record_pair(
+                    tier=tier_name,
+                    category=calib_category,
+                    cheap_verdict=cheap_verdict,
+                    strong_verdict=res.get("status"),
+                    source="escalation",
+                ):
+                    agreed = str(res.get("status", "")).upper() == str(cheap_verdict).upper()
+                    print(f"📏 [CALIBRATION] {tier_name}/{calib_category}: strong tier "
+                          f"{'agreed' if agreed else 'DISAGREED'} "
+                          f"(cheap={cheap_verdict}, strong={res.get('status')})")
             log_swarm_event("DECISION", {
                 "tool": "supervisor_agent", 
                 "confidence": 0.9, 

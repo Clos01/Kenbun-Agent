@@ -244,6 +244,12 @@ class KenbunSettings(BaseSettings):
     # vulnerabilities; small primaries (1.5b-3b) reject safe code with invented
     # RCE claims. Falls back to PRIMARY_LLM_MODEL when unset.
     COURT_LLM_MODEL: Optional[str] = None
+    # Tier 2 "Supreme Evaluator" audit model. This is the strong rung of the
+    # oversight ladder — it must never be pinned behind the models it audits, or
+    # the supervisor/executor capability gap silently inverts. Was hardcoded to
+    # claude-3-5-sonnet-20241022 in supervisor_agent.py.
+    AUDIT_LLM_MODEL: str = "claude-sonnet-5"
+    AUDIT_LLM_URL: str = "https://api.anthropic.com/v1"
     OLLAMA_PORT: int = 11434
     FALLBACK_LLM_URL: Optional[str] = None
     OPENAI_RUNTIME: str = Field(default="auto")
@@ -389,6 +395,74 @@ class KenbunSettings(BaseSettings):
     BASE_TIMEOUT: int = 120              # Per-step timeout budget (seconds)
     GEMINI_STEP_TIMEOUT: int = 90        # Dedicated timeout for Gemini steps (seconds)
     SWARM_TIMEOUT_MULTIPLIER: float = 1.0
+
+    # --- SUPERVISOR (System 2) TIER BUDGETS ---
+    # These are the authoritative per-tier budgets that supervisor_agent enforces
+    # internally. They live here so the orchestrator's watchdog can be derived
+    # from them instead of guessing: the supervisor step used to inherit
+    # BASE_TIMEOUT (120s) while its own tiers were allowed to spend up to 405s,
+    # so `supervisor_review` was killed mid-deliberation on every pipeline that
+    # had the adversarial court enabled. A watchdog must never be tighter than
+    # the budget of the thing it is watching.
+    SUPERVISOR_COURT_TIMEOUT: int = 300     # Tier 1a: adversarial court (3 serialized LLM calls)
+    SUPERVISOR_ENSEMBLE_TIMEOUT: int = 60   # Tier 1: local ensemble (runs parallel to the court)
+    SUPERVISOR_CLOUD_TIMEOUT: int = 45      # Tier 2: cloud escalation
+    SUPERVISOR_FALLBACK_TIMEOUT: int = 60   # Tier 3: local senior fallback
+    SUPERVISOR_WATCHDOG_MARGIN: int = 15    # Headroom for tier hand-off overhead
+
+    # --- TIER CALIBRATION (weak-to-strong bootstrapping) ---
+    # A cheap rung may only auto-APPROVE in a category where it has been shown to
+    # agree with the rung above it. Until then its approvals escalate instead of
+    # short-circuiting. Rejections always short-circuit (fail-closed is free).
+    AUDIT_CALIBRATION_ENABLED: bool = True
+    # These two are tuned to bind together. The Wilson bound on a perfect record
+    # reaches 0.85 at ~25 samples, so a category graduates at exactly the minimum
+    # sample count if it never falsely approves — and a single unsafe approval in
+    # those 25 drops the bound to ~0.80 and keeps it locked. Raising MIN_SAMPLES
+    # without lowering MIN_AGREEMENT (or vice versa) makes one knob dead weight.
+    AUDIT_CALIBRATION_MIN_SAMPLES: int = 25    # Paired approvals before a category can be trusted
+    AUDIT_CALIBRATION_MIN_AGREEMENT: float = 0.85  # Wilson lower bound required on safe-approval rate
+    # Fraction of short-circuited cheap approvals that still run the strong tier in
+    # the background purely to collect paired observations. 0.0 disables live
+    # sampling (offline golden-set runs still populate the store).
+    AUDIT_CALIBRATION_SAMPLE_RATE: float = 0.15
+
+    # --- APPEALS (letting the student discount the supervisor) ---
+    # An executor whose code is rejected may contest once with evidence instead of
+    # blindly re-healing. The appeal is adjudicated by the court under a reversed
+    # burden of proof (the appellant must prove the critique wrong).
+    AUDIT_APPEALS_ENABLED: bool = True
+    AUDIT_APPEAL_MIN_CONFIDENCE: float = 0.75  # Judge confidence required to overturn
+
+    # --- GENERATIVE SUPERVISION ---
+    # Feed the court unrated repo context before it judges, so a weak judge can
+    # tell "this helper already validates the path" from "nothing validates it".
+    # Per-role budgets for the adversarial court. These were hardcoded at 90s /
+    # 240s. A thinking judge on an 8B local model routinely exceeds 240s, and the
+    # failure is silent: the aiohttp call raises, the code falls through to the
+    # OpenAI-compatible gateway, and the gateway quietly serves the verdict from
+    # a cloud model. The verdict still says "court_2a".
+    COURT_BRIEF_TIMEOUT: int = 90
+    COURT_JUDGE_TIMEOUT: int = 240
+    COURT_REPO_CONTEXT_ENABLED: bool = True
+    COURT_REPO_CONTEXT_CHUNKS: int = 4
+    COURT_REPO_CONTEXT_TIMEOUT: float = 8.0
+    COURT_REPO_CONTEXT_MAX_CHARS: int = 3000
+
+    @property
+    def SUPERVISOR_STEP_TIMEOUT(self) -> int:
+        """Worst-case wall time a full supervisor consultation can legitimately take.
+
+        Tier 1a (court) and Tier 1 (ensemble) race in parallel, so they cost
+        max(), not sum(). If neither returns a verdict the agent falls through
+        to Tier 2 and then Tier 3 sequentially.
+        """
+        return (
+            max(self.SUPERVISOR_COURT_TIMEOUT, self.SUPERVISOR_ENSEMBLE_TIMEOUT)
+            + self.SUPERVISOR_CLOUD_TIMEOUT
+            + self.SUPERVISOR_FALLBACK_TIMEOUT
+            + self.SUPERVISOR_WATCHDOG_MARGIN
+        )
     SWARM_CLOUD_FAILOVER: bool = True
     TELEMETRY_ENABLED: bool = True
     NOTIFICATIONS_ENABLED: bool = True

@@ -5,27 +5,7 @@
   "corrupted_runs": 0,
   "total_api_calls": 2,
   "tool_use": {
-    "patch": {
-      "count": 0,
-      "success": 0,
-      "failure": 0
-    },
-    "web_search": {
-      "count": 0,
-      "success": 0,
-      "failure": 0
-    },
-    "web_extract": {
-      "count": 0,
-      "success": 0,
-      "failure": 0
-    },
-    "read_file": {
-      "count": 0,
-      "success": 0,
-      "failure": 0
-    },
-    "terminal": {
+    "search_files": {
       "count": 0,
       "success": 0,
       "failure": 0
@@ -35,12 +15,32 @@
       "success": 0,
       "failure": 0
     },
+    "web_search": {
+      "count": 0,
+      "success": 0,
+      "failure": 0
+    },
     "write_file": {
       "count": 0,
       "success": 0,
       "failure": 0
     },
-    "search_files": {
+    "terminal": {
+      "count": 0,
+      "success": 0,
+      "failure": 0
+    },
+    "patch": {
+      "count": 0,
+      "success": 0,
+      "failure": 0
+    },
+    "read_file": {
+      "count": 0,
+      "success": 0,
+      "failure": 0
+    },
+    "web_extract": {
       "count": 0,
       "success": 0,
       "failure": 0

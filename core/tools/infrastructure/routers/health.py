@@ -8,12 +8,12 @@ infrastructure layers.
 import os
 
 import requests
-from fastapi import APIRouter
+from fastapi import APIRouter, status
 
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get("/health", status_code=status.HTTP_200_OK)
 async def health_check():
     return {"status": "healthy"}
 

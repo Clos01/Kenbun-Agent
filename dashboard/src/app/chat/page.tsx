@@ -146,19 +146,21 @@ export default function KenbunChat() {
     sessionIds: string[];
     isExpanded?: boolean;
   }
-  const [folders, setFolders] = useState<Folder[]>(() => {
+  const [folders, setFolders] = useState<Folder[]>([]);
+
+  // Restore folders from localStorage on client mount (prevents SSR hydration mismatch)
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("kenbun_chat_folders");
       if (saved) {
         try {
-          return JSON.parse(saved);
+          setFolders(JSON.parse(saved));
         } catch (err) {
-          console.error(err);
+          console.error("Failed to parse saved chat folders:", err);
         }
       }
     }
-    return [];
-  });
+  }, []);
 
   // Text Preview Sanitization Helper
   const cleanPreview = (text: string) => {

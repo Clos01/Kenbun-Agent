@@ -455,7 +455,7 @@ export default function SOWGenerator({ projectId, boardId, boardName, projectNam
 
       <div className="flex-1 overflow-y-auto print:overflow-visible print:w-full print:bg-white bg-transparent py-8 pb-48 print:py-0 relative z-10">
         <div ref={contentRef} className="max-w-[816px] mx-auto bg-card artisan-shadow border border-border rounded-sm print:shadow-none print:border-none min-h-[1056px] print:min-h-0 print:w-full relative docs-editor mb-16 sm:mb-24 adhd-mode">
-           <div className="p-10 sm:p-16 print:p-0 react-quill-wrapper">
+           <div className="p-4 sm:p-16 print:p-0 react-quill-wrapper">
             <ReactQuill
               theme="snow"
               value={content}

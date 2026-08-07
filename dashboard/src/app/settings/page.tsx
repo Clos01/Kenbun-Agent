@@ -166,7 +166,7 @@ export default function Settings() {
   }
 
   const sections = [
-    { id: "cloud", title: "Cloud Intelligence", icon: Key, description: "Manage LLM router keys and secure credentials.", chapter: 1 },
+    { id: "cloud", title: "Cloud Intelligence", icon: Key, description: "Manage LLM keys, n8n Cloud webhooks, ElevenLabs, & Project Eko-Veritas credentials.", chapter: 1 },
     { id: "infrastructure", title: "Core Infrastructure", icon: Server, description: "Calibrate Ollama endpoint and local persistence paths.", chapter: 2 },
     { id: "network", title: "Network & Ports", icon: Network, description: "Configure internal API gateway bindings.", chapter: 3 },
     { id: "economics", title: "Swarm Economics", icon: DollarSign, description: "Set daily budget telemetry and token limiters.", chapter: 4 },
@@ -280,7 +280,11 @@ export default function Settings() {
                         {[
                           { key: "GEMINI_API_KEY", label: "Google Gemini API Key", placeholder: "AIzaSy..." },
                           { key: "OPENAI_API_KEY", label: "OpenAI API Key", placeholder: "sk-proj-..." },
-                          { key: "ANTHROPIC_API_KEY", label: "Anthropic API Key", placeholder: "sk-ant-..." }
+                          { key: "ANTHROPIC_API_KEY", label: "Anthropic API Key", placeholder: "sk-ant-..." },
+                          { key: "N8N_HOST", label: "n8n Cloud Host (NeverMiss.ai)", placeholder: "https://nevermiss-ai.app.n8n.cloud" },
+                          { key: "N8N_API_KEY", label: "n8n Cloud API Key", placeholder: "n8n_api_key_..." },
+                          { key: "ELEVENLABS_API_KEY", label: "ElevenLabs API Key", placeholder: "sk_..." },
+                          { key: "ELEVENLABS_ACCELERA_AGENT_ID", label: "Accelera Agent ID (Project Eko-Veritas)", placeholder: "agent_3501k2qznbczet090fr74veg2pew" }
                         ].map((field) => (
                           <div key={field.key} className="space-y-2">
                             <label className="text-[10px] font-bold text-[var(--foreground)] uppercase tracking-wider">{field.label}</label>

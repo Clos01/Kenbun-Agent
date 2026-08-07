@@ -128,12 +128,15 @@ CREATE POLICY rubric_tenant_policy ON eval_rubrics USING (tenant_id = current_se
 -- 11. Eval Criteria
 CREATE TABLE eval_criteria (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     rubric_id UUID NOT NULL REFERENCES eval_rubrics(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     prompt_instruction TEXT NOT NULL, -- e.g. "Did the agent collect the user's email?"
     weight_percentage INTEGER DEFAULT 100,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE eval_criteria ENABLE ROW LEVEL SECURITY;
+CREATE POLICY eval_criteria_tenant_policy ON eval_criteria USING (tenant_id = current_setting('app.current_tenant_id')::UUID);
 
 -- 12. Eval Results (Post-call AI evaluation output)
 CREATE TABLE eval_results (

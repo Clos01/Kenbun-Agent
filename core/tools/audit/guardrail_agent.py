@@ -13,8 +13,12 @@ from pathlib import Path
 from typing import Tuple, Union
 from tools.utils.telemetry import log_tool_performance
 from tools.infrastructure.topology_manager import log_swarm_event
+from tools.audit.calibration import calibration, categorize
 
 from tools.infrastructure.config import settings
+
+# Identifier for this rung in the calibration store.
+TIER_NAME = "guardrail_2c"
 
 _SECURE_ROOT = Path(settings.PROJECT_ROOT).resolve().absolute()
 
@@ -97,29 +101,51 @@ class GuardrailAgent:
 
 
     def run_audit(self, code_snippet: str, task_context: str = ""):
-        """Performs a fast System 2c audit (Heuristics + local LLM)."""
+        """Performs a fast System 2c audit (Heuristics + local LLM).
+
+        Verdict semantics:
+          - "rejected": authoritative. Deterministic pattern hits and local-model
+            rejections both fail closed, and neither needs calibration to be
+            trusted — a wrong rejection costs an escalation, not a breach.
+          - "approved": only returned when this rung has been *shown* to agree
+            with the tier above it in this category (see tools/audit/calibration).
+          - "escalate": the rung has an opinion but has not earned the right to
+            end the review here. The caller must run a stronger audit.
+        """
         start_time = time.time()
-        
+        category = categorize(task_context, code_snippet)
+
         # --- 1. DETERMINISTIC SAFETY LAYER ---
         network_patterns = ["http", "requests.", "urllib", "aiohttp", "socket"]
         obfuscation_patterns = ["base64.b64decode", "binascii.unhexlify", "eval(", "exec("]
-        breach_patterns = [".env", "os.system(", "subprocess.", "shutil.", "open('/etc/", "rm -rf"]
+        # Substring matching, EXCEPT for dotfile references. Plain `".env" in code`
+        # also fires on `os.environ` — so reading a secret from the environment,
+        # which is the correct thing to do, was a critical deterministic rejection.
+        # It also meant the 'secrets' category could never calibrate: every correct
+        # example was rejected. Require a non-word, non-dot character before `.env`.
+        breach_patterns = ["os.system(", "subprocess.", "shutil.", "open('/etc/", "rm -rf"]
+        breach_regexes = [r"(?<![\w.])\.env\b"]
 
         has_network = any(p in code_snippet for p in network_patterns)
         has_obfuscation = any(p in code_snippet for p in obfuscation_patterns)
-        has_breach = any(p in code_snippet for p in breach_patterns)
+        matched_breaches = [p for p in breach_patterns if p in code_snippet]
+        matched_breaches += [r for r in breach_regexes if re.search(r, code_snippet)]
+        has_breach = bool(matched_breaches)
 
         if (has_network and has_obfuscation) or has_breach:
             found_crit = []
             if has_network and has_obfuscation:
                 found_crit.extend([p for p in network_patterns if p in code_snippet])
                 found_crit.extend([p for p in obfuscation_patterns if p in code_snippet])
-            if has_breach:
-                found_crit.extend([p for p in breach_patterns if p in code_snippet])
-                
+            found_crit.extend(matched_breaches)
+
             result = {
                 "status": "rejected",
                 "risk_level": "critical",
+                "category": category,
+                # Deterministic hits are not appealable: there is no argument to
+                # weigh, only a pattern that is present or absent.
+                "appealable": False,
                 "critique": f"DETERMINISTIC REJECTION: Forbidden patterns detected ({', '.join(found_crit)}).",
                 "improvement_instruction": "Remove unauthorized system/file access."
             }
@@ -150,6 +176,26 @@ class GuardrailAgent:
                 json_match = re.search(r"\{.*\}", raw_result, re.DOTALL)
                 if json_match:
                     audit_result = json.loads(json_match.group(0))
+                    audit_result["category"] = category
+                    audit_result["appealable"] = True
+
+                    # --- CALIBRATION GATE ---
+                    # A 3B model approving code written by a frontier model is only
+                    # meaningful where it has demonstrably agreed with the tier
+                    # above. Elsewhere its approval becomes an escalation.
+                    if str(audit_result.get("status", "")).strip().lower() in ("approved", "approve", "safe"):
+                        gate = calibration.may_autoapprove(TIER_NAME, category)
+                        audit_result["calibration"] = gate.as_dict()
+                        if not gate.trusted:
+                            audit_result["status"] = "escalate"
+                            audit_result["local_opinion"] = "approved"
+                            audit_result["critique"] = (
+                                f"[UNCALIBRATED] System 2c leans APPROVED but may not close the "
+                                f"review in category '{category}': {gate.reason}. "
+                                f"Escalate to System 2 (court / cloud audit). "
+                                f"Local reasoning: {audit_result.get('critique', 'n/a')}"
+                            )
+
                     log_tool_performance("guardrail_audit", True, time.time() - start_time)
                     log_swarm_event("DECISION", {
                         "tool": "guardrail_agent",
@@ -161,14 +207,28 @@ class GuardrailAgent:
                     return audit_result
         except Exception:
             log_tool_performance("guardrail_audit", False, time.time() - start_time)
-            
-        fallback_result = {"status": "approved", "risk_level": "unknown", "critique": "Audit fallback to safe status."}
+
+        # A dead audit is not a passing audit. This used to return "approved",
+        # which meant a 404 against Ollama silently rubber-stamped every snippet
+        # that reached it. "escalate" costs an extra tier; auto-approve costs a
+        # breach.
+        fallback_result = {
+            "status": "escalate",
+            "risk_level": "unknown",
+            "category": category,
+            "appealable": False,
+            "critique": (
+                "System 2c could not complete the audit (local model unreachable or "
+                "unparseable response). No verdict was formed — escalate to System 2. "
+                "This is NOT an approval."
+            ),
+        }
         log_swarm_event("DECISION", {
             "tool": "guardrail_agent",
-            "confidence": 0.1,
-            "result": "APPROVED",
-            "logic": "Fallback",
-            "output": "Audit fallback to safe status."
+            "confidence": 0.0,
+            "result": "ESCALATE",
+            "logic": "Audit unavailable — fail-open removed",
+            "output": fallback_result["critique"]
         })
         return fallback_result
 

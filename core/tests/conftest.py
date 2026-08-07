@@ -20,6 +20,27 @@ def mock_security_settings_for_testing():
 
 
 @pytest.fixture(autouse=True)
+def isolate_calibration_store(tmp_path_factory):
+    """Keep test runs out of the real audit-calibration store.
+
+    Any test that exercises the supervisor end-to-end reaches record_pair(), and
+    without this the run writes fabricated verdict pairs into the production
+    table — which then gates (or ungates) real auto-approvals. A calibration
+    store contaminated by mocked verdicts is worse than an empty one: it looks
+    like evidence.
+    """
+    import sqlite3
+    from tools.audit.calibration import calibration
+
+    db = tmp_path_factory.mktemp("calibration") / "test_intelligence.db"
+    calibration._initialized = False
+    with patch.object(calibration, "_connect",
+                      lambda: sqlite3.connect(db, timeout=5.0)):
+        yield
+    calibration._initialized = False
+
+
+@pytest.fixture(autouse=True)
 def mock_databases_for_testing():
     """Globally mock remote database reachability to prevent socket timeouts and connection hangs."""
     import psycopg

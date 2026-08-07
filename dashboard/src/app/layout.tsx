@@ -41,9 +41,9 @@ export default function RootLayout({
       className={`${plusJakarta.variable} ${cormorant.variable} ${spaceMono.variable} h-full antialiased`}
     >
       <head>
-        <script
+        <Script
           id="theme-script"
-          suppressHydrationWarning
+          strategy="beforeInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               (function() {

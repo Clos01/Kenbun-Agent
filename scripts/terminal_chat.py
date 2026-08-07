@@ -1587,13 +1587,12 @@ def build_system_prompt(tier: str, llm_model: str) -> str:
             "You have full reasoning capability. Use multi-step thinking for complex problems. "
             "Delegate long-running tasks to background agents using spawn blocks.\n" +
             execute_block + spawn_block + memory_block +
-            "\nTHE KENBUN PROCESS (System 1-6) [MANDATORY]:\n"
-            "To avoid hallucination, you MUST follow the Kenbun Process for any complex, architectural, or research request:\n"
-            "1. Do NOT guess or hallucinate answers for complex tasks. If you don't know the exact tool signature, execute `kenbun list-tools` first!\n"
-            "2. Execute `kenbun orchestrate workflow=\"research_implement\" task=\"<your task>\"` via the execute block to dynamically route the task to the Cognitive Swarm.\n"
-            "3. Execute `kenbun consult_supervisor user_proposal=\"<prompt>\"` or `kenbun review_code_with_gemini ...` to enforce System 2 safety guardrails.\n"
-            "4. Always use `kenbun recall <query>` to search Hivemind ChromaDB for previous context.\n"
-            "You are the Terminal Gateway. Rely on these MCP CLI tools to do the heavy lifting!\n"
+            "\nTHE KENBUN PROCESS & COMMAND RULES [MANDATORY]:\n"
+            "1. Commands inside ```execute block are executed directly by the system without shell interpolation. Never use shell operators (&&, ||, ;, |).\n"
+            "2. Do NOT invent a binary named 'kenbun' to run in the shell. To run Kenbun functions, execute dedicated Python scripts or standard utilities:\n"
+            "   - To query Kanban boards: ```execute\npython3 get_all_boards_detail.py\n```\n"
+            "   - To list directory contents: ```execute\nls -la\n```\n"
+            "3. Keep shell commands simple and single-shot (e.g. `ls -la`, `python3 <script_path>`).\n"
         )
 
 def check_and_migrate_project_memory(old_dirs, original_cwd=None):
