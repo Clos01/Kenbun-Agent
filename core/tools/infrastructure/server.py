@@ -3,7 +3,6 @@ sys.stderr.write("DEBUG: server.py IS BEING LOADED\n")
 import re
 import json
 import sys
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
@@ -77,7 +76,6 @@ def restore_print():
 # Hierarchical imports moved inside tool functions to prevent startup timeouts
 # Global Strategy Instances
 
-import tools.infrastructure.planka
 
 mcp = FastMCP("Kenbun Tools")
 
@@ -221,7 +219,6 @@ def consult_supervisor(user_proposal: str, code_snippet: str = "", iterative_mod
     debug_log(f"🧠 SYSTEM 2 ACTIVATED (Iterative: {iterative_mode})")
     
     from tools.audit.supervisor_agent import run_supervisor_audit
-    import asyncio
 
     coro = run_supervisor_audit(user_proposal, code_snippet, memory_context, iterative_mode=iterative_mode)
     result = _run_async_safely(coro)
@@ -331,7 +328,7 @@ def _gather_infrastructure_context(query: str) -> str:
                     else:
                         safe_lines.append(line)
                 context_parts.append(
-                    f"### .env (Infrastructure Keys)\n```\n"
+                    "### .env (Infrastructure Keys)\n```\n"
                     + "\n".join(safe_lines)
                     + "\n```"
                 )
@@ -655,7 +652,6 @@ def list_checkpoints(file_path: str = "") -> str:
 # In-process async job store (lives for the MCP server's lifetime).
 import threading as _threading
 from collections import OrderedDict as _OrderedDict
-import uuid as _uuid
 
 _ORCHESTRATE_JOBS = _OrderedDict()
 _ORCHESTRATE_JOBS_LOCK = _threading.Lock()
@@ -683,6 +679,10 @@ def _build_orchestrate_registry() -> dict:
     from tools.memory.hardware_bridge import hardware_bridge
     from services.self_improvement_daemon import run_self_improvement_cycle
     from tools.infrastructure.git_watcher_tools import fetch_git_pushes, analyze_push_changes, apply_git_patch
+    from tools.strategy.kanban_tools import (
+        kanban_create, kanban_show, kanban_list, kanban_complete,
+        kanban_block, kanban_unblock, kanban_heartbeat, kanban_comment, kanban_link
+    )
 
     def _local_view_file(AbsolutePath: str) -> str:
         # Path Traversal Guardrail (Security Hardening)
@@ -737,6 +737,19 @@ def _build_orchestrate_registry() -> dict:
         "fetch_git_pushes": fetch_git_pushes,
         "analyze_push_changes": analyze_push_changes,
         "apply_git_patch": apply_git_patch,
+        # Kanban tools were absent here while present in build_pipeline_tools, so
+        # a workflow that files or updates a card did so normally but silently
+        # skipped it whenever HTTP dispatch failed and the pipeline ran inline —
+        # the one situation where you are least likely to be watching.
+        "kanban_create": kanban_create,
+        "kanban_show": kanban_show,
+        "kanban_list": kanban_list,
+        "kanban_complete": kanban_complete,
+        "kanban_block": kanban_block,
+        "kanban_unblock": kanban_unblock,
+        "kanban_heartbeat": kanban_heartbeat,
+        "kanban_comment": kanban_comment,
+        "kanban_link": kanban_link,
     }
 
 
@@ -751,7 +764,6 @@ def _execute_orchestration(
 ) -> str:
     """Run a pipeline to completion synchronously and return the report string."""
     from tools.infrastructure.orchestrator import run_pipeline
-    import asyncio
 
     coro = run_pipeline(
         workflow=workflow,
@@ -1884,7 +1896,6 @@ def create_bitbucket_pr(repo_slug: str, source_branch: str, target_branch: str =
     """
     import os
     import urllib.request
-    import base64
     
     workspace = os.environ.get("BITBUCKET_WORKSPACE", "mock-workspace")
     token = os.environ.get("BITBUCKET_API_TOKEN")
@@ -1896,7 +1907,7 @@ def create_bitbucket_pr(repo_slug: str, source_branch: str, target_branch: str =
         # Mock mode
         mock_pr_url = f"https://bitbucket.org/{workspace}/{repo_slug}/pull-requests/42"
         report = [
-            f"# 🚀 Bitbucket Pull Request (SIMULATED)",
+            "# 🚀 Bitbucket Pull Request (SIMULATED)",
             f"**Repository:** {repo_slug}",
             f"**Source Branch:** {source_branch}",
             f"**Target Branch:** {target_branch}",
@@ -1929,7 +1940,7 @@ def create_bitbucket_pr(repo_slug: str, source_branch: str, target_branch: str =
             pr_id = res_data.get("id", "Unknown")
             
         report = [
-            f"# 🚀 Bitbucket Pull Request Created",
+            "# 🚀 Bitbucket Pull Request Created",
             f"**PR ID:** #{pr_id}",
             f"**Repository:** {workspace}/{repo_slug}",
             f"**Source:** {source_branch} ➔ **Target:** {target_branch}",

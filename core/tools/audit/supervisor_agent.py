@@ -66,6 +66,56 @@ def _may_short_circuit(tier: str, category: str, verdict: str) -> tuple:
         )
     return True, gate.reason
 
+# Below this a snippet cannot be meaningful source at all — it is a fragment, a
+# filename, or whitespace. Kept deliberately low: `def hello(): print('world')`
+# is 27 characters and is perfectly valid code to audit. The gate's job is to
+# catch *absence* of evidence, not to judge whether there is enough of it.
+_MIN_REVIEWABLE_CHARS = 12
+
+# Error strings that used to be returned (rather than raised) by loaders, and so
+# arrived here looking like content. Kept as a backstop: repo_mapper now raises,
+# but any other caller that still hands us a rendered failure must not have it
+# audited as if it were code.
+_FAILURE_MARKERS = (
+    "❌", "path not found", "not a directory", "no such file",
+    "traceback (most recent call last)",
+)
+
+
+def _is_reviewable(code_snippet: str) -> bool:
+    """True when `code_snippet` is plausibly real source rather than nothing.
+
+    Guards the evidence gate in run_supervisor_audit. Deliberately conservative:
+    the cost of a false negative is one extra INCONCLUSIVE, while a false
+    positive is an approval nobody earned.
+    """
+    if not code_snippet:
+        return False
+    text = code_snippet.strip()
+    if len(text) < _MIN_REVIEWABLE_CHARS:
+        return False
+    low = text.lower()
+    # A short body that is mostly a failure message is evidence of absence.
+    if len(text) < 400 and any(m in low for m in _FAILURE_MARKERS):
+        return False
+    return True
+
+
+def _proposal_expects_code(user_proposal: str) -> bool:
+    """True when the proposal is asking for a judgement about code.
+
+    Non-code proposals (architecture questions, plans, prose) are legitimately
+    audited without a snippet, so the gate must not fire on them.
+    """
+    if not user_proposal:
+        return False
+    low = user_proposal.lower()
+    return any(k in low for k in (
+        "code", "review", "patch", "diff", "refactor", "implement", "function",
+        "class ", "module", "bug", "fix", "commit", "file", "snippet",
+    ))
+
+
 def _call_local_senior(system_prompt: str, user_message: str, max_tokens: int = 3000):
     """Call the hardware-agnostic LLM gateway.
 
@@ -478,9 +528,33 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
     """
     import sys
     from tools.infrastructure.config import settings
-    
+
+    # 0. EVIDENCE GATE — never approve what was never inspected.
+    #
+    # An audit asked to review code, but handed nothing, used to run anyway. The
+    # adversarial court would report "the prosecution identified no concrete
+    # flaws" — true, because there was no code — and that renders as APPROVED.
+    # An unearned approval is worse than a crash: it is indistinguishable from a
+    # real verdict, and it is what let a patch for a non-existent file through.
+    #
+    # A verdict requires evidence. With none, the only honest answer is that the
+    # question could not be decided.
+    if _proposal_expects_code(user_proposal) and not _is_reviewable(code_snippet):
+        return {
+            "status": "INCONCLUSIVE",
+            "critique": (
+                "[EVIDENCE GATE] No reviewable source was supplied, so no verdict "
+                "was reached. This is not an approval. The proposal refers to code, "
+                "but code_snippet was empty or too short to audit. Supply the actual "
+                "source (or a diff); if the source was meant to be loaded from a "
+                "repository, that load failed upstream and should be fixed first."
+            ),
+            "confidence": 0.0,
+            "tier": "System 2: Evidence Gate (pre-audit)",
+        }
+
     sec_cfg = settings.security
-    
+
     # 1. Check Cron / Unattended Mode
     is_unattended = not sys.stdout.isatty() or os.getenv("CRON") == "1" or os.getenv("UNATTENDED") == "1"
     if is_unattended and sec_cfg.cron_mode == "deny":
@@ -683,6 +757,8 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
 
         return res
     except Exception as audit_fatal_err:
+        import traceback
+        traceback.print_exc()
         print(f"🚨 [SUPERVISOR FATAL] Unhandled exception in run_supervisor_audit: {audit_fatal_err}")
         return {
             "status": "ERROR",

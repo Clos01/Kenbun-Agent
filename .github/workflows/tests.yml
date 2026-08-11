@@ -33,6 +33,24 @@ jobs:
         pip install -e .[ml,test]
         if [ -f core/requirements.txt ]; then pip install -r core/requirements.txt; fi
 
+    # Correctness rules only (the F family: undefined names, unused imports,
+    # redefinitions). Deliberately not the full default ruleset — a gate that
+    # fails on style is a gate people learn to ignore.
+    - name: Lint (correctness rules)
+      run: |
+        cd core
+        pip install ruff
+        ruff check --select F --output-format=concise tools/
+
+    # These assert structural invariants that broke in production without
+    # anything noticing: shadowed definitions, tool registries drifting apart,
+    # loaders returning error strings, and audits approving with no evidence.
+    # They are import-only — no network, no LLM — so they belong on every push.
+    - name: Pipeline contract tests
+      run: |
+        cd core
+        PYTHONPATH=. pytest tests/test_pipeline_contracts.py tests/test_orchestration_invariants.py -q
+
     - name: Run PyTest Smoke Suite
       run: |
         cd core

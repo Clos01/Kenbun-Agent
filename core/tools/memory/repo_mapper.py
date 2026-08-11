@@ -155,10 +155,22 @@ def scan_repo(
         A formatted skeleton map of the project structure.
     """
     root = Path(project_path).expanduser().resolve()
+    # Raise rather than return an error string.
+    #
+    # These used to return "❌ Path not found: ..." as a normal return value.
+    # Callers store a step's return value in pipeline state and feed it to an LLM
+    # as the repo map — and a model cannot tell an error message from content.
+    # An audit then "reviewed" the sentence describing the failure, found nothing
+    # objectionable in it, and returned APPROVED. Raising means the pipeline marks
+    # the step failed, never populates `repo_map`, and every downstream step
+    # guarded by `skip_if: not s.get("repo_map")` correctly declines to run.
     if not root.exists():
-        return f"❌ Path not found: {project_path}"
+        raise FileNotFoundError(
+            f"Cannot map '{project_path}': it does not exist from this process. "
+            f"If this is a host path and Kenbun is containerised, it is not visible here."
+        )
     if not root.is_dir():
-        return f"❌ Not a directory: {project_path}"
+        raise NotADirectoryError(f"Cannot map '{project_path}': not a directory.")
 
     ext_set = {e.strip() if e.strip().startswith(".") else f".{e.strip()}"
                for e in extensions.split(",")}

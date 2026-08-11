@@ -70,8 +70,8 @@ The system is segmented into two primary domains to ensure infinite scalability 
 *   **`tools/utils/notifications.py`**: Native macOS notification bridge and audio feedback (say).
 
 ### 🔌 Infrastructure Layer (`tools/infrastructure/`)
-*   **`tools/infrastructure/orchestrator.py`**: The main state-machine engine. Features non-blocking connectivity heartbeats, circuit breakers, and automatic local-PC failover.
-*   **`tools/infrastructure/server.py`**: The MCP server that exposes these tools to your IDE.
+*   **`tools/infrastructure/orchestrator.py`**: The main state-machine engine. Features non-blocking connectivity heartbeats, circuit breakers, and automatic local-PC failover. **`build_pipeline_tools()` here is the single source of truth for the pipeline toolset** — `orchestrate()` and `swarm()` must call it rather than building their own dict. See [Orchestration Invariants](../docs/ORCHESTRATION_INVARIANTS.md).
+*   **`tools/infrastructure/server.py`**: The MCP server that exposes these tools to your IDE. Its inline-fallback registry (`_build_orchestrate_registry`) may *wrap* tools but must expose the same tool **names** as `build_pipeline_tools()`, or workflows behave differently when HTTP dispatch fails. Enforced by `tests/test_pipeline_contracts.py`.
 *   **`tools/infrastructure/agents.py`**: Definitions for Agent Personas (Architect, Security, Swarm).
 *   **`tools/infrastructure/tech_registry.py`**: Central registry of allowed technologies and documentation URIs.
 *   **`tools/infrastructure/api_server.py`**: FastAPI wrapper with real-time SSE topology streaming (`/api/v1/topology/stream`).
