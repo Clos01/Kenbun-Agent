@@ -16,7 +16,6 @@ import time
 from collections import OrderedDict
 import threading
 import uuid
-from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -152,25 +151,54 @@ async def run_orchestrate(payload: dict):
         while len(_HTTP_ORCHESTRATE_JOBS) > _MAX_HTTP_ORCHESTRATE_JOBS:
             _HTTP_ORCHESTRATE_JOBS.popitem(last=False)
 
-    # Host→container path translation: if the caller passed an absolute path
-    # that doesn't exist inside this process (e.g. a Mac path like
-    # `/Users/.../Kenbun` POSTed to a Dockerised server), drop it so the
-    # orchestrator falls back to its own PROJECT_ROOT (`/app` inside Docker).
+    # An unreachable project_path is a hard error, never a substitution.
+    #
+    # This used to silently rewrite an absolute host path that doesn't exist in
+    # the container (e.g. a Mac path like `/Users/.../eko-veritas-prod`) to ".",
+    # which resolves to `/app` — Kenbun's OWN repo. The caller asked to review
+    # project A and got a confident review of project B, with no error and only
+    # an info-level log. Observed twice on 2026-08-11: a code_review that
+    # scanned /app and a research_implement that emitted a patch for
+    # `webhook/handler.py`, a Flask file that exists in neither project. The
+    # guardrail and the adversarial court both APPROVED that patch, because
+    # there was no real code in front of them to find fault with.
+    #
+    # Reviewing the wrong codebase is strictly worse than reviewing none: the
+    # output is indistinguishable from a real result. Fail loudly instead.
     incoming_project_path = payload.get("project_path", ".") or "."
-    try:
+    if incoming_project_path not in (".", ""):
         from pathlib import Path as _Path
-        if (
-            incoming_project_path not in (".", "")
-            and _Path(incoming_project_path).is_absolute()
-            and not _Path(incoming_project_path).exists()
-        ):
-            logging.info(
-                f"🔁 /orchestrate: stripping unreachable host path "
-                f"'{incoming_project_path}' → '.' (using container PROJECT_ROOT)"
+        try:
+            unreachable = (
+                _Path(incoming_project_path).is_absolute()
+                and not _Path(incoming_project_path).exists()
             )
-            incoming_project_path = "."
-    except Exception as _path_err:  # noqa: BLE001 — defensive, never block dispatch
-        logging.debug(f"project_path translation skipped: {_path_err}")
+        except OSError as _path_err:
+            unreachable = True
+            logging.warning(f"project_path check failed for "
+                            f"'{incoming_project_path}': {_path_err}")
+        if unreachable:
+            logging.error(
+                f"❌ /orchestrate: refusing job — project_path "
+                f"'{incoming_project_path}' is not reachable from this container"
+            )
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "rejected",
+                    "error": "project_path_unreachable",
+                    "project_path": incoming_project_path,
+                    "detail": (
+                        f"'{incoming_project_path}' does not exist inside the "
+                        f"Kenbun container, so the requested code cannot be read. "
+                        f"The job was NOT run: scanning a different repository "
+                        f"would produce confident output about the wrong code. "
+                        f"Pass a container-visible path, send the source via "
+                        f"code_snippet, or omit project_path to target the "
+                        f"container's own PROJECT_ROOT deliberately."
+                    ),
+                },
+            )
 
     loop = asyncio.get_event_loop()
     loop.run_in_executor(
