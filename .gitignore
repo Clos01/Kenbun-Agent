@@ -121,3 +121,10 @@ core/external/
 .env
 *.log
 dashboard/.pnpm-store/
+
+# Runtime artifacts and model weights — 25G combined, must never enter git history.
+# The deploy copy accumulated these as untracked files; a stray `git add -A` there
+# would have committed them permanently.
+core/training_data/
+kenbun_training/
+tailscale-state/
