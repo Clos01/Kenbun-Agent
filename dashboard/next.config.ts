@@ -64,6 +64,35 @@ const nextConfig: NextConfig = {
           { key: "Content-Security-Policy", value: csp },
         ],
       },
+      {
+        // Make the document revalidate instead of letting the browser guess.
+        //
+        // Next gives a statically prerendered page `s-maxage=31536000` — a year,
+        // addressed to a SHARED cache, on the assumption a CDN sits in front and
+        // gets purged on deploy. This dashboard is served straight off the
+        // container over Tailscale: there is no CDN, so the browser is the only
+        // cache, and browsers ignore `s-maxage`. With no `max-age`, no `Expires`
+        // and no `no-cache`, the document falls into HEURISTIC freshness, where
+        // the browser invents a lifetime from Last-Modified.
+        //
+        // That is what made frontend changes look like they had not deployed. The
+        // stale document still references the previous build's asset names, and
+        // those names are content-hashed and served `immutable`, so the browser
+        // reuses the old JS quite correctly — the wrong thing is the document
+        // telling it to. A normal reload showed the old build; only a
+        // cache-bypassing hard reload showed the new one.
+        //
+        // `no-cache` means "store it, but revalidate before use" — not "do not
+        // store". Unchanged documents come back as a 304, so this costs one
+        // conditional request per navigation and makes a redeploy visible on the
+        // next load.
+        //
+        // /_next/static is excluded: those filenames contain a content hash, so
+        // caching them for a year is correct, and Next does not permit
+        // overriding their header anyway.
+        source: "/:path((?!_next/static|_next/image).*)",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
     ];
   },
 };
