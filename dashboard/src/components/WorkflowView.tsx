@@ -2290,7 +2290,7 @@ export default function WorkflowView({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md min-w-[320px] bg-card border border-border p-6 rounded-2xl shadow-2xl flex flex-col relative z-[10000]"
+              className="w-full max-w-lg min-w-[320px] bg-card border border-border p-6 rounded-2xl shadow-2xl flex flex-col relative z-[10000]"
             >
               <div className="flex justify-between items-center pb-4 border-b border-border mb-4">
                 <h3 className="font-mono text-xs uppercase tracking-widest text-primary font-bold">

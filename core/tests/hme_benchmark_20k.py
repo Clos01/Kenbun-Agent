@@ -42,7 +42,7 @@ def generate_20k_dataset():
 
 def run_20k_benchmark():
     data = generate_20k_dataset()
-    print(f"📊 Starting 20,000 Case 'Deep Pressure' Stress Test...")
+    print("📊 Starting 20,000 Case 'Deep Pressure' Stress Test...")
     print("-" * 60)
     
     correct = 0
@@ -72,7 +72,7 @@ def run_20k_benchmark():
     accuracy = (correct / len(data)) * 100
     
     print("-" * 60)
-    print(f"📈 20K BENCHMARK COMPLETE (SOVEREIGN SCALE)")
+    print("📈 20K BENCHMARK COMPLETE (SOVEREIGN SCALE)")
     print(f"   Accuracy:    {accuracy:.2f}%")
     print(f"   Total Time:  {duration*1000:.2f}ms")
     print(f"   Avg Latency: {duration*1000/len(data):.4f}ms")

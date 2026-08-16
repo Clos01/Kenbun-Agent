@@ -1,9 +1,8 @@
 import re
 import os
-import json
 import logging
 import asyncio
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import requests
 from tools.infrastructure.config import settings
 

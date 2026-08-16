@@ -261,7 +261,7 @@ class AdversarialCourt:
         # Check cache before doing expensive LLM queries (off the event loop)
         cached = await asyncio.to_thread(self._check_cache, proposal, code_snippet, repo_context)
         if cached:
-            print(f"\n\033[38;5;46m[COURT] Cache hit found for proposal. Returning cached verdict.\033[0m")
+            print("\n\033[38;5;46m[COURT] Cache hit found for proposal. Returning cached verdict.\033[0m")
             log_swarm_event("DECISION", {
                 "tool": "adversarial_court",
                 "confidence": cached["confidence"],

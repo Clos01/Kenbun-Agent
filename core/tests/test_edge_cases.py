@@ -1,11 +1,6 @@
 import os
-import json
-import sqlite3
 import pytest
-import shutil
-from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 # Ensure core is in path
@@ -15,7 +10,7 @@ if core_dir not in sys.path:
     sys.path.insert(0, core_dir)
 
 from tools.infrastructure.config import settings
-from tools.strategy.strategy_manager import BayesianGovernor, TelemetryPulse, PulseStatus
+from tools.strategy.strategy_manager import BayesianGovernor, PulseStatus
 from tools.sensory.imessage_tools import list_imessage_chats, get_imessage_history, send_imessage
 from tools.infrastructure.routers.skills import parse_yaml_frontmatter, validate_skill_metadata
 from tools.infrastructure.api_server import app as api_app
@@ -461,7 +456,7 @@ class TestEdgeCases:
         """Test API server verify_authorization enforces token requirements."""
         from fastapi.testclient import TestClient
         from tools.infrastructure.api_server import app as auth_app
-        from tools.infrastructure.server_deps import verify_authorization, get_or_create_config_token
+        from tools.infrastructure.server_deps import get_or_create_config_token
         
         # Temporarily clear overrides to test actual authorization logic
         original_overrides = dict(auth_app.dependency_overrides)

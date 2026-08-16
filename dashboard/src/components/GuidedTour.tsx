@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useLayoutEffect } from "react";
+import React, { useState, useEffect, useCallback, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ArrowLeft, ArrowRight, Sparkles } from "lucide-react";
@@ -23,6 +23,10 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [mounted, setMounted] = useState(false);
+  // Measured height of the callout. Placement needs it before it can decide
+  // which gap the callout fits in; the seed is only used for the first frame.
+  const calloutRef = useRef<HTMLDivElement | null>(null);
+  const [calloutH, setCalloutH] = useState(280);
 
   useEffect(() => setMounted(true), []);
 
@@ -58,7 +62,18 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
     if (!active) return;
     const step = steps[i];
     const el = step && (document.querySelector(step.selector) as HTMLElement | null);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (el) {
+      // Top-align under the sticky subsystem bar rather than centring.
+      // Centring splits the leftover space above and below the target, so a
+      // mid-height panel ends up with two gaps that are each too small for the
+      // callout; top-aligning pools it all below.
+      // Instant, not smooth: this page re-renders on a 5s poll and smooth
+      // scrolling is silently cancelled here (measured — scrollY never moved),
+      // which left every step measuring a target still far below the fold.
+      const STICKY_HEADER = 96;
+      const top = window.scrollY + el.getBoundingClientRect().top - STICKY_HEADER;
+      window.scrollTo({ top: Math.max(0, top) });
+    }
     measure();
   }, [active, i, steps, measure]);
 
@@ -75,6 +90,14 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
       clearInterval(t);
     };
   }, [active, measure]);
+
+  // Measure the rendered callout so placement uses its real height. Runs after
+  // every render (the ring re-measures on a 300ms tick, so this settles with
+  // it); guarded on a changed value to avoid a render loop.
+  useLayoutEffect(() => {
+    const h = calloutRef.current?.offsetHeight;
+    if (h && Math.abs(h - calloutH) > 1) setCalloutH(h);
+  });
 
   const close = useCallback(() => setActive(false), []);
   const next = useCallback(() => setI((p) => (p < steps.length - 1 ? p + 1 : (setActive(false), p))), [steps.length]);
@@ -101,14 +124,63 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   const calloutW = 340;
+
+  // Place the callout in a gap beside the spotlight rather than on top of it.
+  // The previous logic only ever tried below-then-above against a hardcoded
+  // 200px height guess, so a target taller than roughly half the viewport —
+  // which most cards on this page are — landed the callout squarely over the
+  // component it was describing.
+  const M = 16;   // keep clear of the viewport edge
+  const GAP = 14; // breathing room between spotlight and callout
   let calloutTop: number, calloutLeft: number, placeBelow = true;
   if (spot) {
-    placeBelow = spot.top + spot.height + 200 < vh;
-    calloutTop = placeBelow ? spot.top + spot.height + 14 : Math.max(16, spot.top - 200);
-    calloutLeft = Math.min(Math.max(16, spot.left), vw - calloutW - 16);
+    const clampH = (x: number) => Math.min(Math.max(M, x), Math.max(M, vw - calloutW - M));
+    const clampV = (y: number) => Math.min(Math.max(M, y), Math.max(M, vh - calloutH - M));
+
+    // Calculate intersection area between a candidate position and the spotlight
+    const getOverlapArea = (l: number, t: number) => {
+      const xOverlap = Math.max(0, Math.min(l + calloutW, spot.left + spot.width) - Math.max(l, spot.left));
+      const yOverlap = Math.max(0, Math.min(t + calloutH, spot.top + spot.height) - Math.max(t, spot.top));
+      return xOverlap * yOverlap;
+    };
+
+    // Generate candidate positions, all clamped to stay fully on screen
+    const candidates = [
+      // 1. Right of spotlight
+      { pos: [clampH(spot.left + spot.width + GAP), clampV(spot.top)], weight: 0.0 },
+      // 2. Left of spotlight
+      { pos: [clampH(spot.left - GAP - calloutW), clampV(spot.top)], weight: 0.1 },
+      // 3. Below spotlight
+      { pos: [clampH(spot.left), clampV(spot.top + spot.height + GAP)], weight: 0.2 },
+      // 4. Above spotlight
+      { pos: [clampH(spot.left), clampV(spot.top - GAP - calloutH)], weight: 0.3 },
+    ].map((c) => {
+      const [l, t] = c.pos;
+      const overlap = getOverlapArea(l, t);
+      // Score prioritizes zero/minimal overlap, with slight weights to break ties
+      const score = overlap + c.weight;
+      return { pos: c.pos, score };
+    });
+
+    // Find the candidate that minimizes the overlap area
+    candidates.sort((a, b) => a.score - b.score);
+    const best = candidates[0];
+
+    // Minimum *area* is the wrong objective once nothing fits cleanly: on a
+    // narrow viewport the smallest-area option is usually "above", which covers
+    // the panel's heading and headline figure — the parts the step is naming.
+    // When no candidate is clean, pin to the bottom edge instead: same callout,
+    // but it covers the panel's tail rather than its title.
+    const chosen =
+      best.score < 1
+        ? best.pos
+        : [clampH(spot.left), Math.max(M, vh - calloutH - M)];
+
+    [calloutLeft, calloutTop] = chosen;
+    placeBelow = calloutTop > spot.top;
   } else {
-    calloutTop = vh / 2 - 100;
-    calloutLeft = vw / 2 - calloutW / 2;
+    calloutTop = Math.max(M, vh / 2 - calloutH / 2);
+    calloutLeft = Math.max(M, vw / 2 - calloutW / 2);
   }
 
   const step = steps[i];
@@ -165,6 +237,7 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
           {/* Tethered callout */}
           <motion.div
             key={i}
+            ref={calloutRef}
             initial={{ opacity: 0, y: placeBelow ? -8 : 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             className="absolute rounded-2xl border border-black/10 shadow-2xl p-5 space-y-3"

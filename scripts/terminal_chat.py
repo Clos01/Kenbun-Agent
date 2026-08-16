@@ -2450,7 +2450,7 @@ def main():
                             history = SessionTrackingList([{"role": "system", "content": system_prompt}], session_id=new_session_id)
                             add_message(new_session_id, "system", system_prompt)
                             
-                            notice = f"🗜️ Context compressed. Continuing conversation in new lineage session."
+                            notice = "🗜️ Context compressed. Continuing conversation in new lineage session."
                             history.append({"role": "system", "content": notice})
                             
                             current_session_id = new_session_id

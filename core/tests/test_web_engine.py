@@ -1,6 +1,4 @@
 import os
-import json
-import asyncio
 from unittest.mock import patch, MagicMock
 import pytest
 from tools.utils.web_engine import WebSearchEngine, WebExtractEngine, ContentCompressor, ddgs_search, raw_extract

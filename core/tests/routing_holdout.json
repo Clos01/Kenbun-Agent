@@ -1,0 +1,10 @@
+[
+  {
+    "task": "fix the bug in login.py",
+    "expected": "SECURITY_GUARD"
+  },
+  {
+    "task": "Analyze the tools and logic required to implement the neutral stone aesthetic UI, with thin elegant typography, and create a roadmap or logic structure for this UI.",
+    "expected": "PRO_AUDITOR"
+  }
+]

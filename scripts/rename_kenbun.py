@@ -1,5 +1,4 @@
 import os
-import re
 
 ROOT_DIR = "/Users/carlosrivas/Dev/Kenbun"
 

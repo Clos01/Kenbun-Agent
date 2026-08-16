@@ -1,8 +1,6 @@
 import os
-import asyncio
 import logging
 import chromadb
-from pathlib import Path
 from honcho import Honcho
 from core.tools.infrastructure.config import settings
 
@@ -71,7 +69,7 @@ def migrate_data():
         metadatas = data.get('metadatas') or []
         
         if not documents:
-            logger.info(f"  └─ Empty collection, skipping.")
+            logger.info("  └─ Empty collection, skipping.")
             continue
             
         logger.info(f"  └─ Found {len(documents)} documents to migrate.")
@@ -93,7 +91,7 @@ def migrate_data():
         # Add any remaining messages
         if messages_to_add:
             session.add_messages(messages_to_add)
-            logger.info(f"  └─ Migrated final batch")
+            logger.info("  └─ Migrated final batch")
             
     logger.info("🎉 Migration to Honcho complete!")
     logger.info("The Honcho deriver worker will now automatically process these messages in the background.")

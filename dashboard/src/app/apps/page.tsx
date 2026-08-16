@@ -345,7 +345,7 @@ export default function AppsPortal() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral text-primary flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden relative font-sans">
+    <div className="h-screen overflow-hidden bg-neutral text-primary flex selection:bg-tertiary selection:text-white max-w-[100vw] relative font-sans">
       <div className="grain-overlay opacity-20" />
       
       {/* Background Ambience */}
@@ -357,9 +357,9 @@ export default function AppsPortal() {
 
       <Sidebar />
 
-      <main className="flex-1 p-6 lg:p-10 relative flex flex-col z-10 pb-24 lg:pb-10 min-w-0">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0">
         {/* HEADER */}
-        <header className="h-20 flex items-center justify-between border-b border-primary/5 mb-8 shrink-0 bg-transparent">
+        <header className="h-20 flex items-center justify-between border-b border-primary/5 px-6 lg:px-10 shrink-0 bg-transparent">
           <div className="flex items-center gap-4">
             <div className="w-8 h-8 border border-tertiary flex items-center justify-center bg-tertiary/10 rounded-sm">
               <Layers className="w-4 h-4 text-tertiary" />
@@ -390,8 +390,10 @@ export default function AppsPortal() {
           </div>
         </header>
 
-        {/* APPS BENTO GRID */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 flex-1 items-start">
+        {/* SCROLLABLE CONTENT */}
+        <div className="flex-1 overflow-y-auto p-6 lg:p-10 custom-scrollbar pb-16 z-10">
+          {/* APPS BENTO GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-start">
           {apps.map((app) => {
             const appUrl = getAppUrl(app);
             const cleanUrl = appUrl.split("?")[0];
@@ -562,7 +564,7 @@ export default function AppsPortal() {
             </motion.div>
           )}
         </div>
-
+      </div>
       </main>
 
       {/* EMBEDDED IFRAME SHELL DRAWER - Rendered via Portal to escape all stacking contexts */}

@@ -1,6 +1,5 @@
 import json
-from unittest.mock import patch, MagicMock
-import pytest
+from unittest.mock import patch
 
 from tools.strategy.codex_runtime_tool import codex_runtime, check_codex_installed
 

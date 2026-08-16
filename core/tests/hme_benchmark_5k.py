@@ -42,7 +42,7 @@ def generate_5k_dataset():
 
 def run_5k_benchmark():
     data = generate_5k_dataset()
-    print(f"📊 Starting 5,000 Case 'Deep Void' Stress Test (Boosting Layer Active)...")
+    print("📊 Starting 5,000 Case 'Deep Void' Stress Test (Boosting Layer Active)...")
     print("-" * 60)
     
     correct = 0
@@ -72,7 +72,7 @@ def run_5k_benchmark():
     accuracy = (correct / len(data)) * 100
     
     print("-" * 60)
-    print(f"📈 5K BENCHMARK COMPLETE (BOOSTING ENABLED)")
+    print("📈 5K BENCHMARK COMPLETE (BOOSTING ENABLED)")
     print(f"   Accuracy:    {accuracy:.2f}%")
     print(f"   Total Time:  {duration*1000:.2f}ms")
     print(f"   Avg Latency: {duration*1000/len(data):.4f}ms")

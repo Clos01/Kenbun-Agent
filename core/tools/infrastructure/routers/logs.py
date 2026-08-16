@@ -5,7 +5,6 @@ Provides Server-Sent Events (SSE) endpoints for real-time tailing and streaming
 of Kenbun logs (stdout, core_api, dashboard, etc.).
 """
 
-import os
 import asyncio
 import logging
 from pathlib import Path

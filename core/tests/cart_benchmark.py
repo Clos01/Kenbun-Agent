@@ -85,7 +85,7 @@ def run_benchmark():
     accuracy = (correct / len(BENCHMARK_DATA)) * 100
     
     print("-" * 60)
-    print(f"📈 BENCHMARK COMPLETE")
+    print("📈 BENCHMARK COMPLETE")
     print(f"   Accuracy: {accuracy:.2f}% ({correct}/{len(BENCHMARK_DATA)})")
     print(f"   Latency:  {duration*1000:.2f}ms (Total) | {duration*1000/len(BENCHMARK_DATA):.2f}ms (Avg)")
     print("-" * 60)

@@ -1,6 +1,5 @@
 import pytest
 import uuid
-import hashlib
 from services.self_improvement_daemon import (
     optimize_agent_prompt,
     run_self_improvement_cycle,

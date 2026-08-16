@@ -43,7 +43,7 @@ def generate_1k_dataset():
 
 def run_1k_benchmark():
     data = generate_1k_dataset()
-    print(f"📊 Starting 1,000 Case 'Deep Stress' Benchmark...")
+    print("📊 Starting 1,000 Case 'Deep Stress' Benchmark...")
     print("-" * 60)
     
     correct = 0
@@ -84,7 +84,7 @@ def run_1k_benchmark():
     accuracy = (correct / len(data)) * 100
     
     print("-" * 60)
-    print(f"📈 1K BENCHMARK COMPLETE")
+    print("📈 1K BENCHMARK COMPLETE")
     print(f"   Total Tasks: {len(data)}")
     print(f"   Accuracy:    {accuracy:.2f}%")
     print(f"   Bayesian Pivots: {pivots}")

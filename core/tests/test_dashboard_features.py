@@ -1,10 +1,8 @@
 import os
 import json
 import pytest
-import asyncio
-from pathlib import Path
 from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 # Ensure core is in path
@@ -14,7 +12,6 @@ if core_dir not in sys.path:
     sys.path.insert(0, core_dir)
 
 from tools.infrastructure.api_server import app
-from tools.infrastructure.config import settings
 from tools.infrastructure.routers.logs import log_generator
 
 client = TestClient(app)
@@ -152,7 +149,7 @@ class TestDashboardFeatures:
                 assert servers[0]["env"]["API_KEY"] == "********"
                 
                 # 3. Toggle Enabled
-                res = client.put(f"/api/v1/mcp/servers/weather-cli/enabled", json={"enabled": False})
+                res = client.put("/api/v1/mcp/servers/weather-cli/enabled", json={"enabled": False})
                 assert res.status_code == 200
                 res = client.get("/api/v1/mcp/servers")
                 assert res.json()[0]["enabled"] is False

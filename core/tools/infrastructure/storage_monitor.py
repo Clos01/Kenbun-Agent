@@ -5,7 +5,6 @@ Provides disk usage stats for p330 and Legion nodes,
 and performs automated cleanup of temporary logs and old n8n execution files.
 """
 
-import os
 import shutil
 import subprocess
 from typing import Dict, Any

@@ -42,7 +42,7 @@ def generate_100k_dataset():
 
 def run_100k_benchmark():
     data = generate_100k_dataset()
-    print(f"📊 Starting 100,000 Case 'Deep Pressure' Stress Test...")
+    print("📊 Starting 100,000 Case 'Deep Pressure' Stress Test...")
     print("-" * 60)
     
     correct = 0
@@ -72,7 +72,7 @@ def run_100k_benchmark():
     accuracy = (correct / len(data)) * 100
     
     print("-" * 60)
-    print(f"📈 100K BENCHMARK COMPLETE (SOVEREIGN SCALE)")
+    print("📈 100K BENCHMARK COMPLETE (SOVEREIGN SCALE)")
     print(f"   Accuracy:    {accuracy:.2f}%")
     print(f"   Total Time:  {duration*1000:.2f}ms")
     print(f"   Avg Latency: {duration*1000/len(data):.4f}ms")

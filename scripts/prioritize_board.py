@@ -7,7 +7,6 @@ import ssl
 import urllib.request
 import urllib.error
 from datetime import datetime
-from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 
 try:
@@ -73,13 +72,13 @@ def _get_planka_client() -> Tuple[str, str]:
             _cached_token = token
             _cached_base_url = base_url_clean
             return base_url_clean, token
-    except urllib.error.URLError as url_err:
+    except urllib.error.URLError:
         raise ConnectionError("Network issue during Planka authentication.") from None
-    except ValueError as val_err:
+    except ValueError:
         raise ValueError("Failed to parse authentication response securely.") from None
-    except TypeError as type_err:
+    except TypeError:
         raise TypeError("Unexpected type layout in authentication response.") from None
-    except json.JSONDecodeError as decode_err:
+    except json.JSONDecodeError:
         raise ValueError("Invalid JSON in authentication response.") from None
     finally:
         # Prevent references from remaining in local scope frame
@@ -115,15 +114,15 @@ def _planka_request(path: str) -> Dict[str, Any]:
                 raise TypeError("Planka API response is not a valid JSON dictionary.")
                 
             return res_data
-    except urllib.error.HTTPError as http_err:
+    except urllib.error.HTTPError:
         raise ConnectionError("HTTP connection error accessing Planka server.") from None
-    except urllib.error.URLError as url_err:
+    except urllib.error.URLError:
         raise ConnectionError("Network connection error accessing Planka server.") from None
-    except ValueError as val_err:
+    except ValueError:
         raise ValueError("Failed to parse Planka API response payload securely.") from None
-    except TypeError as type_err:
+    except TypeError:
         raise TypeError("Unexpected type layout in Planka API response.") from None
-    except json.JSONDecodeError as decode_err:
+    except json.JSONDecodeError:
         raise ValueError("Invalid JSON in Planka API response.") from None
 
 def calculate_card_score(card: Dict[str, Any], list_name: str) -> float:

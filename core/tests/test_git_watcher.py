@@ -1,11 +1,7 @@
 import pytest
 import json
-import os
-from unittest.mock import patch, MagicMock
-from tools.infrastructure.config import settings
-from tools.infrastructure.git_watcher_tools import _parse_github_repo, fetch_git_pushes, apply_git_patch
+from tools.infrastructure.git_watcher_tools import _parse_github_repo, apply_git_patch
 from tools.registry import registry
-import tools.infrastructure.orchestrator  # Trigger pipeline registrations
 
 def test_parse_github_repo():
     assert _parse_github_repo("https://github.com/Clos01/Kenbun-Agent") == ("Clos01", "Kenbun-Agent")

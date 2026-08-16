@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tools.utils.ide_context import (
     get_caller_ide,
-    get_caller_ide_label,
     is_antigravity_ide,
     is_claude_ide,
     uses_external_review,

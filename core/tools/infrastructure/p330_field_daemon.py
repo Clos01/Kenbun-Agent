@@ -12,15 +12,13 @@ Capabilities:
    - "Reject" -> Cancels outreach.
 """
 
-import os
-import re
 import sys
 import time
 import logging
 import json
 import urllib.request
 import urllib.parse
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 logging.basicConfig(
     level=logging.INFO,

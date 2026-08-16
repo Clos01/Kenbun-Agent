@@ -1,6 +1,5 @@
 import os
 import base64
-from typing import Optional
 from tools.registry import sovereign_tool
 from tools.infrastructure.config import settings
 from tools.utils.vision_helper import is_vision_capable_model, describe_image_with_aux

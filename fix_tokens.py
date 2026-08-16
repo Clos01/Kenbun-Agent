@@ -1,4 +1,6 @@
-import json, fcntl, os
+import json
+import fcntl
+import os
 
 path = "/app/brain_health/usage_stats.json"
 

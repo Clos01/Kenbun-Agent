@@ -7,10 +7,8 @@ Exposes endpoints to list, install, and uninstall skills.
 import re
 import shutil
 from pathlib import Path
-from typing import Dict, Any, List
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse
 
 from tools.infrastructure.config import settings
 

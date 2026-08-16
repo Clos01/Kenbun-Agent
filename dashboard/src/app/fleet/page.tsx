@@ -342,10 +342,10 @@ export default function FleetCommand() {
   console.log("[browser] DEBUG_FLEET: tools length =", tools.length, "error =", error, "budget =", !!budget);
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex selection:bg-[var(--gold)] selection:text-white max-w-[100vw] overflow-x-hidden">
+    <div className="h-screen overflow-hidden bg-[var(--background)] flex selection:bg-[var(--gold)] selection:text-white max-w-[100vw]">
       <Sidebar />
       
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0">
         <div className="noise" />
         
         {/* HEADER */}
@@ -376,7 +376,7 @@ export default function FleetCommand() {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.6 }}
-          className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 2xl:p-16 space-y-12 lg:space-y-16 relative z-10 custom-scrollbar pb-32"
+          className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 2xl:p-16 space-y-12 lg:space-y-16 relative z-10 custom-scrollbar pb-16"
         >
           {error && (
             <div className="p-6 border border-red-500 bg-red-500/5 flex items-center gap-6">
@@ -587,7 +587,7 @@ export default function FleetCommand() {
                 <p className="font-serif italic text-lg text-[var(--foreground)]/70">
                   No tool telemetry recorded yet
                 </p>
-                <p className="text-xs font-mono opacity-40 max-w-md mx-auto leading-relaxed">
+                <p className="text-xs font-mono opacity-40 max-w-lg mx-auto leading-relaxed">
                   The intelligence store returned no rows. Weights appear here once tools
                   have actually run — nothing is estimated or filled in on their behalf.
                 </p>

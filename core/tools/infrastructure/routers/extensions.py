@@ -5,16 +5,15 @@ Handles loading, normalisation, and switching of dashboard themes,
 and discovery and static asset serving for UI plugins.
 """
 
-import os
 import yaml
 import json
 import logging
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import FileResponse
 
 from tools.infrastructure.config import settings
 from tools.infrastructure.server_deps import verify_authorization

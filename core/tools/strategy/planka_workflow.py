@@ -1,5 +1,4 @@
 import os
-import json
 import logging
 from typing import Optional, Dict, Any, List, Tuple
 from tools.infrastructure.planka import _planka_request

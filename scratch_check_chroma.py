@@ -1,4 +1,3 @@
-import asyncio
 from core.tools.memory.honcho_connect import get_project_collection
 
 collection = get_project_collection("code")

@@ -44,7 +44,7 @@ def detect_sovereign_tools_in_file(file_path: Path) -> bool:
         visitor.visit(tree)
         return visitor.has_sovereign_tool
     except Exception as e:
-        logger.debug(f"AST parse skipped for {file_path}: {e}")
+        logger.warning(f"⚠️ Harvester: AST parse failed for {file_path}: {e}", exc_info=True)
         return False
 
 def harvest_and_register_tools(tools_dir: Optional[Path] = None) -> List[str]:
@@ -71,20 +71,31 @@ def harvest_and_register_tools(tools_dir: Optional[Path] = None) -> List[str]:
                 # Compute relative module name
                 relative_parts = list(path.relative_to(tools_dir).parts)
                 relative_parts[-1] = path.stem # strip .py suffix
+                
+                # Sanitize: ensure all module path segments are valid Python identifiers
+                if not all(part.isidentifier() for part in relative_parts):
+                    logger.warning(
+                        f"⚠️ Harvester: Skipped importing {path} because path segments are not valid Python identifiers."
+                    )
+                    continue
+
                 mod_name = "tools." + ".".join(relative_parts)
                 
                 # Import module dynamically to trigger decoration & registration
                 importlib.import_module(mod_name)
                 imported_modules.append(mod_name)
                 logger.info(f"✅ Harvester: Dynamically registered tools from module: {mod_name}")
-            except BaseException as e:
-                # BaseException, not Exception: a module that calls sys.exit() at
-                # import time raises SystemExit, which is NOT an Exception and
-                # would otherwise propagate out of the sweep and kill the host
-                # process. native_ears.py does exactly that when the native macOS
-                # Speech libs are absent; it has no @sovereign_tool so it is not
-                # swept today, but the harvester must not be one refactor away
-                # from taking down the MCP server on startup.
+            except KeyboardInterrupt:
+                # Propagate KeyboardInterrupt so process termination signals work naturally
+                raise
+            except SystemExit as e:
+                # Capture SystemExit (sys.exit calls inside module initializations)
+                # without aborting the harvester sweep entirely
+                logger.error(
+                    f"❌ Harvester: Module called sys.exit() during import of {path}: {e}"
+                )
+            except Exception as e:
+                # Capture standard import exceptions
                 logger.error(
                     f"❌ Harvester: Failed to dynamically import {path}: "
                     f"{type(e).__name__}: {e}"

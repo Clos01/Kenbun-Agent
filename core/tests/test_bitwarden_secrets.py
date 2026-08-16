@@ -1,9 +1,7 @@
 import os
 import sys
-import unittest
 from unittest.mock import patch, MagicMock
 import tempfile
-import yaml
 import pytest
 
 from tools.utils.secrets_bitwarden import (

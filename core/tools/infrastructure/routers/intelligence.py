@@ -615,7 +615,7 @@ async def api_semantic_search(req: SemanticSearchRequest):
                     "name": name_str,
                     "file": file_path,
                     "type": type_str,
-                    "description": f"Similarity match in AST code embeddings (ChromaDB).",
+                    "description": "Similarity match in AST code embeddings (ChromaDB).",
                     "code_snippet": doc,
                     "vectors": meta.get("vectors", 1536),
                     "lastUpdated": "Indexed",

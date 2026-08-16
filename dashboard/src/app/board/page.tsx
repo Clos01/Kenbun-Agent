@@ -340,12 +340,13 @@ export default function BoardPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Active view tab: kanban | calendar | messaging | workflow
+  // Active view tab: kanban | calendar | messaging | workflow | wireframe | docs
   const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs">(() => {
     if (typeof window !== "undefined") {
       const savedTab = localStorage.getItem("board_active_tab");
-      if (savedTab === "kanban" || savedTab === "calendar" || savedTab === "messaging" || savedTab === "workflow" || savedTab === "wireframe") {
-        return savedTab;
+      const validTabs = ["kanban", "calendar", "messaging", "workflow", "wireframe", "docs"];
+      if (savedTab && validTabs.includes(savedTab)) {
+        return savedTab as any;
       }
     }
     return "kanban";
@@ -2433,7 +2434,7 @@ export default function BoardPage() {
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              className="w-full max-w-md min-w-[320px] sm:min-w-[400px] bg-card/95 backdrop-blur-xl border border-primary/10 rounded-xl p-6 shadow-2xl text-left relative overflow-hidden z-10"
+              className="w-full max-w-lg min-w-[320px] sm:min-w-[400px] bg-card/95 backdrop-blur-xl border border-primary/10 rounded-xl p-6 shadow-2xl text-left relative overflow-hidden z-10"
             >
               {/* Top Accent Line */}
               <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-tertiary to-transparent" />

@@ -103,7 +103,7 @@ def _ensure_table(cur) -> None:
 
 
 @router.get("/list", dependencies=[Depends(verify_authorization)])
-async def list_docs(project_id: str = "", category: str = ""):
+async def list_docs(project_id: str = "", category: str = "") -> dict[str, Any]:
     """Metadata index for a project — deliberately omits `body` so the sidebar
     does not pull every document's full text on every render."""
     try:
@@ -135,7 +135,7 @@ async def list_docs(project_id: str = "", category: str = ""):
 
 
 @router.get("/search", dependencies=[Depends(verify_authorization)])
-async def search_docs(q: str, project_id: str = "", limit: int = 20):
+async def search_docs(q: str, project_id: str = "", limit: int = 20) -> dict[str, Any]:
     """Full-text search with a highlighted snippet per hit."""
     if not q.strip():
         return {"results": [], "query": q}
@@ -169,7 +169,7 @@ async def search_docs(q: str, project_id: str = "", limit: int = 20):
 
 
 @router.get("/export", dependencies=[Depends(verify_authorization)])
-async def export_docs(project_id: str):
+async def export_docs(project_id: str) -> dict[str, Any]:
     """Every doc for a project as markdown files, ready to be written into a
     repo's docs/ directory. This is the handover path: a client developer gets
     the repo, not access to Kenbun, so documentation has to be able to leave."""
@@ -215,14 +215,14 @@ async def export_docs(project_id: str):
 
 
 @router.get("/revisions", dependencies=[Depends(verify_authorization)])
-async def doc_revisions(project_id: str, slug: str, limit: int = 25):
+async def doc_revisions(project_id: str, slug: str, limit: int = 25) -> dict[str, Any]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 _ensure_table(cur)
                 cur.execute(
                     """
-                    SELECT r.id, r.title, r.author, r.created_at, length(r.body) AS size
+                    SELECT r.id, r.title, r.body, r.author, r.created_at, length(r.body) AS size
                       FROM doc_revisions r
                       JOIN docs d ON d.id = r.doc_id
                      WHERE d.project_id = %s AND d.slug = %s
@@ -240,7 +240,7 @@ async def doc_revisions(project_id: str, slug: str, limit: int = 25):
 
 @router.post("", dependencies=[Depends(verify_authorization)])
 @router.post("/", dependencies=[Depends(verify_authorization)])
-async def upsert_doc(payload: DocUpsert):
+async def upsert_doc(payload: DocUpsert) -> dict[str, Any]:
     """Create or update a doc. The previous version is snapshotted into
     doc_revisions first, and only when the content actually changed — otherwise
     an idle save would manufacture noise history."""
@@ -292,7 +292,7 @@ async def upsert_doc(payload: DocUpsert):
 
 
 @router.delete("/{slug}", dependencies=[Depends(verify_authorization)])
-async def delete_doc(slug: str, project_id: str):
+async def delete_doc(slug: str, project_id: str) -> dict[str, Any]:
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -316,7 +316,7 @@ async def delete_doc(slug: str, project_id: str):
 # Declared last: /{slug} is a catch-all and would otherwise shadow the literal
 # routes above it.
 @router.get("/{slug}", dependencies=[Depends(verify_authorization)])
-async def get_doc(slug: str, project_id: str):
+async def get_doc(slug: str, project_id: str) -> dict[str, Any]:
     if not project_id:
         raise HTTPException(status_code=400, detail="project_id is required")
     try:

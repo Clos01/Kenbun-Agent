@@ -5,7 +5,6 @@ Kenbun Skills Manager CLI
 Manages active and optional skills within the Kenbun ecosystem.
 """
 
-import os
 import sys
 import shutil
 import re
@@ -17,7 +16,6 @@ root_dir = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(root_dir))
 sys.path.insert(0, str(root_dir / "core"))
 
-from tools.infrastructure.config import settings
 
 ACTIVE_SKILLS_DIR = root_dir / "core" / "tools" / "skills"
 OPTIONAL_SKILLS_DIR = root_dir / "optional_skills"

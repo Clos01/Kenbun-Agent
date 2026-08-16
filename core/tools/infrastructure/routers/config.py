@@ -26,7 +26,6 @@ from pydantic import BaseModel, Field
 from tools.infrastructure.config import settings
 from tools.infrastructure.server_deps import (
     verify_authorization,
-    get_or_create_config_token,
     _encrypt_setting,
     project_root,
 )

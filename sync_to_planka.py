@@ -17,8 +17,7 @@ if env_path.exists():
 
 sys.path.insert(0, str(Path("core").resolve()))
 
-from tools.strategy.planka_workflow import sync_pipeline_start, sync_pipeline_step
-from tools.infrastructure.planka import planka_get_board
+from tools.strategy.planka_workflow import sync_pipeline_start
 
 # Steps for E2E Testing
 e2e_steps = [

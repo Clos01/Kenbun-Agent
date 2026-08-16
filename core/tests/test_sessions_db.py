@@ -5,7 +5,6 @@ import pytest
 from unittest.mock import patch
 
 from tools.utils.sessions_db import (
-    get_db_path,
     init_db,
     create_session,
     add_message,

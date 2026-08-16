@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import time
 import logging
@@ -8,7 +7,7 @@ import requests
 import ipaddress
 import atexit
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Optional
 from urllib.parse import urlparse
 from tools.infrastructure.config import settings
 from tools.utils.secret_manager import decrypt_value

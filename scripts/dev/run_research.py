@@ -1,7 +1,6 @@
 import subprocess
 import json
 import os
-import sys
 
 env = os.environ.copy()
 env["PYTHONPATH"] = "/Users/carlosrivas/Dev/Kenbun/core:/Users/carlosrivas/Dev/Kenbun/core/tools:/Users/carlosrivas/Dev/Kenbun"

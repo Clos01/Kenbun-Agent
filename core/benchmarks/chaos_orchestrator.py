@@ -111,7 +111,7 @@ async def run_chaos_test():
     if selections["recall_fix"] > selections["chaos_generator"]:
         print(f"  ✅ SUCCESS: System correctly favored high-confidence 'recall_fix' ({selections['recall_fix']}%) over failing 'chaos_generator'.")
     else:
-        print(f"  ❌ FAILURE: System selected failing tool more often than reliable tool.")
+        print("  ❌ FAILURE: System selected failing tool more often than reliable tool.")
 
     print("\n" + "="*60)
     print("🏁 CHAOS TEST COMPLETE")

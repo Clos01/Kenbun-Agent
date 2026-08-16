@@ -17,8 +17,9 @@ export function parseInlineMarkdown(text: string): React.ReactNode[] {
 export function formatMarkdown(rawText: string): React.ReactNode {
   if (!rawText) return "";
 
-  // Decode HTML entities that the backend might have pre-encoded
+  // Decode HTML entities and normalize escaped newlines
   const text = rawText
+    .replace(/\\n/g, "\n")
     .replace(/&#039;/g, "'")
     .replace(/&#39;/g, "'")
     .replace(/&quot;/g, '"')

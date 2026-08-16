@@ -10,11 +10,10 @@ import json
 import time
 import asyncio
 import logging
-from pathlib import Path
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, Request, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from tools.infrastructure.config import settings
 from tools.infrastructure.server_deps import verify_authorization

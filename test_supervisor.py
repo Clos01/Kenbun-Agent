@@ -1,7 +1,5 @@
 import sys
 import asyncio
-from pathlib import Path
-import os
 
 # Ensure we can import from core
 sys.path.insert(0, '/Users/carlosrivas/Dev/Kenbun/core')
@@ -18,7 +16,7 @@ async def main():
             tech_key=""
         )
         print("Result:", res)
-    except Exception as e:
+    except Exception:
         import traceback
         traceback.print_exc()
 

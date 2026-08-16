@@ -3,7 +3,6 @@ import pytest
 import urllib.request
 from tools.strategy.planka_workflow import (
     is_planka_sync_enabled,
-    get_planka_board_and_lists,
     sync_pipeline_start,
     sync_pipeline_step,
     sync_pipeline_end

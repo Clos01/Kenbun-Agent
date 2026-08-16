@@ -166,10 +166,10 @@ export default function HivemindMemory() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-neutral flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
+    <div className="h-screen overflow-hidden bg-neutral flex selection:bg-tertiary selection:text-white max-w-[100vw] font-sans">
       <Sidebar />
 
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0">
         <div className="grain-overlay opacity-20" />
 
         {/* Header */}
@@ -196,7 +196,7 @@ export default function HivemindMemory() {
         </header>
 
         {/* Scroll Content */}
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-12 relative z-10 custom-scrollbar pb-32">
+        <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-12 relative z-10 custom-scrollbar pb-16">
           
           {/* Quick Metrics Grid */}
           <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

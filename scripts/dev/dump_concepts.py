@@ -1,5 +1,4 @@
 import chromadb
-import json
 
 client = chromadb.PersistentClient(path="/Users/carlosrivas/Dev/Kenbun/brain_health/chromadb_local")
 col_qjl = client.get_collection("kenbun-agent.concepts_qjl")

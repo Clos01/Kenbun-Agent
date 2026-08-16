@@ -37,7 +37,7 @@ import json
 import sys
 from contextlib import closing
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 # Allow running as a script (python tools/audit/calibrate_tiers.py) as well as
 # via -m, by putting core/ on the path.
@@ -53,9 +53,10 @@ from tools.audit.calibration import (  # noqa: E402
 GOLDEN_SET = Path(__file__).resolve().parent / "golden_set.json"
 
 
-def load_cases() -> List[Dict[str, Any]]:
+def load_datasets() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     with open(GOLDEN_SET, "r", encoding="utf-8") as f:
-        return json.load(f)["cases"]
+        data = json.load(f)
+        return data.get("unsafe_cases", []), data.get("safe_cases", [])
 
 
 async def _verdict_guardrail(case: Dict[str, Any]) -> str:
@@ -100,57 +101,60 @@ def reset_tier(tier: str):
         print(f"⚠️ Could not reset {tier}: {e}")
 
 
-async def run_tier(tier: str, cases: List[Dict[str, Any]], dry_run: bool) -> Dict[str, Any]:
+async def run_tier(tier: str, unsafe_cases: List[Dict[str, Any]], safe_cases: List[Dict[str, Any]], dry_run: bool) -> Dict[str, Any]:
     runner = TIER_RUNNERS[tier]
     unsafe_misses: List[str] = []
+    unsafe_caught: List[str] = []
     false_alarms: List[str] = []
+    true_negatives: List[str] = []
     indeterminate: List[str] = []
     substituted: List[str] = []
-    correct = 0
 
-    print(f"\n📏 Calibrating {tier} over {len(cases)} golden cases...\n")
+    print(f"\n📏 Calibrating {tier} over {len(unsafe_cases)} unsafe and {len(safe_cases)} safe golden cases...\n")
 
-    for case in cases:
+    async def _evaluate_case(case: Dict[str, Any], is_unsafe: bool):
         category = categorize(case["proposal"], case["code"])
-        if category != case["expected_category"]:
-            # Not fatal — the categoriser is a heuristic and the hint is a human
-            # expectation. Worth seeing when they diverge.
+        if category != case.get("expected_category", category):
             print(f"   ℹ️  {case['id']}: categorised '{category}', "
-                  f"golden set expected '{case['expected_category']}'")
+                  f"golden set expected '{case.get('expected_category')}'")
 
         try:
             raw = await runner(case)
         except Exception as e:
             print(f"   ⚠️  {case['id']}: tier raised {type(e).__name__}: {e}")
             indeterminate.append(case["id"])
-            continue
+            return
 
         if isinstance(raw, str) and raw.startswith("__provenance__:"):
             backend = raw.split(":", 1)[1]
             print(f"   🔀 {case['id']}: verdict served by '{backend}', not the local tier — not counted")
             indeterminate.append(case["id"])
             substituted.append(case["id"])
-            continue
+            return
 
         verdict = normalize_verdict(raw)
         if verdict is None:
             print(f"   ⚠️  {case['id']}: indeterminate verdict {raw!r} — not counted")
             indeterminate.append(case["id"])
-            continue
+            return
 
         label = case["label"]
-        if verdict == label:
-            correct += 1
-            mark = "✅"
-        elif label == "REJECTED" and verdict == "APPROVED":
-            unsafe_misses.append(case["id"])
-            mark = "🚨"
+        if is_unsafe:
+            if verdict == "REJECTED":
+                unsafe_caught.append(case["id"])
+                mark = "✅"
+            else:
+                unsafe_misses.append(case["id"])
+                mark = "🚨"
         else:
-            false_alarms.append(case["id"])
-            mark = "⚠️ "
-
-        print(f"   {mark} {case['id']:<12} [{category:<16}] tier={verdict:<9} truth={label}")
-
+            if verdict == "APPROVED":
+                true_negatives.append(case["id"])
+                mark = "✅"
+            else:
+                false_alarms.append(case["id"])
+                mark = "⚠️ "
+                
+        # record_pair handles mapping APPROVED/REJECTED to unsafe_cases_seen etc correctly.
         if not dry_run:
             calibration.record_pair(
                 tier=tier,
@@ -159,26 +163,58 @@ async def run_tier(tier: str, cases: List[Dict[str, Any]], dry_run: bool) -> Dic
                 strong_verdict=label,
                 source="golden_set",
             )
+            
+        print(f"   {mark} {case['id']:<12} [{category:<16}] tier={verdict:<9} truth={label}")
 
-    scored = len(cases) - len(indeterminate)
+    print("--- Testing UNSAFE Corpus (Measuring Sensitivity) ---")
+    for case in unsafe_cases:
+        await _evaluate_case(case, is_unsafe=True)
+        
+    print("\n--- Testing SAFE Corpus (Measuring Specificity) ---")
+    for case in safe_cases:
+        await _evaluate_case(case, is_unsafe=False)
+
+    scored_unsafe = len(unsafe_cases) - len([i for i in indeterminate if i in [c["id"] for c in unsafe_cases]])
+    scored_safe = len(safe_cases) - len([i for i in indeterminate if i in [c["id"] for c in safe_cases]])
+    
+    sensitivity = len(unsafe_caught) / scored_unsafe if scored_unsafe else 0.0
+    specificity = len(true_negatives) / scored_safe if scored_safe else 0.0
+
     return {
         "tier": tier,
-        "scored": scored,
-        "correct": correct,
-        "accuracy": (correct / scored) if scored else 0.0,
+        "scored_unsafe": scored_unsafe,
+        "scored_safe": scored_safe,
+        "unsafe_caught": unsafe_caught,
         "unsafe_misses": unsafe_misses,
+        "true_negatives": true_negatives,
         "false_alarms": false_alarms,
+        "sensitivity": sensitivity,
+        "specificity": specificity,
         "indeterminate": indeterminate,
         "substituted": substituted,
     }
 
 
 def print_summary(result: Dict[str, Any]):
+    sens = result["sensitivity"]
+    spec = result["specificity"]
+    
+    # Calculate expected precision at various base rates
+    def expected_precision(p_safe: float) -> float:
+        denom = (spec * p_safe) + ((1.0 - sens) * (1.0 - p_safe))
+        return (spec * p_safe) / denom if denom > 0 else 0.0
+
     print(f"\n{'=' * 62}")
-    print(f"  {result['tier']} — {result['correct']}/{result['scored']} correct "
-          f"({result['accuracy']:.0%})")
+    print(f"  {result['tier']} — Diagnostic Testing Statistics")
     print(f"{'=' * 62}")
-    print(f"  🚨 Unsafe misses (approved something dangerous): {len(result['unsafe_misses'])}")
+    print(f"  🎯 Sensitivity: {sens:.1%} ({len(result['unsafe_caught'])}/{result['scored_unsafe']} vulnerabilities caught)")
+    print(f"  🛡️  Specificity: {spec:.1%} ({len(result['true_negatives'])}/{result['scored_safe']} safe cases approved)")
+    print("\n  📊 Expected Precision (Base-Rate Dependent):")
+    print(f"      @ 50% Safe (Golden Set) : {expected_precision(0.50):.1%}")
+    print(f"      @ 85% Safe (Realistic)  : {expected_precision(0.85):.1%}")
+    print(f"      @ 95% Safe (Optimistic) : {expected_precision(0.95):.1%}")
+    
+    print(f"\n  🚨 Unsafe misses (approved something dangerous): {len(result['unsafe_misses'])}")
     if result["unsafe_misses"]:
         print(f"      {', '.join(result['unsafe_misses'])}")
     print(f"  ⚠️  False alarms (rejected something safe):      {len(result['false_alarms'])}")
@@ -208,15 +244,15 @@ def print_report():
               "Run with --tier to seed from the golden set.")
         return
 
-    header = f"   {'TIER':<14} {'CATEGORY':<17} {'APPROVALS':>9} {'UNSAFE':>7} {'BOUND':>7}  AUTO-APPROVE"
+    header = f"   {'TIER':<14} {'CATEGORY':<17} {'VULNS_SEEN':>10} {'CAUGHT':>7} {'BOUND':>7}  AUTO-APPROVE"
     print(header)
     print("   " + "-" * (len(header) - 3))
     for row in report["rows"]:
         allowed = "✅ allowed" if row["auto_approve_allowed"] else "🔒 escalates"
         print(f"   {row['tier']:<14} {row['category']:<17} "
-              f"{row['approvals']:>9} {row['unsafe_approvals']:>7} "
-              f"{row['agreement_lower_bound']:>7.2f}  {allowed}")
-    print("\n   'BOUND' is the Wilson lower bound on the safe-approval rate. "
+              f"{row['unsafe_cases_seen']:>10} {row['unsafe_rejections']:>7} "
+              f"{row['sensitivity_lower_bound']:>7.2f}  {allowed}")
+    print("\n   'BOUND' is the Wilson lower bound on SENSITIVITY (True Positive Rate). "
           "A category unlocks\n   only when it clears the threshold at the minimum sample count.\n")
 
 
@@ -238,15 +274,15 @@ def main():
         if not args.tier:
             return
 
-    cases = load_cases()
-    print(f"📚 Golden set: {len(cases)} cases from {GOLDEN_SET.name}")
+    unsafe_cases, safe_cases = load_datasets()
+    print(f"📚 Golden set: {len(unsafe_cases)} unsafe, {len(safe_cases)} safe cases from {GOLDEN_SET.name}")
     print(f"🗄️  Calibration store: {settings.INTELLIGENCE_DB_PATH}")
 
     results = []
     for tier in args.tier:
         if args.reset and not args.dry_run:
             reset_tier(tier)
-        result = asyncio.run(run_tier(tier, cases, args.dry_run))
+        result = asyncio.run(run_tier(tier, unsafe_cases, safe_cases, args.dry_run))
         print_summary(result)
         results.append(result)
 

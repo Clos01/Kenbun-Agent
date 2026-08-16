@@ -1,5 +1,4 @@
 import sys
-import asyncio
 sys.path.insert(0, '/Users/carlosrivas/Dev/Kenbun/core')
 
 from tools.audit.supervisor_agent import _call_local_senior

@@ -110,7 +110,7 @@ def run_evaluation(full_sweep=False, limit=150):
             json.dump(data, f, indent=2)
             
         print(f"✅ Evaluation Complete. Accuracy: {accuracy:.2%} ({correct}/{total_cases})")
-        print(f"📊 Results saved to BENCHMARKS.json")
+        print("📊 Results saved to BENCHMARKS.json")
         
     except Exception as e:
         print(f"❌ Error updating benchmarks: {e}")

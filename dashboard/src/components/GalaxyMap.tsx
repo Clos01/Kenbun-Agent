@@ -1349,7 +1349,7 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
       {/* Honest empty-state */}
       {loaded && data.length === 0 && (
         <div className="absolute inset-0 z-[90] flex items-center justify-center pointer-events-none select-none px-6">
-          <div className="text-center space-y-3 max-w-sm p-8 bg-[var(--background)]/70 border border-[var(--border)]/50 backdrop-blur-xl rounded-2xl">
+          <div className="text-center space-y-3 max-w-lg p-8 bg-[var(--background)]/70 border border-[var(--border)]/50 backdrop-blur-xl rounded-2xl">
             <Compass className="w-6 h-6 text-[var(--accent)] mx-auto opacity-60" />
             <div className="font-heading text-[var(--foreground)] font-bold uppercase tracking-[0.25em] text-xs">Codebase Not Indexed</div>
             <p className="text-[11px] font-mono text-[var(--foreground)]/45 leading-relaxed">

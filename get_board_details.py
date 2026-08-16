@@ -18,3 +18,5 @@ sys.path.insert(0, str(Path("core").resolve()))
 
 from tools.infrastructure.planka import planka_get_board
 print(planka_get_board("1803497714239931407"))
+
+

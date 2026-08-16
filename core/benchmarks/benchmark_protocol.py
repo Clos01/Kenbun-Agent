@@ -27,7 +27,7 @@ TASKS = [
 
 async def run_benchmark():
     print("🚀 INITIATING KENBUN BENCHMARK (V3): 10 CYCLES")
-    print(f"⚙️  Hardware: Small Model (4B/9B) | Optimized Latency")
+    print("⚙️  Hardware: Small Model (4B/9B) | Optimized Latency")
     print("-" * 50)
     
     results = []

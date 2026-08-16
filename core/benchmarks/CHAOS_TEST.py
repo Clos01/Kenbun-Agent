@@ -59,7 +59,7 @@ def run_chaos():
         if result and (result.get("status", "").lower() == "rejected" or result.get("status", "").lower() == "error"):
             print(f"✅ Protection: Supervisor caught a dangerous payload. Status: {result.get('status')}")
         else:
-            print(f"❌ FAILURE: Supervisor approved a malicious payload!")
+            print("❌ FAILURE: Supervisor approved a malicious payload!")
     except Exception as e:
         print(f"❌ CRASH: System 2 failed during disagreement test: {e}")
 

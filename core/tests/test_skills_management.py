@@ -1,10 +1,5 @@
 import os
-import json
-import pytest
-import shutil
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-from fastapi import HTTPException
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 # Ensure core is in path

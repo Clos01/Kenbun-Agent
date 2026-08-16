@@ -1,6 +1,4 @@
-import pytest
 from langchain_core.messages import HumanMessage
-from tools.infrastructure.swarm_graph import build_swarm_graph
 
 def test_circuit_breaker_halts_infinite_loop(monkeypatch):
     """

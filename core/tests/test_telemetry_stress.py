@@ -1,8 +1,6 @@
-import os
 import time
 import threading
 import sqlite3
-import pytest
 
 # Proxy classes to route psycopg Postgres queries to SQLite for testing
 class SqlitePostgresCursorProxy:

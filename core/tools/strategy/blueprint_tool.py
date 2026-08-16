@@ -1,4 +1,3 @@
-import os
 import yaml
 import json
 import logging

@@ -155,7 +155,7 @@ export default function Settings() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[var(--background)] flex selection:bg-[var(--tertiary)] selection:text-white max-w-[100vw] overflow-x-hidden">
+      <div className="h-screen overflow-hidden bg-[var(--background)] flex selection:bg-[var(--tertiary)] selection:text-white max-w-[100vw]">
         <Sidebar />
         <div className="flex-1 flex flex-col items-center justify-center">
           <div className="w-8 h-8 border-4 border-[var(--tertiary)]/30 border-t-[var(--tertiary)] rounded-full animate-spin mb-4" />
@@ -175,11 +175,11 @@ export default function Settings() {
   ];
 
   return (
-    <div className="min-h-screen bg-[var(--background)] flex selection:bg-[var(--tertiary)] selection:text-white max-w-[100vw] overflow-x-hidden relative">
+    <div className="h-screen overflow-hidden bg-[var(--background)] flex selection:bg-[var(--tertiary)] selection:text-white max-w-[100vw] relative">
       <div className="grain-overlay" />
       <Sidebar />
       
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-24 lg:pb-0 min-w-0 overflow-x-hidden z-10">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0 z-10">
         
         <header className="h-24 lg:h-32 border-b-2 border-[var(--border)] flex items-center justify-between px-6 lg:px-12 bg-[var(--background)]/60 z-20 sticky top-0 backdrop-blur-xl">
           <div className="flex items-center gap-4 lg:gap-10">
@@ -196,7 +196,7 @@ export default function Settings() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 lg:p-12 xl:p-20 2xl:p-32 space-y-32 lg:space-y-48 relative z-10 custom-scrollbar pb-32">
+        <div className="flex-1 overflow-y-auto p-6 lg:p-12 xl:p-20 2xl:p-32 space-y-32 lg:space-y-48 relative z-10 custom-scrollbar pb-16">
           
           <header className="space-y-4 lg:space-y-8">
             <div className="flex items-center gap-4">

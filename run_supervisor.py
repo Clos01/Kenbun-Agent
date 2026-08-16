@@ -4,7 +4,6 @@ from pathlib import Path
 # Add core to sys.path so we can import the tools
 sys.path.insert(0, str(Path("core").resolve()))
 
-from tools.registry import registry
 from tools.infrastructure.server import consult_supervisor
 
 proposal = "I am performing an additive cross-repository sync from Kenbun to kenbun-agent. I am specifically omitting the --delete flag so that I do not destroy unique files in the target repository like AI_POLICY.md and DILIGENCE.md. Does this rsync command look safe?"

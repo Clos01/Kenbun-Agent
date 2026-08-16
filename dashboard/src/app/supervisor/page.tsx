@@ -213,7 +213,7 @@ export default function SupervisorDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex selection:bg-[var(--tertiary)]/20 selection:text-[var(--foreground)] max-w-[100vw] overflow-x-hidden font-sans">
+    <div className="h-screen overflow-hidden bg-background flex selection:bg-[var(--tertiary)]/20 selection:text-[var(--foreground)] max-w-[100vw] font-sans">
       <Sidebar />
 
       {/* Backdrop overlay for mobile sidebar */}
@@ -224,7 +224,7 @@ export default function SupervisorDashboard() {
         />
       )}
 
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden bg-background text-[var(--foreground)]">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0 bg-background text-[var(--foreground)]">
         <div className="grain-overlay opacity-5 pointer-events-none" />
 
         {/* Header */}
@@ -254,7 +254,7 @@ export default function SupervisorDashboard() {
         </header>
 
         {/* Main Body Grid */}
-        <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-10 relative z-10 custom-scrollbar pb-32">
+        <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-10 relative z-10 custom-scrollbar pb-16">
           
           {/* Top Banner Warning Node (Cinematic purple twilight gradient) */}
           <div className="p-6 bg-card/60 backdrop-blur-xl text-[var(--foreground)] flex items-center gap-6 rounded-2xl shadow-lg relative overflow-hidden border border-primary/5">

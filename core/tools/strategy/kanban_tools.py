@@ -4,7 +4,6 @@ import uuid
 import datetime
 import os
 import logging
-from typing import Optional
 from tools.registry import sovereign_tool
 from tools.infrastructure.config import settings
 

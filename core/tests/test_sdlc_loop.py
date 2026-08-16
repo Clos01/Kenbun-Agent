@@ -1,6 +1,4 @@
-import pytest
 from tools.registry import registry
-import tools.infrastructure.orchestrator  # Trigger pipeline registrations
 from tools.infrastructure.server import sync_jira_issue, create_bitbucket_pr
 
 def test_sdlc_loop_registered():

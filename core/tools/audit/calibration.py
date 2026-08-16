@@ -118,18 +118,23 @@ def categorize(proposal: str = "", code_snippet: str = "") -> str:
 
 
 def _wilson_lower_bound(successes: int, total: int, z: float = 1.96) -> float:
-    """Lower bound of the 95% Wilson score interval.
+    """Lower bound of the 95% Wilson score interval with Yates's Continuity Correction.
 
-    Used instead of the raw ratio so that 3/3 (ratio 1.0, lower bound 0.44) can
+    Used instead of the raw ratio so that 3/3 (ratio 1.0, lower bound 0.31) can
     never unlock a category. Small samples stay untrusted until they earn it.
+    The continuity correction unconditionally tightens the bound to prevent
+    optimistic safety inflation on small n.
     """
     if total <= 0:
         return 0.0
-    phat = successes / total
-    denom = 1 + z * z / total
-    centre = phat + z * z / (2 * total)
-    margin = z * math.sqrt((phat * (1 - phat) + z * z / (4 * total)) / total)
-    return max(0.0, (centre - margin) / denom)
+    if successes == 0:
+        return 0.0
+    p = successes / total
+    n = total
+    
+    num = 2 * n * p + z**2 - 1 - z * math.sqrt(z**2 - 2 - 1/n + 4*p*(n*(1-p) + 1))
+    den = 2 * (n + z**2)
+    return max(0.0, num / den)
 
 
 @dataclass
@@ -137,17 +142,17 @@ class CalibrationVerdict:
     """Result of asking whether a rung may auto-approve in a category."""
     trusted: bool
     reason: str
-    samples: int
-    safe_approvals: int
+    unsafe_samples: int
+    caught_unsafe: int
     lower_bound: float
 
     def as_dict(self) -> Dict[str, Any]:
         return {
             "trusted": self.trusted,
             "reason": self.reason,
-            "samples": self.samples,
-            "safe_approvals": self.safe_approvals,
-            "agreement_lower_bound": round(self.lower_bound, 4),
+            "unsafe_samples": self.unsafe_samples,
+            "caught_unsafe": self.caught_unsafe,
+            "sensitivity_lower_bound": round(self.lower_bound, 4),
         }
 
 
@@ -176,10 +181,19 @@ class TierCalibration:
                         safe_approvals INTEGER NOT NULL DEFAULT 0,
                         rejections INTEGER NOT NULL DEFAULT 0,
                         false_rejections INTEGER NOT NULL DEFAULT 0,
+                        unsafe_cases_seen INTEGER NOT NULL DEFAULT 0,
+                        unsafe_rejections INTEGER NOT NULL DEFAULT 0,
                         updated_at REAL NOT NULL,
                         PRIMARY KEY (tier, category)
                     );
                 """)
+                # Handle migrations gracefully
+                try:
+                    conn.execute("ALTER TABLE audit_tier_calibration ADD COLUMN unsafe_cases_seen INTEGER NOT NULL DEFAULT 0")
+                    conn.execute("ALTER TABLE audit_tier_calibration ADD COLUMN unsafe_rejections INTEGER NOT NULL DEFAULT 0")
+                except sqlite3.OperationalError:
+                    pass # Columns probably already exist
+                    
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS audit_tier_calibration_log (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -218,28 +232,32 @@ class TierCalibration:
 
         self._ensure_schema()
         approvals = 1 if cheap == "APPROVED" else 0
-        # The only outcome the gate cares about: cheap said ship it, and the
-        # authority agreed.
         safe_approvals = 1 if (cheap == "APPROVED" and strong == "APPROVED") else 0
         rejections = 1 if cheap == "REJECTED" else 0
         false_rejections = 1 if (cheap == "REJECTED" and strong == "APPROVED") else 0
+
+        # Tracking Sensitivity
+        unsafe_cases_seen = 1 if strong == "REJECTED" else 0
+        unsafe_rejections = 1 if (cheap == "REJECTED" and strong == "REJECTED") else 0
 
         try:
             with closing(self._connect()) as conn:
                 conn.execute(
                     """
                     INSERT INTO audit_tier_calibration
-                        (tier, category, approvals, safe_approvals, rejections, false_rejections, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                        (tier, category, approvals, safe_approvals, rejections, false_rejections, unsafe_cases_seen, unsafe_rejections, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(tier, category) DO UPDATE SET
                         approvals = approvals + excluded.approvals,
                         safe_approvals = safe_approvals + excluded.safe_approvals,
                         rejections = rejections + excluded.rejections,
                         false_rejections = false_rejections + excluded.false_rejections,
+                        unsafe_cases_seen = unsafe_cases_seen + excluded.unsafe_cases_seen,
+                        unsafe_rejections = unsafe_rejections + excluded.unsafe_rejections,
                         updated_at = excluded.updated_at
                     """,
                     (tier, category, approvals, safe_approvals, rejections,
-                     false_rejections, time.time()),
+                     false_rejections, unsafe_cases_seen, unsafe_rejections, time.time()),
                 )
                 conn.execute(
                     """
@@ -261,43 +279,43 @@ class TierCalibration:
             return CalibrationVerdict(True, "calibration disabled", 0, 0, 1.0)
 
         self._ensure_schema()
-        approvals = safe = 0
+        unsafe_cases = unsafe_rejections = 0
         try:
             with closing(self._connect()) as conn:
                 row = conn.execute(
-                    "SELECT approvals, safe_approvals FROM audit_tier_calibration "
+                    "SELECT unsafe_cases_seen, unsafe_rejections FROM audit_tier_calibration "
                     "WHERE tier = ? AND category = ?",
                     (tier, category),
                 ).fetchone()
             if row:
-                approvals, safe = int(row[0]), int(row[1])
+                unsafe_cases, unsafe_rejections = int(row[0]), int(row[1])
         except Exception as e:
             # Fail CLOSED: if we cannot prove the rung is trustworthy, it is not.
             return CalibrationVerdict(False, f"calibration store unreadable: {e}", 0, 0, 0.0)
 
         min_samples = settings.AUDIT_CALIBRATION_MIN_SAMPLES
-        if approvals < min_samples:
+        if unsafe_cases < min_samples:
             return CalibrationVerdict(
                 False,
-                f"only {approvals}/{min_samples} paired approvals recorded for "
+                f"only {unsafe_cases}/{min_samples} unsafe cases recorded for "
                 f"'{category}' — not yet calibrated",
-                approvals, safe, _wilson_lower_bound(safe, approvals),
+                unsafe_cases, unsafe_rejections, _wilson_lower_bound(unsafe_rejections, unsafe_cases),
             )
 
-        lower = _wilson_lower_bound(safe, approvals)
+        lower = _wilson_lower_bound(unsafe_rejections, unsafe_cases)
         threshold = settings.AUDIT_CALIBRATION_MIN_AGREEMENT
         if lower < threshold:
             return CalibrationVerdict(
                 False,
-                f"safe-approval lower bound {lower:.2f} < {threshold:.2f} over "
-                f"{approvals} samples in '{category}'",
-                approvals, safe, lower,
+                f"sensitivity lower bound {lower:.2f} < {threshold:.2f} over "
+                f"{unsafe_cases} unsafe samples in '{category}'",
+                unsafe_cases, unsafe_rejections, lower,
             )
 
         return CalibrationVerdict(
             True,
-            f"calibrated: {safe}/{approvals} safe approvals, lower bound {lower:.2f}",
-            approvals, safe, lower,
+            f"calibrated: caught {unsafe_rejections}/{unsafe_cases} vulnerabilities, sensitivity lower bound {lower:.2f}",
+            unsafe_cases, unsafe_rejections, lower,
         )
 
     def should_drift_check(self, tier: str, category: str) -> bool:
@@ -325,9 +343,9 @@ class TierCalibration:
         rows: List[Dict[str, Any]] = []
         try:
             with closing(self._connect()) as conn:
-                for tier, category, approvals, safe, rejections, false_rej, updated in conn.execute(
+                for tier, category, approvals, safe, rejections, false_rej, unsafe_seen, unsafe_rej, updated in conn.execute(
                     "SELECT tier, category, approvals, safe_approvals, rejections, "
-                    "false_rejections, updated_at FROM audit_tier_calibration "
+                    "false_rejections, unsafe_cases_seen, unsafe_rejections, updated_at FROM audit_tier_calibration "
                     "ORDER BY tier, category"
                 ):
                     verdict = self.may_autoapprove(tier, category)
@@ -339,8 +357,10 @@ class TierCalibration:
                         "unsafe_approvals": approvals - safe,
                         "rejections": rejections,
                         "false_rejections": false_rej,
-                        "agreement_lower_bound": round(
-                            _wilson_lower_bound(safe, approvals), 4),
+                        "unsafe_cases_seen": unsafe_seen,
+                        "unsafe_rejections": unsafe_rej,
+                        "sensitivity_lower_bound": round(
+                            _wilson_lower_bound(unsafe_rej, unsafe_seen), 4),
                         "auto_approve_allowed": verdict.trusted,
                         "updated_at": updated,
                     })

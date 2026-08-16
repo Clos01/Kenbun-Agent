@@ -10,7 +10,7 @@ import shutil
 import inspect
 import signal
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import List
 from tools.registry import sovereign_tool, registry
 from tools.infrastructure.config import settings
 

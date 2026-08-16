@@ -7,7 +7,6 @@ from tools.infrastructure.planka import (
     planka_get_board,
     planka_create_card,
     planka_update_card,
-    planka_move_card,
     planka_add_comment
 )
 

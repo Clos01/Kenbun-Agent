@@ -1,5 +1,3 @@
-import sys
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 def test_hardware_autopilot_pro_macos():

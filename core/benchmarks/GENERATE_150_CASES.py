@@ -108,4 +108,4 @@ if __name__ == "__main__":
     new_cases = generate_cases(10000)
     with open("brain_health/generated_cases.json", "w") as f:
         json.dump(new_cases, f, indent=4)
-    print(f"Generated 10,000 cases in brain_health/generated_cases.json")
+    print("Generated 10,000 cases in brain_health/generated_cases.json")

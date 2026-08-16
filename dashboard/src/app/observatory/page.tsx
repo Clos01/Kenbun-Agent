@@ -1309,6 +1309,7 @@ export default function BuildConsole() {
                       success={selectedTool ? (selectedTool.success_count || selectedTool.failure_count ? (selectedTool.success_count || 0) : Math.round((selectedTool.alpha || 0) * 10)) : totalSuccess} 
                       total={selectedTool ? (selectedTool.success_count || selectedTool.failure_count ? ((selectedTool.success_count || 0) + (selectedTool.failure_count || 0)) : Math.round(((selectedTool.alpha || 0) + (selectedTool.beta || 0)) * 10)) : totalSignals} 
                       label={selectedTool ? `Bayesian Posterior (Trials: ${selectedTool.success_count || 0} S / ${selectedTool.failure_count || 0} F)` : `Global System Fidelity (Trials: ${rawSuccess} S / ${rawFailure} F)`}
+                      valueOverride={selectedTool ? Math.round((selectedTool.success_rate ?? 0) * 100) : undefined}
                     />
                     <div className="space-y-4 pt-6 border-t border-primary/5">
                        <div className="flex items-center justify-between">
@@ -1859,7 +1860,7 @@ export default function BuildConsole() {
                             <div className="mt-2 text-[9px] font-mono uppercase tracking-wider opacity-50 leading-tight">
                               {n === 0
                                 ? "no observations"
-                                : <>n={n} · {s}✓/{fCount}✗{rawPct !== null && rawPct !== shown && <> · raw {rawPct}%</>}</>}
+                                : <span className="whitespace-nowrap">n={n} · {s}✓/{fCount}✗{rawPct !== null && rawPct !== shown && <> ({rawPct}%)</>}</span>}
                             </div>
                           </div>
                         );
@@ -2039,6 +2040,7 @@ export default function BuildConsole() {
                                 success={activeToolModal.success_count || activeToolModal.failure_count ? (activeToolModal.success_count || 0) : Math.round((activeToolModal.alpha || 0) * 10)} 
                                 total={activeToolModal.success_count || activeToolModal.failure_count ? ((activeToolModal.success_count || 0) + (activeToolModal.failure_count || 0)) : Math.round(((activeToolModal.alpha || 0) + (activeToolModal.beta || 0)) * 10)} 
                                 label="Bayesian Posterior"
+                                valueOverride={Math.round((activeToolModal.success_rate ?? 0) * 100)}
                               />
                               <p className="text-[8.5px] text-secondary opacity-50 font-mono">
                                 A statistical model estimating true capability based on trial history.

@@ -1,8 +1,6 @@
 """Shared pytest fixtures."""
-import sys
 from unittest.mock import MagicMock, patch
 import pytest
-from tools.infrastructure.config import settings
 
 
 @pytest.fixture(autouse=True)

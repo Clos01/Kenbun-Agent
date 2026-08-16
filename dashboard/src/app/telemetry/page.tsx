@@ -888,13 +888,13 @@ export default function IntelStream() {
   );
 
   return (
-    <div className="min-h-screen bg-background flex selection:bg-gold selection:text-white max-w-[100vw] overflow-x-hidden relative">
+    <div className="h-screen overflow-hidden bg-background flex selection:bg-gold selection:text-white max-w-[100vw] relative">
       {/* Dynamic Blueprint Grid Grain */}
       <div className="grain-overlay" />
 
       <Sidebar />
       
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-y-auto custom-scrollbar min-w-0 overflow-x-hidden z-10">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0 z-10">
         
         {/* HEADER BAR */}
         <header className="h-20 lg:h-24 border-b-2 border-border flex items-center justify-between px-6 lg:px-10 bg-background/80 sticky top-0 backdrop-blur-xl z-30">
@@ -920,7 +920,7 @@ export default function IntelStream() {
           initial={{ opacity: 0, y: 15 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="flex-1 p-6 lg:p-10 xl:p-12 space-y-10 lg:space-y-14 pb-48"
+          className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-10 lg:space-y-14 pb-16 custom-scrollbar"
         >
           {error && (
             <div className="p-6 border border-red-500 bg-red-500/5 flex items-center gap-6 rounded-md">

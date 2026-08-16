@@ -15,7 +15,6 @@ import logging
 import math
 import time
 from datetime import datetime
-from pathlib import Path
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse

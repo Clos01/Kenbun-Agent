@@ -1,8 +1,7 @@
-import os
 import sqlite3
 import json
 import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from tools.utils.sessions_db import get_db_path, init_db
 
 def format_relative_time(timestamp_str: str) -> str:

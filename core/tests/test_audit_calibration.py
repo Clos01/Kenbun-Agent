@@ -5,7 +5,6 @@ The property under test throughout: a cheap rung may only close a review where i
 has been *shown* to be safe, and everywhere else its opinion escalates.
 """
 import sqlite3
-from contextlib import closing
 
 import pytest
 

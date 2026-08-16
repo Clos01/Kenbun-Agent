@@ -2,11 +2,20 @@ import os
 import json
 import urllib.request
 import urllib.error
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Optional, Tuple, Dict, Any
 from tools.registry import sovereign_tool
 
 def _get_planka_client() -> Tuple[str, str]:
     """Retrieves Planka configuration and authenticates to get a Bearer token."""
+    try:
+        from dotenv import load_dotenv
+        from tools.utils.path_utils import get_project_root
+        env_path = get_project_root() / ".env"
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=True)
+    except Exception:
+        pass
+
     base_url = os.environ.get("PLANKA_BASE_URL", "http://127.0.0.1:1337").rstrip("/")
     email = os.environ.get("PLANKA_AGENT_EMAIL", "admin@example.com")
     password = os.environ.get("PLANKA_AGENT_PASSWORD", "demoadminpass123")
@@ -114,7 +123,7 @@ def planka_get_board(board_id: str) -> str:
         cards = included.get("cards", [])
         
         # Sort lists by position
-        active_lists = [l for l in lists if l.get("type") == "active"]
+        active_lists = [l for l in lists if l.get("type") in ("active", "list")]
         active_lists.sort(key=lambda x: x.get("position") or 0)
         
         markdown = [f"# 📋 Board: {board_name} (ID: `{board_id}`)\n"]

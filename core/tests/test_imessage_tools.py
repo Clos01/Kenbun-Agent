@@ -1,7 +1,7 @@
 import os
 import json
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, AsyncMock
 
 # Ensure core is in path
 import sys
@@ -12,8 +12,7 @@ if core_dir not in sys.path:
 from tools.sensory.imessage_tools import (
     list_imessage_chats,
     get_imessage_history,
-    send_imessage,
-    get_imsg_path
+    send_imessage
 )
 
 class TestIMessageTools:

@@ -1,10 +1,14 @@
+import atexit
 import contextlib
 import functools
 import inspect
+import logging
 import sys
 import threading
-from typing import Callable, Dict, Any, List, Optional
-from pydantic import BaseModel, Field, field_validator
+from typing import Any, Callable, Dict, List, Optional
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger("registry")
 
 
 @contextlib.contextmanager
@@ -58,7 +62,7 @@ class SovereignRegistry:
         self._pipelines: Dict[str, PipelineEntry] = {}
         self._lock = threading.RLock()
 
-    def register_tool(self, entry: ToolEntry):
+    def register_tool(self, entry: ToolEntry) -> None:
         with self._lock:
             self._tools[entry.name] = entry
 
@@ -70,7 +74,7 @@ class SovereignRegistry:
         with self._lock:
             return dict(self._tools)
 
-    def register_pipeline(self, entry: PipelineEntry):
+    def register_pipeline(self, entry: PipelineEntry) -> None:
         with self._lock:
             self._pipelines[entry.name] = entry
 
@@ -82,7 +86,7 @@ class SovereignRegistry:
         with self._lock:
             return dict(self._pipelines)
 
-    def clear(self):
+    def clear(self) -> None:
         with self._lock:
             self._tools.clear()
             self._pipelines.clear()
@@ -91,6 +95,17 @@ class SovereignRegistry:
 registry = SovereignRegistry()
 
 _TELEMETRY_POOL = None
+_TELEMETRY_LOCK = threading.Lock()
+
+
+def _shutdown_telemetry_pool() -> None:
+    global _TELEMETRY_POOL
+    with _TELEMETRY_LOCK:
+        if _TELEMETRY_POOL is not None:
+            _TELEMETRY_POOL.shutdown(wait=False)
+
+
+atexit.register(_shutdown_telemetry_pool)
 
 
 def _record_tool_outcome(tool_name: str, category: str, success: bool) -> None:
@@ -106,30 +121,31 @@ def _record_tool_outcome(tool_name: str, category: str, success: bool) -> None:
     to raise, and is deliberately not papered over with string-sniffing here --
     a measurement layer that guesses is what this change exists to replace.
     """
-    def _write():
+    def _write() -> None:
         try:
             from tools.utils.bayesian import tune_swarm
             tune_swarm(tool_name, success, category)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Telemetry warning: tune_swarm failed for {tool_name}: {e}", exc_info=True)
 
     global _TELEMETRY_POOL
     try:
-        if _TELEMETRY_POOL is None:
-            from concurrent.futures import ThreadPoolExecutor
-            _TELEMETRY_POOL = ThreadPoolExecutor(
-                max_workers=1, thread_name_prefix="tool-telemetry"
-            )
+        with _TELEMETRY_LOCK:
+            if _TELEMETRY_POOL is None:
+                from concurrent.futures import ThreadPoolExecutor
+                _TELEMETRY_POOL = ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="tool-telemetry"
+                )
         _TELEMETRY_POOL.submit(_write)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Telemetry warning: Failed to record outcome for {tool_name}: {e}", exc_info=True)
 
 
 def sovereign_tool(
     name: Optional[str] = None, 
     category: str = "General", 
     requires_env: Optional[List[str]] = None
-):
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to designate a function as an active sovereign tool in the Swarm.
     
@@ -138,7 +154,7 @@ def sovereign_tool(
         category: Operational swarm module (e.g. 'Strategy', 'Sensory', 'Memory').
         requires_env: Optional list of environment variable names required for enablement.
     """
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         tool_name = name or func.__name__
         
         # Parse and sanitize docstrings for model readability
@@ -150,7 +166,7 @@ def sovereign_tool(
 
         if is_async:
             @functools.wraps(func)
-            async def wrapper(*args, **kwargs):
+            async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 # Stdout guard around the entire coroutine: any stray print()
                 # inside async tool bodies (or their awaited internals) gets
                 # routed to stderr so the MCP JSON-RPC channel stays clean.
@@ -166,7 +182,7 @@ def sovereign_tool(
                     return res
         else:
             @functools.wraps(func)
-            def wrapper(*args, **kwargs):
+            def wrapper(*args: Any, **kwargs: Any) -> Any:
                 with _silence_stdout_during_tool_call():
                     try:
                         res = func(*args, **kwargs)

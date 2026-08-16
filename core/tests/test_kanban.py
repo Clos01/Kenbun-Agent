@@ -3,13 +3,12 @@ import sqlite3
 import datetime
 import tempfile
 import json
-import asyncio
 from unittest.mock import patch, MagicMock
 import pytest
 
 from tools.strategy.kanban_tools import (
-    kanban_create, kanban_show, kanban_list, kanban_complete,
-    kanban_block, kanban_unblock, kanban_heartbeat, kanban_comment, kanban_link
+    kanban_create, kanban_show, kanban_complete,
+    kanban_block, kanban_unblock, kanban_heartbeat, kanban_link
 )
 from services.kanban_dispatcher import KanbanDispatcher
 

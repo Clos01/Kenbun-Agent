@@ -263,7 +263,6 @@ def seed_chromadb_code():
     print("📡 Seeding ChromaDB codebase semantic index (high-fidelity subset)...")
     try:
         from tools.memory.code_indexer import chunk_code
-        from tools.infrastructure.config import settings
         from tools.memory.honcho_connect import add_memory
 
         key_files = [

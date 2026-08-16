@@ -19,7 +19,7 @@ Usage:
 """
 import os
 import sys
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 # ── Known IDE & Platform keys ──────────────────────────────────────────────
 KNOWN_IDES = {

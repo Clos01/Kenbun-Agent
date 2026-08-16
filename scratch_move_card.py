@@ -1,7 +1,6 @@
 import sys
 import os
 from pathlib import Path
-import json
 
 # Load env variables manually
 env_path = Path(".env")

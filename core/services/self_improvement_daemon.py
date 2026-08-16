@@ -1,10 +1,8 @@
 import time
 import logging
 import hashlib
-import json
 import asyncio
-from typing import Dict, Any, Optional
-from tools.infrastructure.config import settings
+from typing import Optional
 from tools.memory.hardware_bridge import hardware_bridge
 from tools.audit.gemini_reviewer import call_gemini_pro
 

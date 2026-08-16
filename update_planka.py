@@ -19,7 +19,6 @@ if env_path.exists():
 
 sys.path.insert(0, str(Path("core").resolve()))
 
-from tools.strategy.planka_workflow import sync_pipeline_step, sync_pipeline_end
 from tools.infrastructure.planka import _planka_request
 
 def main():

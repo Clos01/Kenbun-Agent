@@ -13,7 +13,7 @@ model, tokenizer = FastLanguageModel.from_pretrained(
     load_in_4bit = True,
 )
 
-print(f"🚀 Exporting to GGUF (Quantization: Q4_K_M)...")
+print("🚀 Exporting to GGUF (Quantization: Q4_K_M)...")
 print("Note: This might take a few minutes as it merges the weights.")
 
 model.save_pretrained_gguf(

@@ -1,7 +1,6 @@
 import os
 import io
 import logging
-from typing import Optional
 from tools.infrastructure.config import settings
 from tools.utils.secret_manager import decrypt_value
 

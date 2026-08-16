@@ -25,7 +25,7 @@ content = content.replace("services:\n", "services:\n" + tailscale_svc)
 for svc in ["portable_chroma", "portable_ollama", "portable_ollama_init", "portable_fastmcp", "portable_dashboard", "portable_dozzle", "portable_honcho_api", "portable_honcho_deriver", "portable_honcho_database", "portable_honcho_redis"]:
     content = re.sub(
         f"(container_name: {svc}\\n)",
-        f"\\1    network_mode: service:tailscale\\n",
+        "\\1    network_mode: service:tailscale\\n",
         content
     )
 

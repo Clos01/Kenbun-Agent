@@ -1,6 +1,5 @@
 import pytest
 import uuid
-import time
 from tools.memory.hardware_bridge import hardware_bridge
 
 @pytest.mark.unit

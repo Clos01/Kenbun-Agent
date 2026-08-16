@@ -6,7 +6,6 @@ import logging
 import os
 import sys
 import uuid
-from pathlib import Path
 from tools.infrastructure.config import settings
 
 logger = logging.getLogger("kanban_dispatcher")

@@ -1,6 +1,6 @@
 import sys
-import json
 from pathlib import Path
+import asyncio
 
 # Setup environment
 env_path = Path(".env")
@@ -16,11 +16,15 @@ if env_path.exists():
 
 sys.path.insert(0, str(Path("core").resolve()))
 
-from tools.infrastructure.server import consult_supervisor
+from tools.audit.supervisor_agent import ask_supervisor
 
-proposal = """We should not use Penpot right away because it is too heavy for a local rig already running LLMs. Instead, we should embed tldraw or Excalidraw directly into the Next.js Observatory dashboard as a lightweight React component. We can write a simple Kenbun tool that extracts the canvas elements as JSON, letting the user say: 'Kenbun, look at the wireframe on my dashboard and build that React component using the Limestone palette.' Should we add 'Explore Excalidraw Integration' to the Planka board?"""
+proposal = """Please review and rewrite this estimate disclaimer to sound highly professional, legally protective for a flooring company, and clear for the client. The goal is to set firm expectations that the contractor is not liable for free subfloor replacement if the demolition uncovers or causes severe delamination of the plywood. Make it polished."""
+
+code = """Material Requirements: This is a Labor-Only quote. You will need to supply approximately 1,400 sq ft of LVP material to account for standard 10% waste and cuts.
+
+Subfloor Disclaimer: Because the existing floor is engineered hardwood glued or nailed to plywood, ripping it up carries a risk of damaging or delaminating the plywood subfloor beneath it. This estimate covers standard prep and removal. If the plywood is heavily damaged during demolition and requires extensive patching, leveling, or partial replacement before the new LVP can be laid, that additional subfloor repair will be discussed and quoted on-site."""
 
 print("Calling supervisor...")
-result = consult_supervisor(user_proposal=proposal)
+result = asyncio.run(ask_supervisor(user_proposal=proposal, code_snippet=code, iterative_mode=True))
 print("SUPERVISOR RESPONSE:")
 print(result)

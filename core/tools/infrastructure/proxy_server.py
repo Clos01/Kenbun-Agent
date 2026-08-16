@@ -6,13 +6,10 @@ Intercepts requests, attaches configured provider credentials dynamically,
 and forwards them to upstream services (Gemini, DeepSeek, Nvidia, OpenAI, etc.).
 """
 
-import os
-import json
 import logging
-import asyncio
 import time
 import httpx
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import StreamingResponse, JSONResponse
