@@ -15,10 +15,13 @@ import {
   Terminal,
   Rocket,
   Loader2,
-  X
+  X,
+  BookOpen,
+  Sparkles
 } from "lucide-react";
 import { SharpAreaChart, SquareDonut, AccuracyGauge, ContextWindowBar } from "@/components/Visuals";
 import GalaxyMap from "@/components/GalaxyMap";
+import GuidedTour, { TourStep } from "@/components/GuidedTour";
 // import RoamingMascot from "@/components/RoamingMascot";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -383,6 +386,45 @@ const MISSION_WORKFLOWS: { id: string; label: string; blurb: string }[] = [
   { id: "design_ui", label: "Design UI", blurb: "Draft an interface" },
 ];
 
+// Spotlight walkthrough for the Intelligence tab. Selectors point at the
+// data-tour anchors on each panel below; keep the two in sync.
+const INTEL_TOUR_MODULE = "observatory-intelligence";
+const INTELLIGENCE_TOUR: TourStep[] = [
+  {
+    selector: '[data-tour="intel-fidelity"]',
+    title: "1 · Neural Fidelity",
+    body:
+      "The scoreboard for one tool at a time — whichever tile you last clicked in the Tool Matrix. " +
+      "The top bar is a Bayesian posterior: it starts at a 50/50 prior and each recorded success or " +
+      "failure pushes it. Trials tells you how much evidence is behind the number.",
+  },
+  {
+    selector: '[data-tour="intel-chart"]',
+    title: "2 · Accuracy vs Load",
+    body:
+      "Fidelity (correctness) plotted against Load (compute and context cost) over recent cycles. " +
+      "Heads up: the backend does not yet record a real time series, so this panel is generated " +
+      "from the tool's current success rate plus noise. Treat it as a layout placeholder, not evidence.",
+  },
+  {
+    selector: '[data-tour="intel-horizon"]',
+    title: "3 · Reasoning Horizon",
+    body:
+      "The real audit trail. Each card is one ruling by an audit agent on a proposed change. " +
+      "The heading is the stage that ruled (Tier 1 Local Ensemble, Tier 2 Cloud Escalation, " +
+      "Adversarial Court…); APPROVED / REJECTED is the verdict on the proposal itself. " +
+      "Click any card to read the full critique.",
+  },
+  {
+    selector: '[data-tour="intel-matrix"]',
+    title: "4 · Tool Matrix",
+    body:
+      "Every tool and pipeline step the swarm can reach, with its recency-weighted score. " +
+      "Scores decay toward 50% when a tool sits idle, so ⌛ means 'stale evidence', not 'unreliable'. " +
+      "n is the raw observation count. Click a tile to drive panel 1 and open the full profile.",
+  },
+];
+
 export default function BuildConsole() {
   const { tenantId } = useTenant();
   const API_BASE = CONFIG.API_BASE;
@@ -405,6 +447,30 @@ export default function BuildConsole() {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
   const [showFidelity, setShowFidelity] = useState(true);
   const [showLoad, setShowLoad] = useState(true);
+
+  // "How to read this tab" explainer. Open by default so a first-time reader
+  // gets the legend; the dismissal sticks per browser.
+  // The stored preference is unreadable during SSR, so the body stays unrendered
+  // until `intelGuideReady` — otherwise a reader who dismissed it gets a flash of
+  // the expanded panel before the effect collapses it.
+  const [showIntelGuide, setShowIntelGuide] = useState(true);
+  const [intelGuideReady, setIntelGuideReady] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("kenbun_intel_guide_hidden") === "1") setShowIntelGuide(false);
+    } catch (_) { /* private mode / storage disabled */ }
+    setIntelGuideReady(true);
+  }, []);
+  const toggleIntelGuide = useCallback(() => {
+    setShowIntelGuide((prev) => {
+      const next = !prev;
+      try { localStorage.setItem("kenbun_intel_guide_hidden", next ? "0" : "1"); } catch (_) {}
+      return next;
+    });
+  }, []);
+  const startIntelTour = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("kenbun:start-tour", { detail: { module: INTEL_TOUR_MODULE } }));
+  }, []);
 
   // VPN Reachability and Offline Gate states
   const [consecutiveFailures, setConsecutiveFailures] = useState<number>(0);
@@ -539,9 +605,7 @@ export default function BuildConsole() {
         });
         
         const currentSelected = selectedToolRef.current;
-        if (!currentSelected && tools.length > 0) {
-          setSelectedTool(tools[0]);
-        } else if (currentSelected) {
+        if (currentSelected) {
           const updated = tools.find((t: IntelligenceTool) => t.tool_id === currentSelected.tool_id);
           if (updated) setSelectedTool(updated);
         }
@@ -795,10 +859,10 @@ export default function BuildConsole() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
+    <div className="h-screen overflow-hidden bg-neutral flex selection:bg-tertiary selection:text-white max-w-[100vw] font-sans">
       <Sidebar />
       
-      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 pb-20 lg:pb-0 min-w-0 overflow-x-hidden">
+      <main className="flex-1 p-0 relative flex flex-col transition-all duration-700 h-screen overflow-hidden min-w-0">
         <div className="grain-overlay opacity-20" />
         
         {/* Build Console Header */}
@@ -864,7 +928,7 @@ export default function BuildConsole() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-12 relative z-10 custom-scrollbar pb-32"
+          className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-12 relative z-10 custom-scrollbar pb-16"
         >
           {/* Active Error State Banner */}
           {error && !isIntentionalOffline && (
@@ -1092,9 +1156,148 @@ export default function BuildConsole() {
 
           {activeTab === "intelligence" && (
             <div className="space-y-12 pb-20">
+              <GuidedTour module={INTEL_TOUR_MODULE} steps={INTELLIGENCE_TOUR} />
+
+              {/* ---- HOW TO READ THIS TAB -------------------------------------
+                   The panels below are dense and mix live evidence with one
+                   placeholder. Rather than leave an operator to guess which is
+                   which, state it here and mark the placeholder in place. */}
+              <section className="border border-border bg-card/45 backdrop-blur-xl rounded-2xl text-left overflow-hidden shadow-sm transition-all duration-300">
+                <div className="px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <BookOpen className="w-4 h-4 text-tertiary shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="font-heading text-xl italic font-medium text-primary leading-none">How To Read This Tab</span>
+                      <span className="text-[9px] font-bold text-secondary/40 uppercase tracking-[0.2em] mt-1.5">
+                        Kenbun scoring itself · four panels, one reading order
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <button
+                      onClick={startIntelTour}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-tertiary text-white hover:text-white text-[9px] font-bold uppercase tracking-widest rounded-lg hover:shadow-lg active:scale-95 transition-all cursor-pointer border border-transparent"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Guided Tour
+                    </button>
+                    <button
+                      onClick={toggleIntelGuide}
+                      className="px-5 py-2.5 border border-border bg-card/80 hover:bg-card text-primary text-[9px] font-bold uppercase tracking-widest rounded-lg transition-all cursor-pointer hover:border-primary/20"
+                    >
+                      {intelGuideReady && showIntelGuide ? "Hide Instruction" : "Show Instruction"}
+                    </button>
+                  </div>
+                </div>
+
+                <AnimatePresence initial={false}>
+                  {intelGuideReady && showIntelGuide && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: "easeInOut" }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-8 pb-8 space-y-8 border-t border-border/40 pt-6">
+                        <p className="text-xs leading-relaxed text-secondary/90 max-w-4xl font-sans">
+                          Every time the swarm calls a tool or runs a pipeline step, the outcome is written down as a
+                          success or a failure. A Bayesian governor turns that ledger into a reliability score per tool,
+                          and the router leans on those scores when it picks what to reach for next.{" "}
+                          <strong className="text-primary font-semibold">This tab is that ledger, plus the audit trail behind it.</strong>{" "}
+                          Read it top-left → bottom.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {[
+                            {
+                              n: "1",
+                              title: "Neural Fidelity",
+                              where: "top-left card",
+                              live: true,
+                              body:
+                                "Scores one tool at a time — whichever tile you last clicked in the Tool Matrix (Global_State until you pick one). The bar is a Bayesian posterior: it opens at a 50/50 prior and every recorded success or failure nudges it, so the headline percentage is a belief, not a raw batting average. Trials (n S / n F) tells you how much evidence is actually behind it. Confidence is just a threshold on that score — above 80% reads HIGH, below reads LOW.",
+                            },
+                            {
+                              n: "2",
+                              title: "Accuracy vs Load",
+                              where: "top-right chart",
+                              live: false,
+                              body:
+                                "Meant to plot Fidelity (was the output correct) against Load (what it cost in compute and context) over recent cycles. The backend does not record that time series yet, so the curve is generated from the tool's current success rate plus random noise and the Load line is random outright. The four tiles above it — Avg Fidelity, Peak Load, Fidelity Floor, Stability — are computed off that generated series. Ignore them for decisions until the series is real.",
+                            },
+                            {
+                              n: "3",
+                              title: "Reasoning Horizon",
+                              where: "middle strip",
+                              live: true,
+                              body:
+                                "The genuine audit trail, straight from the decision log. Each card is one ruling by an audit agent on a proposed change. The quoted heading is the stage that ruled — Tier 1 Local Ensemble, Tier 2 Cloud Escalation, System 2A Adversarial Court, Guardrail — and APPROVED / REJECTED is the verdict on the proposal, not on the stage. A wall of REJECTED at Tier 2 means the cloud tier is knocking work back. Click a card, or Audit Logic, to read the full written critique.",
+                            },
+                            {
+                              n: "4",
+                              title: "Tool Matrix",
+                              where: "bottom grid",
+                              live: true,
+                              body:
+                                "Every tool and pipeline step the swarm can reach, scored. Scores are recency-weighted, so a tool that has been idle drifts back toward 50% even with a perfect record — ⌛ marks that decay, and it means 'stale evidence', not 'unreliable'. n is the raw observation count, dimmed tiles have fewer than 5 observations, and clicking a tile drives panel 1 and opens the tool's full profile with its α/β parameters.",
+                            },
+                          ].map((s) => (
+                            <div key={s.n} className="flex gap-4 p-5 bg-primary/[0.015] border border-border/40 rounded-xl hover:bg-primary/[0.03] transition-colors duration-300">
+                              <div className="shrink-0 w-8 h-8 rounded-lg bg-tertiary/10 border border-tertiary/20 flex items-center justify-center text-xs font-bold text-tertiary font-mono">
+                                {s.n}
+                              </div>
+                              <div className="space-y-2 flex-1">
+                                <div className="flex items-center gap-2.5 flex-wrap justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[11px] font-bold uppercase tracking-wider text-primary">{s.title}</span>
+                                    <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest font-mono">({s.where})</span>
+                                  </div>
+                                  <span
+                                    className={`flex items-center gap-1 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest rounded border ${
+                                      s.live
+                                        ? "text-emerald-600 border-emerald-500/20 bg-emerald-500/5"
+                                        : "text-amber-600 border-amber-500/20 bg-amber-500/5"
+                                    }`}
+                                  >
+                                    <span className={`w-1 h-1 rounded-full ${s.live ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                                    {s.live ? "Live" : "Placeholder"}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] leading-relaxed text-secondary/80">{s.body}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="pt-6 border-t border-border/40 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {[
+                            ["α / β", "Shape of the Bayesian belief — accumulated success weight vs failure weight. Both start at 1 (no opinion)."],
+                            ["⌛", "The evidence behind this score has decayed with age. Re-run the tool to refresh it."],
+                            ["n = 12 · 10✓/2✗", "Raw lifetime record, undecayed. When it disagrees with the headline %, the gap is age."],
+                            ["Dimmed tile", "Fewer than 5 observations — not enough evidence to read yet."],
+                            ["APPROVED / REJECTED", "An audit agent's verdict on a proposed change. Rejection is the guardrail working, not an outage."],
+                            ["Confidence (audit cards)", "Mostly a fixed value per audit stage. Only the Adversarial Court and ensemble votes report a genuinely computed one."],
+                          ].map(([term, def]) => (
+                            <div key={term} className="p-4 bg-primary/[0.01] border border-border/20 rounded-lg space-y-1.5">
+                              <div className="flex">
+                                <code className="px-2 py-0.5 bg-primary/5 text-primary/80 border border-border/30 rounded text-[9.5px] font-mono font-bold leading-none select-all">
+                                  {term}
+                                </code>
+                              </div>
+                              <p className="text-[10px] leading-relaxed text-secondary/70">{def}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </section>
+
               <section className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12">
                 <div className="xl:col-span-4">
-                  <motion.div layout className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-10 h-full rounded-2xl">
+                  <motion.div data-tour="intel-fidelity" layout className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-10 h-full rounded-2xl">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Neural Fidelity</span>
@@ -1107,42 +1310,73 @@ export default function BuildConsole() {
                       total={selectedTool ? (selectedTool.success_count || selectedTool.failure_count ? ((selectedTool.success_count || 0) + (selectedTool.failure_count || 0)) : Math.round(((selectedTool.alpha || 0) + (selectedTool.beta || 0)) * 10)) : totalSignals} 
                       label={selectedTool ? `Bayesian Posterior (Trials: ${selectedTool.success_count || 0} S / ${selectedTool.failure_count || 0} F)` : `Global System Fidelity (Trials: ${rawSuccess} S / ${rawFailure} F)`}
                     />
-                    <div className="space-y-6 pt-6 border-t border-primary/5">
+                    <div className="space-y-4 pt-6 border-t border-primary/5">
                        <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Confidence</span>
                         <span className="text-[10px] font-bold text-tertiary">{selectedTool?.confidence || "OPTIMIZED"}</span>
                       </div>
+                      {/* Track the posterior itself. This bar used to be pinned at 88%
+                          regardless of the score, which contradicted the HIGH/LOW label. */}
                       <div className="h-1 bg-primary/5 w-full relative overflow-hidden rounded-full">
-                        <motion.div 
+                        <motion.div
                           initial={{ width: 0 }}
-                          animate={{ width: "88%" }}
+                          animate={{ width: `${Number.isFinite(selectedTool?.success_rate) ? Math.round(Math.max(0, Math.min(1, selectedTool!.success_rate)) * 100) : 0}%` }}
                           className="absolute inset-y-0 left-0 bg-tertiary"
                         />
                       </div>
+                      <p className="text-[9px] font-mono leading-relaxed opacity-40">
+                        Threshold on the posterior above: over 80% reads HIGH, under reads LOW. It measures
+                        the score, not how much evidence produced it — check the trial count above for that.
+                      </p>
                     </div>
                     
-                    <div className="space-y-6 pt-6 border-t border-primary/5">
-                      <ContextWindowBar usedTokens={telemetry.performance?.context_tokens || 6144} maxTokens={8192} label="Gemma 4 Context Window" />
+                    {/* /stats does not return telemetry.performance today, so this bar
+                        would otherwise render a constant 6,144 / 8,192 forever. Show it
+                        only when the backend actually reports a live figure. */}
+                    <div className="space-y-3 pt-6 border-t border-primary/5">
+                      {telemetry.performance?.context_tokens ? (
+                        <ContextWindowBar usedTokens={telemetry.performance.context_tokens} maxTokens={8192} label="Supervisor Context Window" />
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-black uppercase tracking-widest opacity-40">Context Window</span>
+                            <span className="text-[9px] font-bold uppercase tracking-widest text-amber-600">Not Instrumented</span>
+                          </div>
+                          <p className="text-[9px] font-mono leading-relaxed opacity-40">
+                            The backend does not report per-call context usage yet, so there is nothing
+                            truthful to plot here. This appears once /stats returns telemetry.performance.
+                          </p>
+                        </>
+                      )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-8 pt-8 border-t border-primary/5">
-                      <div className="space-y-2">
-                        <span className="text-[8px] font-black uppercase tracking-widest opacity-30">Day Δ</span>
-                        <div className={`text-xl font-black italic ${parseFloat(selectedTool?.delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {parseFloat(selectedTool?.delta || "0") >= 0 ? '+' : ''}{selectedTool?.delta || "0.0"}%
+                    {/* These are NOT time deltas. legacy.py computes them as the tool's
+                        current success rate minus a fixed constant (0.45 and 0.35), so
+                        "Day Δ" never changes with time. Labelled for what they are. */}
+                    <div className="space-y-3 pt-8 border-t border-primary/5">
+                      <div className="grid grid-cols-2 gap-8">
+                        <div className="space-y-2">
+                          <span className="text-[8px] font-black uppercase tracking-widest opacity-30">vs 45% Floor</span>
+                          <div className={`text-xl font-black italic ${parseFloat(selectedTool?.delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {parseFloat(selectedTool?.delta || "0") >= 0 ? '+' : ''}{selectedTool?.delta || "0.0"}%
+                          </div>
+                        </div>
+                        <div className="space-y-2 text-right">
+                          <span className="text-[8px] font-black uppercase tracking-widest opacity-30">vs 35% Floor</span>
+                          <div className={`text-xl font-black italic ${parseFloat(selectedTool?.mom_delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {parseFloat(selectedTool?.mom_delta || "0") >= 0 ? '+' : ''}{selectedTool?.mom_delta || "0.0"}%
+                          </div>
                         </div>
                       </div>
-                      <div className="space-y-2 text-right">
-                        <span className="text-[8px] font-black uppercase tracking-widest opacity-30">Mo Δ</span>
-                        <div className={`text-xl font-black italic ${parseFloat(selectedTool?.mom_delta || "0") >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {parseFloat(selectedTool?.mom_delta || "0") >= 0 ? '+' : ''}{selectedTool?.mom_delta || "0.0"}%
-                        </div>
-                      </div>
+                      <p className="text-[9px] font-mono leading-relaxed opacity-40">
+                        Headroom over two fixed acceptability floors, not movement over time. The backend
+                        keeps no per-tool history, so these only change when the score itself changes.
+                      </p>
                     </div>
                   </motion.div>
                 </div>
                 <div className="xl:col-span-8">
-                  <div className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-8 h-full rounded-2xl flex flex-col justify-between">
+                  <div data-tour="intel-chart" className="p-10 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-sm space-y-8 h-full rounded-2xl flex flex-col justify-between">
                     <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-primary/5 pb-6 gap-4">
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2.5">
@@ -1155,16 +1389,28 @@ export default function BuildConsole() {
                             </summary>
                             <div className="absolute left-0 mt-2 z-[250] w-72 bg-neutral/95 backdrop-blur-md border border-primary/10 p-4 rounded-xl shadow-2xl space-y-2 pointer-events-auto text-[9.5px] font-mono leading-relaxed normal-case tracking-normal text-secondary text-left">
                               <p className="font-bold text-primary uppercase text-[10px] tracking-wider">Performance Analytics Guide</p>
-                              <p className="opacity-90">This chart plots tool performance metrics over the last 30 epochs (execution cycles):</p>
+                              <p className="opacity-90">Intended to plot tool performance over the last 30 epochs (execution cycles):</p>
                               <div className="space-y-1.5 pt-1.5 border-t border-primary/5">
                                 <p><strong className="text-tertiary">Fidelity (Orange Line):</strong> The accuracy, security, and logical correctness score of tool outputs (0-100%).</p>
                                 <p><strong className="text-primary">Load Index (Grey Line):</strong> The computational work, token utilization, and memory consumption (0-100).</p>
                                 <p><strong className="text-stone-300">F/L Ratio:</strong> Efficiency rating. High fidelity and low load yield the highest efficiency.</p>
                               </div>
+                              <div className="pt-1.5 border-t border-primary/5">
+                                <p className="text-amber-600">
+                                  <strong>Placeholder:</strong> /stats has no per-tool time series, so legacy.py
+                                  synthesises 30 points from the current success rate plus noise, and Load is
+                                  random. The shape carries no information — do not read trends off it.
+                                </p>
+                              </div>
                             </div>
                           </details>
                         </div>
-                        <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Accuracy vs Load Topology</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Accuracy vs Load Topology</p>
+                          <span className="px-2 py-[2px] text-[7.5px] font-black uppercase tracking-widest rounded-full border text-amber-600 border-amber-600/40 bg-amber-500/10">
+                            Placeholder Data
+                          </span>
+                        </div>
                       </div>
                       
                       {/* Interactive Legend with Toggles */}
@@ -1199,17 +1445,17 @@ export default function BuildConsole() {
                       <div className="space-y-1">
                         <span className="opacity-30 text-[8px]">Avg Fidelity</span>
                         <div className="text-sm font-black text-tertiary italic">{trendStats.avgFidelity.toFixed(1)}%</div>
-                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Average correctness score across recent task executions.</p>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Mean of the plotted fidelity series. Derived from the placeholder curve above.</p>
                       </div>
                       <div className="space-y-1 pt-2 md:pt-0 md:pl-4">
                         <span className="opacity-30 text-[8px]">Peak Load</span>
                         <div className="text-sm font-black text-primary italic">{trendStats.peakLoad.toFixed(1)}%</div>
-                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Highest recorded context or compute usage overhead.</p>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Maximum of the plotted load series. The load series is randomly generated.</p>
                       </div>
                       <div className="space-y-1 pt-2 md:pt-0 md:pl-4">
                         <span className="opacity-30 text-[8px]">Fidelity Floor</span>
                         <div className="text-sm font-black text-secondary/70 italic">{trendStats.minFidelity.toFixed(1)}%</div>
-                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Lowest recorded correctness score (worst-case output).</p>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Minimum of the plotted fidelity series, not a real worst-case observation.</p>
                       </div>
                       <div className="space-y-1 pt-2 md:pt-0 md:pl-4">
                         <span className="opacity-30 text-[8px]">Stability Rating</span>
@@ -1219,7 +1465,7 @@ export default function BuildConsole() {
                         }`}>
                           {trendStats.stabilityRating}
                         </div>
-                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Consistency classification based on performance variance.</p>
+                        <p className="text-[7.5px] opacity-40 font-mono normal-case tracking-normal leading-normal mt-1">Std-dev band of the plotted series: under 1.5 OPTIMIZED, under 4 STABLE, else STRESSED.</p>
                       </div>
                     </div>
 
@@ -1456,13 +1702,25 @@ export default function BuildConsole() {
 
               {/* --- MIDDLE ROW: Reasoning Horizon (Horizontal) --- */}
               <section className="space-y-8">
-                <div className="flex items-center justify-between border-b border-primary/5 pb-4">
-                  <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Reasoning Horizon</span>
+                {/* Tour anchor is the header, not the whole section: the section is
+                    full-width and ~670px tall, which leaves no gap the callout fits in. */}
+                <div data-tour="intel-horizon" className="flex items-center justify-between border-b border-primary/5 pb-4 gap-4 flex-wrap">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Reasoning Horizon</span>
+                    <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Audit rulings on proposed changes · newest first</p>
+                  </div>
                   <div className="flex items-center gap-4">
                     <span className="text-[10px] font-bold opacity-30 uppercase tracking-widest">{intelligenceHistory.length} Historical Pulses</span>
                     <div className="w-2 h-2 rounded-full bg-tertiary animate-pulse" />
                   </div>
                 </div>
+
+                <p className="text-[10px] font-mono leading-relaxed opacity-40 max-w-4xl -mt-2">
+                  Each card is one ruling by an audit agent. The quoted line is the stage that ruled —
+                  Tier 1 Local Ensemble, Tier 2 Cloud Escalation, System 2A Adversarial Court, Guardrail —
+                  and APPROVED / REJECTED is the verdict on the submitted proposal, not on the stage itself.
+                  Click a card to read the full written critique.
+                </p>
 
                 {intelligenceHistory.length > 0 && (
                   <motion.div 
@@ -1475,6 +1733,7 @@ export default function BuildConsole() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="px-3 py-1 bg-tertiary text-white text-[9px] font-black uppercase tracking-widest">Priority Intelligence</div>
+                      <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest italic whitespace-nowrap hidden sm:inline">Highest-confidence ruling on record — not the most recent</span>
                       <div className="h-[1px] flex-1 bg-tertiary/20" />
                       <span className="text-[10px] font-black text-tertiary">{(Math.max(...intelligenceHistory.map(h => h.confidence || 0)) * 100).toFixed(0)}% Confidence</span>
                     </div>
@@ -1568,7 +1827,14 @@ export default function BuildConsole() {
                         const shown = Math.round((tool.success_rate ?? 0) * 100);
                         return (
                           <div
-                            onClick={() => { setSelectedTool(tool); setActiveToolModal(tool); }}
+                            onClick={() => {
+                              if (selectedTool?.tool_id === tool.tool_id) {
+                                setSelectedTool(null);
+                              } else {
+                                setSelectedTool(tool);
+                                setActiveToolModal(tool);
+                              }
+                            }}
                             title={decayed
                               ? `Recency-weighted. Raw record ${s}/${n}; evidence has decayed with age.`
                               : `Raw record ${s}/${n}.`}
@@ -1601,7 +1867,9 @@ export default function BuildConsole() {
 
                       return (
                         <>
-                          <div className="flex items-start justify-between border-b border-primary/5 pb-6 gap-4 flex-wrap">
+                          {/* Tour anchor is the header, not the section: the tile grid runs
+                              thousands of pixels tall and a spotlight that size highlights nothing. */}
+                          <div data-tour="intel-matrix" className="flex items-start justify-between border-b border-primary/5 pb-6 gap-4 flex-wrap">
                             <div className="flex flex-col">
                               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-primary">Tool Matrix</span>
                               <p className="text-[10px] font-bold opacity-30 uppercase tracking-widest italic">Neural Capability Topology</p>
@@ -1677,7 +1945,7 @@ export default function BuildConsole() {
                                    <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Confidence Rating</span>
                                  </div>
                                  <p className="text-xl sm:text-2xl font-black italic text-tertiary">{(selectedDecision.confidence * 100).toFixed(1)}%</p>
-                                 <p className="text-[8.5px] text-secondary opacity-50 font-mono">Likelihood score calculated based on system-wide trial history.</p>
+                                 <p className="text-[8.5px] text-secondary opacity-50 font-mono">How much weight the ruling stage attaches to this verdict. Most stages emit a fixed value; the Adversarial Court and ensemble votes report a computed one.</p>
                                </div>
                                <div className="space-y-1 sm:space-y-2 sm:col-span-2 md:col-span-1">
                                  <span className="text-[9px] font-black uppercase tracking-widest opacity-40">Temporal Stamp</span>
@@ -1983,7 +2251,7 @@ export default function BuildConsole() {
 
           {activeTab === "workspace" && (() => {
             const hasRealSlots = workspaceSlots.length > 0 || workspaceAlerts.length > 0;
-            const displaySlots = hasRealSlots ? [...workspaceAlerts, ...workspaceSlots] : [
+            const displaySlots = hasRealSlots ? workspaceSlots : [
               {
                 concept: "Orchestrator (bug_fix) running step: 🔬 Generating implementation candidate (tool: analyze_bug)",
                 salience: 0.600,
@@ -2056,7 +2324,7 @@ export default function BuildConsole() {
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="text-[10px] font-black opacity-30 uppercase tracking-widest">
-                      {workspaceAlerts.length} Alerts // {workspaceSlots.length} Active Slots
+                      {workspaceAlerts.length} Alerts // {Math.max(0, workspaceSlots.length - workspaceAlerts.length)} Active Slots
                     </div>
                   </div>
                 </div>
