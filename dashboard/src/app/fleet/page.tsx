@@ -99,6 +99,18 @@ const WORKER_DETAILS: Record<string, WorkerDetails> = {
     ],
     connection: "Local Process Socket Port 8000 (ChromaDB Server)",
     performance: "~2ms latency / ~2,500 operations/sec throughput"
+  },
+  "Legion Sentry": {
+    hardware: "Raspberry Pi 3 Model A+ (512MB RAM, headless Wi-Fi Sentry)",
+    activeModel: "Unbound Local Recursive DNS & Pi-hole DNSSEC Filter",
+    responsibilities: [
+      "Network-wide ad and telemetry blocking (296k+ domains loaded)",
+      "Local recursive DNS resolution via global root hints servers",
+      "DNSSEC validation & security signature checks (spoof protection)",
+      "Client group segmentation (Developer vs IoT/telemetry policies)"
+    ],
+    connection: "https://sentry.lan/admin (Local Network Sentry IP 192.168.1.183)",
+    performance: "~0ms cached response / ~12ms recursive lookup resolution"
   }
 };
 
@@ -188,6 +200,7 @@ export default function FleetCommand() {
   const [toolsLoaded, setToolsLoaded] = useState(false);
   const [budget, setBudget] = useState<BudgetData | null>(null);
   const [workers, setWorkers] = useState<WorkerStatus[]>([]);
+  const [sentryStats, setSentryStats] = useState<{ queries: number; blocked: number; pct: number } | null>(null);
   const [selectedTool, setSelectedTool] = useState<ToolStat | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<WorkerStatus | null>(null);
   const [error, setError] = useState(false);
@@ -247,6 +260,27 @@ export default function FleetCommand() {
       
       const configuredNodes = statsData.configured_nodes || {};
 
+      // Dynamic check for Legion Sentry Pi-hole
+      let sentryOnline = false;
+      try {
+        const sentryRes = await fetch("https://sentry.lan/admin/api.php", {
+          signal: AbortSignal.timeout(1200)
+        });
+        if (sentryRes.ok) {
+          const sentryData = await sentryRes.json();
+          if (sentryData && sentryData.status === "enabled") {
+            sentryOnline = true;
+            setSentryStats({
+              queries: sentryData.dns_queries_today ?? 0,
+              blocked: sentryData.ads_blocked_today ?? 0,
+              pct: sentryData.ads_percentage_today ?? 0
+            });
+          }
+        }
+      } catch (e) {
+        sentryOnline = false;
+      }
+
       setWorkers([
         {
           name: "LM Studio",
@@ -283,6 +317,14 @@ export default function FleetCommand() {
           type: "local",
           status: "online", // Managed at container launch
           role: "Vector Memory — Semantic search & code topology"
+        },
+        {
+          name: "Legion Sentry",
+          type: "remote",
+          status: sentryOnline ? "online" : "offline",
+          role: sentryOnline && sentryStats
+            ? `DNS Sentry — Active (${sentryStats.blocked} ads / ${sentryStats.pct.toFixed(1)}% blocked today)`
+            : "DNS Sentry — Recursive local resolver & Pi-hole filter"
         },
       ]);
 
