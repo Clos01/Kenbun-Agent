@@ -17,6 +17,8 @@ services:
     cap_add:
     - net_admin
     - net_raw
+    ports:
+    - "127.0.0.1:3000:3000"
     networks:
     - default
     - kenbun_planka-tier
@@ -328,23 +330,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    network_mode: container:tailscale
-    depends_on:
-      tailscale:
-        condition: service_started
-  excalidraw:
-    image: excalidraw/excalidraw:latest
-    container_name: portable_excalidraw
-    healthcheck:
-      test:
-      - CMD
-      - wget
-      - -qO-
-      - http://127.0.0.1:80
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    restart: unless-stopped
     network_mode: container:tailscale
     depends_on:
       tailscale:
