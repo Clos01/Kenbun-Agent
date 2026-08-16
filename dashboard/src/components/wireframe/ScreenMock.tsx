@@ -80,7 +80,9 @@ function Leaf({ c }: { c: WComponent }) {
       return (
         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           {label && <div style={{ ...truncate, fontSize: 10, color: PAPER.inkMuted }}>{label}</div>}
-          <div style={{ height: c.type === "textarea" ? 46 : 22, border: rule, borderRadius: 3, background: "#FBF9F5" }} />
+          {/* White against the screen frame's `well`, so a field reads as
+              recessed rather than merging into the surface behind it. */}
+          <div style={{ height: c.type === "textarea" ? 46 : 22, border: rule, borderRadius: 3, background: PAPER.sheet }} />
         </div>
       );
 

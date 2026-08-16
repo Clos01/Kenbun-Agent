@@ -54,21 +54,40 @@ export type WDoc = {
 };
 
 /**
- * Fixed drafting-sheet palette.
+ * Drafting-sheet palette, derived from the Heritage tokens.
  *
- * Deliberately NOT wired to the app's theme tokens. The wireframe reads as a
- * document you opened rather than a panel of the dashboard, so it stays on
- * paper in dark mode too. Theme-following was tried in the Excalidraw version
- * and produced a canvas that inverted independently of the app around it.
+ * This used to be an independent sepia palette, justified on the grounds that a
+ * wireframe "stays on paper when the app is dark". The dashboard has no dark
+ * mode — `:root` and `.light` in globals.css are identical — so that argument
+ * was defending against a case that cannot arise, and what it actually produced
+ * was a set of NEAR-MISSES: #E4DFD4 backdrop against the app's #F7F5F2, #1F1E1B
+ * ink against #1A1C1E, #B0562A accent against Boston Clay #B8422E. A colour that
+ * is close to a token but not equal to it reads as a mistake, where either an
+ * exact match or a frank contrast would have read as a decision.
+ *
+ * The hue was the louder half of the problem. Heritage is COOL slate text on
+ * WARM paper; the old palette was warm-on-warm throughout, so its greys drifted
+ * yellow against every other panel in the dashboard. The neutrals below are
+ * tints of --secondary (#6C7278) so they sit in the same slate family, over a
+ * --card sheet on the app's own --neutral background.
+ *
+ * Still deliberately tonal: colour never encodes meaning here. Endpoints are not
+ * coloured by HTTP method and models are not coloured by layer — that made the
+ * wiring louder than the screens people actually read a wireframe for. One
+ * accent exists, it is the Heritage accent, and it is used sparingly.
+ *
+ * Keep these in sync with globals.css. They are literals rather than var()
+ * lookups because sheet.ts must stay browser-free for the Node-side audit.
  */
 export const PAPER = {
-  sheet: "#F4F1EA",
-  sheetEdge: "#E4DFD4",
-  ink: "#1F1E1B",
-  inkSoft: "#57544C",
-  inkMuted: "#8C887E",
-  rule: "#CBC6BA",
-  ruleStrong: "#A9A497",
-  fill: "#E9E5DB",
-  accent: "#B0562A",
+  sheet: "#FFFFFF",       // --card: the page itself
+  sheetEdge: "#F7F5F2",   // --background: the desk the page lies on
+  well: "#F7F5F2",        // recessed surface inside the page (screen frames)
+  ink: "#1A1C1E",         // --primary
+  inkSoft: "#6C7278",     // --secondary
+  inkMuted: "#A7AAAE",    // --secondary @ 60%
+  rule: "#DADCDD",        // --secondary @ 25%
+  ruleStrong: "#BDC0C2",  // --secondary @ 45%
+  fill: "#EDEEEF",        // --secondary @ 12%, for filled controls
+  accent: "#B8422E",      // --tertiary, Boston Clay
 } as const;

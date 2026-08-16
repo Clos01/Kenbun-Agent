@@ -100,6 +100,12 @@ function Sheet({ model, doc }: { model: SheetModel; doc: WDoc }) {
             background: PAPER.sheet,
             border: `0.5px solid ${PAPER.rule}`,
             borderRadius: 4,
+            // The sheet and the desk behind it are now only four steps apart
+            // (--card on --neutral), which is the Heritage card relationship but
+            // too quiet on its own to say "this is a page". The shadow does the
+            // separating that the old high-contrast beige backdrop did by brute
+            // force, without putting an off-token colour on screen.
+            boxShadow: "0 1px 2px rgba(26, 28, 30, 0.04), 0 8px 24px rgba(26, 28, 30, 0.06)",
             padding: "30px 36px 34px",
           }}
         >
@@ -117,7 +123,7 @@ function Sheet({ model, doc }: { model: SheetModel; doc: WDoc }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, color: PAPER.ink }}>{s.title}</div>
                 <div style={{ fontSize: 11, color: PAPER.inkMuted, marginBottom: 10 }}>{s.caption}</div>
-                <div style={{ border: `0.5px solid ${PAPER.ruleStrong}`, borderRadius: 4, padding: "14px 16px", background: "#FBF9F5" }}>
+                <div style={{ border: `0.5px solid ${PAPER.ruleStrong}`, borderRadius: 4, padding: "14px 16px", background: PAPER.well }}>
                   {s.screen.body ? (
                     <ComponentTree
                       c={s.screen.body}
