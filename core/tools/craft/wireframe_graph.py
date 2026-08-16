@@ -33,6 +33,7 @@ module. Only the render target moved.
 """
 import json
 import re
+from typing import Optional
 
 SCHEMA_VERSION = 1
 
@@ -172,7 +173,8 @@ def spec_to_graph(spec: dict, detail: str = "") -> dict:
     nodes = []
     edges = []
     buttons = {}          # normalised button label -> {screenId, handleId}
-    endpoint_by_key = {}  # "post /api/x" AND "/api/x" -> node id
+    endpoint_by_key = {}      # "post /api/x" -> node id (exact, unambiguous)
+    endpoints_by_path = {}    # "/api/x" -> [(method, node id), ...] (may be many)
     entity_by_key = {}
 
     # ── Screens ─────────────────────────────────────────────────────────────
@@ -208,9 +210,13 @@ def spec_to_graph(spec: dict, detail: str = "") -> dict:
         if level >= 2 and ep.get("payload"):
             node["payload"] = _payload_text(ep["payload"])
         nodes.append(node)
-        # Register under both spellings a flow might use.
+        # "POST /api/tasks" is unambiguous, so it can be a direct key.
         endpoint_by_key.setdefault(_norm_key(f"{method} {path}"), eid)
-        endpoint_by_key.setdefault(_norm_key(path), eid)
+        # The bare path is NOT: a REST collection is normally served by several
+        # methods, so "/api/tasks" names two endpoints. Collect the candidates and
+        # let _resolve_endpoint decide, instead of setdefault silently awarding the
+        # path to whichever endpoint the model happened to list first.
+        endpoints_by_path.setdefault(_norm_key(path), []).append((method, eid))
 
     # ── Entities ────────────────────────────────────────────────────────────
     if level >= 1:
@@ -243,11 +249,34 @@ def spec_to_graph(spec: dict, detail: str = "") -> dict:
             e["sourceHandle"] = source_handle
         edges.append(e)
 
+    def _resolve_endpoint(ref, prefer_write: bool = False):
+        """Resolve a flow/integration target, which may or may not name a method.
+
+        The spec schema asks for a bare `path` in flow.to, so the common CRUD case
+        ("/api/tasks", served by both GET and POST) is ambiguous by construction.
+        prefer_write breaks that tie toward the mutating endpoint, because the
+        schema only wires a flow to a button at all when the button DOES something
+        — read-only list/detail GETs are explicitly the endpoints that carry no
+        flow. Without the tie-break, a "Save Task" button drew its arrow to
+        GET /api/tasks purely because the model listed the read first.
+        """
+        key = _norm_key(ref)
+        if key in endpoint_by_key:      # an explicit "post /api/tasks"
+            return endpoint_by_key[key]
+        candidates = endpoints_by_path.get(key) or []
+        if not candidates:
+            return None
+        if prefer_write:
+            for method, eid in candidates:
+                if method != "GET":
+                    return eid
+        return candidates[0][1]
+
     # button -> endpoint
     unresolved = []
     for fl in flows:
         btn = buttons.get(_norm_key(fl.get("from")))
-        tgt = endpoint_by_key.get(_norm_key(fl.get("to")))
+        tgt = _resolve_endpoint(fl.get("to"), prefer_write=True)
         if btn and tgt:
             add_edge(btn["screenId"], tgt, "flow", btn["label"], btn["handleId"])
         else:
@@ -285,7 +314,9 @@ def spec_to_graph(spec: dict, detail: str = "") -> dict:
     # endpoint -> integration
     for nid, ig in integ_ids.items():
         for ep_path in (ig.get("via") or []):
-            add_edge(endpoint_by_key.get(_norm_key(ep_path)), nid, "integration")
+            # No prefer_write here: an integration is called by whichever endpoint
+            # the spec names, and a read can legitimately hit a 3rd-party service.
+            add_edge(_resolve_endpoint(ep_path), nid, "integration")
 
     doc = {
         "type": "kenbun-wireframe",
@@ -365,6 +396,98 @@ WIREFRAME_SYSTEM_PROMPT = (
 )
 
 
+def _parse_spec(raw: object) -> Optional[dict]:
+    """Extract the spec object from a raw completion, or None if there isn't one.
+
+    Kept separate from the retry loop so "did this endpoint answer the question"
+    is one testable decision rather than control flow tangled through two loops.
+    """
+    txt = re.sub(r"^```(json)?", "", str(raw).strip()).strip()
+    txt = re.sub(r"```$", "", txt).strip()
+    m = re.search(r"\{.*\}", txt, re.DOTALL)
+    if not m:
+        return None
+    try:
+        obj = json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+    # A bare {} or a JSON object that is not a spec is a failed attempt, not a
+    # successful one — without this the loop "succeeds" on garbage and the
+    # caller blows up later in spec_to_graph, far from the actual cause.
+    if not isinstance(obj, dict) or not obj.get("screens"):
+        return None
+    return obj
+
+
+def _spec_endpoints():
+    """The escalation ladder for spec generation, strongest rung first.
+
+    Wireframe specs are a structured-output task, and the default gateway rung is
+    whatever PRIMARY_LLM_MODEL happens to be — on lg2025 that is a local
+    completion-style Ollama model (kenbun-cto) that ignores the system prompt and
+    simply continues the user's sentence. Its reply is non-empty, so
+    call_llm_gateway counts it a success and never advances to its own fallback;
+    the caller then retried that same incapable endpoint until it gave up. So the
+    ladder is owned here, where "did we get JSON" is actually known, instead of
+    being delegated to a router whose only failure test is emptiness.
+
+    Rungs that are not configured are skipped rather than attempted, so a host
+    with no cloud key still degrades to the local rung instead of erroring.
+    """
+    from tools.infrastructure.config import settings
+
+    # ANTHROPIC_API_KEY is a pydantic SecretStr: the object is truthy even when it
+    # wraps "", so unwrap it rather than testing the wrapper.
+    key = getattr(settings, "ANTHROPIC_API_KEY", None)
+    key = key.get_secret_value() if hasattr(key, "get_secret_value") else key
+
+    ladder = []
+    if getattr(settings, "AUDIT_LLM_URL", "") and key:
+        ladder.append((settings.AUDIT_LLM_URL, settings.AUDIT_LLM_MODEL, "audit/cloud"))
+
+    # An EXPLICIT strong Gemini rung, rather than relying on the router's
+    # last-ditch native-SDK fallback. That fallback hardcodes model_override=None,
+    # which hands model choice to the cost-optimising bandit — and the bandit's
+    # cheapest arm (flash-lite) answers a full-stack design brief with two screens
+    # and no integrations. It is valid JSON, so nothing here would flag it; the
+    # wireframe is just quietly wrong. Naming the model keeps design quality a
+    # decision rather than a side effect of budget pressure.
+    design_url = getattr(settings, "DESIGN_LLM_URL", "")
+    design_model = getattr(settings, "DESIGN_LLM_MODEL", "")
+    if design_url and design_model and getattr(settings, "GEMINI_API_KEY", None):
+        ladder.append((design_url, design_model, "design/cloud"))
+
+    # None/None = "use whatever the router is configured for", i.e. the previous
+    # behaviour, retained as the last rung so this never becomes cloud-only.
+    ladder.append((None, None, "default gateway"))
+    return ladder
+
+
+def _call_rung(url, model, sysprompt: str, msg: str) -> str:
+    """Invoke ONE rung of the ladder, with no hidden substitution.
+
+    A named rung goes straight at its endpoint. It deliberately does NOT go through
+    call_llm_gateway, because that helper silently absorbs a failure and answers
+    from somewhere else entirely: with the Anthropic key 401ing, a request for
+    claude-sonnet-5 came back 200 OK — served by gemini-flash-lite via the router's
+    last-ditch native-SDK fallback, which hardcodes model_override=None and lets
+    the cost bandit choose. Nothing in the reply says so. That made escalation
+    impossible to express: rung 1 "succeeded", so the ladder never advanced, and
+    every wireframe was drafted by the cheapest arm no matter what was configured.
+    Calling the endpoint directly means a dead rung raises, and raising is what
+    lets the next rung actually get its turn.
+
+    The final rung passes url=model=None and DOES use the gateway, on purpose —
+    that is the general-purpose safety net for hosts configured differently to
+    this one, and by then there is nothing left to escalate to.
+    """
+    if url is None and model is None:
+        from tools.utils.llm_router import call_llm_gateway
+        return call_llm_gateway(sysprompt, msg, max_tokens=8192)
+    from tools.utils.llm_router import _make_openai_compatible_call
+    return _make_openai_compatible_call(url, model, sysprompt, msg, 0.1, 8192)
+
+
 def generate_spec(prompt: str, detail: str = "", prior_spec: dict = None) -> dict:
     """Produce the structured spec.
 
@@ -392,19 +515,34 @@ def generate_spec(prompt: str, detail: str = "", prior_spec: dict = None) -> dic
         user_msg += ("\n\nPREVIOUS SPEC TO AMEND:\n"
                      + json.dumps(prior_spec, indent=1)[:12000])
 
-    raw = ""
-    for _ in range(3):
-        raw = call_llm_gateway(sysprompt, user_msg, max_tokens=8192)
-        txt = re.sub(r"^```(json)?", "", str(raw).strip()).strip()
-        txt = re.sub(r"```$", "", txt).strip()
-        m = re.search(r"\{.*\}", txt, re.DOTALL)
-        if not m:
-            continue
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
-            continue
-    raise ValueError(f"LLM failed to return valid JSON spec after 3 attempts. Last output: {str(raw)[:200]}")
+    failures = []
+    for url, model, label in _spec_endpoints():
+        raw = ""
+        for attempt in range(2):
+            msg = user_msg
+            if attempt:
+                # A repair round, not a rerun. Handing the model back its own
+                # malformed output is the only thing that distinguishes attempt 2
+                # from attempt 1 — an identical call to a deterministic endpoint
+                # returns the identical bad answer, which is exactly how the old
+                # 3-attempt loop burned every retry without learning anything.
+                msg += (
+                    "\n\nYour previous reply was NOT valid JSON and was rejected:\n"
+                    f"<REJECTED>\n{str(raw)[:1500]}\n</REJECTED>\n"
+                    "Reply with ONLY the JSON object described above — no prose, no "
+                    "markdown fence, no commentary. Start with { and end with }.")
+            try:
+                raw = _call_rung(url, model, sysprompt, msg)
+            except Exception as e:
+                failures.append(f"{label} ({model}): call failed — {e}")
+                break
+            spec = _parse_spec(raw)
+            if spec is not None:
+                return spec
+        failures.append(f"{label} ({model}): returned no JSON object — {str(raw)[:160]!r}")
+    raise ValueError(
+        "LLM failed to return a valid JSON spec on every configured endpoint.\n  "
+        + "\n  ".join(failures))
 
 
 def build_wireframe(prompt: str, detail: str = "", prior_spec: dict = None):

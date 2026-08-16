@@ -250,6 +250,13 @@ class KenbunSettings(BaseSettings):
     # claude-3-5-sonnet-20241022 in supervisor_agent.py.
     AUDIT_LLM_MODEL: str = "claude-sonnet-5"
     AUDIT_LLM_URL: str = "https://api.anthropic.com/v1"
+    # Design-generation rung for structured-JSON work (wireframe specs). Kept
+    # separate from AUDIT_* because it is chosen for instruction-following on a
+    # long schema, not for adversarial review, and separate from PRIMARY_* because
+    # the primary may legitimately be a local completion model that cannot emit
+    # JSON at all. Configurable so the model can be moved without a code change.
+    DESIGN_LLM_MODEL: str = "gemini-3.1-pro-preview"
+    DESIGN_LLM_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
     OLLAMA_PORT: int = 11434
     FALLBACK_LLM_URL: Optional[str] = None
     OPENAI_RUNTIME: str = Field(default="auto")
