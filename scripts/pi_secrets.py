@@ -110,9 +110,17 @@ def main():
         try:
             creds = decrypt_data()
             print("🔒 Decrypted Raspberry Pi Credentials:")
-            print(f"  Hostname: {creds['hostname']}")
-            print(f"  Username: {creds['username']}")
-            print(f"  Password: {creds['password']}")
+            print(f"  IP Address: {creds.get('ip_address', '192.168.1.183')}")
+            print(f"  Hostname: {creds.get('hostname')}")
+            print(f"  Username: {creds.get('username')}")
+            
+            # Support both old key 'password' and new key 'ssh_password'
+            ssh_pw = creds.get('ssh_password') or creds.get('password')
+            print(f"  SSH Password: {ssh_pw}")
+            
+            if 'pihole_admin_password' in creds:
+                print(f"  Pi-hole Admin Password: {creds['pihole_admin_password']}")
+                print(f"  Dashboard URL: http://{creds.get('ip_address', '192.168.1.183')}/admin")
         except Exception as e:
             print(f"❌ Failed to decrypt credentials: {e}")
             sys.exit(1)
