@@ -20,7 +20,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  Mic
+  Mic,
+  FileText
 } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useTenant } from "@/context/TenantContext";
@@ -39,6 +40,7 @@ export default function Sidebar() {
     { name: "Build Console", href: "/observatory", icon: Compass },
     { name: "Agents", href: "/fleet", icon: LayoutGrid },
     { name: "Board", href: "/board", icon: Columns },
+    { name: "SOW Studio", href: "/sow", icon: FileText },
     { name: "Services", href: "/apps", icon: Layers },
     { name: "Metrics", href: "/telemetry", icon: Activity },
     { name: "Audit", href: "/supervisor", icon: ShieldCheck },

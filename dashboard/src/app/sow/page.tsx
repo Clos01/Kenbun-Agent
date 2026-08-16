@@ -32,6 +32,17 @@ export default function SOWPage() {
   const [epics, setEpics] = useState<Epic[]>([]);
   const [content, setContent] = useState("");
 
+  // Resolve project ID from query parameter on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const pid = params.get("project_id");
+      if (pid && PROJECTS.some(p => p.id === pid)) {
+        setProjectId(pid);
+      }
+    }
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);

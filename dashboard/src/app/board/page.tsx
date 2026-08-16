@@ -5,6 +5,7 @@
 const DOCMOST_URL = process.env.NEXT_PUBLIC_DOCMOST_URL ?? "http://100.104.211.61:3006";
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import WorkflowView from "@/components/WorkflowView";
 import DocsView from "@/components/DocsView";
@@ -34,7 +35,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Filter,
-  PenTool
+  PenTool,
+  FileText
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -503,7 +505,7 @@ export default function BoardPage() {
 
       // Sort lists
       const activeLists = (included.lists || [])
-        .filter((l: { type: string; isClosed: boolean; [key: string]: unknown }) => l.type === "active" && !l.isClosed)
+        .filter((l: { type: string; isClosed: boolean; [key: string]: unknown }) => (l.type === "active" || l.type === "list") && !l.isClosed)
         .sort((a: { position?: number }, b: { position?: number }) => (a.position || 0) - (b.position || 0));
 
       // Sort cards
@@ -1053,7 +1055,7 @@ export default function BoardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-neutral text-primary flex selection:bg-tertiary selection:text-white max-w-[100vw] overflow-x-hidden font-sans">
+    <div className="h-screen overflow-hidden bg-neutral text-primary flex selection:bg-tertiary selection:text-white max-w-[100vw] font-sans">
       {/* Blueprint backdrop — static drafting grid, faded at the edges, with two matte washes */}
       <div aria-hidden="true" className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] bg-[size:3.5rem_3.5rem] opacity-30 [mask-image:radial-gradient(ellipse_80%_80%_at_50%_30%,black_25%,transparent_100%)]" />
@@ -1063,7 +1065,7 @@ export default function BoardPage() {
 
       <Sidebar />
 
-      <main className="flex-1 relative z-10 flex flex-col min-w-0 pb-20 lg:pb-0">
+      <main className="flex-1 relative z-10 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* ============ HEADER — single calm row ============ */}
         <header className="h-14 sm:h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-3 sm:px-6 lg:px-10 gap-3 sm:gap-6">
           <div className="flex items-center gap-2 sm:gap-4 min-w-0">
@@ -1078,21 +1080,16 @@ export default function BoardPage() {
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
-            ) : (
-              <Columns className="w-4 h-4 text-tertiary shrink-0" />
-            )}
-            <div className="min-w-0">
-              <div className={LABEL_CAPS + " leading-none mb-0.5 text-[8px] sm:text-[9px]"}>
-                {selectedBoard ? "Kanban Board" : "Workspaces"}
-              </div>
-              <h1 className="font-serif italic text-base sm:text-lg font-bold text-primary leading-tight truncate">
-                {selectedBoard ? selectedBoard.name : "Mission Board"}
-              </h1>
-            </div>
+            ) : null}
+            <span className="font-bold text-base sm:text-lg lg:text-xl uppercase tracking-tighter italic">
+              Projects <span className="text-tertiary">Board</span>
+            </span>
+          </div>
 
-            {/* Tabs live in the header — no second nav row */}
-            {selectedBoard && (
-              <nav className="hidden xl:flex items-center gap-1 ml-6 border-l border-primary/10 pl-6 h-full min-w-0 overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2.5 sm:gap-4">
+            {selectedBoard ? (
+              // Desktop Tabs
+              <div className="hidden xl:flex items-center gap-1">
                 {([
                   { key: "kanban", label: "Board", icon: Columns },
                   { key: "calendar", label: "Calendar", icon: Calendar },
@@ -1104,27 +1101,43 @@ export default function BoardPage() {
                   <button
                     key={t.key}
                     onClick={() => changeTab(t.key)}
-                    className={`shrink-0 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors ${
-                      activeTab === t.key
-                        ? "text-tertiary bg-tertiary/10"
-                        : "text-secondary hover:text-primary"
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all duration-300 text-[10px] font-bold uppercase tracking-widest cursor-pointer ${
+                      activeTab === t.key 
+                        ? "bg-primary text-neutral" 
+                        : "text-secondary hover:text-primary hover:bg-primary/5"
                     }`}
                   >
-                    <t.icon className="w-3.5 h-3.5" />
-                    {t.label}
+                    <t.icon className={`w-3 h-3 ${activeTab === t.key ? "text-tertiary" : "text-secondary"}`} />
+                    <span>{t.label}</span>
                   </button>
                 ))}
                 <a
                   href={DOCMOST_URL}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="shrink-0 px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
+                  className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
                   title="Open the Docmost wiki in a new tab"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   Wiki
                 </a>
-              </nav>
+                <Link
+                  href={`/sow?project_id=${selectedBoard.projectId}`}
+                  className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
+                  title="Open the Statement of Work Studio"
+                >
+                  <FileText className="w-3.5 h-3.5 text-secondary" />
+                  SOW
+                </Link>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsAddingProject(true)}
+                className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/95 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Project
+              </button>
             )}
           </div>
 
@@ -1322,6 +1335,14 @@ export default function BoardPage() {
                 <span>{t.label}</span>
               </button>
             ))}
+            <Link
+              href={`/sow?project_id=${selectedBoard.projectId}`}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-sm border bg-card/40 border-primary/5 text-secondary hover:text-primary hover:bg-card/80 text-[10px] font-bold uppercase tracking-widest cursor-pointer shrink-0"
+              title="Open the Statement of Work Studio"
+            >
+              <FileText className="w-3.5 h-3.5 text-secondary" />
+              <span>SOW</span>
+            </Link>
           </div>
         )}
 
