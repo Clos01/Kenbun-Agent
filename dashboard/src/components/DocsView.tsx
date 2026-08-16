@@ -420,7 +420,7 @@ export default function DocsView({
                 </button>
               </div>
             </div>
-            <div className="markdown-content text-sm text-primary leading-relaxed break-words max-w-5xl mt-6">
+            <div className="markdown-content text-sm text-primary leading-relaxed break-words w-full max-w-5xl mt-6">
               {formatMarkdown(active.body || "_This document is empty._")}
             </div>
           </div>
@@ -428,7 +428,7 @@ export default function DocsView({
           <div className="text-center py-24">
             <BookOpen className="w-8 h-8 text-secondary mx-auto mb-4" />
             <div className={LABEL}>{projectName || "Documentation"}</div>
-            <p className="text-xs text-secondary mt-3 max-w-md mx-auto leading-relaxed">
+            <p className="text-xs text-secondary mt-3 w-full max-w-md mx-auto leading-relaxed">
               Select a document, or create one with +. Documents are scoped to this
               project, keep full revision history, and can be exported as markdown
               for handover.

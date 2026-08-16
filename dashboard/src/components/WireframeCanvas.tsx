@@ -203,7 +203,7 @@ function Sheet({ model, doc }: { model: SheetModel; doc: WDoc }) {
 function Notice({ title, body }: { title: string; body: string }) {
   return (
     <div style={{ display: "flex", height: "100%", width: "100%", alignItems: "center", justifyContent: "center", padding: 32 }}>
-      <div className="max-w-md rounded-lg border border-border bg-card/60 p-5 text-center">
+      <div className="w-full max-w-md rounded-lg border border-border bg-card/60 p-5 text-center">
         <FileWarning className="mx-auto mb-3 h-5 w-5 text-secondary" />
         <div className="text-[11px] font-bold uppercase tracking-[0.15em] text-primary">{title}</div>
         <p className="mt-2 text-xs leading-relaxed text-secondary">{body}</p>
