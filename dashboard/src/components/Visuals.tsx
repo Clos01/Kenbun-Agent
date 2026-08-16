@@ -7,10 +7,20 @@ import { motion, AnimatePresence } from "framer-motion";
 /**
  * A Sharp Accuracy Ledger (Success vs Failure)
  */
-export const AccuracyGauge = ({ success, total, label = "Signals" }: { success: number, total: number, label?: string }) => {
+export const AccuracyGauge = ({ 
+  success, 
+  total, 
+  label = "Signals",
+  valueOverride
+}: { 
+  success: number, 
+  total: number, 
+  label?: string,
+  valueOverride?: number
+}) => {
   const failure = total - success;
-  const successPct = total > 0 ? (success / total) * 100 : 0;
-  const failurePct = total > 0 ? (failure / total) * 100 : 0;
+  const successPct = valueOverride !== undefined ? valueOverride : (total > 0 ? (success / total) * 100 : 0);
+  const failurePct = 100 - successPct;
 
   return (
     <div className="space-y-4">
