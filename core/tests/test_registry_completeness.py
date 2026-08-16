@@ -1,6 +1,4 @@
-import pytest
-from tools.registry import registry, ToolEntry, PipelineEntry
-import tools.infrastructure.orchestrator  # Trigger pipeline registrations
+from tools.registry import registry, ToolEntry
 
 def test_registry_pipeline_completeness():
     # Verify that standard pipelines are registered
@@ -30,3 +28,20 @@ def test_registry_tool_completeness():
     assert retrieved is not None
     assert retrieved.name == "test_tool"
     assert retrieved.category == "Test"
+
+def test_build_pipeline_tools_dynamic_resolution():
+    from tools.infrastructure.orchestrator import build_pipeline_tools
+    tools = build_pipeline_tools()
+    
+    # Verify standard pipeline tools are resolved
+    assert "scan_repo" in tools
+    assert "review_code_with_gemini" in tools
+    assert "research_with_gemini" in tools
+    assert "consult_supervisor" in tools
+    assert "view_file" in tools
+    assert "analyze_bug" in tools
+    
+    # Verify dynamically harvested tools are also present
+    assert "browser_navigate" in tools
+    assert "computer_use" in tools
+    assert "send_imessage" in tools

@@ -201,34 +201,28 @@ def _telemetry_id(step_id: str) -> str:
 def build_pipeline_tools(project_path: str = "."):
     """The canonical name -> callable map that pipeline builders index.
 
-    Pipeline builders in tools/infrastructure/pipelines/ reference tools by
-    string key (tools["recall_fix"], tools["guardrail_audit"], ...). Any caller
-    that assembles its own partial dict starves them, so this is the one place
-    that mapping is defined and every caller should start here.
+    This dynamically registers and resolves all harvested tools from the central
+    registry, avoiding hardcoded drift and giving the pipelines / swarm full
+    access to the sovereign toolset.
 
     project_path scopes view_file's jail to the repo under work.
     """
-    from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
-    from tools.audit.supervisor_agent import run_supervisor_audit
-    from tools.memory.repo_mapper import scan_repo
-    from tools.utils.error_memory import remember_fix, recall_fix
-    from tools.utils.backtracker import save_checkpoint, restore_checkpoint
-    from tools.execution.e2b_runner import run_code_safely as run_code_safely
-    from tools.utils.bayesian import tune_swarm
-    from tools.audit.consult_architect import consult_brain
-    from tools.audit.discovery_agent import generate_discovery_form
-    from tools.audit.linter_autofix import autofix_linter
-    from tools.infrastructure.server import write_website_content, sync_jira_issue, create_bitbucket_pr
-    from tools.infrastructure.git_watcher_tools import fetch_git_pushes, analyze_push_changes, apply_git_patch
-    from tools.strategy.kanban_tools import (
-        kanban_create, kanban_show, kanban_list, kanban_complete,
-        kanban_block, kanban_unblock, kanban_heartbeat, kanban_comment, kanban_link
-    )
-    # Required by the self_improve pipeline. These were wired only into the tool
-    # dict inside server.py, so the pipeline could never resolve them from here.
-    from tools.memory.hardware_bridge import hardware_bridge
-    from services.self_improvement_daemon import run_self_improvement_cycle
+    import os
+    from tools.harvester import harvest_and_register_tools
+    harvest_and_register_tools()
 
+    from tools.registry import registry
+    
+    # 1. Dynamically load all registered tools with env verification
+    tools_dict = {}
+    for name, tool_entry in registry.get_all_tools().items():
+        missing_env = [env for env in tool_entry.requires_env if env not in os.environ]
+        if missing_env:
+            # Skip tool if required environment variables are missing (Senior Version)
+            continue
+        tools_dict[name] = tool_entry.handler
+
+    # 2. Local Helper wrappers
     def _local_view_file(AbsolutePath: str) -> str:
         path = Path(AbsolutePath).resolve()
         root = Path(project_path).resolve()
@@ -239,44 +233,22 @@ def build_pipeline_tools(project_path: str = "."):
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
 
-    # Map actual functions to the tool registry
-    return {
-        "scan_repo": scan_repo,
-        "review_code_with_gemini": gemini_code_review,
-        "research_with_gemini": gemini_research,
-        "consult_supervisor": run_supervisor_audit,
-        "remember_fix": remember_fix,
-        "recall_fix": recall_fix,
-        "save_checkpoint": save_checkpoint,
-        "restore_checkpoint": restore_checkpoint,
-        "run_code_safely": run_code_safely,
-        "reflect_and_distill": _reflect_and_distill,
-        "guardrail_audit": run_guardrail_audit,
-        "maze_verification": backward_verify,
-        "tune_swarm": tune_swarm,
-        "consult_hivemind": consult_brain,  # Renamed for clarity
-        "write_website_content": write_website_content,
-        "generate_discovery_form": generate_discovery_form,
-        "autofix_linter": autofix_linter,
-        "view_file": _local_view_file,
-        "analyze_bug": _analyze_bug,
-        "sync_jira_issue": sync_jira_issue,
-        "create_bitbucket_pr": create_bitbucket_pr,
-        "fetch_git_pushes": fetch_git_pushes,
-        "analyze_push_changes": analyze_push_changes,
-        "apply_git_patch": apply_git_patch,
-        "kanban_create": kanban_create,
-        "kanban_show": kanban_show,
-        "kanban_list": kanban_list,
-        "kanban_complete": kanban_complete,
-        "kanban_block": kanban_block,
-        "kanban_unblock": kanban_unblock,
-        "kanban_heartbeat": kanban_heartbeat,
-        "kanban_comment": kanban_comment,
-        "kanban_link": kanban_link,
-        "detect_hardware": hardware_bridge.detect_capabilities,
-        "run_self_improvement_cycle": run_self_improvement_cycle,
-    }
+    # Override/inject local wrappers
+    tools_dict["view_file"] = _local_view_file
+    tools_dict["analyze_bug"] = _analyze_bug
+    tools_dict["reflect_and_distill"] = _reflect_and_distill
+
+    # Custom renames / compatibility mappings
+    from tools.audit.consult_architect import consult_brain
+    tools_dict["consult_hivemind"] = consult_brain
+
+    # Ensure self_improve daemon tools are registered
+    from tools.memory.hardware_bridge import hardware_bridge
+    from services.self_improvement_daemon import run_self_improvement_cycle
+    tools_dict["detect_hardware"] = hardware_bridge.detect_capabilities
+    tools_dict["run_self_improvement_cycle"] = run_self_improvement_cycle
+
+    return tools_dict
 
 
 # NOTE: an earlier `orchestrate` definition lived here. It was dead code — a

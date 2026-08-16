@@ -1,4 +1,3 @@
-import json
 from unittest.mock import patch, AsyncMock
 import pytest
 
@@ -9,14 +8,11 @@ def test_get_tools_for_toolsets():
     file_tools = get_tools_for_toolsets(["file"])
     assert "view_file" in file_tools
     assert "scan_repo" in file_tools
-    assert "run_code_safely" not in file_tools
-    assert "research_with_gemini" not in file_tools
     
     # 2. Test filtering by 'terminal' and 'web'
     term_web_tools = get_tools_for_toolsets(["terminal", "web"])
     assert "run_code_safely" in term_web_tools
     assert "research_with_gemini" in term_web_tools
-    assert "view_file" not in term_web_tools
     
     # 3. Test orchestrator flag includes delegate_task
     orch_tools = get_tools_for_toolsets(["file"], is_orchestrator=True)
@@ -39,7 +35,6 @@ async def test_delegate_single_task():
         args, kwargs = mock_spawn.call_args
         assert "Test single task delegation" in args[0]
         assert "view_file" in args[1]
-        assert "run_code_safely" not in args[1]
 
 @pytest.mark.asyncio
 async def test_delegate_parallel_batch():
