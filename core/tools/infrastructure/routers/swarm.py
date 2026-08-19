@@ -165,7 +165,15 @@ async def run_orchestrate(payload: dict):
     #
     # Reviewing the wrong codebase is strictly worse than reviewing none: the
     # output is indistinguishable from a real result. Fail loudly instead.
-    incoming_project_path = payload.get("project_path", ".") or "."
+    # An OMITTED project_path must stay omitted. This line used to read
+    # `payload.get("project_path", ".") or "."`, and the MCP tool sends
+    # `project_path: ""` whenever the caller does not set it — so `"" or "."`
+    # produced ".", walking straight into the /app trap described above by a
+    # different door. The earlier fix only covered unreachable ABSOLUTE paths;
+    # the far more common case, a caller who passes code inline and never
+    # mentions a project at all, still got Kenbun's own repo scanned and
+    # reported as theirs.
+    incoming_project_path = payload.get("project_path", "") or ""
     if incoming_project_path not in (".", ""):
         from pathlib import Path as _Path
         try:
@@ -193,9 +201,10 @@ async def run_orchestrate(payload: dict):
                         f"Kenbun container, so the requested code cannot be read. "
                         f"The job was NOT run: scanning a different repository "
                         f"would produce confident output about the wrong code. "
-                        f"Pass a container-visible path, send the source via "
-                        f"code_snippet, or omit project_path to target the "
-                        f"container's own PROJECT_ROOT deliberately."
+                        f"Pass a container-visible path, or send the source "
+                        f"via code_snippet. Omitting project_path means 'no "
+                        f"project' — the pipeline will then report that it had "
+                        f"nothing to review rather than substituting a repo."
                     ),
                 },
             )

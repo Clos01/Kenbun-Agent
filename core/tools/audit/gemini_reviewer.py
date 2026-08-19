@@ -52,6 +52,15 @@ def _get_gemini_client():
     return _gemini_client
 
 
+# The string token_governor.get_budget_aware_model() returns when the daily
+# budget is spent. Kept in one place so callers stop comparing to a literal.
+LOCAL_SENTINEL = "local"
+
+
+class BudgetExhaustedError(RuntimeError):
+    """Raised instead of calling Gemini with the "local" placeholder model."""
+
+
 # --- 2. LOW-LEVEL GEMINI HELPER ---
 def _call_gemini(
     system_prompt: str, 
@@ -78,6 +87,22 @@ def _call_gemini(
         model_to_use = token_governor.get_budget_aware_model(smart_model, task_critical=thinking)
     else:
         model_to_use = token_governor.get_budget_aware_model(model_override, task_critical=thinking)
+
+    # The governor returns the sentinel "local" once the daily budget is spent.
+    # That is an instruction to route away from the cloud — llm_router honours
+    # it by swapping in a local endpoint. This function is a *Gemini* client and
+    # has no local endpoint to swap to, so it used to pass the sentinel straight
+    # through as a model name and call `models/local`, which every time returned
+    # `404 NOT_FOUND ... models/local is not found for API version v1beta`.
+    # A budget stop was therefore indistinguishable from a broken API key.
+    if model_to_use == LOCAL_SENTINEL:
+        remaining = token_governor.get_remaining_budget()
+        raise BudgetExhaustedError(
+            f"Daily LLM budget exhausted (${remaining:.2f} remaining of "
+            f"${token_governor.daily_budget:.2f}). Skipping the cloud review "
+            f"rather than calling Gemini with a placeholder model. Raise "
+            f"DAILY_BUDGET or wait for the UTC daily reset."
+        )
 
     # Map our levels to official SDK values (thinking_budget).
     # Guarded with hasattr: the installed google-genai SDK (0.1.0) has no

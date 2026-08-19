@@ -1098,10 +1098,17 @@ def _analyze_bug(
         )
 
 
-def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = ".", code_snippet: str = "", tech_key: str = "", project_id: str = "", fast: bool = False):
+def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str = "", code_snippet: str = "", tech_key: str = "", project_id: str = "", fast: bool = False):
     """
     Synchronous entry point for the Pro Stack.
     Usage: orchestrate("bug_fix", task="Fix the leak", file_path="app.py")
+
+    project_path defaults to "" — NOT ".". It used to default to ".", which
+    resolves to the container's own working directory, so a caller who omitted
+    project_path silently got Kenbun's own repo reviewed: scan_repo mapped
+    /app (3,897 files) and presented it as the caller's project, while
+    load_review_target found nothing and returned empty. An unspecified
+    project must stay unspecified.
     """
     import asyncio
 
@@ -1126,6 +1133,9 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
         project_id=project_id,
         fast=fast
     ))
+
+# Alias for backwards compatibility with orchestration_tools.py
+run_orchestration_pipeline = orchestrate
 
 def swarm(objective: str, project_path: str = "."):
     """

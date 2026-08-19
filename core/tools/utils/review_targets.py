@@ -30,8 +30,17 @@ MAX_TOTAL = 24000        # chars across the whole bundle
 _PATH_RE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./\\-]*\.[A-Za-z0-9]{1,6}")
 
 
-def _project_root(project_path: str) -> Path:
-    root = Path(project_path or ".").expanduser()
+def _project_root(project_path: str) -> Path | None:
+    """Resolve the review root, or None when the caller named no project.
+
+    This used to fall back to ``Path(".")``, which resolves to the *container's*
+    working directory (/app — Kenbun's own repo). A caller who passed no
+    project_path therefore had Kenbun's source scanned and its working-tree
+    diff loaded as though it were their code. No project means no root.
+    """
+    if not project_path or not project_path.strip():
+        return None
+    root = Path(project_path).expanduser()
     try:
         return root.resolve()
     except Exception:
@@ -116,7 +125,13 @@ def load_review_target(
     if code_snippet and code_snippet.strip():
         return code_snippet
 
+    # 2. No project named -> nothing to read. Returning "" here lets the
+    #    pipeline report "no source" instead of quietly reviewing whatever
+    #    repo the container happens to be sitting in.
     root = _project_root(project_path)
+    if root is None:
+        return ""
+
     blocks: list[str] = []
     seen: set[str] = set()
 
