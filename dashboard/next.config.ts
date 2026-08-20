@@ -53,7 +53,8 @@ const nextConfig: NextConfig = {
   // client hydration for every visitor. 100.100.199.127 is p330.
   allowedDevOrigins: [
     "100.92.127.1",
-    "100.100.199.127"
+    "100.100.199.127",
+    "kenbun.lan"
   ],
   async headers() {
     return [
