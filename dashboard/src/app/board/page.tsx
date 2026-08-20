@@ -131,11 +131,7 @@ export interface DeliverableItem {
 
 
 
- = parseCardMetadata(description);
-  const jsonStr = JSON.stringify(metadata);
-  const metadataComment = `\n\n<!-- kenbun_metadata: ${jsonStr} -->`;
-  return cleanDescription + metadataComment;
-}
+
 
 function parseDrillContent(description: string) {
   if (!description) return null;
