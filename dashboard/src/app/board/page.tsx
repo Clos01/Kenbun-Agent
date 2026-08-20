@@ -1,3 +1,4 @@
+import { KenbunMetadata, parseCardMetadata, injectCardMetadata } from "../../lib/metadata";
 "use client";
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
