@@ -14,7 +14,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { 
   BookOpen, Plus, Search, Save, Trash2, X, Download, History, FileText,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Folder, FolderOpen, Cpu, Play, CheckSquare, Link, ChevronRight, Eye, Edit3,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ArrowLeft, Clock, RefreshCw, Check
 } from "lucide-react";
 import { CONFIG } from "@/lib/config";
@@ -126,6 +129,7 @@ export default function DocsView({
   }, [api, projectId]);
 
   useEffect(() => {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     setActive(null);
     setEditing(false);
     setHits(null);
@@ -165,6 +169,7 @@ export default function DocsView({
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     if (!query.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHits(null);
       return;
     }

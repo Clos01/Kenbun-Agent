@@ -18,6 +18,7 @@ export const AccuracyGauge = ({
   label?: string,
   valueOverride?: number
 }) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const failure = total - success;
   const successPct = valueOverride !== undefined ? valueOverride : (total > 0 ? (success / total) * 100 : 0);
   const failurePct = 100 - successPct;

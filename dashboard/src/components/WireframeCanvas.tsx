@@ -100,12 +100,14 @@ function Sheet({ model, doc }: { model: SheetModel; doc: WDoc }) {
             background: PAPER.sheet,
             border: `0.5px solid ${PAPER.rule}`,
             borderRadius: 4,
-            // The sheet and the desk behind it are now only four steps apart
-            // (--card on --neutral), which is the Heritage card relationship but
-            // too quiet on its own to say "this is a page". The shadow does the
-            // separating that the old high-contrast beige backdrop did by brute
-            // force, without putting an off-token colour on screen.
-            boxShadow: "0 1px 2px rgba(26, 28, 30, 0.04), 0 8px 24px rgba(26, 28, 30, 0.06)",
+            // --card on --background is a quiet pairing in every preset, so the
+            // page needs a little help reading as a page. Plain black at low
+            // alpha rather than a themed colour: under a dark preset --primary is
+            // the LIGHT foreground, and a shadow mixed from it would glow instead
+            // of shading. This lifts the sheet in the light presets and fades to
+            // nothing in the dark ones, where the card/background step and the
+            // themed border already do the separating.
+            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px rgba(0, 0, 0, 0.07)",
             padding: "30px 36px 34px",
           }}
         >

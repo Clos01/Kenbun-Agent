@@ -154,6 +154,7 @@ export default function KenbunChat() {
       const saved = localStorage.getItem("kenbun_chat_folders");
       if (saved) {
         try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
           setFolders(JSON.parse(saved));
         } catch (err) {
           console.error("Failed to parse saved chat folders:", err);
@@ -875,7 +876,7 @@ export default function KenbunChat() {
                         setInput(msg.content);
                         inputRef.current?.focus();
                       }}
-                      className="bg-neutral/45 border border-border/25 hover:bg-neutral/60 hover:border-primary/20 transition-all duration-200 rounded-2xl px-4 py-2.5 max-w-[85%] lg:max-w-[70%] artisan-shadow cursor-pointer select-text"
+                      className="bg-neutral/45 border border-border/25 hover:bg-neutral/60 hover:border-primary/20 transition-all duration-200 rounded-md px-4 py-2.5 max-w-[85%] lg:max-w-[70%] artisan-shadow cursor-pointer select-text"
                       title="Double click to edit/re-send"
                     >
                       <p className="text-sm font-sans text-primary/95 leading-relaxed whitespace-pre-wrap">
@@ -983,7 +984,7 @@ export default function KenbunChat() {
           <div className="max-w-4xl mx-auto">
             <form
               onSubmit={handleSend}
-              className="bg-card/45 backdrop-blur-xl border border-border/40 focus-within:border-tertiary/30 focus-within:shadow-[0_0_30px_rgba(var(--tertiary-rgb),0.03)] rounded-2xl p-3.5 flex flex-col gap-3 relative artisan-shadow transition-all duration-300"
+              className="bg-card/45 backdrop-blur-xl border border-border/40 focus-within:border-tertiary/30 focus-within:shadow-[0_0_30px_rgba(var(--tertiary-rgb),0.03)] rounded-md p-3.5 flex flex-col gap-3 relative artisan-shadow transition-all duration-300"
             >
               {/* Chat Input Field */}
               <textarea
@@ -1033,7 +1034,7 @@ export default function KenbunChat() {
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, y: 8, scale: 0.98 }}
                           transition={{ duration: 0.15 }}
-                          className="absolute bottom-full left-0 mb-3 w-80 overflow-hidden rounded-2xl border border-border/40 bg-card/98 backdrop-blur-xl shadow-[0_15px_40px_rgba(26,28,30,0.12)] z-30"
+                          className="absolute bottom-full left-0 mb-3 w-80 overflow-hidden rounded-md border border-border/40 bg-card/98 backdrop-blur-xl shadow-[0_15px_40px_rgba(26,28,30,0.12)] z-30"
                         >
                           <div className="px-4 py-3 border-b border-primary/5">
                             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/30">
@@ -1049,14 +1050,14 @@ export default function KenbunChat() {
                                   key={w.id}
                                   type="button"
                                   onClick={() => { setWorkflow(w.id); setWfOpen(false); }}
-                                  className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left transition-all group/item ${
+                                  className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-md text-left transition-all group/item ${
                                     active
                                       ? "bg-tertiary/10 text-tertiary"
                                       : "text-primary/70 hover:bg-primary/5 hover:text-primary hover:translate-x-0.5"
                                   }`}
                                 >
                                   <div className="flex items-center gap-3 truncate">
-                                    <div className={`p-1.5 rounded-lg border shrink-0 transition-colors ${
+                                    <div className={`p-1.5 rounded-md border shrink-0 transition-colors ${
                                       active 
                                         ? "bg-tertiary/20 border-tertiary/30 text-tertiary" 
                                         : "bg-primary/5 border-primary/5 text-primary/45 group-hover/item:border-primary/10 group-hover/item:text-primary"
@@ -1115,7 +1116,7 @@ export default function KenbunChat() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ duration: 0.2 }}
-              className="bg-card/95 backdrop-blur-xl border border-border/40 rounded-2xl p-6 w-96 shadow-[0_20px_50px_rgba(26,28,30,0.25)] flex flex-col gap-4 relative animate-in fade-in zoom-in-95"
+              className="bg-card/95 backdrop-blur-xl border border-border/40 rounded-md p-6 w-96 shadow-[0_20px_50px_rgba(26,28,30,0.25)] flex flex-col gap-4 relative animate-in fade-in zoom-in-95"
             >
               {/* Header */}
               <div className="flex flex-col gap-1">

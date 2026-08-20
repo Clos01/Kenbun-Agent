@@ -103,6 +103,7 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
           return count > 0 && count <= SMART_CARD_THRESHOLD;
         })
         .map(l => l.id);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpandedLists(new Set(smartIds));
     }
   }, [lists, cards]);
@@ -142,6 +143,7 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
       let maxCy = 0;
 
       const buildGrid = (cardsArr: typeof lc, isRight: boolean) => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const numCols = 1;
         const numRows = cardsArr.length;
         

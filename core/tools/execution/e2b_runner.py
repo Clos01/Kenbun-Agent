@@ -120,6 +120,7 @@ def _run_on_host(
     code: str,
     language: str = "python",
     timeout: int = DEFAULT_TIMEOUT_SEC,
+    filter_passing_tests: bool = True,
 ) -> str:
     """Execute code directly on the host machine using subprocess."""
     import sys
@@ -152,13 +153,22 @@ def _run_on_host(
         stdout = result.stdout[:10000] if result.stdout else "(no output)"
         stderr = result.stderr[:10000] if result.stderr else "(clean)"
         exit_code = result.returncode
-        status = "✅ SUCCESS" if exit_code == 0 else "❌ FAILED"
         
+        if exit_code == 0 and filter_passing_tests:
+            lines_count = len(stdout.strip().splitlines())
+            return (
+                f"## 💻 Host Execution ({lang})\n\n"
+                f"**Status:** ✅ SUCCESS (exit code: 0)\n\n"
+                f"✨ **Deterministic Gate:** All assertions & code executions passed ({lines_count} output lines).\n"
+                f"*(Full stdout suppressed to conserve context window tokens)*"
+            )
+        
+        status = "✅ SUCCESS" if exit_code == 0 else "❌ FAILED"
         return (
             f"## 💻 Host Execution ({lang})\n\n"
             f"**Status:** {status} (exit code: {exit_code})\n\n"
             f"### stdout\n```\n{stdout}\n```\n\n"
-            f"### stderr\n```\n{stderr}\n```"
+            f"### stderr / Traceback\n```\n{stderr}\n```"
         )
     except subprocess.TimeoutExpired:
         return f"❌ Host Execution: ⏰ TIMEOUT (exceeded {timeout}s limit)"
@@ -174,13 +184,14 @@ def run_code_safely(
     code: str,
     language: str = "python",
     timeout: int = DEFAULT_TIMEOUT_SEC,
+    filter_passing_tests: bool = True,
 ) -> str:
     """
     Execute code in a secure E2B remote microVM, with local Docker fallback.
     """
     from tools.infrastructure.config import settings
     if settings.security.sandbox_mode == "host":
-        result = _run_on_host(code, language, timeout)
+        result = _run_on_host(code, language, timeout, filter_passing_tests)
         # "host" mode runs directly in this process's environment so drafted
         # tests can `import tools.*` from the real Kenbun codebase — but that
         # means a missing host dependency (e.g. watchdog wasn't installed

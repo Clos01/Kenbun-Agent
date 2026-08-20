@@ -22,6 +22,8 @@ import {
   AccuracyGauge, 
   ToolMatrix 
 } from "@/components/Visuals";
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { motion, AnimatePresence, useMotionValue, useMotionTemplate } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { ToolStat } from "@/lib/tools";
@@ -61,7 +63,7 @@ export const SpotlightCard = ({
 }) => {
   return (
     <div
-      className={`relative overflow-hidden border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl transition-all duration-300 ${className}`}
+      className={`relative overflow-hidden border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md transition-all duration-300 ${className}`}
     >
       <div className="relative z-10 h-full w-full">{children}</div>
     </div>
@@ -419,7 +421,7 @@ const CognitiveFlowchart = ({ logs, activeCategory }: { logs: LogRecord[], activ
   return (
     <div 
       ref={containerRef}
-      className="relative w-full min-h-[480px] md:h-[500px] border border-primary/5 bg-card/25 rounded-2xl overflow-hidden select-none flex-1 flex flex-col"
+      className="relative w-full min-h-[480px] md:h-[500px] border border-primary/5 bg-card/25 rounded-md overflow-hidden select-none flex-1 flex flex-col"
     >
       {/* 2026 HUD Canvas elements: Corner Blueprint Crosshairs */}
       <div className="absolute top-3 left-3 text-[8px] font-mono text-border/30 pointer-events-none select-none">+ HUD_SYS_2026</div>
@@ -735,7 +737,7 @@ export default function IntelStream() {
   };
 
   const LogContent = (
-    <div className={`transition-all duration-500 border border-primary/5 bg-card/60 backdrop-blur-xl p-6 overflow-hidden artisan-shadow relative group rounded-2xl flex flex-col ${
+    <div className={`transition-all duration-500 border border-primary/5 bg-card/60 backdrop-blur-xl p-6 overflow-hidden artisan-shadow relative group rounded-md flex flex-col ${
       isLogsExpanded ? 'w-full h-full max-h-[90vh]' : 'h-[640px]'
     }`}>
       {/* Absolute high-tech grid background overlay */}

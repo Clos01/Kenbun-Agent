@@ -570,18 +570,36 @@ class BayesianGovernor:
         
         return results
 
-    def sample_strategy(self, tools: list):
-        """Thompson Sampling using remote or local weights."""
+    def sample_strategy(self, tools: list, category: str = "global"):
+        """Thompson Sampling over the governor's weights.
+
+        Delegates to tools.utils.bayesian, which is the single canonical
+        implementation. This method used to carry its own betavariate loop; the
+        two copies read the same posteriors but drifted (only this one clamped
+        via get_tool_stats), so a routing decision's behaviour depended on which
+        entry point the caller happened to use. Falls back to the local loop if
+        the canonical module is unavailable.
+        """
+        if not tools:
+            return None, 0.0
+
+        try:
+            from tools.utils.bayesian import rank_tools_thompson
+            ranked = rank_tools_thompson(category, tools, exploration_mode=True)
+            return ranked[0]
+        except Exception as e:
+            print(f"⚠️ [THOMPSON] Canonical sampler unavailable ({e}); using governor-local weights.")
+
         best_score = -1
         best_tool = None
-        
+
         for tool_id in tools:
             alpha, beta, _, _ = self.get_tool_stats(tool_id)
             score = random.betavariate(alpha, beta)
             if score > best_score:
                 best_score = score
                 best_tool = tool_id
-        
+
         return best_tool, best_score
 
     def get_tool_confidence(self, tool_id: str) -> float:

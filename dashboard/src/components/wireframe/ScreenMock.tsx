@@ -16,12 +16,16 @@
  * component type cannot desynchronise anything because there is no second
  * height calculation to keep in sync.
  *
- * SECOND, the palette. Colours are fixed values from PAPER rather than the app's
- * theme tokens. A wireframe is a document, not a panel of the dashboard, and it
- * stays on paper when the app is dark. Colour is not used to encode meaning
- * anywhere here: the Excalidraw version coloured endpoints by HTTP method and
- * models by layer, which made the wiring louder than the screens people
- * actually read the wireframe for. One accent exists and is used sparingly.
+ * SECOND, the palette. Every colour comes from PAPER, which resolves to the
+ * active theme preset's CSS variables — so the sheet follows the app into
+ * obsidian/midnight/cyber/sunset instead of staying a white rectangle in a dark
+ * dashboard. See the PAPER comment in types.ts for why it is var()s and not
+ * literals, and note that a themed colour on an SVG shape must be applied via
+ * `style` rather than a stroke/fill attribute. Colour is still not used to
+ * encode meaning anywhere here: the Excalidraw version coloured endpoints by
+ * HTTP method and models by layer, which made the wiring louder than the screens
+ * people actually read the wireframe for. One accent exists, it is the theme's,
+ * and it is used sparingly.
  */
 
 import React from "react";
@@ -44,7 +48,9 @@ export function HatchDefs() {
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden="true">
       <defs>
         <pattern id="wf-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="6" stroke={PAPER.ruleStrong} strokeWidth="1.1" />
+          {/* style, not a stroke="" attribute: presentation attributes do not
+              resolve var(), so a themed colour must go through CSS. */}
+          <line x1="0" y1="0" x2="0" y2="6" style={{ stroke: PAPER.ruleStrong }} strokeWidth="1.1" />
         </pattern>
       </defs>
     </svg>
@@ -136,7 +142,7 @@ function Leaf({ c }: { c: WComponent }) {
     case "image":
       return (
         <svg viewBox="0 0 100 46" preserveAspectRatio="none" style={{ width: "100%", height: 62, display: "block" }} role="img" aria-label={label || "image placeholder"}>
-          <rect x="0.5" y="0.5" width="99" height="45" fill="url(#wf-hatch)" stroke={PAPER.rule} strokeWidth="0.5" />
+          <rect x="0.5" y="0.5" width="99" height="45" fill="url(#wf-hatch)" style={{ stroke: PAPER.rule }} strokeWidth="0.5" />
         </svg>
       );
 

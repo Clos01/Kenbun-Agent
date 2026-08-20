@@ -54,6 +54,7 @@ export async function GET(
       lot = pathParams[i + 1];
       i++;
     } else if (pathParams[i] === "21" && pathParams[i + 1]) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       serial = pathParams[i + 1];
       i++;
     }

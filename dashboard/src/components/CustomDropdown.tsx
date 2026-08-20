@@ -18,6 +18,7 @@ interface CustomDropdownProps {
   className?: string;
   id?: string;
   size?: "sm" | "md";
+  placement?: "bottom" | "top" | "auto";
 }
 
 export default function CustomDropdown({
@@ -27,7 +28,8 @@ export default function CustomDropdown({
   placeholder = "Select option...",
   className = "",
   id,
-  size = "md"
+  size = "md",
+  placement = "bottom"
 }: CustomDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,11 +72,13 @@ export default function CustomDropdown({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            initial={{ opacity: 0, y: placement === "top" ? 4 : -4, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            exit={{ opacity: 0, y: placement === "top" ? 4 : -4, scale: 0.98 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-card/95 backdrop-blur-xl border border-border rounded-xl shadow-2xl overflow-hidden py-1 max-h-60 overflow-y-auto"
+            className={`absolute left-0 right-0 ${
+              placement === "top" ? "bottom-full mb-1.5" : "top-full mt-1.5"
+            } z-[100] bg-card/98 backdrop-blur-2xl border border-border/80 rounded-xl shadow-[0_15px_30px_rgba(0,0,0,0.4)] overflow-hidden py-1 max-h-60 overflow-y-auto`}
             role="listbox"
           >
             {options.map((opt) => {

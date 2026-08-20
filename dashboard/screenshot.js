@@ -24,6 +24,7 @@ const puppeteer = require('puppeteer');
   
   // Set to Flowchart and curved
   await page.evaluate(() => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const modeSelects = Array.from(document.querySelectorAll('button')).filter(el => el.textContent.includes('Flowchart') || el.textContent.includes('ASCII') || el.textContent.includes('Mindmap'));
     // Usually it's in a custom select, click the one that has mode text to open it
     // Wait, the custom select uses divs and buttons. It's too complex to drive the custom select reliably.

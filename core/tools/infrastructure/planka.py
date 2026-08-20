@@ -39,8 +39,8 @@ def _get_planka_client() -> Tuple[str, str]:
     except Exception as e:
         raise ConnectionError(f"Planka authentication failed at {url}. Make sure your SSH tunnel is active. Error: {e}")
 
-def _planka_request(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-    """Performs an authorized HTTP request to the Planka REST API."""
+def _planka_request(path: str, method: str = "GET", body: Optional[Dict[str, Any]] = None, timeout: int = 10) -> Dict[str, Any]:
+    """Performs an authorized HTTP request to the Planka REST API with an explicit timeout."""
     base_url, token = _get_planka_client()
     url = f"{base_url}{path}"
     headers = {
@@ -57,7 +57,7 @@ def _planka_request(path: str, method: str = "GET", body: Optional[Dict[str, Any
         req.add_header(k, v)
         
     try:
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
             res_body = response.read().decode("utf-8")
             if not res_body:
                 return {}

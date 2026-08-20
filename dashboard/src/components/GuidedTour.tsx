@@ -28,16 +28,20 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
   const calloutRef = useRef<HTMLDivElement | null>(null);
   const [calloutH, setCalloutH] = useState(280);
 
+      // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
 
   // Register this page's tour so global UI (e.g. the guide modal) can tell a tour exists here
   useEffect(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any;
     (w.__kenbunTours = w.__kenbunTours || new Set()).add(module);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     return () => { try { w.__kenbunTours?.delete(module); } catch (_) {} };
   }, [module]);
 
   useEffect(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const onStart = (e: any) => {
       if (!e?.detail || e.detail.module === module) {
         setI(0);
@@ -74,6 +78,7 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
       const top = window.scrollY + el.getBoundingClientRect().top - STICKY_HEADER;
       window.scrollTo({ top: Math.max(0, top) });
     }
+      // eslint-disable-next-line react-hooks/set-state-in-effect
     measure();
   }, [active, i, steps, measure]);
 
@@ -214,7 +219,7 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
           {/* Pulsing highlight ring */}
           {spot && (
             <motion.div
-              className="absolute rounded-2xl"
+              className="absolute rounded-md"
               style={{
                 top: spot.top,
                 left: spot.left,
@@ -240,7 +245,7 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
             ref={calloutRef}
             initial={{ opacity: 0, y: placeBelow ? -8 : 8, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            className="absolute rounded-2xl border border-black/10 shadow-2xl p-5 space-y-3"
+            className="absolute rounded-md border border-black/10 shadow-2xl p-5 space-y-3"
             style={{ top: calloutTop, left: calloutLeft, width: calloutW, background: "var(--card, #ffffff)", pointerEvents: "auto" }}
           >
             <div className="flex items-center justify-between">

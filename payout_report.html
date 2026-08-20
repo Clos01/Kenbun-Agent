@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Liquidación de Trabajo — Repartición 100% Equitativa</title>
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --card-border: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --emerald: #059669;
+      --emerald-bg: #ecfdf5;
+      --emerald-border: #a7f3d0;
+      --blue: #0284c7;
+      --blue-bg: #f0f9ff;
+      --blue-border: #bae6fd;
+      --red: #dc2626;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.05) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(2, 132, 199, 0.05) 0px, transparent 50%);
+      color: var(--text-main);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 32px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 560px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 28px;
+      padding: 36px 32px;
+      box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .container::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #10b981, #0284c7);
+    }
+
+    /* HEADER */
+    .header {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      background: var(--emerald-bg);
+      color: var(--emerald);
+      border: 1px solid var(--emerald-border);
+      margin-bottom: 12px;
+    }
+
+    .badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text-main);
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      font-weight: 500;
+    }
+
+    /* OVERVIEW STATS */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: #f8fafc;
+      border: 1px solid var(--card-border);
+      padding: 20px;
+      border-radius: 20px;
+      position: relative;
+    }
+
+    .stat-card.profit-card {
+      border-color: var(--emerald-border);
+      background: linear-gradient(180deg, var(--emerald-bg) 0%, #f8fafc 100%);
+    }
+
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.06em;
+    }
+
+    .stat-val {
+      font-size: 28px;
+      font-weight: 800;
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', monospace;
+      letter-spacing: -0.03em;
+    }
+
+    .stat-val.total {
+      color: var(--text-main);
+    }
+
+    .stat-val.profit {
+      color: var(--emerald);
+    }
+
+    .stat-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-weight: 600;
+    }
+
+    /* EXPENSES BREAKDOWN */
+    .section-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .expenses-box {
+      background: #f8fafc;
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+    }
+
+    .expense-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 0;
+      font-size: 13px;
+      color: var(--text-main);
+      font-weight: 500;
+    }
+
+    .expense-row .item-name {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #334155;
+    }
+
+    .expense-row .cost {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: var(--red);
+    }
+
+    .expense-divider {
+      height: 1px;
+      background: var(--card-border);
+      margin: 8px 0;
+    }
+
+    .expense-row.total-row {
+      font-weight: 700;
+      color: var(--text-main);
+      padding-top: 4px;
+    }
+
+    .expense-row.total-row .cost {
+      font-size: 14px;
+      color: var(--red);
+    }
+
+    /* PAYOUTS CARDS */
+    .payout-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .payout-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      border-radius: 20px;
+      border: 1px solid var(--card-border);
+      background: #ffffff;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .payout-card:hover {
+      border-color: #cbd5e1;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      transform: translateY(-1px);
+    }
+
+    .person-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--emerald-bg);
+      border: 1px solid var(--emerald-border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--emerald);
+    }
+
+    .person-name {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-main);
+    }
+
+    .person-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      font-weight: 600;
+    }
+
+    .person-amount {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--emerald);
+      letter-spacing: -0.02em;
+    }
+
+    /* ACTION BUTTONS */
+    .actions-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      padding: 13px 16px;
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid var(--card-border);
+      background: #ffffff;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+
+    .btn:hover {
+      background: #f8fafc;
+      border-color: #cbd5e1;
+    }
+
+    .btn.whatsapp {
+      background: #25d366;
+      border-color: #22c55e;
+      color: #ffffff;
+    }
+
+    .btn.whatsapp:hover {
+      background: #16a34a;
+      border-color: #15803d;
+    }
+
+    /* AUDIT FOOTER */
+    .footer {
+      border-top: 1px solid var(--card-border);
+      padding-top: 20px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .footer strong {
+      color: var(--emerald);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+
+    #copy-toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #0f172a;
+      color: #ffffff;
+      padding: 12px 24px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    #copy-toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+        color: #000000;
+        padding: 0;
+      }
+      .container {
+        border: none;
+        box-shadow: none;
+        max-width: 100%;
+        padding: 0;
+      }
+      .actions-grid {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- ENCABEZADO -->
+    <div class="header">
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Repartición 100% Equitativa
+      </div>
+      <h1>Liquidación de Trabajo</h1>
+      <p class="subtitle">Cobro del Trabajo ($2,000) + Sobrante de Caja ($21.07)</p>
+    </div>
+
+    <!-- TARJETAS PRINCIPALES -->
+    <div class="overview-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Efectivo Disponible</div>
+        <div class="stat-val total">$2,021.07</div>
+        <div class="stat-sub">$2,000 cobro + $21.07 sobrante caja</div>
+      </div>
+      <div class="stat-card profit-card">
+        <div class="stat-label">Pago Igual para Cada Uno</div>
+        <div class="stat-val profit">$673.69</div>
+        <div class="stat-sub">1/3 Exacto para los 3</div>
+      </div>
+    </div>
+
+    <!-- GASTOS PAGADOS DE LOS $300 DE LA CAJA -->
+    <div class="section-title">
+      <span>Gastos Pagados con los $300 de la Caja</span>
+      <span style="font-family:'JetBrains Mono'; font-weight:700; color:var(--red);">-$278.93</span>
+    </div>
+    <div class="expenses-box">
+      <div class="expense-row">
+        <span class="item-name">🔩 Clavos de Piso</span>
+        <span class="cost">-$103.68</span>
+      </div>
+      <div class="expense-row">
+        <span class="item-name">🛠️ Herramienta Clavadora</span>
+        <span class="cost">-$58.44</span>
+      </div>
+      <div class="expense-row">
+        <span class="item-name">🏬 Home Depot (Disco Sierra & Material Neto)</span>
+        <span class="cost">-$116.81</span>
+      </div>
+      <div style="font-size:11px; color:var(--text-muted); padding: 2px 0 6px 24px;">
+        ($186.49 compra - $69.68 reembolso devuelto)
+      </div>
+      <div class="expense-divider"></div>
+      <div class="expense-row total-row">
+        <span>Total Gastos Cubiertos por la Caja:</span>
+        <span class="cost">-$278.93</span>
+      </div>
+      <div style="font-size:11px; color:var(--emerald); font-weight:700; padding-top:6px; display:flex; justify-content:space-between;">
+        <span>Sobrante que quedó en la caja ($300 - $278.93):</span>
+        <span style="font-family:'JetBrains Mono';">+$21.07</span>
+      </div>
+    </div>
+
+    <!-- PAGOS DE EFECTIVO -->
+    <div class="section-title">
+      <span>Entrega de Efectivo para Cada Uno</span>
+      <span style="font-family:'JetBrains Mono'; font-weight:700; color:var(--emerald);">Partes Iguales</span>
+    </div>
+    
+    <div class="payout-list">
+      
+      <!-- MARIO -->
+      <div class="payout-card">
+        <div class="person-left">
+          <div class="avatar">M</div>
+          <div>
+            <div class="person-name">Mario</div>
+            <div class="person-tag">Pago Total en Mano (1/3)</div>
+          </div>
+        </div>
+        <div class="person-amount">$673.69</div>
+      </div>
+
+      <!-- FERNANDO -->
+      <div class="payout-card">
+        <div class="person-left">
+          <div class="avatar">F</div>
+          <div>
+            <div class="person-name">Fernando</div>
+            <div class="person-tag">Pago Total en Mano (1/3)</div>
+          </div>
+        </div>
+        <div class="person-amount">$673.69</div>
+      </div>
+
+      <!-- CARLOS -->
+      <div class="payout-card">
+        <div class="person-left">
+          <div class="avatar">C</div>
+          <div>
+            <div class="person-name">Carlos</div>
+            <div class="person-tag">Pago Total en Mano (1/3)</div>
+          </div>
+        </div>
+        <div class="person-amount">$673.69</div>
+      </div>
+
+    </div>
+
+    <!-- BOTONES DE ACCIÓN RÁPIDA -->
+    <div class="actions-grid">
+      <button class="btn whatsapp" onclick="copyWhatsAppMessage()">
+        <span>📲</span> Copiar para WhatsApp
+      </button>
+      <button class="btn" onclick="window.print()">
+        <span>🖨️</span> Imprimir / Guardar PDF
+      </button>
+    </div>
+
+    <!-- PIE DE BALANCE -->
+    <div class="footer">
+      ✅ Total Físico Repartido: $673.69 + $673.69 + $673.69 = <strong>$2,021.07</strong><br>
+      <span style="font-size:11px; color:var(--text-dim);">($2,000.00 del trabajo + $21.07 que sobraron de la caja)</span>
+    </div>
+
+  </div>
+
+  <div id="copy-toast">✅ Mensaje copiado para WhatsApp!</div>
+
+  <script>
+    function copyWhatsAppMessage() {
+      const text = 
+`📋 *RESUMEN DE LIQUIDACIÓN DE TRABAJO ($2,000)*
+━━━━━━━━━━━━━━━━━━━━
+💵 *Cobro del Trabajo:* $2,000.00
+🔒 *Fondo Inicial de Caja:* $300.00
+━━━━━━━━━━━━━━━━━━━━
+🔩 *Clavos:* -$103.68
+🛠️ *Herramienta:* -$58.44
+🏬 *Home Depot Neto:* -$116.81 ($186.49 - $69.68 refund)
+━━━━━━━━━━━━━━━━━━━━
+📉 *Total Gastos Pagados de la Caja:* -$278.93
+💵 *Sobrante en Caja:* +$21.07
+✨ *TOTAL EFECTIVO A REPARTIR:* $2,021.07
+━━━━━━━━━━━━━━━━━━━━
+💰 *ENTREGAS DE EFECTIVO (PARTES IGUALES):*
+👤 *Mario:* $673.69
+👤 *Fernando:* $673.69
+👤 *Carlos:* $673.69
+━━━━━━━━━━━━━━━━━━━━
+✅ *Total Cuadrado Exacto:* $2,021.07 ($2,000 trabajo + $21.07 caja)`;
+
+      navigator.clipboard.writeText(text).then(() => {
+        const toast = document.getElementById('copy-toast');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 2500);
+      });
+    }
+  </script>
+
+</body>
+</html>

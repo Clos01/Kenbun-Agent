@@ -66,6 +66,12 @@ async def lifespan_context(app: FastAPI):
     t3.add_done_callback(handle_task_result)
     tasks.add(t3)
 
+    # Launch continuous codebase vector indexer daemon
+    from tools.memory.code_indexer import code_indexer_daemon_loop
+    t4 = asyncio.create_task(code_indexer_daemon_loop())
+    t4.add_done_callback(handle_task_result)
+    tasks.add(t4)
+
     yield
     
     # Graceful shutdown of daemons
@@ -174,10 +180,12 @@ from tools.infrastructure.routers.docs import router as docs_router
 from tools.infrastructure.routers.supervisor import router as supervisor_router
 from tools.infrastructure.routers.swarm import router as swarm_router
 from tools.infrastructure.routers.telemetry import router as telemetry_router
+from tools.infrastructure.routers.sentry import router as sentry_router
 
 app.include_router(health_router)
 app.include_router(config_router)
 app.include_router(telemetry_router)
+app.include_router(sentry_router)
 app.include_router(intelligence_router)
 app.include_router(chat_router)
 app.include_router(swarm_router)

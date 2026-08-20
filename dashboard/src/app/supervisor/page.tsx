@@ -257,7 +257,7 @@ export default function SupervisorDashboard() {
         <div className="flex-1 overflow-y-auto p-6 lg:p-10 xl:p-12 space-y-10 relative z-10 custom-scrollbar pb-16">
           
           {/* Top Banner Warning Node (Cinematic purple twilight gradient) */}
-          <div className="p-6 bg-card/60 backdrop-blur-xl text-[var(--foreground)] flex items-center gap-6 rounded-2xl shadow-lg relative overflow-hidden border border-primary/5">
+          <div className="p-6 bg-card/60 backdrop-blur-xl text-[var(--foreground)] flex items-center gap-6 rounded-md shadow-lg relative overflow-hidden border border-primary/5">
             <div className="absolute top-0 right-0 w-[40%] h-[150%] bg-[var(--tertiary)]/5 rounded-full blur-[80px] pointer-events-none" />
             <ShieldCheck className="w-8 h-8 text-[var(--tertiary)] animate-pulse shrink-0 relative z-10" />
             <div className="space-y-1 relative z-10 text-left">
@@ -276,7 +276,7 @@ export default function SupervisorDashboard() {
               { label: "AST Validation Rules", value: `${stats.astIntegrity}% Nominal`, icon: Activity, color: "text-[var(--foreground)]" },
               { label: "System Checkpoints", value: stats.checkpointsSaved, icon: GitCommit, color: "text-[var(--foreground)]" }
             ].map((stat, i) => (
-              <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-2xl flex items-center justify-between group hover:border-[var(--tertiary)] transition-all duration-300 hover:scale-[1.02] hover:bg-card/85">
+              <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-md flex items-center justify-between group hover:border-[var(--tertiary)] transition-all duration-300 hover:scale-[1.02] hover:bg-card/85">
                 <div className="space-y-1 text-left">
                   <span className="text-[9px] uppercase tracking-[0.2em] text-[var(--foreground)]/45 font-bold font-mono">{stat.label}</span>
                   <div className="text-xl lg:text-2xl font-bold text-[var(--foreground)] tracking-tighter">{stat.value}</div>
@@ -290,7 +290,7 @@ export default function SupervisorDashboard() {
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
             
             {/* Left Block: Sandboxed Code Safety Inspector */}
-            <section className="xl:col-span-7 p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
+            <section className="xl:col-span-7 p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md shadow-lg space-y-6">
               <div className="space-y-1 text-left">
                 <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--tertiary)]">Secure Sandbox</span>
                 <h3 className="text-lg font-bold uppercase tracking-tight text-[var(--foreground)]">Sandbox Inspector</h3>
@@ -399,7 +399,7 @@ export default function SupervisorDashboard() {
             <div className="xl:col-span-5 space-y-6 text-left">
               <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--foreground)]/40 block">System Recovery Rollbacks</span>
 
-              <div className="p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
+              <div className="p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md shadow-lg space-y-6">
                 <div className="space-y-1">
                   <span className="text-[9px] font-bold text-[var(--tertiary)] uppercase tracking-widest">Rollback Ledger</span>
                   <h4 className="font-bold text-sm uppercase text-[var(--foreground)]">Active State Checkpoints</h4>
@@ -407,12 +407,12 @@ export default function SupervisorDashboard() {
 
                 <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
                   {checkpoints.length === 0 ? (
-                    <div className="text-center text-[10px] font-mono text-[var(--foreground)]/40 py-8 border border-dashed border-primary/5 rounded-2xl">
+                    <div className="text-center text-[10px] font-mono text-[var(--foreground)]/40 py-8 border border-dashed border-primary/5 rounded-md">
                       No system checkpoints saved yet.
                     </div>
                   ) : (
                     checkpoints.map((cp) => (
-                      <div key={cp.id} className="p-4 border border-primary/5 bg-card/45 rounded-xl hover:border-[var(--tertiary)]/50 transition-all flex items-center justify-between gap-4 hover:scale-[1.01] duration-300">
+                      <div key={cp.id} className="p-4 border border-primary/5 bg-card/45 rounded-md hover:border-[var(--tertiary)]/50 transition-all flex items-center justify-between gap-4 hover:scale-[1.01] duration-300">
                         <div className="space-y-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] font-mono font-bold text-[var(--tertiary)] select-all">[{cp.hash.substring(0, 8)}]</span>
@@ -423,7 +423,7 @@ export default function SupervisorDashboard() {
                         </div>
                         <button 
                           onClick={() => handleRestoreCheckpoint(cp.hash, cp.name)}
-                          className="bg-[var(--sand)] hover:bg-[var(--sand)]/80 text-[var(--foreground)] border border-primary/5 hover:border-[var(--tertiary)] px-3.5 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 hover:scale-105 duration-300"
+                          className="bg-[var(--sand)] hover:bg-[var(--sand)]/80 text-[var(--foreground)] border border-primary/5 hover:border-[var(--tertiary)] px-3.5 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0 hover:scale-105 duration-300"
                         >
                           Restore
                         </button>
@@ -442,21 +442,21 @@ export default function SupervisorDashboard() {
                       value={newCheckpointName}
                       onChange={(e) => setNewCheckpointName(e.target.value)}
                       placeholder="Checkpoint title (e.g. 'Staged memory calibration')"
-                      className="w-full px-4 py-3 bg-card/40 border border-primary/5 text-[var(--foreground)] placeholder-[var(--secondary)]/40 focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] rounded-xl font-sans text-xs transition-all"
+                      className="w-full px-4 py-3 bg-card/40 border border-primary/5 text-[var(--foreground)] placeholder-[var(--secondary)]/40 focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] rounded-md font-sans text-xs transition-all"
                     />
                     <input
                       type="text"
                       value={newCheckpointDesc}
                       onChange={(e) => setNewCheckpointDesc(e.target.value)}
                       placeholder="Brief description (optional)"
-                      className="w-full px-4 py-3 bg-card/40 border border-primary/5 text-[var(--foreground)] placeholder-[var(--secondary)]/40 focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] rounded-xl font-sans text-xs transition-all"
+                      className="w-full px-4 py-3 bg-card/40 border border-primary/5 text-[var(--foreground)] placeholder-[var(--secondary)]/40 focus:border-[var(--tertiary)] focus:ring-1 focus:ring-[var(--tertiary)] rounded-md font-sans text-xs transition-all"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={isSavingCheckpoint || !newCheckpointName.trim()}
-                    className="w-full py-3 bg-[var(--foreground)] hover:opacity-90 text-[var(--background)] font-bold uppercase tracking-widest text-[9px] transition-all rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] duration-300 shadow-md"
+                    className="w-full py-3 bg-[var(--foreground)] hover:opacity-90 text-[var(--background)] font-bold uppercase tracking-widest text-[9px] transition-all rounded-md flex items-center justify-center gap-2 cursor-pointer hover:scale-[1.01] duration-300 shadow-md"
                   >
                     <PlusCircle className="w-3.5 h-3.5" />
                     {isSavingCheckpoint ? "Saving State..." : "Commit State Snapshot"}
@@ -468,7 +468,7 @@ export default function SupervisorDashboard() {
           </div>
 
           {/* Section: Ethical Guardrails Catalog */}
-          <section className="p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6 text-left">
+          <section className="p-6 md:p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md shadow-lg space-y-6 text-left">
             <div className="flex items-center gap-4">
               <span className="text-[10px] font-bold font-mono uppercase tracking-[0.3em] text-[var(--foreground)]">System 2 Active Guardrails</span>
               <div className="flex-1 h-[1px] bg-[var(--border)]" />
@@ -477,13 +477,13 @@ export default function SupervisorDashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {guardrails.map((gr) => (
-                <div key={gr.id} className="p-5 border border-primary/5 bg-card/45 hover:bg-card/75 hover:border-[var(--tertiary)]/30 rounded-2xl transition-all space-y-4 hover:scale-[1.02] duration-300">
+                <div key={gr.id} className="p-5 border border-primary/5 bg-card/45 hover:bg-card/75 hover:border-[var(--tertiary)]/30 rounded-md transition-all space-y-4 hover:scale-[1.02] duration-300">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Lock className="w-3.5 h-3.5 text-[var(--tertiary)]" />
                       <span className="text-[9px] font-mono font-bold text-[var(--foreground)]/40 uppercase">{gr.category} guardian</span>
                     </div>
-                    <span className="text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 border border-emerald-500/20 text-emerald-600 rounded-lg bg-emerald-500/[0.02]">
+                    <span className="text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 border border-emerald-500/20 text-emerald-600 rounded-md bg-emerald-500/[0.02]">
                       {gr.status}
                     </span>
                   </div>

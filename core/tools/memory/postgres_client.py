@@ -1,12 +1,20 @@
 import logging
-import psycopg
-from psycopg.rows import dict_row
+
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:
+    psycopg = None
+    dict_row = None
+
 from tools.infrastructure.config import settings
 
 logger = logging.getLogger(__name__)
 
 def get_connection():
     """Returns a synchronous psycopg connection."""
+    if psycopg is None:
+        raise RuntimeError("psycopg is not installed in current environment")
     conn_str = f"postgresql://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}?connect_timeout=3"
     return psycopg.connect(conn_str, row_factory=dict_row)
 

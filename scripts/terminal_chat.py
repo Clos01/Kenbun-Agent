@@ -2366,23 +2366,25 @@ def main():
                             log_event("❓ Displayed commands directory via /help")
                             help_lines = [
                                 f"  {C_BOLD}{C_C}/help{C_R}{C_G} (/?){C_D}           ➟ Show this guide{C_R}",
-                                f"  {C_BOLD}{C_C}/exit{C_R}{C_D}              ➟ Gracefully close session{C_R}",
+                                f"  {C_BOLD}{C_C}/mcp{C_R}{C_G} [app]{C_D}           ➟ Claude Code / Claude Desktop / Cursor MCP setup{C_R}",
+                                f"  {C_BOLD}{C_C}/cluster{C_R}{C_G} (or /stats){C_D}  ➟ Real-time 3-node cluster health & latency matrix{C_R}",
+                                f"  {C_BOLD}{C_C}/research{C_R}{C_G} <query>{C_D}    ➟ Autonomous multi-source online research loop{C_R}",
+                                f"  {C_BOLD}{C_C}/board{C_R}{C_G} [project]{C_D}     ➟ Terminal deliverables & project task matrix{C_R}",
+                                f"  {C_BOLD}{C_C}/audit{C_R}{C_G} [file/code]{C_D}   ➟ System 2 AST & security guardrail check{C_R}",
+                                f"  {C_BOLD}{C_C}/switch{C_R}{C_G} [model]{C_D}      ➟ Switch active LLM model/tier on the fly{C_R}",
+                                f"  {C_BOLD}{C_C}/tools{C_R}{C_G} [name]{C_D}        ➟ List or inspect harvested sovereign tools (88 tools){C_R}",
+                                f"  {C_BOLD}{C_C}/skills{C_R}{C_G} [name]{C_D}       ➟ List or inspect design & template skills{C_R}",
+                                f"  {C_BOLD}{C_C}/run{C_R}{C_G} <tool> [args]{C_D}   ➟ Live REPL execution of a harvested tool{C_R}",
+                                f"  {C_BOLD}{C_C}/recall{C_R}{C_G} <query>{C_D}      ➟ Search Hivemind memories & vectors{C_R}",
+                                f"  {C_BOLD}{C_C}/remember{C_R}{C_G} t=c{C_D}        ➟ Save a note or concept to Hivemind{C_R}",
                                 f"  {C_BOLD}{C_C}/new{C_R}{C_D}               ➟ Start a fresh conversation session{C_R}",
-                                f"  {C_BOLD}{C_C}/reset{C_R}{C_D}             ➟ Alias for /new (purges active dialog){C_R}",
-                                f"  {C_BOLD}{C_C}/title [text]{C_R}{C_D}      ➟ Show or set current session's title{C_R}",
                                 f"  {C_BOLD}{C_C}/compress{C_R}{C_D}          ➟ Compress context and spawn continuation session{C_R}",
-                                f"  {C_BOLD}{C_C}/handoff <plat>{C_R}{C_D}     ➟ Handoff conversation to Telegram/Discord/Slack{C_R}",
-                                f"  {C_BOLD}{C_C}/system{C_R}{C_D}            ➟ Show environment config{C_R}",
-                                f"  {C_BOLD}{C_C}/spawn <cmd>{C_R}{C_D}       ➟ Run command in background agent{C_R}",
+                                f"  {C_BOLD}{C_C}/handoff{C_R}{C_G} <plat>{C_D}     ➟ Handoff conversation to Telegram/Discord/Slack{C_R}",
+                                f"  {C_BOLD}{C_C}/spawn{C_R}{C_G} <cmd>{C_D}         ➟ Run command in background agent{C_R}",
                                 f"  {C_BOLD}{C_C}/agents{C_R}{C_D}            ➟ List all running background agents{C_R}",
-                                f"  {C_BOLD}{C_C}/kill <id>{C_R}{C_D}         ➟ Kill a background agent{C_R}",
-                                f"  {C_BOLD}{C_C}/recall <query>{C_R}{C_D}    ➟ Search Hivemind memories{C_R}",
-                                f"  {C_BOLD}{C_C}/remember t=c{C_R}{C_D}      ➟ Save a note to Hivemind{C_R}",
-                                f"  {C_BOLD}{C_C}/search <topic>{C_R}{C_D}    ➟ Search UI/UX design database{C_R}",
-                                f"  {C_BOLD}{C_C}/tools [name]{C_R}{C_D}     ➟ List or inspect harvested sovereign tools{C_R}",
-                                f"  {C_BOLD}{C_C}/skills [name]{C_R}{C_D}    ➟ List or inspect design & template skills{C_R}",
-                                f"  {C_BOLD}{C_C}/run <tool> [args]{C_R}{C_D}  ➟ Live REPL execution of a harvested tool{C_R}",
+                                f"  {C_BOLD}{C_C}/kill{C_R}{C_G} <id>{C_D}           ➟ Kill a background agent{C_R}",
                                 f"  {C_BOLD}{C_RED}/yolo{C_R}{C_D}              ➟ Toggle YOLO mode (auto-approve commands){C_R}",
+                                f"  {C_BOLD}{C_C}/exit{C_R}{C_D}              ➟ Gracefully close session{C_R}",
                             ]
                             yolo_status = f"{C_RED}⚡ YOLO MODE: ON  — Commands execute automatically!{C_R}" if YOLO_MODE else f"{C_D}  YOLO MODE: off — Commands need your approval{C_R}"
                             print()
@@ -2762,6 +2764,162 @@ def main():
                                     print(f"\n{'🛑 Killed: ' if ok else '⚠️ Not found: '}{aid}\n")
                                 else:
                                     print(f"\n{C_Y}Usage: /kill <agent-id>{C_R}\n")
+                                continue
+
+                            elif cmd == "/mcp":
+                                root_path = str(Path(__file__).resolve().parent.parent)
+                                server_py = os.path.join(root_path, "core", "tools", "infrastructure", "server.py")
+                                
+                                # Probe FastMCP endpoint
+                                mcp_live = False
+                                try:
+                                    r = requests.get("http://localhost:8001/stats", timeout=0.8)
+                                    mcp_live = r.status_code == 200
+                                except Exception:
+                                    try:
+                                        r = requests.get("http://100.104.211.61:8001/stats", timeout=0.8)
+                                        mcp_live = r.status_code == 200
+                                    except Exception:
+                                        mcp_live = False
+
+                                status_pill = f"{C_G}● ONLINE (FastMCP Port 8001 & STDIO){C_R}" if mcp_live else f"{C_Y}○ READY (STDIO Mode){C_R}"
+                                
+                                mcp_lines = [
+                                    f"  {C_BOLD}Status:{C_R} {status_pill}",
+                                    f"  {C_BOLD}Server Script:{C_R} {C_C}{server_py}{C_R}",
+                                    f"  {C_BOLD}Harvested Tools:{C_R} 88 Sovereign FastMCP Tools",
+                                    "",
+                                    f"  {C_Y}{C_BOLD}1. Claude Code (Terminal CLI):{C_R}",
+                                    f"  {C_G}claude mcp add kenbun python3 {server_py}{C_R}",
+                                    "",
+                                    f"  {C_Y}{C_BOLD}2. Claude Desktop Config (~/Library/Application Support/Claude/claude_desktop_config.json):{C_R}",
+                                    f"  {C_D}{{\"mcpServers\": {{\"kenbun\": {{\"command\": \"python3\", \"args\": [\"{server_py}\"]}}}}{C_R}",
+                                    "",
+                                    f"  {C_Y}{C_BOLD}3. Cursor IDE (.cursor/mcp.json):{C_R}",
+                                    f"  {C_D}{{\"mcpServers\": {{\"kenbun\": {{\"command\": \"python3\", \"args\": [\"{server_py}\"]}}}}{C_R}",
+                                    "",
+                                    f"  {C_Y}{C_BOLD}4. HTTP/SSE Stream Gateway:{C_R}",
+                                    f"  {C_C}http://localhost:8001/sse{C_R} or {C_C}http://kenbun.lan:8001/sse{C_R}",
+                                ]
+                                print()
+                                draw_box(mcp_lines, title=f"🔌 {C_Y}KENBUN MCP INTEGRATION MATRIX", border_color=C_C, text_color=C_W)
+                                print()
+                                continue
+
+                            elif cmd in ("/cluster", "/stats", "/nodes"):
+                                print(f"\n{C_D}⚡ Probing Kenbun 3-Node Cluster latency & health...{C_R}")
+                                nodes = [
+                                    {"name": "Host (M-Series)", "url": "http://localhost:3000", "role": "FastMCP Gateway & Local Next.js"},
+                                    {"name": "Remote P330", "url": "http://100.100.199.127:3000", "role": "RTX 4090 GPU Embeddings & Ollama"},
+                                    {"name": "Legion Sentry", "url": "http://192.168.1.183:80", "role": "Pi-hole DNS Sinkhole (:183)"},
+                                    {"name": "Primary Server (lg2025)", "url": "http://100.104.211.61:3000", "role": "Production Docker Stack"},
+                                ]
+                                cluster_lines = []
+                                for n in nodes:
+                                    t0 = time.time()
+                                    ok = False
+                                    try:
+                                        r = requests.get(n["url"], timeout=1.2)
+                                        ok = r.status_code in (200, 301, 302, 404)
+                                    except Exception:
+                                        ok = False
+                                    latency_ms = int((time.time() - t0) * 1000)
+                                    dot = f"{C_G}● ONLINE{C_R}" if ok else f"{C_RED}○ OFFLINE{C_R}"
+                                    cluster_lines.append(f"  {dot} {C_BOLD}{n['name']:<24}{C_R} {C_D}({latency_ms:>3}ms){C_R} ➔ {n['role']}")
+                                    cluster_lines.append(f"     {C_D}Endpoint: {n['url']}{C_R}")
+
+                                print()
+                                draw_box(cluster_lines, title=f"🌐 {C_Y}KENBUN 3-NODE CLUSTER TOPOLOGY", border_color=C_G, text_color=C_W)
+                                print()
+                                continue
+
+                            elif cmd == "/research":
+                                if len(cmd_parts) < 2:
+                                    print(f"\n{C_Y}⚠️ Usage: /research <topic or technical question>{C_R}\n")
+                                    continue
+                                query = cmd_parts[1].strip()
+                                print(f"\n{C_P}🌸 Initiating Autonomous Multi-Source Research Loop for:{C_R} '{query}'")
+                                print(f"  {C_D}1. Live Web & GitHub Scanner...{C_R}")
+                                print(f"  {C_D}2. Official Documentation Ingestion...{C_R}")
+                                print(f"  {C_D}3. Cloud AI Grounded Synthesis...{C_R}\n")
+                                try:
+                                    from tools.research.research_assistant import research_with_gemini
+                                    res = research_with_gemini(query, "general")
+                                    print(f"{C_G}✓ Research Synthesis Complete:{C_R}\n")
+                                    print(res)
+                                    print()
+                                except Exception as e:
+                                    try:
+                                        from tools.research.web_search import search_web
+                                        results = search_web(query)
+                                        print(f"{C_G}✓ Multi-Source Web Results:{C_R}\n")
+                                        print(results)
+                                        print()
+                                    except Exception as e2:
+                                        print(f"{C_RED}❌ Research loop error: {e} / {e2}{C_R}\n")
+                                continue
+
+                            elif cmd == "/board":
+                                filter_name = cmd_parts[1].strip().lower() if len(cmd_parts) > 1 else ""
+                                print(f"\n{C_D}📋 Syncing project deliverables from Planka backend...{C_R}")
+                                try:
+                                    r = None
+                                    for base in ("http://localhost:8001", "http://100.104.211.61:8001", "http://kenbun.lan:8001"):
+                                        try:
+                                            r = requests.get(f"{base}/api/v1/planka/structure", timeout=1.5)
+                                            if r.status_code == 200:
+                                                break
+                                        except Exception:
+                                            continue
+                                    if not r or r.status_code != 200:
+                                        print(f"{C_Y}⚠️ Could not connect to Planka API directly.{C_R}\n")
+                                        continue
+                                    data = r.json()
+                                    projects = data.get("items", [])
+                                    if not projects:
+                                        print(f"{C_D}  No active projects found.{C_R}\n")
+                                        continue
+                                    board_lines = []
+                                    for p in projects:
+                                        p_name = p.get("name", "Untitled")
+                                        if filter_name and filter_name not in p_name.lower():
+                                            continue
+                                        boards = p.get("boards", [])
+                                        board_lines.append(f"  📁 {C_BOLD}{C_C}{p_name}{C_R} ({len(boards)} boards)")
+                                        for b in boards:
+                                            b_name = b.get("name", "Board")
+                                            board_lines.append(f"     └─ 📊 {b_name}")
+                                    draw_box(board_lines, title=f"📋 {C_Y}PROJECT DELIVERABLES DIRECTORY", border_color=C_P, text_color=C_W)
+                                    print()
+                                except Exception as e:
+                                    print(f"{C_RED}❌ Failed to load board: {e}{C_R}\n")
+                                continue
+
+                            elif cmd == "/audit":
+                                target = cmd_parts[1].strip() if len(cmd_parts) > 1 else "."
+                                print(f"\n{C_D}🛡️  Running System 2 Supervisor AST & Security Audit on: '{target}'...{C_R}")
+                                try:
+                                    from tools.audit.supervisor_tool import consult_supervisor
+                                    content = ""
+                                    if os.path.isfile(target):
+                                        with open(target, "r", encoding="utf-8", errors="ignore") as f:
+                                            content = f.read(4000)
+                                    else:
+                                        content = f"Workspace directory: {target}"
+                                    verdict = consult_supervisor(f"Audit {target}", content)
+                                    print(f"\n{C_G}✓ Supervisor Verdict:{C_R}\n{verdict}\n")
+                                except Exception as e:
+                                    print(f"{C_RED}❌ Audit error: {e}{C_R}\n")
+                                continue
+
+                            elif cmd == "/switch":
+                                if len(cmd_parts) < 2:
+                                    print(f"\n{C_Y}Current Model:{C_R} {llm_model} ({llm_url})")
+                                    print(f"Usage: /switch <model-name>\n  Examples:\n    /switch qwen2.5-coder:7b\n    /switch gemini-2.0-flash\n    /switch claude-3-7-sonnet\n")
+                                    continue
+                                new_model = cmd_parts[1].strip()
+                                llm_model = new_model
+                                print(f"\n{C_G}✓ Switched active LLM model to:{C_R} {llm_model}\n")
                                 continue
 
                             else:

@@ -698,38 +698,34 @@ async def run_supervisor_audit(user_proposal: str, code_snippet: str = "", memor
                     )
                     res["appeal"] = appeal_entry
 
-            print("🔄 [RALPH-LOOP] Security/Compliance audit rejected the snippet. Initiating autonomic healing loop...")
+            print("🔄 [RALPH-LOOP] Security/Compliance audit rejected the snippet. Initiating Forward Stagewise Residual Patching (ESL Ch. 10)...")
             print(f"🔄 [RALPH-LOOP] Critique: {critique}")
 
-            # Speculatively adjust the prompt and ask the Local Senior/Defendant to correct the code
-            system_prompt = (
-                "You are the autonomic 'Ralph-Loop' self-healing agent in Kenbun-Agent.\n"
-                "A code snippet you wrote was REJECTED by the supervisor audit because it violated security, design, or compliance rules.\n"
-                "Your task is to heal/fix the code snippet to address the critique completely while preserving its original functional intent.\n"
-                "CRITICAL: Output ONLY the raw corrected code block (e.g. wrapped in ```python ... ``` or raw if no markdown, preferably wrapped in code fence block). "
-                "Do NOT include any explanations, introduction, markdown text, or other wrappers. Just the executable healed code."
-            )
-            user_message = (
-                f"ORIGINAL PROPOSAL: {user_proposal}\n\n"
-                f"REJECTED CODE SNIPPET:\n```python\n{code_snippet}\n```\n\n"
-                f"AUDIT CRITIQUE:\n{critique}\n\n"
-                f"Please output the corrected/healed code snippet now:"
-            )
-            
+            try:
+                from tools.audit.residual_patcher import compute_residual, build_residual_prompt, apply_stagewise_patch_verbose
+            except ImportError:
+                from core.tools.audit.residual_patcher import compute_residual, build_residual_prompt, apply_stagewise_patch_verbose
+
+            residual = compute_residual(code_snippet, critique)
+            if residual["target_lines"]:
+                print(f"🔄 [RALPH-LOOP] Residual r_m: lines {residual['target_lines']} "
+                      f"in {residual['target_definitions'] or ['<module>']} | "
+                      f"risks {residual['risk_categories'] or ['unclassified']}")
+            system_prompt, user_message = build_residual_prompt(code_snippet, residual, user_proposal)
+
             healed_raw, err = _call_local_senior(system_prompt, user_message)
             if not err and healed_raw:
-                # Parse code from fenced block if returned
-                healed_code = healed_raw
-                if "```python" in healed_raw:
-                    parts = healed_raw.split("```python", 1)[1].split("```", 1)
-                    healed_code = parts[0].strip()
-                elif "```" in healed_raw:
-                    parts = healed_raw.split("```", 1)[1].split("```", 1)
-                    healed_code = parts[0].strip()
-                
-                healed_code = healed_code.strip()
+                healed_code, patch_stats = apply_stagewise_patch_verbose(code_snippet, healed_raw)
+                if patch_stats["errors"]:
+                    print(f"⚠️ [RALPH-LOOP] Patch issues: {patch_stats['errors']}")
+
                 if healed_code and healed_code != code_snippet.strip():
-                    print(f"🔄 [RALPH-LOOP] Code successfully healed (Attempt {3 - recovery_attempts_left}/2). Re-submitting for audit...")
+                    print(f"🔄 [RALPH-LOOP] Healed via {patch_stats['mode']} "
+                          f"({patch_stats['hunks']} hunk(s), {patch_stats['changed_lines']}/"
+                          f"{patch_stats['total_lines']} lines touched"
+                          + (f", collateral: {patch_stats['collateral_definitions']}"
+                             if patch_stats["collateral_definitions"] else "")
+                          + f") (Attempt {3 - recovery_attempts_left}/2). Re-submitting for audit...")
                     # Re-submit the healed code snippet
                     recovery_res = await run_supervisor_audit(
                         user_proposal=user_proposal,

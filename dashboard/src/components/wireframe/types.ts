@@ -54,40 +54,53 @@ export type WDoc = {
 };
 
 /**
- * Drafting-sheet palette, derived from the Heritage tokens.
+ * Drafting-sheet palette, resolved from the active theme preset at paint time.
  *
- * This used to be an independent sepia palette, justified on the grounds that a
- * wireframe "stays on paper when the app is dark". The dashboard has no dark
- * mode — `:root` and `.light` in globals.css are identical — so that argument
- * was defending against a case that cannot arise, and what it actually produced
- * was a set of NEAR-MISSES: #E4DFD4 backdrop against the app's #F7F5F2, #1F1E1B
- * ink against #1A1C1E, #B0562A accent against Boston Clay #B8422E. A colour that
- * is close to a token but not equal to it reads as a mistake, where either an
- * exact match or a frank contrast would have read as a decision.
+ * Two earlier versions of this got it wrong in opposite directions, and both
+ * mistakes are worth keeping written down.
  *
- * The hue was the louder half of the problem. Heritage is COOL slate text on
- * WARM paper; the old palette was warm-on-warm throughout, so its greys drifted
- * yellow against every other panel in the dashboard. The neutrals below are
- * tints of --secondary (#6C7278) so they sit in the same slate family, over a
- * --card sheet on the app's own --neutral background.
+ * The FIRST was an independent sepia palette (#E4DFD4 backdrop, #1F1E1B ink,
+ * #B0562A accent) held fixed so the wireframe would "stay on paper when the app
+ * is dark". It was right about dark mode and wrong about the values: every one
+ * of them was a NEAR-MISS of the token the rest of the dashboard used, and a
+ * colour that is close to a token but not equal to it reads as a mistake rather
+ * than a decision.
+ *
+ * The SECOND — correcting that — pinned the palette to Limestone's literal
+ * values (#FFFFFF, #F7F5F2, #1A1C1E, ...). That fixed the near-misses and broke
+ * something worse: ThemeContext ships eight presets, four of them dark
+ * (obsidian, midnight, cyber, sunset), and it applies them by setting CSS custom
+ * properties on documentElement at runtime. A hardcoded #1A1C1E ink is the LIGHT
+ * foreground; under obsidian, --primary is #F7F5F2 and the whole sheet stayed
+ * blinding white while everything around it went dark.
+ *
+ * So the values below are var() references, not literals. The theme provides
+ * foreground (--primary), a muted text tone (--secondary), surfaces (--card,
+ * --background) and an accent; everything else is derived with color-mix against
+ * `transparent`, which composites over whatever surface is behind it and is
+ * therefore correct in both directions rather than tuned for one. `well` mixes
+ * toward --primary, so it recedes from --card whichever way the theme runs.
+ *
+ * This is safe for the Node-side audit: sheet.ts imports only the types above
+ * and never PAPER, so nothing browser-only reaches scripts/audit_wireframe_sheet.
  *
  * Still deliberately tonal: colour never encodes meaning here. Endpoints are not
  * coloured by HTTP method and models are not coloured by layer — that made the
  * wiring louder than the screens people actually read a wireframe for. One
- * accent exists, it is the Heritage accent, and it is used sparingly.
+ * accent exists, it is the theme's accent, and it is used sparingly.
  *
- * Keep these in sync with globals.css. They are literals rather than var()
- * lookups because sheet.ts must stay browser-free for the Node-side audit.
+ * NOTE: these must be applied via the `style` property. A CSS variable does not
+ * resolve in an SVG presentation ATTRIBUTE (stroke="..."), only in style.
  */
 export const PAPER = {
-  sheet: "#FFFFFF",       // --card: the page itself
-  sheetEdge: "#F7F5F2",   // --background: the desk the page lies on
-  well: "#F7F5F2",        // recessed surface inside the page (screen frames)
-  ink: "#1A1C1E",         // --primary
-  inkSoft: "#6C7278",     // --secondary
-  inkMuted: "#A7AAAE",    // --secondary @ 60%
-  rule: "#DADCDD",        // --secondary @ 25%
-  ruleStrong: "#BDC0C2",  // --secondary @ 45%
-  fill: "#EDEEEF",        // --secondary @ 12%, for filled controls
-  accent: "#B8422E",      // --tertiary, Boston Clay
+  sheet: "var(--card)",                                          // the page itself
+  sheetEdge: "var(--background)",                                // the desk it lies on
+  well: "color-mix(in srgb, var(--primary) 4%, var(--card))",    // recessed surface
+  ink: "var(--primary)",                                         // foreground
+  inkSoft: "var(--secondary)",
+  inkMuted: "color-mix(in srgb, var(--secondary) 70%, transparent)",
+  rule: "color-mix(in srgb, var(--secondary) 30%, transparent)",
+  ruleStrong: "color-mix(in srgb, var(--secondary) 55%, transparent)",
+  fill: "color-mix(in srgb, var(--secondary) 14%, transparent)", // filled controls
+  accent: "var(--accent)",
 } as const;

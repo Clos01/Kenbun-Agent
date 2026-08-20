@@ -634,17 +634,52 @@ class DecisionRouter:
         self.bandit.record_feedback(context, model_key, success, latency, cost)
         print(f"📊 [BANDIT FEEDBACK] Model: {model_key} | Success: {success} | Latency: {latency:.3f}s | Cost: ${cost:.6f} | Context: {context}")
 
-    def recommend_tools(self, task: str) -> List[str]:
+    # Strategy path -> Bayesian telemetry category. These category names are the
+    # same ones the orchestrator's MARS boundary injection records under, so the
+    # posteriors read here are the ones tune_swarm() actually writes.
+    _PATH_CATEGORY = {
+        "UI_FIX_PATH": "ui",
+        "UI_COMPONENT_BUILD": "ui",
+        "SECURITY_HARDENING_PATH": "security",
+        "ARCHITECT_RESEARCH_PATH": "architecture",
+        "STANDARD_BUG_FIX": "bug_fix",
+        "STANDARD_EXECUTION": "global",
+    }
+
+    _PATH_TOOLS = {
+        "UI_FIX_PATH": ["ask_ui_expert", "save_checkpoint", "run_code_safely"],
+        "SECURITY_HARDENING_PATH": ["consult_supervisor", "review_code_with_gemini", "research_official_docs"],
+        "STANDARD_BUG_FIX": ["recall_fix", "scan_repo", "save_checkpoint", "run_code_safely"],
+        "ARCHITECT_RESEARCH_PATH": ["research_with_gemini", "ask_architect", "consult_supervisor"],
+        "UI_COMPONENT_BUILD": ["research_official_docs", "ask_ui_expert", "run_code_safely"],
+        "STANDARD_EXECUTION": ["research_with_gemini", "scan_repo", "consult_supervisor"],
+    }
+
+    def recommend_tools(self, task: str, exploration_mode: bool = True) -> List[str]:
+        """Candidate tools for the task's strategy path, ordered by Thompson sampling.
+
+        The decision tree still decides WHICH tools are eligible; the Bayesian
+        posteriors decide the ORDER they are recommended in. Previously this
+        returned a hardcoded order, so a tool that had been failing for weeks
+        stayed pinned at position 1 and a newly registered tool never surfaced.
+        Sampling theta_i ~ Beta(alpha_i, beta_i) fixes both directions at once.
+
+        Falls back to the static order if the intelligence store is unreachable —
+        a routing decision must never hard-fail on a telemetry lookup.
+        """
         path = self.get_strategy_path(task)
-        recommendations = {
-            "UI_FIX_PATH": ["ask_ui_expert", "save_checkpoint", "run_code_safely"],
-            "SECURITY_HARDENING_PATH": ["consult_supervisor", "review_code_with_gemini", "research_official_docs"],
-            "STANDARD_BUG_FIX": ["recall_fix", "scan_repo", "save_checkpoint", "run_code_safely"],
-            "ARCHITECT_RESEARCH_PATH": ["research_with_gemini", "ask_architect", "consult_supervisor"],
-            "UI_COMPONENT_BUILD": ["research_official_docs", "ask_ui_expert", "run_code_safely"],
-            "STANDARD_EXECUTION": ["research_with_gemini", "scan_repo", "consult_supervisor"]
-        }
-        return recommendations.get(path, recommendations["STANDARD_EXECUTION"])
+        candidates = self._PATH_TOOLS.get(path, self._PATH_TOOLS["STANDARD_EXECUTION"])
+        category = self._PATH_CATEGORY.get(path, "global")
+
+        try:
+            from tools.utils.bayesian import rank_tools_thompson
+            ranked = rank_tools_thompson(category, candidates, exploration_mode=exploration_mode)
+            ordered = [tid for tid, _ in ranked]
+            logging.debug(f"[THOMPSON] path={path} category={category} order={ordered}")
+            return ordered
+        except Exception as e:
+            logging.warning(f"[THOMPSON] Posterior ranking unavailable ({e}); using static order.")
+            return list(candidates)
 
 # Global Instance
 router = DecisionRouter()

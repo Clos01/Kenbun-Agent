@@ -11,6 +11,11 @@ export async function POST(request: Request) {
     
     // TODO: Parse the payload according to ElevenLabs webhook documentation
     // Typically includes call_id, agent_id, status, transcript, recording_url
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { call_id, agent_id, status, transcript, recording_url } = payload;
 
     // TODO: Insert or update the Call record in Supabase

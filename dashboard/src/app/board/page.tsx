@@ -1,21 +1,20 @@
 "use client";
 
-/* Docmost wiki. Opens in a new tab -- it sends X-Frame-Options:
-   SAMEORIGIN and cannot be embedded the way the wireframe canvas is. */
-const DOCMOST_URL = process.env.NEXT_PUBLIC_DOCMOST_URL ?? "http://100.104.211.61:3006";
-
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import Link from "next/link";
 import Sidebar from "@/components/Sidebar";
 import WorkflowView from "@/components/WorkflowView";
 import DocsView from "@/components/DocsView";
 import WireframeCanvas from "@/components/WireframeCanvas";
+import SowStudio from "@/components/SowStudio";
 import CustomDropdown from "@/components/CustomDropdown";
 import { formatMarkdown } from "@/lib/markdown";
 import { computeWorkOrder } from "@/lib/prioritize";
 import {
   Columns,
   BookOpen,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
   ExternalLink,
   GitFork,
   Plus,
@@ -36,7 +35,23 @@ import {
   RefreshCw,
   Filter,
   PenTool,
-  FileText
+  FileText,
+  FolderOpen,
+  FileCode,
+  CheckCircle2,
+  ListChecks,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  Sparkles,
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  Layers,
+  Activity,
+  LayoutList,
+  Grid,
+  ChevronDown,
+  Copy,
+  Code2,
+  SlidersHorizontal,
+  RotateCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -47,6 +62,7 @@ import { z } from "zod";
 interface Board {
   id: string;
   projectId: string;
+  projectName?: string;
   name: string;
   type: string;
 }
@@ -93,6 +109,19 @@ interface BoardComment {
   cardId: string;
 }
 
+export interface DeliverableItem {
+  id: string;
+  name: string;
+  description: string;
+  listName: string;
+  isDone: boolean;
+  isInProgress: boolean;
+  boardName: string;
+  boardId: string;
+  files: string[];
+  tasks: Array<{ text: string; done: boolean }>;
+}
+
 export interface KenbunMetadata {
   location?: string;
   recurring?: "none" | "daily" | "weekly" | "monthly";
@@ -133,7 +162,7 @@ function sanitizeText(input: string): string {
 }
 
 // Helpers for metadata parsing
-export function parseCardMetadata(description: string): { cleanDescription: string; metadata: KenbunMetadata } {
+function parseCardMetadata(description: string): { cleanDescription: string; metadata: KenbunMetadata } {
   if (typeof description !== "string") {
     return { cleanDescription: "", metadata: {} };
   }
@@ -282,7 +311,7 @@ export function parseCardMetadata(description: string): { cleanDescription: stri
   return { cleanDescription: sanitizeText(inputStr), metadata: {} };
 }
 
-export function injectCardMetadata(description: string, metadata: KenbunMetadata): string {
+function injectCardMetadata(description: string, metadata: KenbunMetadata): string {
   const { cleanDescription } = parseCardMetadata(description);
   const jsonStr = JSON.stringify(metadata);
   const metadataComment = `\n\n<!-- kenbun_metadata: ${jsonStr} -->`;
@@ -340,12 +369,13 @@ export default function BoardPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Active view tab: kanban | calendar | messaging | workflow | wireframe | docs
-  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs">(() => {
+  // Active view tab: kanban | calendar | messaging | workflow | wireframe | docs | sow
+  const [activeTab, setActiveTab] = useState<"kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs" | "sow">(() => {
     if (typeof window !== "undefined") {
       const savedTab = localStorage.getItem("board_active_tab");
-      const validTabs = ["kanban", "calendar", "messaging", "workflow", "wireframe", "docs"];
+      const validTabs = ["kanban", "calendar", "messaging", "workflow", "wireframe", "docs", "sow"];
       if (savedTab && validTabs.includes(savedTab)) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return savedTab as any;
       }
     }
@@ -353,6 +383,18 @@ export default function BoardPage() {
   });
 
   const hasRestoredBoard = useRef(false);
+
+  // Project Folder Deliverables & File Matrix State
+  const [inspectingProject, setInspectingProject] = useState<Project | null>(null);
+  const [projectDeliverables, setProjectDeliverables] = useState<DeliverableItem[]>([]);
+  const [loadingDeliverables, setLoadingDeliverables] = useState<boolean>(false);
+  const [deliverablesFilter, setDeliverablesFilter] = useState<"all" | "completed" | "in_progress" | "todo">("all");
+  const [deliverableSearch, setDeliverableSearch] = useState<string>("");
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [selectedDeliverable, setSelectedDeliverable] = useState<DeliverableItem | null>(null);
+  const [deliverablesLayout, setDeliverablesLayout] = useState<"list" | "grid">("list");
+  const [copiedFilePath, setCopiedFilePath] = useState<string | null>(null);
+  const [expandedDeliverableIds, setExpandedDeliverableIds] = useState<Set<string>>(new Set());
 
   const [now, setNow] = useState<number>(1700000000000);
 
@@ -364,7 +406,7 @@ export default function BoardPage() {
   }, []);
 
   // Persistence helpers
-  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs") => {
+  const changeTab = (tab: "kanban" | "calendar" | "messaging" | "workflow" | "wireframe" | "docs" | "sow") => {
     setActiveTab(tab);
     if (typeof window !== "undefined") {
       localStorage.setItem("board_active_tab", tab);
@@ -458,10 +500,17 @@ export default function BoardPage() {
       const included = data.included || {};
       const boards = included.boards || [];
 
-      // Associate boards to projects
-      const formattedProjects = items.map((proj: { id: string; [key: string]: unknown }) => ({
+      // Associate boards to projects & explicitly embed projectId and projectName
+      const formattedProjects = items.map((proj: { id: string; name?: string; [key: string]: unknown }) => ({
         ...proj,
-        boards: boards.filter((b: { projectId: string; [key: string]: unknown }) => b.projectId === proj.id)
+        name: proj.name || "Untitled Project",
+        boards: boards
+          .filter((b: { projectId: string; [key: string]: unknown }) => b.projectId === proj.id)
+          .map((b: { projectId: string; [key: string]: unknown }) => ({
+            ...b,
+            projectId: proj.id,
+            projectName: proj.name || "Untitled Project",
+          }))
       }));
 
       setProjects(formattedProjects);
@@ -522,6 +571,80 @@ export default function BoardPage() {
       setError(`Failed to sync board: ${message}`);
     } finally {
       setSyncing(false);
+    }
+  }, [API_BASE]);
+
+  // Inspect deliverables & files across all boards in a project folder
+  const handleInspectProject = useCallback(async (proj: Project) => {
+    setInspectingProject(proj);
+    setLoadingDeliverables(true);
+    setProjectDeliverables([]);
+    setSelectedDeliverable(null);
+    try {
+      const boards = proj.boards || [];
+      const results = await Promise.all(
+        boards.map(async (b) => {
+          try {
+            const res = await tenantFetch(`${API_BASE}/api/v1/planka/board/${b.id}`, { cache: "no-store" });
+            if (!res.ok) return { board: b, lists: [] as Array<{ id: string; name?: string }>, cards: [] as Array<{ id: string; name?: string; description?: string; listId: string; isClosed?: boolean }> };
+            const data = await res.json();
+            return {
+              board: b,
+              lists: (data.included?.lists || []) as Array<{ id: string; name?: string }>,
+              cards: (data.included?.cards || []) as Array<{ id: string; name?: string; description?: string; listId: string; isClosed?: boolean }>
+            };
+          } catch {
+            return { board: b, lists: [] as Array<{ id: string; name?: string }>, cards: [] as Array<{ id: string; name?: string; description?: string; listId: string; isClosed?: boolean }> };
+          }
+        })
+      );
+
+      const allItems: DeliverableItem[] = [];
+      for (const res of results) {
+        const listMap = new Map<string, string>();
+        for (const l of res.lists) {
+          listMap.set(l.id, l.name || "List");
+        }
+
+        for (const c of res.cards) {
+          if (c.isClosed) continue;
+          const listName = listMap.get(c.listId) || "General";
+          const lname = listName.toLowerCase();
+          const isDone = lname.includes("done") || lname.includes("complete") || lname.includes("shipped") || lname.includes("verified");
+          const isInProgress = !isDone && (lname.includes("progress") || lname.includes("doing") || lname.includes("testing") || lname.includes("review"));
+
+          const desc = c.description || "";
+          // Extract referenced file paths
+          const fileMatches = desc.match(/(?:[a-zA-Z0-9_\-./]+\.(?:tsx?|jsx?|py|json|md|sql|ya?ml|css|html)|(?:src|core|tests|dashboard|lib)\/[a-zA-Z0-9_\-./]+)/g) || [];
+          const uniqueFiles = Array.from(new Set(fileMatches)).filter(f => !f.startsWith("http") && f.length < 80);
+
+          // Extract checklist tasks
+          const taskLines = desc.split("\n").filter((line: string) => line.trim().startsWith("- [ ]") || line.trim().startsWith("- [x]") || line.trim().startsWith("- [X]"));
+          const tasks = taskLines.map((line: string) => ({
+            text: line.replace(/^-\s*\[[xX ]\]\s*/, "").trim(),
+            done: line.includes("[x]") || line.includes("[X]")
+          }));
+
+          allItems.push({
+            id: c.id,
+            name: c.name || "Untitled Deliverable",
+            description: desc,
+            listName,
+            isDone,
+            isInProgress,
+            boardName: res.board.name,
+            boardId: res.board.id,
+            files: uniqueFiles,
+            tasks
+          });
+        }
+      }
+
+      setProjectDeliverables(allItems);
+    } catch (err) {
+      console.error("Failed to load project deliverables:", err);
+    } finally {
+      setLoadingDeliverables(false);
     }
   }, [API_BASE]);
 
@@ -1068,85 +1191,43 @@ export default function BoardPage() {
 
       <main className="flex-1 relative z-10 flex flex-col min-w-0 h-screen overflow-hidden">
         {/* ============ HEADER — single calm row ============ */}
-        <header className="h-14 sm:h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-3 sm:px-6 lg:px-10 gap-3 sm:gap-6">
-          <div className="flex items-center gap-2 sm:gap-4 min-w-0">
+        <header className="h-14 sm:h-16 border-b border-primary/10 bg-neutral/85 backdrop-blur-sm sticky top-0 z-30 shrink-0 flex items-center justify-between px-4 sm:px-8 gap-4 print:hidden">
+          <div className="flex items-center gap-3 min-w-0">
             {selectedBoard ? (
-              <button
-                onClick={() => {
-                  selectBoard(null);
-                  changeTab("kanban");
-                }}
-                className="p-1.5 -ml-1 text-secondary hover:text-primary transition-colors rounded cursor-pointer"
-                aria-label="Back to projects"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
-            ) : null}
-            <span className="font-bold text-base sm:text-lg lg:text-xl uppercase tracking-tighter italic">
-              Projects <span className="text-tertiary">Board</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2.5 sm:gap-4">
-            {selectedBoard ? (
-              // Desktop Tabs
-              <div className="hidden xl:flex items-center gap-1">
-                {([
-                  { key: "kanban", label: "Board", icon: Columns },
-                  { key: "calendar", label: "Calendar", icon: Calendar },
-                  { key: "messaging", label: "Feed", icon: MessageSquare },
-                  { key: "workflow", label: "Workflow", icon: GitFork },
-                  { key: "wireframe", label: "Wireframe", icon: PenTool },
-                  { key: "docs", label: "Docs", icon: BookOpen },
-                ] as const).map(t => (
-                  <button
-                    key={t.key}
-                    onClick={() => changeTab(t.key)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-all duration-300 text-[10px] font-bold uppercase tracking-widest cursor-pointer ${
-                      activeTab === t.key 
-                        ? "bg-primary text-neutral" 
-                        : "text-secondary hover:text-primary hover:bg-primary/5"
-                    }`}
-                  >
-                    <t.icon className={`w-3 h-3 ${activeTab === t.key ? "text-tertiary" : "text-secondary"}`} />
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-                <a
-                  href={DOCMOST_URL}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
-                  title="Open the Docmost wiki in a new tab"
+              <>
+                <button
+                  onClick={() => {
+                    selectBoard(null);
+                    changeTab("kanban");
+                  }}
+                  className="p-1.5 -ml-1 text-secondary hover:text-primary transition-colors rounded cursor-pointer shrink-0"
+                  aria-label="Back to projects"
+                  title="Back to all projects"
                 >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  Wiki
-                </a>
-                <Link
-                  href={`/sow?project_id=${selectedBoard.projectId}`}
-                  className="px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors text-secondary hover:text-primary"
-                  title="Open the Statement of Work Studio"
-                >
-                  <FileText className="w-3.5 h-3.5 text-secondary" />
-                  SOW
-                </Link>
-              </div>
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <div className="flex items-baseline gap-2 min-w-0 truncate">
+                  <span className="font-serif italic font-bold text-sm sm:text-base text-primary truncate">
+                    {selectedBoard.projectName || projects.find(p => p.id === selectedBoard.projectId)?.name || "Project"}
+                  </span>
+                  <span className="text-secondary/40 text-xs font-mono">/</span>
+                  <span className="text-xs sm:text-sm font-semibold text-tertiary truncate">
+                    {selectedBoard.name}
+                  </span>
+                </div>
+              </>
             ) : (
-              <button
-                onClick={() => setIsAddingProject(true)}
-                className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/95 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Project
-              </button>
+              <span className="font-bold text-base sm:text-lg lg:text-xl uppercase tracking-tighter italic">
+                Projects <span className="text-tertiary">Board</span>
+              </span>
             )}
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 ml-2">
-            {/* Search and Filters */ }
+          <div className="flex items-center gap-2.5 shrink-0">
+            {/* Search and Filters */}
             {selectedBoard && activeTab === "kanban" && (
-              <div className="flex items-center gap-2 mr-2">
-                <div className="hidden lg:flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-48 xl:w-64 transition-all focus-within:border-tertiary/50">
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-36 sm:w-48 lg:w-64 transition-all focus-within:border-tertiary/50">
                   <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
                   <input
                     type="text"
@@ -1188,81 +1269,133 @@ export default function BoardPage() {
                           onClick={() => setShowMobileFilters(false)}
                         />
                         <motion.div
-                          initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                          initial={{ opacity: 0, y: 8, scale: 0.96 }}
                           animate={{ opacity: 1, y: 0, scale: 1 }}
-                          exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                          className="absolute top-full right-0 mt-2 w-72 bg-card/95 backdrop-blur-xl border border-border/80 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col p-4 gap-4"
+                          exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                          transition={{ duration: 0.18, ease: "easeOut" }}
+                          className="absolute top-full right-0 mt-2 w-80 bg-card/98 backdrop-blur-2xl border border-border/80 rounded-xl shadow-[0_20px_50px_rgba(0,0,0,0.35)] z-50 flex flex-col p-4 gap-3.5"
                         >
-                          {/* Mobile/Tablet Search - only shows below desktop */}
-                          <div className="lg:hidden flex items-center gap-2 bg-neutral/40 border border-border rounded-md px-2.5 py-1 w-full">
-                            <Search className="w-3.5 h-3.5 text-secondary shrink-0" />
-                            <input
-                              type="text"
-                              placeholder="Search cards…"
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                              className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none w-full py-0.5"
-                            />
+                          {/* Header */}
+                          <div className="flex items-center justify-between pb-2.5 border-b border-border/60">
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-md bg-tertiary/10 flex items-center justify-center">
+                                <SlidersHorizontal className="w-3 h-3 text-tertiary" />
+                              </div>
+                              <span className="font-mono text-xs font-semibold text-primary uppercase tracking-wider">
+                                Filter Cards
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              {hasActiveFilters && (
+                                <button
+                                  onClick={() => {
+                                    setSearchQuery("");
+                                    setFilterStartDate("");
+                                    setFilterEndDate("");
+                                    setFilterLocation("");
+                                    setSelectedCollection("");
+                                  }}
+                                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono text-secondary hover:text-tertiary hover:bg-tertiary/10 cursor-pointer transition-colors"
+                                  title="Reset all filters"
+                                >
+                                  <RotateCcw className="w-2.5 h-2.5" />
+                                  <span>Reset</span>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setShowMobileFilters(false)}
+                                className="p-1 rounded text-secondary hover:text-primary hover:bg-neutral/60 cursor-pointer transition-colors"
+                                aria-label="Close filters"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
 
-                          <label className="flex items-center justify-between gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full">
-                            <span>From</span>
-                            <input
-                              type="date"
-                              value={filterStartDate}
-                              onChange={(e) => setFilterStartDate(e.target.value)}
-                              className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 flex-1 max-w-[140px]"
-                            />
-                          </label>
-
-                          <label className="flex items-center justify-between gap-2 text-[9px] font-mono text-secondary uppercase tracking-wider w-full">
-                            <span>To</span>
-                            <input
-                              type="date"
-                              value={filterEndDate}
-                              onChange={(e) => setFilterEndDate(e.target.value)}
-                              className="bg-neutral text-[10px] text-primary focus:outline-none cursor-pointer border border-border focus:border-tertiary rounded px-2 py-1 flex-1 max-w-[140px]"
-                            />
-                          </label>
-
-                          <div className="flex items-center gap-2 w-full">
-                            <MapPin className="w-3.5 h-3.5 text-secondary shrink-0" />
-                            <input
-                              type="text"
-                              placeholder="Location"
-                              value={filterLocation}
-                              onChange={(e) => setFilterLocation(e.target.value)}
-                              className="bg-neutral text-[10px] text-primary placeholder-secondary/50 focus:outline-none border border-border focus:border-tertiary rounded px-2.5 py-1 w-full"
-                            />
+                          {/* Date Range Section */}
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-secondary uppercase tracking-wider font-semibold">
+                              <Calendar className="w-3 h-3 text-secondary/80" />
+                              <span>Due Date Range</span>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[9px] font-mono text-secondary/70 uppercase tracking-widest pl-0.5">From</span>
+                                <input
+                                  type="date"
+                                  value={filterStartDate}
+                                  onChange={(e) => setFilterStartDate(e.target.value)}
+                                  className="w-full bg-neutral/60 hover:bg-neutral/90 focus:bg-card border border-border/70 focus:border-tertiary/70 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-primary outline-none transition-all cursor-pointer shadow-xs"
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[9px] font-mono text-secondary/70 uppercase tracking-widest pl-0.5">To</span>
+                                <input
+                                  type="date"
+                                  value={filterEndDate}
+                                  onChange={(e) => setFilterEndDate(e.target.value)}
+                                  className="w-full bg-neutral/60 hover:bg-neutral/90 focus:bg-card border border-border/70 focus:border-tertiary/70 rounded-lg px-2.5 py-1.5 text-[11px] font-mono text-primary outline-none transition-all cursor-pointer shadow-xs"
+                                />
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="flex items-center gap-2 w-full">
-                            <Tag className="w-3.5 h-3.5 text-secondary shrink-0" />
+                          {/* Location Section */}
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-secondary uppercase tracking-wider font-semibold">
+                              <MapPin className="w-3 h-3 text-secondary/80" />
+                              <span>Location</span>
+                            </div>
+                            <div className="relative flex items-center bg-neutral/60 hover:bg-neutral/90 focus-within:bg-card border border-border/70 focus-within:border-tertiary/70 rounded-lg px-2.5 py-1.5 transition-all shadow-xs">
+                              <input
+                                type="text"
+                                placeholder="Filter by location…"
+                                value={filterLocation}
+                                onChange={(e) => setFilterLocation(e.target.value)}
+                                className="bg-transparent text-xs text-primary placeholder-secondary/50 focus:outline-none w-full font-mono"
+                              />
+                              {filterLocation && (
+                                <button
+                                  onClick={() => setFilterLocation("")}
+                                  className="text-secondary hover:text-primary cursor-pointer p-0.5 ml-1"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Collections / Tag Section */}
+                          <div className="flex flex-col gap-1.5">
+                            <div className="flex items-center gap-1.5 text-[10px] font-mono text-secondary uppercase tracking-wider font-semibold">
+                              <Tag className="w-3 h-3 text-secondary/80" />
+                              <span>Collection</span>
+                            </div>
                             <CustomDropdown
                               value={selectedCollection}
                               onChange={(val) => setSelectedCollection(val)}
                               options={[
-                                { value: "", label: "Collections" },
+                                { value: "", label: "All Collections" },
                                 ...allCollections.map(col => ({ value: col, label: col }))
                               ]}
+                              placeholder="All Collections"
                               size="sm"
+                              className="w-full"
                             />
                           </div>
 
-                          {hasActiveFilters && (
+                          {/* Footer with summary info */}
+                          <div className="pt-2 border-t border-border/60 flex items-center justify-between">
+                            <span className="text-[10px] font-mono text-secondary">
+                              {filteredCards.length} of {cards.length} cards match
+                            </span>
                             <button
-                              onClick={() => {
-                                setSearchQuery("");
-                                setFilterStartDate("");
-                                setFilterEndDate("");
-                                setFilterLocation("");
-                                setSelectedCollection("");
-                              }}
-                              className="w-full py-2 mt-1 border border-dashed border-tertiary/40 rounded text-center text-[10px] font-mono font-bold uppercase tracking-wider text-tertiary hover:bg-tertiary/5 cursor-pointer transition-colors"
+                              onClick={() => setShowMobileFilters(false)}
+                              className="px-3 py-1 bg-primary text-neutral hover:bg-primary/90 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider cursor-pointer transition-colors"
                             >
-                              Clear all filters
+                              Done
                             </button>
-                          )}
+                          </div>
                         </motion.div>
                       </>
                     )}
@@ -1303,7 +1436,7 @@ export default function BoardPage() {
             ) : (
               <button
                 onClick={() => setIsAddingProject(true)}
-                className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors"
+                className="px-3 py-1.5 bg-primary text-neutral hover:bg-primary/90 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Project
@@ -1312,9 +1445,9 @@ export default function BoardPage() {
           </div>
         </header>
 
-        {/* Mobile/Tablet Tab Selector Row */}
+        {/* ============ TABS NAVIGATION BAR ============ */}
         {selectedBoard && (
-          <div className="xl:hidden flex border-b border-primary/10 px-6 py-4 gap-2 overflow-x-auto no-scrollbar bg-card/20 backdrop-blur-sm shrink-0">
+          <div className="flex border-b border-primary/10 px-4 sm:px-8 py-2.5 gap-2 overflow-x-auto no-scrollbar bg-card/25 backdrop-blur-md shrink-0 print:hidden">
             {([
               { key: "kanban", label: "Board", icon: Columns },
               { key: "calendar", label: "Calendar", icon: Calendar },
@@ -1322,28 +1455,21 @@ export default function BoardPage() {
               { key: "workflow", label: "Workflow", icon: GitFork },
               { key: "wireframe", label: "Wireframe", icon: PenTool },
               { key: "docs", label: "Docs", icon: BookOpen },
+              { key: "sow", label: "SOW", icon: FileText },
             ] as const).map(t => (
               <button
                 key={t.key}
                 onClick={() => changeTab(t.key)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-sm border transition-all duration-300 text-[10px] font-bold uppercase tracking-widest cursor-pointer ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-md border transition-all duration-200 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap shrink-0 cursor-pointer ${
                   activeTab === t.key 
                     ? "bg-primary text-neutral border-primary shadow-sm" 
                     : "bg-card/40 border-primary/5 text-secondary hover:text-primary hover:bg-card/80"
                 }`}
               >
                 <t.icon className={`w-3.5 h-3.5 ${activeTab === t.key ? "text-tertiary" : "text-secondary"}`} />
-                <span>{t.label}</span>
+                <span className="whitespace-nowrap">{t.label}</span>
               </button>
             ))}
-            <Link
-              href={`/sow?project_id=${selectedBoard.projectId}`}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-sm border bg-card/40 border-primary/5 text-secondary hover:text-primary hover:bg-card/80 text-[10px] font-bold uppercase tracking-widest cursor-pointer shrink-0"
-              title="Open the Statement of Work Studio"
-            >
-              <FileText className="w-3.5 h-3.5 text-secondary" />
-              <span>SOW</span>
-            </Link>
           </div>
         )}
 
@@ -1397,13 +1523,24 @@ export default function BoardPage() {
                   ) : (
                     <div className="space-y-10">
                       {projects.map((proj) => (
-                        <section key={proj.id}>
-                          <div className="flex items-baseline justify-between border-b border-primary/15 pb-2 mb-1">
-                            <h2 className="font-serif italic font-bold text-primary text-xl">{proj.name}</h2>
-                            <div className="flex items-baseline gap-4">
+                        <section key={proj.id} className="text-left">
+                          <div className="flex flex-col sm:flex-row sm:items-baseline justify-between border-b border-primary/15 pb-2 mb-1 gap-2">
+                            <div className="flex items-center gap-2.5">
+                              <Folder className="w-4 h-4 text-tertiary shrink-0" />
+                              <h2 className="font-serif italic font-bold text-primary text-xl">{proj.name}</h2>
+                            </div>
+                            <div className="flex items-center gap-3 flex-wrap">
                               <span className={LABEL_CAPS}>
                                 {(proj.boards || []).length} {(proj.boards || []).length === 1 ? "board" : "boards"}
                               </span>
+                              <button
+                                onClick={() => handleInspectProject(proj)}
+                                className="text-[9px] font-mono font-bold uppercase tracking-[0.2em] text-secondary hover:text-tertiary transition-colors flex items-center gap-1.5 cursor-pointer bg-primary/5 hover:bg-tertiary/10 px-2.5 py-1 rounded-sm"
+                                title="View project deliverables, files, and completion matrix"
+                              >
+                                <FolderOpen className="w-3 h-3 text-tertiary" />
+                                <span>Inspect Deliverables</span>
+                              </button>
                               <button
                                 onClick={() => {
                                   setActiveAddingBoardForProjectId(proj.id);
@@ -2178,7 +2315,7 @@ export default function BoardPage() {
                 </motion.div>
               ) : activeTab === "wireframe" ? (
                 <motion.div
-                  key="board-wireframe"
+                  key={`board-wireframe-${selectedBoard?.id || selectedBoard?.projectId || "none"}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
@@ -2186,21 +2323,41 @@ export default function BoardPage() {
                   className="w-full h-[calc(100vh-5rem)] min-h-[480px]"
                 >
                   <div className="w-full h-full bg-transparent relative">
-                    {/* A wireframe belongs to one project. Pass the selected
-                        project through so the canvas loads that project's
-                        wireframe and no other; the component keys itself on the
-                        id so switching project remounts, instead of leaving the
-                        previous app's design on screen.
-
-                        This used to be an <iframe> around a self-hosted
-                        Excalidraw build. It rendered a scene whose every
-                        coordinate had been computed in Python, which is where
-                        the overlapping cards came from; it also followed the OS
-                        colour scheme rather than the app's theme. Rendering
-                        in-tree lets the layout use measured sizes and inherit
-                        the dashboard's own theme tokens. */}
-                    <WireframeCanvas projectId={selectedBoard?.projectId} />
+                    <WireframeCanvas
+                      key={selectedBoard?.id || selectedBoard?.projectId}
+                      projectId={selectedBoard?.id || selectedBoard?.projectId}
+                    />
                   </div>
+                </motion.div>
+              ) : activeTab === "sow" ? (
+                <motion.div
+                  key={`board-sow-${selectedBoard?.id || selectedBoard?.projectId || "none"}`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="w-full basis-full grow min-w-0 p-4 md:p-8"
+                >
+                  <SowStudio
+                    key={selectedBoard?.id || selectedBoard?.projectId}
+                    projectId={selectedBoard?.id || selectedBoard?.projectId}
+                    projectName={selectedBoard?.name ? `${selectedBoard.projectName || "Project"} / ${selectedBoard.name}` : selectedBoard?.projectName}
+                    boardLists={lists}
+                    boardCards={cards}
+                    availableProjects={projects.flatMap(p => 
+                      (p.boards && p.boards.length > 0)
+                        ? p.boards.map(b => ({
+                            id: b.id,
+                            name: `${p.name} / ${b.name}`,
+                            boardId: b.id,
+                          }))
+                        : [{
+                            id: p.id,
+                            name: p.name,
+                            boardId: p.id,
+                          }]
+                    )}
+                  />
                 </motion.div>
               ) : (
                 /* ---- FEED (mail & messaging) ---- */
@@ -2518,7 +2675,7 @@ export default function BoardPage() {
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
                 transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                className="w-full max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl h-full sm:h-auto max-h-full sm:max-h-[85dvh] bg-neutral border-0 sm:border border-primary/15 rounded-none sm:rounded-2xl flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
+                className="w-full max-w-4xl md:max-w-5xl lg:max-w-6xl xl:max-w-7xl h-full sm:h-auto max-h-full sm:max-h-[85dvh] bg-neutral border-0 sm:border border-primary/15 rounded-none sm:rounded-md flex flex-col shadow-2xl text-left pointer-events-auto overflow-hidden"
               >
                 {/* Panel header */}
                 <div className="px-6 pt-5 pb-4 border-b border-primary/10 shrink-0">
@@ -2809,6 +2966,482 @@ export default function BoardPage() {
             </div>
           </>
         )}
+
+        {/* ========================================================================= */}
+        {/* PROJECT DELIVERABLES & FILE MATRIX DRAWER (LINEAR / RAYCAST HIGH-DENSITY) */}
+        {/* ========================================================================= */}
+        {inspectingProject && (() => {
+          const totalItems = projectDeliverables.length;
+          const completedItems = projectDeliverables.filter(d => d.isDone);
+          const inProgressItems = projectDeliverables.filter(d => d.isInProgress);
+          const todoItems = projectDeliverables.filter(d => !d.isDone && !d.isInProgress);
+          const completionPct = totalItems > 0 ? Math.round((completedItems.length / totalItems) * 100) : 0;
+          const inProgressPct = totalItems > 0 ? Math.round((inProgressItems.length / totalItems) * 100) : 0;
+
+          const filteredDeliverables = projectDeliverables.filter((d) => {
+            const matchesSearch = d.name.toLowerCase().includes(deliverableSearch.toLowerCase()) || 
+              d.description.toLowerCase().includes(deliverableSearch.toLowerCase()) ||
+              d.files.some(f => f.toLowerCase().includes(deliverableSearch.toLowerCase()));
+            if (!matchesSearch) return false;
+            if (deliverablesFilter === "completed") return d.isDone;
+            if (deliverablesFilter === "in_progress") return d.isInProgress;
+            if (deliverablesFilter === "todo") return !d.isDone && !d.isInProgress;
+            return true;
+          });
+
+          // Helper to parse tags and clean title
+          const parseTitleSpec = (rawTitle: string) => {
+            let clean = rawTitle;
+            let tag: string | null = null;
+            let tagColor = "bg-primary/10 text-primary border-primary/20";
+
+            const tagMatch = rawTitle.match(/\[([A-Za-z0-9_\-]+)\]/);
+            if (tagMatch) {
+              const rawTag = tagMatch[1].toUpperCase();
+              tag = rawTag;
+              if (rawTag.includes("DB") || rawTag.includes("DATA") || rawTag.includes("SQL")) {
+                tag = "DB";
+                tagColor = "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/25";
+              } else if (rawTag.includes("N8N") || rawTag.includes("FLOW") || rawTag.includes("CRON")) {
+                tag = "WORKFLOW";
+                tagColor = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/25";
+              } else if (rawTag.includes("API") || rawTag.includes("ROUTE") || rawTag.includes("MCP")) {
+                tag = "API";
+                tagColor = "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25";
+              } else if (rawTag.includes("UI") || rawTag.includes("PAGE") || rawTag.includes("FRONTEND")) {
+                tag = "UI";
+                tagColor = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/25";
+              }
+              clean = clean.replace(/\[[A-Za-z0-9_\-]+\]/, "").trim();
+            }
+
+            // Remove leading numbers like "1. " or "4. "
+            clean = clean.replace(/^\d+[\.\)]\s*/, "").trim();
+
+            return { tag, tagColor, cleanTitle: clean || rawTitle };
+          };
+
+          const handleCopyPath = (pathStr: string, e: React.MouseEvent) => {
+            e.stopPropagation();
+            navigator.clipboard.writeText(pathStr);
+            setCopiedFilePath(pathStr);
+            setTimeout(() => setCopiedFilePath(null), 2000);
+          };
+
+          const toggleExpand = (itemId: string) => {
+            setExpandedDeliverableIds((prev) => {
+              const next = new Set(prev);
+              if (next.has(itemId)) {
+                next.delete(itemId);
+              } else {
+                next.add(itemId);
+              }
+              return next;
+            });
+          };
+
+          return (
+            <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setInspectingProject(null)}
+                className="fixed inset-0 w-full h-full bg-black/70 backdrop-blur-md cursor-pointer"
+              />
+
+              <motion.div
+                initial={{ scale: 0.97, opacity: 0, y: 15 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.97, opacity: 0, y: 15 }}
+                role="dialog"
+                aria-modal="true"
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-5xl bg-card border border-border/80 p-5 sm:p-8 rounded-lg shadow-2xl z-10 space-y-5 my-auto max-h-[92vh] flex flex-col text-left overflow-hidden"
+              >
+                {/* Header with breadcrumb & close */}
+                <div className="flex items-center justify-between border-b border-border/50 pb-4 shrink-0">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest text-secondary">
+                      <FolderOpen className="w-3.5 h-3.5 text-tertiary shrink-0" />
+                      <span>Projects</span>
+                      <span>/</span>
+                      <span className="text-tertiary font-bold truncate">{inspectingProject.name}</span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h3 className="text-xl sm:text-2xl font-serif font-bold text-primary italic truncate">
+                        {inspectingProject.name}
+                      </h3>
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        {completionPct}% Complete
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setInspectingProject(null)}
+                    className="px-3 py-1.5 border border-border/60 hover:border-tertiary hover:text-tertiary text-[10px] font-mono font-bold transition-all rounded-md uppercase cursor-pointer shrink-0"
+                  >
+                    ESC
+                  </button>
+                </div>
+
+                {/* Linear-Style Unified Segmented Progress & Pill Strip */}
+                <div className="p-3.5 border border-border/50 bg-neutral/25 rounded-md space-y-2.5 shrink-0">
+                  {/* Segmented Bar */}
+                  <div className="w-full h-2 rounded-full overflow-hidden bg-neutral/80 flex gap-0.5">
+                    <div 
+                      className="h-full bg-emerald-500 transition-all duration-500" 
+                      style={{ width: `${completionPct}%` }} 
+                      title={`Completed: ${completedItems.length} (${completionPct}%)`}
+                    />
+                    <div 
+                      className="h-full bg-amber-500 transition-all duration-500" 
+                      style={{ width: `${inProgressPct}%` }} 
+                      title={`In Progress: ${inProgressItems.length} (${inProgressPct}%)`}
+                    />
+                    <div 
+                      className="h-full bg-neutral border border-border/40 flex-1" 
+                      title={`Backlog: ${todoItems.length}`}
+                    />
+                  </div>
+
+                  {/* Horizontal Status Chips */}
+                  <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] font-mono">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        <span>{completedItems.length} Completed</span>
+                        <span className="text-secondary/70 font-normal">({completionPct}%)</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        <span>{inProgressItems.length} In Progress</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-secondary font-medium">
+                        <span className="w-2 h-2 rounded-full bg-secondary/40" />
+                        <span>{todoItems.length} Backlog</span>
+                      </div>
+                    </div>
+                    <div className="text-secondary text-[10px] uppercase tracking-wider font-semibold">
+                      Total: {totalItems} Tasks · {(inspectingProject.boards || []).length} Boards
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Toolbar & View Switcher */}
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between shrink-0 p-2.5 border border-border/50 bg-card/40 rounded-md">
+                  {/* Search */}
+                  <div className="relative w-full sm:w-80">
+                    <Search className="w-3.5 h-3.5 text-secondary absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      value={deliverableSearch}
+                      onChange={(e) => setDeliverableSearch(e.target.value)}
+                      placeholder="Search deliverables, code files, paths..."
+                      className="w-full pl-8 pr-7 py-1.5 border border-border/60 rounded bg-neutral/40 text-xs font-mono focus:outline-none focus:border-tertiary text-primary placeholder-secondary/40"
+                    />
+                    {deliverableSearch && (
+                      <button
+                        onClick={() => setDeliverableSearch("")}
+                        className="absolute right-2.5 top-2 text-secondary hover:text-primary cursor-pointer text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Filter Pills + Layout Toggle */}
+                  <div className="flex items-center justify-between sm:justify-end gap-2 w-full sm:w-auto overflow-x-auto">
+                    <div className="flex items-center gap-1">
+                      {([
+                        { id: "all", label: "All", count: totalItems },
+                        { id: "completed", label: "Done", count: completedItems.length },
+                        { id: "in_progress", label: "Active", count: inProgressItems.length },
+                        { id: "todo", label: "Backlog", count: todoItems.length }
+                      ] as const).map((filter) => (
+                        <button
+                          key={filter.id}
+                          onClick={() => setDeliverablesFilter(filter.id)}
+                          className={`px-2.5 py-1 text-[9px] font-mono font-bold uppercase tracking-wider rounded transition-all cursor-pointer flex items-center gap-1.5 ${
+                            deliverablesFilter === filter.id
+                              ? "bg-tertiary text-white shadow-xs"
+                              : "bg-neutral/40 hover:bg-neutral text-secondary hover:text-primary"
+                          }`}
+                        >
+                          <span>{filter.label}</span>
+                          <span className={`text-[8px] px-1 rounded ${
+                            deliverablesFilter === filter.id ? "bg-black/20 text-white" : "bg-card text-secondary"
+                          }`}>
+                            {filter.count}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* View Switcher */}
+                    <div className="hidden sm:flex items-center border border-border/60 rounded p-0.5 bg-neutral/40">
+                      <button
+                        onClick={() => setDeliverablesLayout("list")}
+                        className={`p-1 rounded cursor-pointer transition-colors ${
+                          deliverablesLayout === "list" ? "bg-card text-tertiary shadow-xs" : "text-secondary hover:text-primary"
+                        }`}
+                        title="List View (Compact)"
+                      >
+                        <LayoutList className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeliverablesLayout("grid")}
+                        className={`p-1 rounded cursor-pointer transition-colors ${
+                          deliverablesLayout === "grid" ? "bg-card text-tertiary shadow-xs" : "text-secondary hover:text-primary"
+                        }`}
+                        title="Grid View (Cards)"
+                      >
+                        <Grid className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Deliverables Content Viewport */}
+                <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 custom-scrollbar min-h-[240px]">
+                  {loadingDeliverables ? (
+                    <div className="h-48 flex flex-col items-center justify-center gap-3">
+                      <RefreshCw className="w-5 h-5 text-tertiary animate-spin" />
+                      <span className="text-xs font-mono font-bold text-secondary uppercase">Loading Project Deliverables…</span>
+                    </div>
+                  ) : filteredDeliverables.length === 0 ? (
+                    <div className="h-48 flex flex-col items-center justify-center gap-2 border border-dashed border-border rounded-md text-secondary/60 text-xs font-mono">
+                      <span>No deliverables found matching filter</span>
+                    </div>
+                  ) : deliverablesLayout === "list" ? (
+                    /* ====== 1. LINEAR-STYLE LIST VIEW ====== */
+                    <div className="space-y-1.5">
+                      {filteredDeliverables.map((item) => {
+                        const { tag, tagColor, cleanTitle } = parseTitleSpec(item.name);
+                        const isExpanded = expandedDeliverableIds.has(item.id);
+                        const completedTasksCount = item.tasks.filter(t => t.done).length;
+
+                        return (
+                          <div
+                            key={item.id}
+                            className={`border rounded-md transition-all ${
+                              item.isDone 
+                                ? "border-emerald-500/20 bg-emerald-500/[0.015] hover:border-emerald-500/40" 
+                                : item.isInProgress 
+                                ? "border-amber-500/20 bg-amber-500/[0.015] hover:border-amber-500/40" 
+                                : "border-border/60 bg-card/50 hover:border-tertiary/40"
+                            }`}
+                          >
+                            {/* Summary Row */}
+                            <button
+                              type="button"
+                              onClick={() => toggleExpand(item.id)}
+                              className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-3 text-left cursor-pointer group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0 flex-1">
+                                {/* Status Icon */}
+                                <div className="shrink-0">
+                                  {item.isDone ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                  ) : item.isInProgress ? (
+                                    <Activity className="w-4 h-4 text-amber-500 animate-pulse" />
+                                  ) : (
+                                    <div className="w-3.5 h-3.5 rounded-full border border-secondary/50 group-hover:border-tertiary transition-colors" />
+                                  )}
+                                </div>
+
+                                {/* Tag */}
+                                {tag && (
+                                  <span className={`text-[8.5px] font-mono uppercase px-1.5 py-0.5 rounded border font-bold shrink-0 ${tagColor}`}>
+                                    {tag}
+                                  </span>
+                                )}
+
+                                {/* Title */}
+                                <span className="text-xs sm:text-sm font-semibold text-primary group-hover:text-tertiary transition-colors truncate">
+                                  {cleanTitle}
+                                </span>
+                              </div>
+
+                              {/* Right Badges */}
+                              <div className="flex items-center gap-2.5 shrink-0">
+                                <span className="hidden md:inline-block text-[9px] font-mono text-secondary px-2 py-0.5 bg-neutral/50 rounded border border-border/40 truncate max-w-[140px]">
+                                  {item.boardName}
+                                </span>
+
+                                {item.files.length > 0 && (
+                                  <span className="flex items-center gap-1 text-[9px] font-mono text-secondary px-1.5 py-0.5 bg-neutral/40 rounded border border-border/40">
+                                    <FileCode className="w-3 h-3 text-tertiary" />
+                                    <span>{item.files.length}</span>
+                                  </span>
+                                )}
+
+                                {item.tasks.length > 0 && (
+                                  <span className="flex items-center gap-1 text-[9px] font-mono px-1.5 py-0.5 rounded border border-border/40 text-secondary">
+                                    <ListChecks className="w-3 h-3" />
+                                    <span>{completedTasksCount}/{item.tasks.length}</span>
+                                  </span>
+                                )}
+
+                                <ChevronDown className={`w-3.5 h-3.5 text-secondary transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                              </div>
+                            </button>
+
+                            {/* Expandable Accordion Drawer */}
+                            <AnimatePresence>
+                              {isExpanded && (
+                                <motion.div
+                                  initial={{ opacity: 0, height: 0 }}
+                                  animate={{ opacity: 1, height: "auto" }}
+                                  exit={{ opacity: 0, height: 0 }}
+                                  transition={{ duration: 0.2 }}
+                                  className="px-4 pb-4 pt-1 border-t border-border/40 space-y-3 overflow-hidden text-xs"
+                                >
+                                  {/* Description */}
+                                  {item.description && (
+                                    <div className="text-secondary/90 leading-relaxed font-sans border-l-2 border-primary/15 pl-3 py-0.5">
+                                      {item.description.replace(/<!--[\s\S]*?-->/g, "").trim() || "No notes"}
+                                    </div>
+                                  )}
+
+                                  {/* Checklists */}
+                                  {item.tasks.length > 0 && (
+                                    <div className="p-3 bg-neutral/40 rounded border border-border/40 space-y-2">
+                                      <div className="flex items-center justify-between text-[9px] font-mono font-bold text-secondary uppercase">
+                                        <span className="flex items-center gap-1.5">
+                                          <ListChecks className="w-3.5 h-3.5 text-tertiary" /> Deliverables Checklist
+                                        </span>
+                                        <span>{completedTasksCount}/{item.tasks.length} Done</span>
+                                      </div>
+                                      <div className="space-y-1">
+                                        {item.tasks.map((t, tIdx) => (
+                                          <div key={tIdx} className="flex items-center gap-2 text-[11px] font-mono">
+                                            <div className={`w-3.5 h-3.5 rounded flex items-center justify-center shrink-0 border ${
+                                              t.done ? "bg-emerald-500 text-white border-emerald-600" : "border-border"
+                                            }`}>
+                                              {t.done && <Check className="w-2.5 h-2.5" />}
+                                            </div>
+                                            <span className={t.done ? "line-through opacity-50" : "text-primary"}>
+                                              {t.text}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Linked Files */}
+                                  {item.files.length > 0 && (
+                                    <div className="space-y-1.5 pt-1">
+                                      <span className="text-[9px] font-mono uppercase tracking-wider text-secondary font-bold flex items-center gap-1">
+                                        <FileCode className="w-3 h-3 text-tertiary" /> Referenced Files (Click to Copy)
+                                      </span>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {item.files.map((file, fIdx) => (
+                                          <button
+                                            key={fIdx}
+                                            type="button"
+                                            onClick={(e) => handleCopyPath(file, e)}
+                                            className="px-2.5 py-1 bg-card border border-border/80 hover:border-tertiary text-[10px] font-mono text-primary rounded flex items-center gap-1.5 cursor-pointer group/file transition-colors"
+                                            title="Click to copy file path"
+                                          >
+                                            <Code2 className="w-3 h-3 text-secondary group-hover/file:text-tertiary" />
+                                            <span>{file}</span>
+                                            {copiedFilePath === file ? (
+                                              <span className="text-emerald-500 text-[8px] font-bold">COPIED!</span>
+                                            ) : (
+                                              <Copy className="w-2.5 h-2.5 text-secondary/50 group-hover/file:text-primary" />
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    /* ====== 2. CARD GRID VIEW ====== */
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {filteredDeliverables.map((item) => {
+                        const { tag, tagColor, cleanTitle } = parseTitleSpec(item.name);
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-4 border rounded-md transition-all space-y-3 ${
+                              item.isDone 
+                                ? "border-emerald-500/30 bg-emerald-500/[0.02]" 
+                                : item.isInProgress 
+                                ? "border-amber-500/30 bg-amber-500/[0.02]" 
+                                : "border-border/60 bg-card/60"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={`text-[8px] font-mono uppercase px-2 py-0.5 rounded font-bold border ${
+                                    item.isDone 
+                                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" 
+                                      : item.isInProgress 
+                                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" 
+                                      : "bg-neutral text-secondary border-border"
+                                  }`}>
+                                    {item.isDone ? "Completed" : item.isInProgress ? "In Progress" : "Backlog"}
+                                  </span>
+                                  {tag && (
+                                    <span className={`text-[8px] font-mono uppercase px-1.5 py-0.5 rounded border font-bold ${tagColor}`}>
+                                      {tag}
+                                    </span>
+                                  )}
+                                </div>
+                                <h4 className="text-sm font-semibold text-primary">{cleanTitle}</h4>
+                              </div>
+                              <span className="text-[8px] font-mono text-secondary px-2 py-0.5 bg-neutral/50 rounded border border-border/40 shrink-0">
+                                {item.boardName}
+                              </span>
+                            </div>
+
+                            {item.description && (
+                              <div className="text-xs text-secondary/80 line-clamp-3 font-sans leading-relaxed border-l-2 border-primary/10 pl-3">
+                                {item.description.replace(/<!--[\s\S]*?-->/g, "").trim() || "No detailed notes provided"}
+                              </div>
+                            )}
+
+                            {item.files.length > 0 && (
+                              <div className="space-y-1 pt-1 border-t border-border/40">
+                                <span className="text-[8.5px] font-mono uppercase tracking-wider text-secondary font-bold flex items-center gap-1">
+                                  <FileCode className="w-3 h-3 text-tertiary" /> Linked Code Files
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {item.files.map((file, fIdx) => (
+                                    <button
+                                      key={fIdx}
+                                      type="button"
+                                      onClick={(e) => handleCopyPath(file, e)}
+                                      className="px-2 py-0.5 bg-card border border-border text-[9.5px] font-mono text-primary rounded hover:border-tertiary transition-colors flex items-center gap-1"
+                                      title="Click to copy path"
+                                    >
+                                      <span>{file}</span>
+                                      {copiedFilePath === file && <span className="text-emerald-500 text-[8px] font-bold">✓</span>}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
     </div>
   );

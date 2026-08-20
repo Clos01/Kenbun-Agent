@@ -1,21 +1,24 @@
+import logging
 import os
 import re
 from pathlib import Path
+from typing import Set, Any, Optional, Dict
 from tools.infrastructure.config import settings
 
 from tools.memory.honcho_connect import get_project_collection, query_embeddings
 from tools.memory.project_memory import get_project_id
 
-IGNORE_DIRS = {
-    "node_modules", "venv", ".venv", ".git", ".next", "dist", "build", 
-    ".idea", "__pycache__", ".agent", ".vercel", ".DS_Store", "public", "coverage",
-    "benchmarks", "tests", "external", "design_systems", "dev", "training_data", ".pytest_cache", "brain_health", "skills",
-    ".claude", ".benchmarks", "optional_skills"
-}
-ALLOWED_EXTS = {".js", ".jsx", ".ts", ".tsx", ".py", ".md", ".json"}
-ALLOWED_ROOMS = {"Archives", "Central_Logic", "Observatory", "Simulations", "Vault"}
+logger = logging.getLogger("code-indexer")
 
-def get_chroma_collection():
+IGNORE_DIRS: Set[str] = {
+    "node_modules", "venv", ".venv", ".git", ".next", "dist", "build", 
+    ".idea", "__pycache__", ".vercel", ".DS_Store", "public", "coverage",
+    ".pytest_cache", ".pnpm-store", "logs", "scratch", "brain_health"
+}
+ALLOWED_EXTS: Set[str] = {".js", ".jsx", ".ts", ".tsx", ".py", ".md", ".json"}
+ALLOWED_ROOMS: Set[str] = {"Archives", "Central_Logic", "Observatory", "Simulations", "Vault"}
+
+def get_chroma_collection() -> Any:
     return get_project_collection("code")
 
 def is_relative_to_compat(path: Path, base: Path) -> bool:
@@ -264,3 +267,102 @@ def search_code(query: str, n_results: int = 5) -> str:
     except Exception:
         # Sanitized error message to prevent information disclosure (CWE-209)
         return "ERROR: Secure code search failed."
+
+def index_single_file(file_path: str, project_path: Optional[str] = None) -> bool:
+    """Incrementally indexes or re-indexes a single file into ChromaDB."""
+    try:
+        base_path = Path(project_path or settings.PROJECT_ROOT).resolve()
+        target_path = Path(file_path).resolve()
+        
+        if not is_relative_to_compat(target_path, base_path) or not target_path.exists():
+            return False
+            
+        if not any(target_path.name.endswith(ext) for ext in ALLOWED_EXTS):
+            return False
+            
+        rel_path = os.path.relpath(target_path, base_path)
+        parts = Path(rel_path).parts
+        if any(p in IGNORE_DIRS for p in parts):
+            return False
+            
+        collection = get_chroma_collection()
+        project_id = get_project_id(str(base_path))
+        
+        with open(target_path, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+            
+        if not content.strip():
+            try:
+                collection.delete(where={"file_path": rel_path})
+            except Exception:
+                pass
+            return True
+            
+        chunks = chunk_code(content, rel_path)
+        if len(chunks) > 500:
+            chunks = chunks[:500]
+            
+        first_component = parts[0] if parts else ""
+        room = "Archives"
+        if first_component == "core":
+            room = "Central_Logic"
+        elif first_component == "dashboard":
+            room = "Observatory"
+        elif first_component in ("tests", "test"):
+            room = "Simulations"
+        elif first_component == "security":
+            room = "Vault"
+        
+        docs: list = []
+        metas: list = []
+        ids: list = []
+        for chunk in chunks:
+            chunk["metadata"]["room"] = room
+            chunk["metadata"]["project_id"] = project_id
+            unique_id = f"{project_id}:code:{chunk['id']}"
+            docs.append(chunk["document"])
+            metas.append(whitelist_metadata(chunk["metadata"]))
+            ids.append(unique_id)
+            
+        if ids:
+            try:
+                collection.delete(where={"file_path": rel_path})
+            except Exception:
+                pass
+            collection.upsert(ids=ids, documents=docs, metadatas=metas)
+        return True
+    except Exception as e:
+        logger.warning("Incremental indexing failed for %s: %s", file_path, e)
+        return False
+
+# In-memory mtime cache for background file watcher
+_LAST_SEEN_MTIMES: Dict[str, float] = {}
+
+async def code_indexer_daemon_loop(project_path: Optional[str] = None, interval: float = 8.0) -> None:
+    """Non-blocking background loop that detects modified files and updates ChromaDB embeddings in real time."""
+    import asyncio
+    base_path = Path(project_path or settings.PROJECT_ROOT).resolve()
+    logger.info("Continuous code indexer daemon initialized for %s", base_path)
+    
+    while True:
+        try:
+            await asyncio.sleep(interval)
+            for root, dirs, files in os.walk(str(base_path)):
+                dirs[:] = [d for d in dirs if d not in IGNORE_DIRS and not os.path.islink(os.path.join(root, d))]
+                for file in files:
+                    if any(file.endswith(ext) for ext in ALLOWED_EXTS):
+                        full_path = os.path.join(root, file)
+                        try:
+                            mtime = os.path.getmtime(full_path)
+                            prev_mtime = _LAST_SEEN_MTIMES.get(full_path)
+                            if prev_mtime is not None and mtime > prev_mtime:
+                                index_single_file(full_path, str(base_path))
+                            _LAST_SEEN_MTIMES[full_path] = mtime
+                        except (OSError, ValueError):
+                            continue
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.warning("Code indexer daemon warning: %s", e)
+            await asyncio.sleep(interval)
+

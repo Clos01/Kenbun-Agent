@@ -206,7 +206,7 @@ export default function HivemindMemory() {
               { label: "Search Response Time", value: stats.searchLatency, icon: Clock, color: "text-primary" },
               { label: "Last Index Update", value: stats.lastIndexTime, icon: RefreshCw, color: "text-primary" }
             ].map((stat, i) => (
-              <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-2xl flex items-center justify-between group hover:border-tertiary/30 hover:scale-[1.02] hover:bg-card/85 transition-all duration-300">
+              <div key={i} className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl shadow-md rounded-md flex items-center justify-between group hover:border-tertiary/30 hover:scale-[1.02] hover:bg-card/85 transition-all duration-300">
                 <div className="space-y-2">
                   <span className="text-[9px] uppercase tracking-[0.2em] opacity-40 font-black">{stat.label}</span>
                   <div className="text-xl lg:text-2xl font-black text-primary tracking-tighter italic">{stat.value}</div>
@@ -217,7 +217,7 @@ export default function HivemindMemory() {
           </section>
 
           {/* Semantic Workspace Search Panel */}
-          <section className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl shadow-lg space-y-6">
+          <section className="p-8 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md shadow-lg space-y-6">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
                 <span className="text-[10px] font-black uppercase tracking-[0.4em] text-tertiary">Vector Search Engine</span>
@@ -305,7 +305,7 @@ export default function HivemindMemory() {
                       exit={{ opacity: 0, scale: 0.95 }}
                       transition={{ delay: i * 0.05 }}
                       onClick={() => setSelectedConcept(concept)}
-                      className={`p-6 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-tertiary/35 cursor-pointer transition-all hover:scale-[1.01] hover:bg-card/85 duration-300 ${
+                      className={`p-6 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-tertiary/35 cursor-pointer transition-all hover:scale-[1.01] hover:bg-card/85 duration-300 ${
                         selectedConcept?.id === concept.id ? 'border-tertiary/40 bg-card/90 shadow-md shadow-tertiary/[0.02] scale-[1.01]' : ''
                       }`}
                     >
@@ -343,7 +343,7 @@ export default function HivemindMemory() {
                 </AnimatePresence>
 
                 {(searchResults !== null && searchResults.length === 0) && (
-                  <div className="p-12 border border-dashed border-primary/10 rounded-2xl text-center space-y-4 bg-card/10">
+                  <div className="p-12 border border-dashed border-primary/10 rounded-md text-center space-y-4 bg-card/10">
                     <AlertCircle className="w-8 h-8 text-primary/20 mx-auto" />
                     <div className="space-y-1">
                       <h4 className="font-serif font-bold text-sm text-primary uppercase">No matches found</h4>
@@ -366,7 +366,7 @@ export default function HivemindMemory() {
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      className="p-8 border border-tertiary/20 bg-card/85 backdrop-blur-xl rounded-2xl shadow-xl space-y-6 text-primary hover:border-tertiary/45 transition-colors duration-300"
+                      className="p-8 border border-tertiary/20 bg-card/85 backdrop-blur-xl rounded-md shadow-xl space-y-6 text-primary hover:border-tertiary/45 transition-colors duration-300"
                     >
                       <div className="flex items-center justify-between border-b border-primary/5 pb-4">
                         <div className="space-y-1">
@@ -387,7 +387,7 @@ export default function HivemindMemory() {
                         {selectedConcept.code_snippet && (
                           <div className="space-y-1 pt-3 border-t border-primary/5">
                             <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest text-tertiary">Semantic Match Code Snippet</span>
-                            <pre className="p-3 bg-neutral-900 border border-primary/5 text-[9px] text-primary/90 break-all rounded-xl font-mono max-h-48 overflow-y-auto overflow-x-auto whitespace-pre select-all">
+                            <pre className="p-3 bg-neutral-900 border border-primary/5 text-[9px] text-primary/90 break-all rounded-md font-mono max-h-48 overflow-y-auto overflow-x-auto whitespace-pre select-all">
                               {selectedConcept.code_snippet}
                             </pre>
                           </div>
@@ -395,7 +395,7 @@ export default function HivemindMemory() {
 
                         <div className="space-y-1 pt-3 border-t border-primary/5">
                           <span className="text-[9px] font-bold opacity-30 uppercase tracking-widest">Source File Location</span>
-                          <div className="p-3 bg-primary/5 border border-primary/5 text-[10px] text-primary break-all rounded-xl font-semibold select-all">
+                          <div className="p-3 bg-primary/5 border border-primary/5 text-[10px] text-primary break-all rounded-md font-semibold select-all">
                             {selectedConcept.file}
                           </div>
                         </div>
@@ -414,7 +414,7 @@ export default function HivemindMemory() {
                         <div className="pt-6 border-t border-primary/5">
                           <a 
                             href={`file:///${selectedConcept.file}`}
-                            className="w-full flex items-center justify-center gap-2 py-3 border border-primary hover:bg-primary hover:text-neutral transition-all duration-300 uppercase font-black tracking-widest text-[9px] rounded-xl hover:scale-[1.01] cursor-pointer"
+                            className="w-full flex items-center justify-center gap-2 py-3 border border-primary hover:bg-primary hover:text-neutral transition-all duration-300 uppercase font-black tracking-widest text-[9px] rounded-md hover:scale-[1.01] cursor-pointer"
                           >
                             Open Concept Source Code
                             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -427,7 +427,7 @@ export default function HivemindMemory() {
                       key="no-selection"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 0.5 }}
-                      className="p-12 border border-dashed border-primary/10 rounded-2xl text-center py-20 bg-card/20"
+                      className="p-12 border border-dashed border-primary/10 rounded-md text-center py-20 bg-card/20"
                     >
                       <Database className="w-12 h-12 text-primary/10 mx-auto mb-4" />
                       <h4 className="font-serif font-black text-sm uppercase text-primary">No concept selected</h4>
@@ -467,7 +467,7 @@ export default function HivemindMemory() {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-lg bg-[var(--card)] border border-primary/5 rounded-2xl shadow-2xl p-8 z-10 text-left space-y-6"
+              className="relative w-full max-w-lg bg-[var(--card)] border border-primary/5 rounded-md shadow-2xl p-8 z-10 text-left space-y-6"
             >
               <div className="flex items-center justify-between border-b border-primary/5 pb-4">
                 <div className="space-y-1">
