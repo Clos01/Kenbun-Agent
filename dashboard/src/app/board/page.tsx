@@ -122,10 +122,7 @@ export interface DeliverableItem {
   tasks: Array<{ text: string; done: boolean }>;
 }
 
-export ;
-  shape?: "process" | "decision" | "terminal";
-  linkLabels?: Record<string, string>;
-}
+
 
 
 
