@@ -21,7 +21,7 @@ import {
   Square,
   Diamond
 } from "lucide-react";
-import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../app/board/page";
+import { parseCardMetadata, injectCardMetadata, KenbunMetadata } from "../lib/metadata";
 import { computeWorkOrder } from "../lib/prioritize";
 import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
