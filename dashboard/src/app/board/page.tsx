@@ -1,5 +1,5 @@
-import { KenbunMetadata, parseCardMetadata, injectCardMetadata } from "../../lib/metadata";
 "use client";
+import { KenbunMetadata, parseCardMetadata, injectCardMetadata } from "../../lib/metadata";
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
