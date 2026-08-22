@@ -1030,6 +1030,33 @@ export default function FleetCommand() {
                                 <Power className="w-3.5 h-3.5" /> Safe Shutdown
                               </button>
                             </div>
+                            
+                            {/* ACTION RESULTS / LOADING STATE */}
+                            {(sentryLoadingAction || sentryActionResult) && (
+                              <div className="mt-4 p-4 border border-border/60 bg-neutral/30 rounded-md text-xs font-mono">
+                                {sentryLoadingAction && (
+                                  <div className="flex items-center gap-2 text-tertiary animate-pulse">
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                    <span>Executing {sentryLoadingAction}...</span>
+                                  </div>
+                                )}
+                                {!sentryLoadingAction && sentryActionResult && (
+                                  <div className={`space-y-2 ${sentryActionResult.error ? 'text-red-500' : 'text-emerald-500'}`}>
+                                    <div className="flex items-center gap-2 font-bold">
+                                      {sentryActionResult.error ? <ShieldAlert className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                                      <span>{sentryActionResult.error || sentryActionResult.message}</span>
+                                    </div>
+                                    {sentryActionResult.data && (
+                                      <pre className="p-2 bg-black/20 rounded-md text-[10px] overflow-x-auto text-secondary max-h-[200px] custom-scrollbar">
+                                        {typeof sentryActionResult.data === 'object' 
+                                          ? JSON.stringify(sentryActionResult.data, null, 2)
+                                          : String(sentryActionResult.data)}
+                                      </pre>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
