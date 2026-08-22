@@ -34,15 +34,28 @@ _SESSION_CACHE: Dict[str, Any] = {
 }
 
 
+# Node identity (board model + Pi-hole versions) changes only across reboots and
+# upgrades, so it is cached for an hour rather than re-fetched on every 5s poll —
+# the Sentry is a 512MB Pi 3 A+ and does not need the extra round trips.
+_IDENTITY_CACHE: Dict[str, Any] = {
+    "data": None,
+    "host": None,
+    "expires_at": 0
+}
+
+
 class SentryActionRequest(BaseModel):
     action: str  # poweroff, reboot, speedtest, netwatch, status
 
 
 def _get_ssh_credentials() -> Tuple[str, str, str, str]:
-    host = os.getenv("SENTRY_HOST", "192.168.1.183").strip()
-    tailscale = os.getenv("SENTRY_TAILSCALE", "100.102.104.66").strip()
-    user = os.getenv("SENTRY_USER", "carlos").strip()
-    password = os.getenv("SENTRY_PASSWORD", "jyZbJ%ljOC&N%kD5").strip()
+    host = os.getenv("SENTRY_HOST", "").strip()
+    tailscale = os.getenv("SENTRY_TAILSCALE", "").strip()
+    user = os.getenv("SENTRY_USER", "").strip()
+    # No default: a hardcoded fallback password would ship the node's real
+    # credentials in source. Fail closed instead — _get_ssh_client() raises
+    # when this is empty.
+    password = os.getenv("SENTRY_PASSWORD", "").strip()
     return host, tailscale, user, password
 
 
@@ -158,6 +171,45 @@ print(json.dumps({
     return None
 
 
+def _fetch_node_identity(host: str, sid: str) -> Dict[str, Any]:
+    """Board model and Pi-hole/FTL versions, straight from the node.
+
+    These used to be hardcoded strings in the dashboard and drifted badly (the
+    card claimed a Pi 4 Model B running FTLDNS v5.24; the node is a Pi 3 A+ on
+    FTL v6.7). Reading them from the node keeps the profile honest.
+    """
+    now = time.time()
+    if (
+        _IDENTITY_CACHE.get("data")
+        and _IDENTITY_CACHE.get("host") == host
+        and now < _IDENTITY_CACHE.get("expires_at", 0)
+    ):
+        return _IDENTITY_CACHE["data"]
+
+    try:
+        req_host = urllib.request.Request(f"http://{host}/api/info/host", headers={"sid": sid})
+        with urllib.request.urlopen(req_host, timeout=3) as resp:
+            host_data = json.loads(resp.read().decode()).get("host", {})
+
+        req_ver = urllib.request.Request(f"http://{host}/api/info/version", headers={"sid": sid})
+        with urllib.request.urlopen(req_ver, timeout=3) as resp:
+            ver_data = json.loads(resp.read().decode()).get("version", {})
+
+        identity = {
+            "model": (host_data.get("model") or "").strip(),
+            "arch": host_data.get("uname", {}).get("machine", ""),
+            "kernel": host_data.get("uname", {}).get("release", ""),
+            "ftl_version": ver_data.get("ftl", {}).get("local", {}).get("version", ""),
+            "core_version": ver_data.get("core", {}).get("local", {}).get("version", ""),
+        }
+        _IDENTITY_CACHE.update({"data": identity, "host": host, "expires_at": now + 3600})
+        return identity
+    except Exception as e:
+        logger.debug("Failed fetching node identity from %s: %s", host, e)
+        # Serve the last known identity rather than blanking the profile card.
+        return _IDENTITY_CACHE.get("data") or {}
+
+
 def _fetch_pihole_telemetry() -> Dict[str, Any]:
     """Fetch live system telemetry from Pi-hole v6 API or SSH fallback."""
     target_hosts = [SENTRY_HOST, SENTRY_TAILSCALE]
@@ -190,6 +242,8 @@ def _fetch_pihole_telemetry() -> Dict[str, Any]:
             return {
                 "status": "online",
                 "host": host,
+                **_fetch_node_identity(host, sid),
+                "cpu_cores": cpu_info.get("nprocs", 0),
                 "uptime_seconds": sys_data.get("uptime", 0),
                 "cpu_load": [round(x, 2) for x in load_raw],
                 "cpu_percent": round(cpu_info.get("%cpu", 0), 1),
@@ -227,6 +281,38 @@ def _fetch_pihole_telemetry() -> Dict[str, Any]:
     }
 
 
+def _run_ssh(ssh: Any, command: str, timeout: int) -> Tuple[int, str, str]:
+    """Run a plain (non-sudo) command, draining both streams before returning."""
+    _, stdout, stderr = ssh.exec_command(command, timeout=timeout)
+    out = stdout.read().decode(errors="replace")
+    err = stderr.read().decode(errors="replace")
+    return stdout.channel.recv_exit_status(), out, err
+
+
+def _run_sudo(ssh: Any, password: str, command: str, timeout: int) -> Tuple[int, str, str]:
+    """Run `command` under sudo and return (exit_status, stdout, stderr).
+
+    Reading both streams to EOF *before* the caller closes the SSH client is
+    what keeps the channel alive until the command has actually run — firing
+    exec_command() and returning immediately lets the `finally: ssh.close()`
+    tear the channel down before sudo has even consumed the password.
+
+    `-p ''` suppresses sudo's prompt so it never pollutes stderr, and
+    shutdown_write() signals EOF so sudo stops waiting for more input.
+    """
+    stdin, stdout, stderr = ssh.exec_command(f"sudo -S -p '' {command}", timeout=timeout)
+    if password:
+        stdin.write(f"{password}\n")
+        stdin.flush()
+    try:
+        stdin.channel.shutdown_write()
+    except Exception:
+        pass
+    out = stdout.read().decode(errors="replace")
+    err = stderr.read().decode(errors="replace")
+    return stdout.channel.recv_exit_status(), out, err
+
+
 @router.get("/api/v1/sentry/telemetry")
 async def get_sentry_telemetry() -> Dict[str, Any]:
     """Returns live hardware telemetry and stats from Legion Sentry."""
@@ -247,39 +333,70 @@ async def execute_sentry_action(req: SentryActionRequest) -> Dict[str, Any]:
         ssh, host = _get_ssh_client()
         _, _, _, password = _get_ssh_credentials()
         try:
-            if action == "poweroff":
-                stdin, stdout, stderr = ssh.exec_command("sudo -S poweroff", timeout=10)
-                stdin.write(f"{password}\n")
-                stdin.flush()
-                return {"success": True, "action": "poweroff", "message": "Legion Sentry is shutting down safely. Safe to unplug in 10s."}
-                
-            elif action == "reboot":
-                stdin, stdout, stderr = ssh.exec_command("sudo -S reboot", timeout=10)
-                stdin.write(f"{password}\n")
-                stdin.flush()
-                return {"success": True, "action": "reboot", "message": "Legion Sentry is rebooting. It will be back online in ~60s."}
+            if action in ("poweroff", "reboot"):
+                # Pre-flight: prove sudo actually works before reporting success.
+                # Without this the endpoint returns "shutting down safely" even
+                # when the credential is wrong and nothing happened.
+                rc, _, err = _run_sudo(ssh, password, "true", timeout=10)
+                if rc != 0:
+                    detail = err.strip().splitlines()[-1] if err.strip() else f"exit {rc}"
+                    return {
+                        "success": False,
+                        "action": action,
+                        "error": f"Cannot obtain sudo on Legion Sentry: {detail}",
+                    }
+
+                # Detach the power command so sudo/sshd can exit cleanly and the
+                # channel closes before the node actually goes down. Running it
+                # in the foreground races the shutdown against our own transport.
+                binary = "poweroff" if action == "poweroff" else "reboot"
+                try:
+                    rc, _, err = _run_sudo(
+                        ssh,
+                        password,
+                        f"sh -c 'nohup {binary} >/dev/null 2>&1 &'",
+                        timeout=10,
+                    )
+                except Exception as exc:
+                    # The node tore the transport down as it went offline —
+                    # sudo had already been proven to work by the pre-flight,
+                    # so treat a dropped connection here as the command landing.
+                    logger.info("Sentry %s: transport closed by node (%s).", action, type(exc).__name__)
+                    rc, err = 0, ""
+                # recv_exit_status() yields -1 when the channel closed before a
+                # status came back; same expected shutdown case, not a failure.
+                if rc not in (0, -1):
+                    detail = err.strip().splitlines()[-1] if err.strip() else f"exit {rc}"
+                    return {"success": False, "action": action, "error": f"{binary} failed: {detail}"}
+
+                message = (
+                    "Legion Sentry is shutting down safely. Safe to unplug in 10s."
+                    if action == "poweroff"
+                    else "Legion Sentry is rebooting. It will be back online in ~60s."
+                )
+                return {"success": True, "action": action, "message": message}
                 
             elif action == "speedtest":
-                stdin, stdout, stderr = ssh.exec_command("sudo -S /usr/local/bin/sentry-speedtest", timeout=90)
-                stdin.write(f"{password}\n")
-                stdin.flush()
-                raw_out = stdout.read().decode()
-                stdin, stdout, stderr = ssh.exec_command("cat /var/log/sentry/speedtest_latest.json", timeout=5)
+                rc, raw_out, err = _run_sudo(ssh, password, "/usr/local/bin/sentry-speedtest", timeout=90)
+                if rc != 0:
+                    detail = err.strip().splitlines()[-1] if err.strip() else f"exit {rc}"
+                    return {"success": False, "action": "speedtest", "error": f"sentry-speedtest failed: {detail}"}
+                _, raw_json, _ = _run_ssh(ssh, "cat /var/log/sentry/speedtest_latest.json", timeout=5)
                 try:
-                    speed_json = json.loads(stdout.read().decode())
-                except:
+                    speed_json = json.loads(raw_json)
+                except Exception:
                     speed_json = {"raw": raw_out}
                 return {"success": True, "action": "speedtest", "data": speed_json}
                 
             elif action == "netwatch":
-                stdin, stdout, stderr = ssh.exec_command("sudo -S /usr/local/bin/sentry-netwatch", timeout=30)
-                stdin.write(f"{password}\n")
-                stdin.flush()
-                raw_out = stdout.read().decode()
-                stdin, stdout, stderr = ssh.exec_command("cat /var/log/sentry/devices_latest.json", timeout=5)
+                rc, _, err = _run_sudo(ssh, password, "/usr/local/bin/sentry-netwatch", timeout=30)
+                if rc != 0:
+                    detail = err.strip().splitlines()[-1] if err.strip() else f"exit {rc}"
+                    return {"success": False, "action": "netwatch", "error": f"sentry-netwatch failed: {detail}"}
+                _, raw_json, _ = _run_ssh(ssh, "cat /var/log/sentry/devices_latest.json", timeout=5)
                 try:
-                    devices_json = json.loads(stdout.read().decode())
-                except:
+                    devices_json = json.loads(raw_json)
+                except Exception:
                     devices_json = []
                 return {"success": True, "action": "netwatch", "devices": devices_json, "count": len(devices_json)}
                 
@@ -294,7 +411,13 @@ async def execute_sentry_action(req: SentryActionRequest) -> Dict[str, Any]:
 
     try:
         res = await asyncio.to_thread(_exec)
+        # A node-side refusal (e.g. sudo denied) must not come back as HTTP 200 —
+        # the dashboard keys off res.ok and would render it as a success.
+        if isinstance(res, dict) and res.get("success") is False:
+            raise HTTPException(status_code=502, detail=res.get("error", "Action failed on node."))
         return res
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Sentry action '%s' failed: %s", action, e)
-        raise HTTPException(status_code=500, detail="Action execution failed on node.")
+        logger.error("Sentry action '%s' failed: %s", action, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Action execution failed on node: {e}")

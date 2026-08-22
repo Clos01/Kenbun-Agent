@@ -60,6 +60,12 @@ export interface SentryTelemetryData {
   queries_blocked?: number;
   blocked_percent?: number;
   clients_active?: number;
+  model?: string;
+  arch?: string;
+  kernel?: string;
+  ftl_version?: string;
+  core_version?: string;
+  cpu_cores?: number;
 }
 
 interface BudgetData {
@@ -144,8 +150,8 @@ const WORKER_DETAILS: Record<string, WorkerDetails> = {
     performance: "< 5ms query response time"
   },
   "Legion Sentry": {
-    hardware: "Raspberry Pi 4 Model B (4GB RAM) / Quad-core Cortex-A72 @ 1.8GHz",
-    activeModel: "FTLDNS v5.24 + Unbound Recursive DNS Root Resolver",
+    hardware: "Raspberry Pi 3 Model A+ (512MB RAM) / Quad-core Cortex-A53 @ 1.4GHz",
+    activeModel: "Pi-hole FTL v6.7 + Unbound Recursive DNS Root Resolver",
     responsibilities: [
       "Network-wide ad-blocking and telemetry sinkhole (Pi-hole)",
       "DNS-over-HTTPS (DoH) recursive query resolver without ISP interception",
@@ -164,6 +170,118 @@ const COLOR_TOKENS = [
   { id: "neutral", name: "Matte Paper (Neutral)", variable: "--color-neutral", lightHex: "#F7F5F2", darkHex: "#0D0E10", description: "Canvas background, cards, and modal sheets" },
   { id: "border", name: "Structural Border", variable: "--color-border", lightHex: "rgba(26, 28, 30, 0.08)", darkHex: "rgba(255, 255, 255, 0.08)", description: "Ultra-thin minimalist borders" }
 ];
+
+interface SentryDevice {
+  ip: string;
+  mac: string;
+  vendor: string;
+  status: string;
+}
+
+/** Sort dotted-quads numerically so .2 comes before .100. */
+function ipSortKey(ip: string): number {
+  return ip.split(".").reduce((acc, octet) => acc * 256 + (parseInt(octet, 10) || 0), 0);
+}
+
+function SentryDeviceTable({ devices }: { devices: SentryDevice[] }) {
+  const sorted = [...devices].sort((a, b) => ipSortKey(a.ip) - ipSortKey(b.ip));
+  const newCount = sorted.filter((d) => !d.status.includes("Known")).length;
+
+  if (sorted.length === 0) {
+    return <p className="text-secondary text-[11px]">No active devices returned by the ARP sweep.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-bold">
+        <span className="text-secondary">
+          {sorted.length} active device{sorted.length === 1 ? "" : "s"} · 192.168.1.0/24
+        </span>
+        <span className={newCount > 0 ? "text-tertiary" : "text-secondary"}>
+          {newCount > 0 ? `${newCount} new` : "no new devices"}
+        </span>
+      </div>
+      <div className="max-h-[260px] overflow-auto custom-scrollbar border border-border/60 rounded-md">
+        <table className="w-full text-left border-collapse text-[10px]">
+          <thead className="sticky top-0 bg-neutral z-10">
+            <tr className="text-secondary uppercase tracking-wider">
+              <th className="px-2 py-1.5 font-bold">IP</th>
+              <th className="px-2 py-1.5 font-bold">MAC</th>
+              <th className="px-2 py-1.5 font-bold">Vendor / Hardware</th>
+              <th className="px-2 py-1.5 font-bold text-right">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((d) => {
+              const isNew = !d.status.includes("Known");
+              return (
+                <tr key={`${d.mac}-${d.ip}`} className="border-t border-border/40">
+                  <td className="px-2 py-1.5 tabular-nums text-primary font-bold">{d.ip}</td>
+                  <td className="px-2 py-1.5 text-secondary">{d.mac}</td>
+                  <td className="px-2 py-1.5 text-primary">{d.vendor}</td>
+                  <td className={`px-2 py-1.5 text-right font-bold whitespace-nowrap ${isNew ? "text-tertiary" : "text-secondary"}`}>
+                    {isNew ? "NEW" : "KNOWN"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+interface SentrySpeedtest {
+  download_mbps?: number;
+  upload_mbps?: number;
+  ping_ms?: number;
+  jitter_ms?: number;
+  packet_loss_pct?: number;
+  isp?: string;
+  server?: string;
+  external_ip?: string;
+  result_url?: string;
+  timestamp?: string;
+}
+
+function SentrySpeedtestCard({ data }: { data: SentrySpeedtest }) {
+  const stats = [
+    { label: "Down", value: data.download_mbps, unit: "Mbps" },
+    { label: "Up", value: data.upload_mbps, unit: "Mbps" },
+    { label: "Ping", value: data.ping_ms, unit: "ms" },
+    { label: "Jitter", value: data.jitter_ms, unit: "ms" },
+    { label: "Loss", value: data.packet_loss_pct, unit: "%" },
+  ].filter((s) => typeof s.value === "number");
+
+  if (stats.length === 0) {
+    return <p className="text-secondary text-[11px]">Speedtest returned no parsable metrics.</p>;
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {stats.map((s) => (
+          <div key={s.label} className="p-2 border border-border/60 rounded-md bg-neutral/40 text-center">
+            <div className="text-[9px] uppercase tracking-wider text-secondary font-bold">{s.label}</div>
+            <div className="mt-0.5 font-serif font-bold text-primary text-sm tabular-nums">{s.value}</div>
+            <div className="text-[9px] text-secondary">{s.unit}</div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-secondary">
+        {data.isp && <span><strong className="text-primary">ISP:</strong> {data.isp}</span>}
+        {data.server && <span><strong className="text-primary">Server:</strong> {data.server}</span>}
+        {data.external_ip && <span><strong className="text-primary">WAN:</strong> {data.external_ip}</span>}
+        {data.result_url && (
+          <a href={data.result_url} target="_blank" rel="noopener noreferrer" className="text-tertiary font-bold hover:underline">
+            Full result ↗
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ColorSwatch({ token }: { token: typeof COLOR_TOKENS[0] }) {
   const [copied, setCopied] = useState(false);
@@ -218,7 +336,8 @@ export default function FleetCommand() {
   const [sentryLoadingAction, setSentryLoadingAction] = useState<string | null>(null);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [sentryActionResult, setSentryActionResult] = useState<{ message?: string; error?: string; data?: any } | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [sentryActionResult, setSentryActionResult] = useState<{ action?: string; message?: string; error?: string; data?: any } | null>(null);
   const [confirmAction, setConfirmAction] = useState<"poweroff" | "reboot" | null>(null);
   const [selectedTool, setSelectedTool] = useState<ToolStat | null>(null);
   const [selectedWorker, setSelectedWorker] = useState<WorkerStatus | null>(null);
@@ -265,14 +384,16 @@ export default function FleetCommand() {
       if (!res.ok) {
         throw new Error(json.detail || "Action failed");
       }
-      setSentryActionResult({ 
-        message: json.message || "Action completed successfully.",
-        data: json.data || json.devices 
+      setSentryActionResult({
+        action,
+        message: json.message
+          || (Array.isArray(json.devices) ? `LAN sweep complete — ${json.devices.length} active device${json.devices.length === 1 ? "" : "s"}.` : "Action completed successfully."),
+        data: json.data || json.devices
       });
       setTimeout(fetchData, 1500);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (err: any) {
-      setSentryActionResult({ error: err.message || "Failed to execute Sentry action." });
+      setSentryActionResult({ action, error: err.message || "Failed to execute Sentry action." });
     } finally {
       setSentryLoadingAction(null);
       setConfirmAction(null);
@@ -969,11 +1090,19 @@ export default function FleetCommand() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="p-3 border border-border/60 bg-neutral/30 rounded-md">
                             <span className="text-[9px] uppercase tracking-wider text-secondary font-bold">Hardware</span>
-                            <p className="mt-1 font-serif font-bold text-primary">{details.hardware}</p>
+                            <p className="mt-1 font-serif font-bold text-primary">
+                              {selectedWorker.name === "Legion Sentry" && sentryTelemetry?.model
+                                ? `${sentryTelemetry.model} (${Math.round(sentryTelemetry.ram_total_mb ?? 0)}MB RAM) / ${sentryTelemetry.cpu_cores}-core ${sentryTelemetry.arch}`
+                                : details.hardware}
+                            </p>
                           </div>
                           <div className="p-3 border border-border/60 bg-neutral/30 rounded-md">
                             <span className="text-[9px] uppercase tracking-wider text-secondary font-bold">Active Model</span>
-                            <p className="mt-1 font-bold text-tertiary truncate">{details.activeModel}</p>
+                            <p className="mt-1 font-bold text-tertiary truncate">
+                              {selectedWorker.name === "Legion Sentry" && sentryTelemetry?.ftl_version
+                                ? `Pi-hole FTL ${sentryTelemetry.ftl_version} (Core ${sentryTelemetry.core_version}) + Unbound Recursive DNS`
+                                : details.activeModel}
+                            </p>
                           </div>
                         </div>
 
@@ -1041,14 +1170,26 @@ export default function FleetCommand() {
                                   </div>
                                 )}
                                 {!sentryLoadingAction && sentryActionResult && (
-                                  <div className={`space-y-2 ${sentryActionResult.error ? 'text-red-500' : 'text-emerald-500'}`}>
-                                    <div className="flex items-center gap-2 font-bold">
-                                      {sentryActionResult.error ? <ShieldAlert className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                                  <div className="space-y-3">
+                                    <div className={`flex items-center gap-2 font-bold ${sentryActionResult.error ? 'text-red-500' : 'text-emerald-500'}`}>
+                                      {sentryActionResult.error ? <ShieldAlert className="w-4 h-4 shrink-0" /> : <CheckCircle2 className="w-4 h-4 shrink-0" />}
                                       <span>{sentryActionResult.error || sentryActionResult.message}</span>
                                     </div>
-                                    {sentryActionResult.data && (
+
+                                    {!sentryActionResult.error && sentryActionResult.action === "netwatch" && Array.isArray(sentryActionResult.data) && (
+                                      <SentryDeviceTable devices={sentryActionResult.data as SentryDevice[]} />
+                                    )}
+
+                                    {!sentryActionResult.error && sentryActionResult.action === "speedtest" && sentryActionResult.data && !Array.isArray(sentryActionResult.data) && (
+                                      <SentrySpeedtestCard data={sentryActionResult.data as SentrySpeedtest} />
+                                    )}
+
+                                    {/* Anything without a dedicated renderer still shows its payload rather than nothing. */}
+                                    {!sentryActionResult.error
+                                      && sentryActionResult.data
+                                      && !["netwatch", "speedtest"].includes(sentryActionResult.action ?? "") && (
                                       <pre className="p-2 bg-black/20 rounded-md text-[10px] overflow-x-auto text-secondary max-h-[200px] custom-scrollbar">
-                                        {typeof sentryActionResult.data === 'object' 
+                                        {typeof sentryActionResult.data === 'object'
                                           ? JSON.stringify(sentryActionResult.data, null, 2)
                                           : String(sentryActionResult.data)}
                                       </pre>

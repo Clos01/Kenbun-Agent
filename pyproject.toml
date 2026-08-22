@@ -37,6 +37,7 @@ dependencies = [
     "ruff",
     "watchdog>=6.0.0",
     "pypdf>=4.0.0",
+    "paramiko>=3.4.0",
 ]
 
 [project.scripts]
