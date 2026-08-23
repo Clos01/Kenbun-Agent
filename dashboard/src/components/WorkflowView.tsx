@@ -27,6 +27,9 @@ import { useTheme } from "../context/ThemeContext";
 import MindmapView from "./MindmapView";
 import AnalyticsPanel from "./AnalyticsPanel";
 import SOWGenerator from "./SOWGenerator";
+import CouncilView from "./CouncilView";
+import SwitchyardView from "./SwitchyardView";
+import TimelineGanttView from "./TimelineGanttView";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
@@ -323,7 +326,7 @@ export default function WorkflowView({
   const [copied, setCopied] = useState<boolean>(false);
   const [groupByLanes, setGroupByLanes] = useState<boolean>(true);
   const [lineStyle, setLineStyle] = useState<"basis" | "step" | "linear">("basis");
-  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "analytics" | "sow">("flowchart");
+  const [diagramMode, setDiagramMode] = useState<"flowchart" | "mindmap" | "timeline" | "council" | "switchyard" | "analytics" | "sow">("flowchart");
   const [showSuggestedPath, setShowSuggestedPath] = useState<boolean>(true);
   const [showViewSettings, setShowViewSettings] = useState<boolean>(false);
 
@@ -1451,6 +1454,9 @@ export default function WorkflowView({
             options={[
               { value: "flowchart", label: "Flowchart" },
               { value: "mindmap", label: "Mindmap" },
+              { value: "timeline", label: "Timeline / Gantt" },
+              { value: "council", label: "5-Persona Council" },
+              { value: "switchyard", label: "Switchyard Router" },
               { value: "analytics", label: "Analytics" },
               { value: "sow", label: "SOW Editor" }
             ]}
@@ -1482,8 +1488,24 @@ export default function WorkflowView({
       {/* Main split-screen workspace */}
       <div className="flex-1 flex overflow-hidden">
         
-        {/* Mindmap: dedicated component. Flowchart: the canvas below. */}
-        {diagramMode === "analytics" ? (
+        {/* Render mode components */}
+        {diagramMode === "council" ? (
+          <CouncilView
+            cards={cards}
+            lists={lists}
+            onClose={() => setDiagramMode("flowchart")}
+            onOpenCard={onOpenCard}
+          />
+        ) : diagramMode === "switchyard" ? (
+          <SwitchyardView />
+        ) : diagramMode === "timeline" ? (
+          <TimelineGanttView
+            cards={cards}
+            lists={lists}
+            onClose={() => setDiagramMode("flowchart")}
+            onOpenCard={onOpenCard}
+          />
+        ) : diagramMode === "analytics" ? (
           <div 
             className="flex-1 overflow-hidden relative"
             style={{
