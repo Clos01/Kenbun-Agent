@@ -24,10 +24,7 @@ from pathlib import Path
 try:
     from pptx import Presentation
 except ImportError:
-    sys.stderr.write(
-        "python-pptx is required. Install with: pip install python-pptx\n"
-    )
-    sys.exit(2)
+    Presentation = None
 
 
 def emu_to_in(emu: int | None) -> float | None:
@@ -110,6 +107,9 @@ def extract_pptx(path: Path) -> dict:
 
 
 def main() -> int:
+    if Presentation is None:
+        sys.stderr.write("python-pptx is required. Install with: pip install python-pptx\n")
+        return 2
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("path", type=Path, help=".pptx file to extract")
     ap.add_argument("-o", "--output", type=Path, help="write JSON to this path; default stdout")

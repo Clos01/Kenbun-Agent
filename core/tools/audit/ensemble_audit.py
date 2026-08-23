@@ -1,7 +1,10 @@
 import asyncio
 import time
 import json
-import aiohttp
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
 from typing import List, Dict, Any
 from pathlib import Path
 from dataclasses import dataclass

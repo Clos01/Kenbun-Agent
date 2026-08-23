@@ -851,6 +851,34 @@ export default function BuildConsole() {
   const activeTask = kanban.find(t => t.status === "doing") || kanban[0];
   const usageHistory = [2, 5, 8, 4, 12, 7, 15, 10, 20, 14, 25, 18, 30, 22, 10, 5, 12, 18, 22, 15, 20];
 
+  const hasRealSlots = workspaceSlots.length > 0 || workspaceAlerts.length > 0;
+  const displaySlots = hasRealSlots ? workspaceSlots : [
+    {
+      concept: "Orchestrator (bug_fix) running step: 🔬 Generating implementation candidate (tool: analyze_bug)",
+      salience: 0.600,
+      agent_id: "orch_bug_fix",
+      flagged: false,
+      age_min: 0.5,
+      meta: null
+    },
+    {
+      concept: "Watchlist breach detected: user requested file deletion using rm -rf",
+      salience: 0.950,
+      agent_id: "guardrail_agent",
+      flagged: true,
+      age_min: 1.2,
+      meta: null
+    },
+    {
+      concept: "Decoupled Data Hydration Pattern loaded from Honcho memory cache",
+      salience: 0.450,
+      agent_id: "code_indexer",
+      flagged: false,
+      age_min: 5.4,
+      meta: null
+    }
+  ];
+
   // Launch an orchestrate workflow via the backend (proxy injects the Bearer
   // config token; the endpoint runs an injection guardrail on the task).
   const launchMission = useCallback(async () => {
@@ -2406,8 +2434,7 @@ export default function BuildConsole() {
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        {vectorResults.map((res: any, rIdx: number) => {
+                        {vectorResults.map((res: { snippet?: string; content?: string; document?: string; file?: string; path?: string; metadata?: { file_path?: string }; similarity?: number; score?: number; distance?: number }, rIdx: number) => {
                           const snippet = res.snippet || res.content || res.document || JSON.stringify(res);
                           const file = res.file || res.path || res.metadata?.file_path || "ChromaDB Embedding";
                           const score = res.similarity ?? res.score ?? res.distance ?? 0.88;
@@ -2449,8 +2476,7 @@ export default function BuildConsole() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  {displaySignals.map((signal: any, idx: number) => (
+                  {displaySignals.map((signal: { timestamp?: string; action?: string; summary?: string; details?: string; concept?: string }, idx: number) => (
                     <motion.div 
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -2488,36 +2514,7 @@ export default function BuildConsole() {
             );
           })()}
 
-          {activeTab === "workspace" && (() => {
-            const hasRealSlots = workspaceSlots.length > 0 || workspaceAlerts.length > 0;
-            const displaySlots = hasRealSlots ? workspaceSlots : [
-              {
-                concept: "Orchestrator (bug_fix) running step: 🔬 Generating implementation candidate (tool: analyze_bug)",
-                salience: 0.600,
-                agent_id: "orch_bug_fix",
-                flagged: false,
-                age_min: 0.5,
-                meta: null
-              },
-              {
-                concept: "Watchlist breach detected: user requested file deletion using rm -rf",
-                salience: 0.950,
-                agent_id: "guardrail_agent",
-                flagged: true,
-                age_min: 1.2,
-                meta: null
-              },
-              {
-                concept: "Decoupled Data Hydration Pattern loaded from Honcho memory cache",
-                salience: 0.450,
-                agent_id: "code_indexer",
-                flagged: false,
-                age_min: 5.4,
-                meta: null
-              }
-            ];
-
-            return (
+          {activeTab === "workspace" && (
               <div className="space-y-10 animate-fade-in text-left">
                 {/* System 4 Instruction-Based Steering Guide */}
                 <div className="p-6 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md flex flex-col md:flex-row md:items-center justify-between gap-6 text-left">
@@ -2597,8 +2594,7 @@ export default function BuildConsole() {
                 </div>
 
                 <div className="grid grid-cols-1 gap-6">
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  {displaySlots.map((slot: any, idx: number) => (
+                  {displaySlots.map((slot: { flagged?: boolean; agent_id: string; age_min: number; concept: string; salience: number }, idx: number) => (
                     <motion.div
                       initial={{ opacity: 0, y: 15 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -2640,7 +2636,10 @@ export default function BuildConsole() {
 
                           {slot.flagged && (
                             <button
-                              onClick={() => handleResolveAlert(slot.concept)}
+                              onClick={() => {
+                                const targetConcept = slot.concept;
+                                handleResolveAlert(targetConcept);
+                              }}
                               className="px-4 py-2 border border-red-500/20 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-[10px] font-black uppercase tracking-wider rounded-md transition-all duration-200"
                             >
                               Resolve
@@ -2652,8 +2651,7 @@ export default function BuildConsole() {
                   ))}
                 </div>
               </div>
-            );
-          })()}
+          )}
 
           {activeTab === "feed" && (() => {
             // Process log filtering

@@ -35,7 +35,7 @@ class SpeechDelegate(NSObject):
     Delegate to track when the system is speaking to prevent acoustic feedback.
     """
     def initWithParent_(self, parent):
-        self = super().init()
+        self = objc.super(SpeechDelegate, self).init()
         if self:
             self.parent = parent
         return self

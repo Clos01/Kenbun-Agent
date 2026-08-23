@@ -11,8 +11,11 @@ import time
 import asyncio
 import hashlib
 import sqlite3
-import aiohttp
 from contextlib import closing
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None
 from typing import Dict, Any, Optional
 from pathlib import Path
 

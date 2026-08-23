@@ -2,6 +2,7 @@ import logging
 import random
 import time
 from functools import lru_cache
+from typing import Dict, List, Optional, Tuple, Set, Any
 try:
     from tools.memory.postgres_client import get_connection
 except Exception:

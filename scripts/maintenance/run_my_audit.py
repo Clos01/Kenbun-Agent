@@ -7,7 +7,7 @@ from tools.infrastructure.server import consult_supervisor
 
 proposal = "Implement dynamic metadata transformer and component registry for the bento grid display of project proposal metadata. Ensure strict typescript validation without 'any' type, and correct formatting of currency, dates, booleans, arrays, and standard strings, conforming to the Heritage design system."
 
-snippet = """
+snippet = r"""
 // --- dashboard/src/lib/metadataTransformer.ts ---
 export type MetadataType = "currency" | "date" | "boolean" | "list" | "string";
 

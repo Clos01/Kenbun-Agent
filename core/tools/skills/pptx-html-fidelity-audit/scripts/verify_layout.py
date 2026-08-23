@@ -37,10 +37,7 @@ from pathlib import Path
 try:
     from pptx import Presentation
 except ImportError:
-    sys.stderr.write(
-        "python-pptx is required. Install with: pip install python-pptx\n"
-    )
-    sys.exit(2)
+    Presentation = None
 
 
 FOOTER_NAME_HINTS = ("footer", "foot", "chrome", "page", "pagination")
@@ -114,6 +111,9 @@ def verify(path: Path, content_max_y: float, canvas_w: float, canvas_h: float,
 
 
 def main() -> int:
+    if Presentation is None:
+        sys.stderr.write("python-pptx is required. Install with: pip install python-pptx\n")
+        return 2
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("path", type=Path, help=".pptx file to verify")
     ap.add_argument("--content-max-y", type=float, default=6.70,

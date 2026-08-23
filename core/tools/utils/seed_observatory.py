@@ -20,10 +20,6 @@ else:
 DB_PATH = BRAIN_HEALTH_DIR / "kenbun_intelligence.db"
 MAB_STATS_PATH = BRAIN_HEALTH_DIR / "mab_stats.json"
 
-print("🚀 Initializing Observatory Seeder...")
-print(f"📁 DB_PATH: {DB_PATH}")
-print(f"📁 MAB_STATS_PATH: {MAB_STATS_PATH}")
-
 def seed_sqlite():
     print("🧠 Seeding SQLite Tool Intelligence table...")
     try:

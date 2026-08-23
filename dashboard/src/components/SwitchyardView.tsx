@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Cpu, DollarSign, ShieldCheck, Zap, Activity, RefreshCw } from "lucide-react";
 
 interface SwitchyardTelemetry {
@@ -27,7 +27,7 @@ export default function SwitchyardView() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchTelemetry = async () => {
+  const syncTelemetry = useCallback(async () => {
     setIsRefreshing(true);
     setError(null);
     try {
@@ -40,10 +40,19 @@ export default function SwitchyardView() {
     } finally {
       setIsRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchTelemetry();
+    let active = true;
+    fetch("/api/switchyard")
+      .then(res => res.ok ? res.json() : null)
+      .then(json => {
+        if (active && json) setData(json);
+      })
+      .catch(e => {
+        if (active) setError(String(e));
+      });
+    return () => { active = false; };
   }, []);
 
   const tier0Pct = data?.tier_distribution?.tier0_pct ?? 75.0;
@@ -72,7 +81,7 @@ export default function SwitchyardView() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={fetchTelemetry}
+            onClick={syncTelemetry}
             disabled={isRefreshing}
             className="px-3.5 py-1.5 rounded-md text-[11px] font-mono font-bold tracking-wider uppercase bg-card border border-border hover:bg-neutral text-secondary hover:text-primary transition-all flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
           >
