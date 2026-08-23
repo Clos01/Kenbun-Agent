@@ -218,8 +218,18 @@ class DummyCollection:
             
     def upsert(self, ids, documents, metadatas=None):
         self.add(ids, documents, metadatas)
-    def query(self, query_texts, n_results=5, where=None):
-        return query_embeddings(query_texts[0], n_results=n_results, category=self.name)
+    def query(self, query_texts=None, query_embeddings=None, n_results=5, where=None, where_document=None, include=None, **kwargs):
+        chroma = get_chroma_client()
+        if chroma:
+            try:
+                collection = chroma.get_or_create_collection(self.name)
+                return collection.query(query_texts=query_texts, query_embeddings=query_embeddings, n_results=n_results, where=where, where_document=where_document, include=include, **kwargs)
+            except Exception as e:
+                logger.warning(f"⚠️ [CHROMA] Query failed: {e}")
+        if query_texts:
+            return query_embeddings(query_texts[0], n_results=n_results, category=self.name)
+        return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+
     def count(self):
         chroma = get_chroma_client()
         if chroma:
@@ -229,6 +239,29 @@ class DummyCollection:
             except Exception as e:
                 logger.warning(f"⚠️ [CHROMA] Count failed: {e}")
         return 0
+
+    def get(self, ids=None, where=None, limit=None, offset=None, where_document=None, include=None, **kwargs):
+        chroma = get_chroma_client()
+        if chroma:
+            try:
+                collection = chroma.get_or_create_collection(self.name)
+                return collection.get(ids=ids, where=where, limit=limit, offset=offset, where_document=where_document, include=include, **kwargs)
+            except Exception as e:
+                logger.warning(f"⚠️ [CHROMA] Get failed: {e}")
+        return {"ids": [], "embeddings": [], "documents": [], "metadatas": []}
+
+    def delete(self, ids=None, where=None, **kwargs):
+        chroma = get_chroma_client()
+        if chroma:
+            try:
+                collection = chroma.get_or_create_collection(self.name)
+                return collection.delete(ids=ids, where=where, **kwargs)
+            except Exception as e:
+                logger.warning(f"⚠️ [CHROMA] Delete failed: {e}")
+        return None
+
+    def peek(self, limit=10, **kwargs):
+        return self.get(limit=limit, **kwargs)
 
 def get_project_collection(name: str):
     chroma = get_chroma_client()

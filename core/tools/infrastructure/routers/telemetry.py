@@ -49,46 +49,6 @@ async def stream_topology():
 
 
 # ──────────────────────────────────────────────
-# SSE: Live Logs
-# ──────────────────────────────────────────────
-
-@router.get("/api/v1/logs/stream")
-async def stream_logs():
-    async def log_generator():
-        last_size = 0
-        if LOG_FILE.exists():
-            last_size = LOG_FILE.stat().st_size
-        while True:
-            if LOG_FILE.exists():
-                current_size = LOG_FILE.stat().st_size
-                if current_size > last_size:
-                    try:
-                        with open(LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
-                            f.seek(last_size)
-                            new_lines = f.readlines()
-                            for line in new_lines:
-                                line = line.strip()
-                                if not line:
-                                    continue
-                                try:
-                                    data = json.loads(line)
-                                    if data.get("type") == "log" or "message" in data:
-                                        msg = data.get("message", "")
-                                        msg_sanitized = guardrail_agent.mask_secrets(msg)
-                                        payload = {"message": msg_sanitized, "timestamp": data.get("timestamp", time.time())}
-                                        yield f"data: {json.dumps(payload)}\n\n"
-                                except Exception:
-                                    msg_sanitized = guardrail_agent.mask_secrets(line)
-                                    payload = {"message": msg_sanitized, "timestamp": time.time()}
-                                    yield f"data: {json.dumps(payload)}\n\n"
-                        last_size = current_size
-                    except Exception as e:
-                        logging.error(f"STREAM_LOG_READ_ERROR: {e}")
-            await asyncio.sleep(0.5)
-    return StreamingResponse(log_generator(), media_type="text/event-stream")
-
-
-# ──────────────────────────────────────────────
 # Galaxy Map: 2D Embedding Projection
 # ──────────────────────────────────────────────
 

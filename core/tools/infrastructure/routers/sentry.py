@@ -60,7 +60,10 @@ def _get_ssh_credentials() -> Tuple[str, str, str, str]:
 
 
 def _get_ssh_client() -> Tuple[Any, str]:
-    import paramiko
+    try:
+        import paramiko
+    except ImportError:
+        raise RuntimeError("paramiko is required for SSH remote control. Install with: pip install paramiko")
     ssh = paramiko.SSHClient()
     ssh.load_system_host_keys()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
