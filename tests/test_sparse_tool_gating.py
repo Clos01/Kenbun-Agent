@@ -7,8 +7,7 @@ path that pays for the tokens.
 """
 
 import importlib
-
-import pytest
+import unittest
 from unittest.mock import patch
 
 try:
@@ -37,7 +36,6 @@ except ImportError:
     WORKSPACE_PATH = "core.tools.infrastructure.workspace_tools"
 
 
-# A catalog spanning clearly disjoint domains, so a correct gate is unambiguous.
 TOOL_CATALOG_FIXTURE = {
     "ask_ui_expert": "Expert UI and CSS flexbox styling assistant",
     "get_design_tokens": "Fetches color tokens, typography themes, and CSS radii",
@@ -54,139 +52,100 @@ TOOL_CATALOG_FIXTURE = {
 }
 
 
-# ------------------------------------------------------------------
-# soft_threshold — the L1 operator itself
-# ------------------------------------------------------------------
+class TestSparseToolGating(unittest.TestCase):
 
-def test_soft_threshold_zeroes_small_values():
-    assert soft_threshold(0.1, 0.15) == 0.0
-    assert soft_threshold(-0.1, 0.15) == 0.0
-    assert soft_threshold(0.15, 0.15) == 0.0
+    def test_soft_threshold_zeroes_small_values(self):
+        self.assertEqual(soft_threshold(0.1, 0.15), 0.0)
+        self.assertEqual(soft_threshold(-0.1, 0.15), 0.0)
+        self.assertEqual(soft_threshold(0.15, 0.15), 0.0)
 
+    def test_soft_threshold_shrinks_toward_zero_preserving_sign(self):
+        self.assertAlmostEqual(soft_threshold(0.5, 0.15), 0.35, places=4)
+        self.assertAlmostEqual(soft_threshold(-0.5, 0.15), -0.35, places=4)
 
-def test_soft_threshold_shrinks_toward_zero_preserving_sign():
-    assert soft_threshold(0.5, 0.15) == pytest.approx(0.35)
-    assert soft_threshold(-0.5, 0.15) == pytest.approx(-0.35)
+    def test_extract_text_features_drops_single_chars_and_lowercases(self):
+        tokens = extract_text_features("Fix the CSS a b Grid_Layout")
+        self.assertIn("css", tokens)
+        self.assertIn("grid_layout", tokens)
+        self.assertNotIn("a", tokens)
 
+    def test_gate_isolates_task_domain(self):
+        cases = [
+            (
+                "Create a sleek dark-mode navigation bar with glassmorphism CSS",
+                {"ask_ui_expert", "get_design_tokens"},
+                {"webull_place_order", "elevenlabs_tts"},
+            ),
+            (
+                "Commit feature branch changes and create a PR for review",
+                {"create_bitbucket_pr"},
+                {"webull_place_order", "elevenlabs_tts", "ask_ui_expert"},
+            ),
+            (
+                "Submit a limit buy order for 10 shares of NVDA on Webull",
+                {"webull_place_order"},
+                {"ask_ui_expert", "elevenlabs_tts"},
+            ),
+        ]
+        for task, expected_present, expected_absent in cases:
+            active = filter_active_toolset(task, TOOL_CATALOG_FIXTURE, max_active_tools=4)
+            self.assertTrue(expected_present <= set(active), f"{task}: missing {expected_present - set(active)}")
+            self.assertFalse(bool(expected_absent & set(active)), f"{task}: leaked {expected_absent & set(active)}")
 
-def test_extract_text_features_drops_single_chars_and_lowercases():
-    tokens = extract_text_features("Fix the CSS a b Grid_Layout")
-    assert "css" in tokens
-    assert "grid_layout" in tokens
-    assert "a" not in tokens
+    def test_gate_respects_max_active_tools(self):
+        active = filter_active_toolset("Build a responsive CSS grid layout", TOOL_CATALOG_FIXTURE, max_active_tools=3)
+        self.assertLessEqual(len(active), 3)
 
+    def test_gate_returns_everything_when_catalog_is_already_small(self):
+        small = {"a": "alpha", "b": "beta"}
+        self.assertEqual(filter_active_toolset("anything", small, max_active_tools=6), small)
 
-# ------------------------------------------------------------------
-# task-conditioned selection
-# ------------------------------------------------------------------
+    def test_core_tools_survive_an_unrelated_task(self):
+        ranked = compute_sparse_tool_weights("translate this poem into Latin", TOOL_CATALOG_FIXTURE, max_active_tools=6)
+        selected = {tid for tid, _ in ranked}
+        self.assertTrue(CORE_DEFAULT_TOOLS <= selected)
 
-@pytest.mark.parametrize(
-    "task,expected_present,expected_absent",
-    [
-        (
-            "Create a sleek dark-mode navigation bar with glassmorphism CSS",
-            {"ask_ui_expert", "get_design_tokens"},
-            {"webull_place_order", "elevenlabs_tts"},
-        ),
-        (
-            "Commit feature branch changes and create a PR for review",
-            {"create_bitbucket_pr"},
-            {"webull_place_order", "elevenlabs_tts", "ask_ui_expert"},
-        ),
-        (
-            "Submit a limit buy order for 10 shares of NVDA on Webull",
-            {"webull_place_order"},
-            {"ask_ui_expert", "elevenlabs_tts"},
-        ),
-    ],
-)
-def test_gate_isolates_task_domain(task, expected_present, expected_absent):
-    active = filter_active_toolset(task, TOOL_CATALOG_FIXTURE, max_active_tools=4)
-    assert expected_present <= set(active), f"{task}: missing {expected_present - set(active)}"
-    assert not (expected_absent & set(active)), f"{task}: leaked {expected_absent & set(active)}"
+    def test_empty_task_does_not_crash(self):
+        ranked = compute_sparse_tool_weights("", TOOL_CATALOG_FIXTURE, max_active_tools=4)
+        self.assertLessEqual(len(ranked), 4)
 
+    def test_render_tool_catalog_lists_every_tool(self):
+        text = render_tool_catalog({"a": "does a", "b": "does b"}, "TOOLS:")
+        self.assertIn("a — does a", text)
+        self.assertIn("b — does b", text)
 
-def test_gate_respects_max_active_tools():
-    active = filter_active_toolset(
-        "Build a responsive CSS grid layout", TOOL_CATALOG_FIXTURE, max_active_tools=3
-    )
-    assert len(active) <= 3
+    def test_gated_catalog_measures_real_savings(self):
+        with patch(f"{GATING_PATH}.build_registry_tool_map", return_value=TOOL_CATALOG_FIXTURE):
+            text, stats = gated_tool_catalog("Fix the CSS grid on the navbar", max_active_tools=4)
 
+        self.assertIsNotNone(text)
+        self.assertEqual(stats["total_tools"], 12)
+        self.assertLessEqual(stats["active_tools"], 4)
+        self.assertLess(stats["gated_chars"], stats["full_chars"])
+        self.assertGreater(stats["savings_pct"], 0)
+        self.assertNotIn("webull_place_order", text)
 
-def test_gate_returns_everything_when_catalog_is_already_small():
-    small = {"a": "alpha", "b": "beta"}
-    assert filter_active_toolset("anything", small, max_active_tools=6) == small
+    def test_gated_catalog_falls_back_when_registry_unavailable(self):
+        with patch(f"{GATING_PATH}.build_registry_tool_map", return_value={}):
+            text, stats = gated_tool_catalog("anything")
+        self.assertIsNone(text)
+        self.assertEqual(stats["total_tools"], 0)
 
+    def test_think_about_tools_uses_the_gate(self):
+        workspace = importlib.import_module(WORKSPACE_PATH)
+        with patch(f"{GATING_PATH}.build_registry_tool_map", return_value=TOOL_CATALOG_FIXTURE):
+            catalog = workspace._catalog_for_task("Fix the CSS grid on the navbar")
 
-def test_core_tools_survive_an_unrelated_task():
-    """consult_supervisor / run_code_safely must never be gated out — the planner
-    needs them regardless of domain."""
-    ranked = compute_sparse_tool_weights(
-        "translate this poem into Latin", TOOL_CATALOG_FIXTURE, max_active_tools=6
-    )
-    selected = {tid for tid, _ in ranked}
-    assert CORE_DEFAULT_TOOLS <= selected
+        self.assertIn("L1-gated", catalog)
+        self.assertNotIn("webull_place_order", catalog)
 
+    def test_catalog_falls_back_to_static_on_failure(self):
+        workspace = importlib.import_module(WORKSPACE_PATH)
+        with patch(f"{GATING_PATH}.gated_tool_catalog", side_effect=RuntimeError("registry down")):
+            catalog = workspace._catalog_for_task("anything at all")
 
-def test_empty_task_does_not_crash():
-    ranked = compute_sparse_tool_weights("", TOOL_CATALOG_FIXTURE, max_active_tools=4)
-    assert len(ranked) <= 4
-
-
-# ------------------------------------------------------------------
-# the catalog actually injected into prompts
-# ------------------------------------------------------------------
-
-def test_render_tool_catalog_lists_every_tool():
-    text = render_tool_catalog({"a": "does a", "b": "does b"}, "TOOLS:")
-    assert "a — does a" in text
-    assert "b — does b" in text
-
-
-def test_gated_catalog_measures_real_savings():
-    with patch(f"{GATING_PATH}.build_registry_tool_map", return_value=TOOL_CATALOG_FIXTURE):
-        text, stats = gated_tool_catalog("Fix the CSS grid on the navbar", max_active_tools=4)
-
-    assert text is not None
-    assert stats["total_tools"] == 12
-    assert stats["active_tools"] <= 4
-    # Savings must be measured from rendered characters, not asserted from a ratio.
-    assert stats["gated_chars"] < stats["full_chars"]
-    assert stats["savings_pct"] > 0
-    assert "webull_place_order" not in text
+        self.assertEqual(catalog, workspace.TOOL_CATALOG)
 
 
-def test_gated_catalog_falls_back_when_registry_unavailable():
-    with patch(f"{GATING_PATH}.build_registry_tool_map", return_value={}):
-        text, stats = gated_tool_catalog("anything")
-    assert text is None
-    assert stats["total_tools"] == 0
-
-
-# ------------------------------------------------------------------
-# WIRING — the gate must be reachable from production, not just from tests
-# ------------------------------------------------------------------
-
-def test_think_about_tools_uses_the_gate():
-    """Regression guard for the original defect: the module existed, passed its
-    tests, and was called by nobody.
-
-    Deliberately a hard import, not importorskip: if the production module
-    cannot load, the wiring is broken and this must go red, not green-with-a-skip.
-    """
-    workspace = importlib.import_module(WORKSPACE_PATH)
-
-    with patch(f"{GATING_PATH}.build_registry_tool_map", return_value=TOOL_CATALOG_FIXTURE):
-        catalog = workspace._catalog_for_task("Fix the CSS grid on the navbar")
-
-    assert "L1-gated" in catalog
-    assert "webull_place_order" not in catalog
-
-
-def test_catalog_falls_back_to_static_on_failure():
-    workspace = importlib.import_module(WORKSPACE_PATH)
-
-    with patch(f"{GATING_PATH}.gated_tool_catalog", side_effect=RuntimeError("registry down")):
-        catalog = workspace._catalog_for_task("anything at all")
-
-    assert catalog == workspace.TOOL_CATALOG
+if __name__ == "__main__":
+    unittest.main()

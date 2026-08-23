@@ -856,8 +856,7 @@ Client / Stakeholder: ${meta.client || "CRG Operations"} | Date: _______________
                     {/* Category Items List */}
                     {isExpanded && (
                       <div className="divide-y divide-border/40">
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                        {categoryEpics.map((epic, idx) => (
+                        {categoryEpics.map((epic) => (
                           <div 
                             key={epic.id} 
                             className={`p-3.5 sm:p-4 transition-colors ${

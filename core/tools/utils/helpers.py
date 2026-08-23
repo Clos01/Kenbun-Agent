@@ -8,9 +8,10 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Optional
-
-from tools.infrastructure.config import settings
+try:
+    from tools.infrastructure.config import settings
+except Exception:
+    settings = None
 from tools.utils.path_utils import get_project_root
 
 PROJECT_ROOT = get_project_root()

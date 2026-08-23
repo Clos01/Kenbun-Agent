@@ -4,9 +4,10 @@ import logging
 import os
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional
-
-from tools.infrastructure.config import settings
+try:
+    from tools.infrastructure.config import settings
+except Exception:
+    settings = None
 from tools.registry import sovereign_tool
 from tools.utils.helpers import silence_stdout
 from tools.utils.path_utils import get_project_root

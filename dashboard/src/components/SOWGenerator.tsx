@@ -378,7 +378,6 @@ export default function SOWGenerator({ projectId, boardId, boardName, projectNam
   };
   
   const contentRef = useRef<HTMLDivElement>(null);
-  const ReactQuill = useMemo(() => dynamic(() => import("react-quill-new"), { ssr: false }), []);
 
   const handleDownloadPdf = useReactToPrint({
     contentRef,

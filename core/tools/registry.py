@@ -5,8 +5,15 @@ import inspect
 import logging
 import sys
 import threading
-from typing import Any, Callable, Dict, List, Optional
-from pydantic import BaseModel, Field
+try:
+    from pydantic import BaseModel, Field
+except ImportError:
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    def Field(*args, **kwargs):
+        return None
 
 logger = logging.getLogger("registry")
 

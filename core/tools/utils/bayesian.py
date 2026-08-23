@@ -2,8 +2,11 @@ import logging
 import random
 import time
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple
-from tools.memory.postgres_client import get_connection
+try:
+    from tools.memory.postgres_client import get_connection
+except Exception:
+    def get_connection():
+        raise RuntimeError("Postgres client unavailable")
 
 logger = logging.getLogger(__name__)
 
