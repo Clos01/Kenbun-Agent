@@ -15,7 +15,7 @@ LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
 def log_event(level: str, event: str, **kwargs):
     # Blueprint-compliant metadata
     entry = {
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "level": level.upper(),
         "event": event,
         "theme": "Blueprint",  # Token compliance
@@ -187,7 +187,7 @@ async def execute_cron_job(job_row):
         final_output = delivery_content
 
     # 4. Save output
-    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
     out_dir = Path(settings.PROJECT_ROOT) / "scratch" / "cron" / "output" / job_id
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{timestamp}.md"
@@ -245,7 +245,7 @@ class ChronosDaemon:
             conn.close()
             return
             
-        now_str = datetime.datetime.utcnow().isoformat() + "Z"
+        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
         
         cursor.execute('''
             SELECT * FROM kenbun_cron_jobs 
@@ -266,7 +266,7 @@ class ChronosDaemon:
             schedule = job[2]
             
             # Calculate next run time and update status
-            now = datetime.datetime.utcnow()
+            now = datetime.datetime.now(datetime.timezone.utc)
             try:
                 next_run = calculate_next_run(schedule, now)
                 next_run_str = next_run.isoformat() + "Z"

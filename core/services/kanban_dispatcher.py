@@ -13,7 +13,7 @@ LOCAL_DB_PATH = settings.INTELLIGENCE_DB_PATH
 
 def log_event(level: str, event: str, **kwargs):
     entry = {
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "level": level.upper(),
         "event": event,
         "theme": "Blueprint",
@@ -107,7 +107,7 @@ class KanbanDispatcher:
                     cursor.execute("SELECT COUNT(*) FROM kenbun_kanban_runs WHERE task_id = ?", (task_id,))
                     total_runs = cursor.fetchone()[0]
                     
-                    now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     
                     # Close the crashed run
                     cursor.execute('''
@@ -156,7 +156,7 @@ class KanbanDispatcher:
                 
                 if unfinished == 0:
                     log_event("info", f"All children complete. Promoting parent task '{title}' to ready.", task_id=parent_id)
-                    now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     cursor.execute("UPDATE kenbun_kanban_tasks SET status = 'ready', updated_at = ? WHERE id = ?", (now_str, parent_id))
                     conn.commit()
 
@@ -181,7 +181,7 @@ class KanbanDispatcher:
                 
                 if should_promote:
                     log_event("info", f"Dependency satisfied. Promoting task '{title}' to ready.", task_id=task_id)
-                    now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     cursor.execute("UPDATE kenbun_kanban_tasks SET status = 'ready', updated_at = ? WHERE id = ?", (now_str, task_id))
                     conn.commit()
 
@@ -229,7 +229,7 @@ class KanbanDispatcher:
                                 VALUES (?, ?, ?, ?, ?, ?, ?, 'todo', ?, '[]')
                             ''', (st_id, st_title, st_body, st_assignee, tenant, priority, task_id, max_retries))
                             
-                        now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                         cursor.execute("UPDATE kenbun_kanban_tasks SET status = 'waiting_on_children', updated_at = ? WHERE id = ?", (now_str, task_id))
                         conn.commit()
                         
@@ -240,7 +240,7 @@ class KanbanDispatcher:
                 log_event("warning", f"Failed to decompose task '{title}': {e}. Promoting to todo directly.", task_id=task_id)
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
-                    now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     cursor.execute("UPDATE kenbun_kanban_tasks SET status = 'todo', updated_at = ? WHERE id = ?", (now_str, task_id))
                     conn.commit()
 
@@ -272,7 +272,7 @@ class KanbanDispatcher:
             def claim_task():
                 with self._get_connection() as conn:
                     cursor = conn.cursor()
-                    now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                    now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                     cursor.execute("UPDATE kenbun_kanban_tasks SET status = 'running', updated_at = ? WHERE id = ?", (now_str, task_id))
                     
                     cursor.execute("SELECT COUNT(*) FROM kenbun_kanban_runs WHERE task_id = ?", (task_id,))
@@ -320,7 +320,7 @@ class KanbanDispatcher:
                 def handle_spawn_failure():
                     with self._get_connection() as conn:
                         cursor = conn.cursor()
-                        now_str = datetime.datetime.utcnow().isoformat() + "Z"
+                        now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
                         cursor.execute('''
                             UPDATE kenbun_kanban_runs 
                             SET outcome = 'spawn_failed', ended_at = ?, error = ?

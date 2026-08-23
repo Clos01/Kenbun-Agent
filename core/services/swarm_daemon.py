@@ -16,7 +16,7 @@ from threading import Thread
 def log_event(level: str, event: str, **kwargs):
     # Blueprint-compliant metadata
     entry = {
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "level": level.upper(),
         "event": event,
         "theme": "Blueprint",  # Token compliance
