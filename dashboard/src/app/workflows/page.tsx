@@ -74,28 +74,28 @@ export default function WorkflowsPage() {
   const [selectedEnvelope, setSelectedEnvelope] = useState<AgentEnvelope | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowSession | null>(null);
 
-  const fetchWorkflows = async () => {
-    try {
-      const res = await fetch("/api/workflows");
-      const data = await res.json();
-      if (data.success) {
-        setWorkflows(data.workflows);
-        if (!selectedWorkflow && data.workflows.length > 0) {
-          setSelectedWorkflow(data.workflows[0]);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to load workflows:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchWorkflows();
-    const interval = setInterval(fetchWorkflows, 6000);
-    return () => clearInterval(interval);
+    let active = true;
+    const loadWorkflows = async () => {
+      try {
+        const res = await fetch("/api/workflows");
+        const data = await res.json();
+        if (active && data.success) {
+          setWorkflows(data.workflows);
+          setSelectedWorkflow((prev) => (!prev && data.workflows.length > 0 ? data.workflows[0] : prev));
+        }
+      } catch (err) {
+        console.error("Failed to load workflows:", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadWorkflows();
+    const interval = setInterval(loadWorkflows, 6000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   const getStatusBadge = (status: string) => {

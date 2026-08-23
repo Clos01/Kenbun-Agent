@@ -22,7 +22,7 @@ import {
   AccuracyGauge, 
   ToolMatrix 
 } from "@/components/Visuals";
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { motion, AnimatePresence, useMotionValue, useMotionTemplate } from "framer-motion";
 import { CONFIG } from "@/lib/config";

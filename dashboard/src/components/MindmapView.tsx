@@ -326,7 +326,7 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
     setScale(Math.max(0.35, Math.min(1.1, Math.min(sx, sy))));
     setOffset({ x: 0, y: 0 });
     hasInitialFit.current = true;
-  }, [model.width, model.height]);
+  }, [model.width, model.height, setScale, setOffset]);
 
   useEffect(() => { fit(); }, [fit]);
 
@@ -362,7 +362,7 @@ export default function MindmapView({ cards, lists, onSelectCard, selectedCardId
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [setScale, setOffset]);
 
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;

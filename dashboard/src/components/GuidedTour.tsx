@@ -102,7 +102,7 @@ export default function GuidedTour({ module, steps }: { module: string; steps: T
   useLayoutEffect(() => {
     const h = calloutRef.current?.offsetHeight;
     if (h && Math.abs(h - calloutH) > 1) setCalloutH(h);
-  });
+  }, [calloutH]);
 
   const close = useCallback(() => setActive(false), []);
   const next = useCallback(() => setI((p) => (p < steps.length - 1 ? p + 1 : (setActive(false), p))), [steps.length]);

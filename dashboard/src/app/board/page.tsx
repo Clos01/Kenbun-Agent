@@ -57,7 +57,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
 import { tenantFetch } from "@/lib/tenantFetch";
-import { z } from "zod";
 
 // Types
 interface Board {

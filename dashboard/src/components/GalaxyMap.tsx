@@ -289,7 +289,7 @@ export default function GalaxyMap({ onNodesLoaded }: { onNodesLoaded?: (count: n
         cancelAnimationFrame(glideAnimationRef.current);
       }
     };
-  }, []);
+  }, [tenantId]);
 
   // Pre-calculate pulse offsets to avoid high-frequency string parsing during draw calls
   useEffect(() => {

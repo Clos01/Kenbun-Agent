@@ -11,7 +11,7 @@ import { CONFIG } from "../lib/config";
 const API_BASE = CONFIG.API_BASE;
 
 // Dynamic import with SSR disabled for Quill editor
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
 const ReactQuill = dynamic(() => import("react-quill-new"), { ssr: false });
 
 const getClaudeCorpsSOW = () => `
@@ -253,7 +253,7 @@ interface SOWGeneratorProps {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export default function SOWGenerator({ projectId, boardId, boardName, projectName, cards = [] }: SOWGeneratorProps) {
   const [content, setContent] = useState<string>("");
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isAdhdMode, setIsAdhdMode] = useState<boolean>(false);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -263,10 +263,7 @@ export default function SOWGenerator({ projectId, boardId, boardName, projectNam
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const pid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
-
-  const getDefaultContent = () => {
+  const getDefaultContent = useCallback(() => {
     const target = `${projectName || ""} ${boardName || ""}`.toLowerCase();
     if (target.includes("claude corps") || target.includes("take-home")) {
       return getClaudeCorpsSOW();
@@ -279,43 +276,42 @@ export default function SOWGenerator({ projectId, boardId, boardName, projectNam
     } else {
       return getDefaultSOW(boardName || projectName || "Project");
     }
-  };
+  }, [projectName, boardName]);
 
   const storageKey = useMemo(() => {
     const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
-    return `sow_content_v7_${currentPid}`;
+    return `kenbun_sow_doc_${currentPid}`;
   }, [boardId, projectId, projectName]);
 
   const fetchAndApplySOW = useCallback(async () => {
-    const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "");
-    const logInfo = `PID=${currentPid || "NONE"} | Board="${boardName || ""}" | Proj="${projectName || ""}"`;
-    console.log(`[SOW_DIAGNOSTIC] Fetching SOW. ${logInfo}`);
+    setIsLoading(true);
+    setDiagLog("Checking local and server storage...");
 
-    if (!currentPid) {
-      setDiagLog(`Waiting for Board Context... (${logInfo})`);
-      setSourceTag("WAITING");
+    const localDoc = localStorage.getItem(storageKey);
+    if (localDoc && !isBlankHtml(localDoc)) {
+      setContent(localDoc);
+      setSourceTag("BROWSER LOCAL");
+      setDiagLog("Restored from browser localStorage cache.");
+      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
-    setDiagLog(`Querying PostgreSQL for ${currentPid}...`);
-
+    const currentPid = boardId || projectId || (projectName ? projectName.replace(/[^a-zA-Z0-9]/g, "_") : "default");
     try {
-      const res = await tenantFetch(`${API_BASE}/api/v1/sow?project_id=${encodeURIComponent(currentPid)}`, { cache: "no-store" });
+      const res = await tenantFetch(`${API_BASE}/api/v1/sow/${currentPid}`);
       if (res.ok) {
         const data = await res.json();
-        console.log(`[SOW_DIAGNOSTIC] Backend response:`, data);
-        if (data && data.exists && data.content && !isBlankHtml(data.content)) {
+        if (data && data.content && !isBlankHtml(data.content)) {
           setContent(data.content);
           localStorage.setItem(storageKey, data.content);
-          setSourceTag("POSTGRES DB");
-          setDiagLog(`Loaded from DB. Title: "${data.title || "Untitled"}" | Length: ${data.content.length} chars`);
+          setSourceTag("DB RECORD");
+          setDiagLog("Loaded from server PostgreSQL DB.");
           setIsLoading(false);
           return;
         }
       }
-    } catch (err) {
-      console.warn("[SOW_DIAGNOSTIC] Backend fetch error:", err);
+    } catch {
+      // Fallback
     }
 
     const fresh = getDefaultContent();
@@ -324,7 +320,7 @@ export default function SOWGenerator({ projectId, boardId, boardName, projectNam
     setSourceTag("FRESH DEFAULT");
     setDiagLog(`Generated Fresh Template for "${boardName || projectName || "Project"}"`);
     setIsLoading(false);
-  }, [boardId, projectId, boardName, projectName, storageKey]);
+  }, [boardId, projectId, boardName, projectName, storageKey, getDefaultContent]);
 
   useEffect(() => {
       // eslint-disable-next-line react-hooks/set-state-in-effect

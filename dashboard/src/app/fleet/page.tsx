@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import Sidebar from "@/components/Sidebar";
 import { 
@@ -331,11 +331,10 @@ export default function FleetCommand() {
   const [toolsLoaded, setToolsLoaded] = useState(false);
   const [budget, setBudget] = useState<BudgetData | null>(null);
   const [workers, setWorkers] = useState<WorkerStatus[]>([]);
-  const [sentryStats, setSentryStats] = useState<{ queries: number; blocked: number; pct: number } | null>(null);
   const [sentryTelemetry, setSentryTelemetry] = useState<SentryTelemetryData | null>(null);
   const [sentryLoadingAction, setSentryLoadingAction] = useState<string | null>(null);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
+       
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sentryActionResult, setSentryActionResult] = useState<{ action?: string; message?: string; error?: string; data?: any } | null>(null);
   const [confirmAction, setConfirmAction] = useState<"poweroff" | "reboot" | null>(null);
@@ -400,112 +399,116 @@ export default function FleetCommand() {
     }
   };
 
-  const fetchData = useCallback(async () => {
-    try {
-      const statsRes = await tenantFetch(`${API_BASE}/stats`, { cache: 'no-store' });
-      if (!statsRes.ok) throw new Error("API_ERROR");
-      const statsData = await statsRes.json();
-      
-      const liveTools: unknown[] = Array.isArray(statsData.intelligence)
-        ? statsData.intelligence
-        : [];
-
-      const validatedTools = liveTools.map((t: unknown) => validateToolStat(t));
-      setTools(validatedTools.sort((a: ToolStat, b: ToolStat) => b.success_rate - a.success_rate));
-      setToolsLoaded(true);
-
-      // Extract budget & tokens
-      if (statsData.budget) {
-        setBudget(statsData.budget);
-      }
-
-      // Build worker status dynamically
-      const lmStudioOnline = statsData.telemetry?.lm_studio?.status === "Online";
-      const p330Online = statsData.telemetry?.p330?.status === "online";
-      const configuredNodes = statsData.configured_nodes || {};
-
-      let sentryOnline = false;
-      try {
-        const sentryRes = await tenantFetch(`${API_BASE}/api/v1/sentry/telemetry`, {
-          signal: AbortSignal.timeout(2500)
-        });
-        if (sentryRes.ok) {
-          const sentryData: SentryTelemetryData = await sentryRes.json();
-          setSentryTelemetry(sentryData);
-          if (sentryData && sentryData.status === "online") {
-            sentryOnline = true;
-            setSentryStats({
-              queries: sentryData.queries_total ?? 0,
-              blocked: sentryData.queries_blocked ?? 0,
-              pct: sentryData.blocked_percent ?? 0
-            });
-          }
-        }
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      } catch (e) {
-        sentryOnline = false;
-      }
-
-      setWorkers([
-        {
-          name: "LM Studio",
-          type: "local",
-          status: lmStudioOnline ? "online" : "offline",
-          role: "System 2 Supervisor — Local reasoning & code review"
-        },
-        {
-          name: "Gemini Flash",
-          type: "cloud",
-          status: configuredNodes.gemini ? "online" : "offline (unconfigured)",
-          role: "System 1 Cloud AI — Research, code review, consensus"
-        },
-        {
-          name: "OpenAI",
-          type: "cloud",
-          status: configuredNodes.openai ? "online" : "offline (unconfigured)",
-          role: "System 1 Cloud AI Fallback"
-        },
-        {
-          name: "DeepSeek",
-          type: "cloud",
-          status: configuredNodes.deepseek ? "online" : "offline (unconfigured)",
-          role: "Advanced Logic / Code Generation"
-        },
-        {
-          name: "P330 Worker",
-          type: "remote",
-          status: p330Online ? "online" : "offline",
-          role: "Remote GPU Node — Embeddings & heavy inference"
-        },
-        {
-          name: "ChromaDB",
-          type: "local",
-          status: "online",
-          role: "Vector Memory — Semantic search & code topology"
-        },
-        {
-          name: "Legion Sentry",
-          type: "remote",
-          status: sentryOnline ? "online" : "offline",
-          role: sentryOnline && sentryStats
-            ? `DNS Sentry — Active (${sentryStats.blocked} ads / ${sentryStats.pct.toFixed(1)}% blocked today)`
-            : "DNS Sentry — Recursive local resolver & Pi-hole filter"
-        },
-      ]);
-
-      setError(false);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (err) {
-      setError(true);
-      setToolsLoaded(true);
-    }
-  }, [API_BASE]);
-
   useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 5000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+    let active = true;
+    const fetchFleetData = async () => {
+      try {
+        const statsRes = await tenantFetch(`${API_BASE}/stats`, { cache: 'no-store' });
+        if (!statsRes.ok) throw new Error("API_ERROR");
+        const statsData = await statsRes.json();
+        if (!active) return;
+        
+        const liveTools: unknown[] = Array.isArray(statsData.intelligence)
+          ? statsData.intelligence
+          : [];
+
+        const validatedTools = liveTools.map((t: unknown) => validateToolStat(t));
+        setTools(validatedTools.sort((a: ToolStat, b: ToolStat) => b.success_rate - a.success_rate));
+        setToolsLoaded(true);
+
+        if (statsData.budget) {
+          setBudget(statsData.budget);
+        }
+
+        const lmStudioOnline = statsData.telemetry?.lm_studio?.status === "Online";
+        const p330Online = statsData.telemetry?.p330?.status === "online";
+        const configuredNodes = statsData.configured_nodes || {};
+
+        let sentryOnline = false;
+        let freshSentryStats: { blocked: number; pct: number } | null = null;
+        try {
+          const sentryRes = await tenantFetch(`${API_BASE}/api/v1/sentry/telemetry`, {
+            signal: AbortSignal.timeout(2500)
+          });
+          if (sentryRes.ok) {
+            const sentryData: SentryTelemetryData = await sentryRes.json();
+            if (active) setSentryTelemetry(sentryData);
+            if (sentryData && sentryData.status === "online") {
+              sentryOnline = true;
+              freshSentryStats = {
+                blocked: sentryData.queries_blocked ?? 0,
+                pct: sentryData.blocked_percent ?? 0
+              };
+            }
+          }
+        } catch {
+          sentryOnline = false;
+        }
+
+        if (active) {
+          setWorkers([
+            {
+              name: "Local LM Studio",
+              type: "local",
+              status: lmStudioOnline ? "online" : "offline",
+              role: "System 2 Supervisor — Local code/guardrail auditing"
+            },
+            {
+              name: "Gemini",
+              type: "cloud",
+              status: configuredNodes.gemini ? "online" : "offline (unconfigured)",
+              role: "System 1 Cloud AI — Research, code review, consensus"
+            },
+            {
+              name: "OpenAI",
+              type: "cloud",
+              status: configuredNodes.openai ? "online" : "offline (unconfigured)",
+              role: "System 1 Cloud AI Fallback"
+            },
+            {
+              name: "DeepSeek",
+              type: "cloud",
+              status: configuredNodes.deepseek ? "online" : "offline (unconfigured)",
+              role: "Advanced Logic / Code Generation"
+            },
+            {
+              name: "P330 Worker",
+              type: "remote",
+              status: p330Online ? "online" : "offline",
+              role: "Remote GPU Node — Embeddings & heavy inference"
+            },
+            {
+              name: "ChromaDB",
+              type: "local",
+              status: "online",
+              role: "Vector Memory — Semantic search & code topology"
+            },
+            {
+              name: "Legion Sentry",
+              type: "remote",
+              status: sentryOnline ? "online" : "offline",
+              role: sentryOnline && freshSentryStats
+                ? `DNS Sentry — Active (${freshSentryStats.blocked} ads / ${freshSentryStats.pct.toFixed(1)}% blocked today)`
+                : "DNS Sentry — Recursive local resolver & Pi-hole filter"
+            },
+          ]);
+          setError(false);
+        }
+      } catch {
+        if (active) {
+          setError(true);
+          setToolsLoaded(true);
+        }
+      }
+    };
+
+    fetchFleetData();
+    const interval = setInterval(fetchFleetData, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [API_BASE]);
 
   const getConfidenceColor = (conf: string) => {
     switch (conf) {

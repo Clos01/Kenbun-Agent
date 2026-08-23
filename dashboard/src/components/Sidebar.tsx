@@ -34,7 +34,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 export default function Sidebar() {
   const pathname = usePathname();
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+       
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { theme, preset, setPreset, toggleTheme, mounted } = useTheme();
   const { tenantId, setTenantId, tenants } = useTenant();

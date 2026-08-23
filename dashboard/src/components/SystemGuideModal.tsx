@@ -315,7 +315,7 @@ export default function SystemGuideModal({
 
   const currentGuide = MODULE_GUIDES[activeTab] || MODULE_GUIDES.bridge;
   const ActiveIcon = currentGuide.icon;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tourAvailable = typeof window !== "undefined" && !!((window as any).__kenbunTours && (window as any).__kenbunTours.size > 0);
 
