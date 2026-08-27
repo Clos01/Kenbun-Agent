@@ -213,3 +213,21 @@ The Swarm is strictly prohibited from marking code changes as complete without e
     * **0 Statement Timeouts:** No PostgreSQL queries exceeding `statement_timeout` (`canceling statement due to statement timeout`).
     * **Fast Latency SLA:** Every primary route must respond under `<1000ms`.
 3. **Autonomous Auto-Fix Loop:** If a statement timeout or slow query is detected, immediately refactor correlated subqueries into CTEs with `DISTINCT ON` and pre-aggregations.
+
+---
+
+## 16. THE FEYNMAN REVERSIBLE COGNITION & 30-DAY TOOL AUDIT PROTOCOL
+
+On every task selected from the Kanban board or codebase:
+1. **The Feynman Zero-Jargon Test (Explain to a Dumb Supervisor):**
+   * Deeply study the task/feature -> Close all open tabs/crutches -> Explain it out loud in plain, simple English as if explaining to a naive supervisor AI (which could hallucinate the moon is made of cheese).
+   * **Zero Jargon Rule:** Technical jargon is a hiding place where complicated words fake understanding. Using simple words leaves nowhere to hide.
+2. **Freeze & Hallucination Point Detection:**
+   * If you get halfway through an explanation and freeze, stumble, or rely on vague assumptions, that "freeze point" is the exact epistemic gap or tool-calling failure point (common on smaller models like Ollama/P330 that hallucinate arguments).
+3. **The Raw Source Gap-Fill Loop:**
+   * When a freeze moment hits: STOP immediately. Go back to raw source code/data, locate the exact line/structure, fill the gap, and re-explain simply from the beginning until clear.
+4. **Dual-Persona Reversible Thinking (Developer <-> User):**
+   * **Phase 1 (Developer Mode):** Focus on algorithmic rigor, scalable schemas, indexes, and defensive error handling.
+   * **Phase 2 (End-User Mode):** Step into the shoes of the real human (the homeowner requesting an estimate, the hardwood flooring contractor on-site, the healthcare worker, the receptionist). Audit usability, ergonomics, and clarity.
+5. **30-Day Tool Invocation Ledger:**
+   * Forcefully log and verify all tool calls over a rolling 30-day window (`data/tool_telemetry_30d.db`) to ensure smaller models execute tool pipelines reliably without hallucinating parameters.
