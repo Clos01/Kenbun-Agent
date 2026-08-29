@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# Port Killer CLI Utility
+# Safely inspects and terminates processes running on specific localhost ports.
+#
+# Usage:
+#   bin/kill-port 3000
+#   bin/kill-port 3000 3001 3002
+#   bin/kill-port --list
+#
+
+if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "🛑 Port Killer CLI"
+    echo ""
+    echo "Usage:"
+    echo "  bin/kill-port <port1> [port2 ...]"
+    echo "  bin/kill-port --list"
+    echo ""
+    echo "Examples:"
+    echo "  bin/kill-port 3000"
+    echo "  bin/kill-port 3000 3001 3002"
+    echo "  bin/kill-port --list"
+    exit 0
+fi
+
+if [ "$1" = "--list" ] || [ "$1" = "-l" ]; then
+    echo "🔍 Active Listening Ports on Localhost:"
+    echo ""
+    lsof -iTCP -sTCP:LISTEN -n -P | grep -E "(127\.0\.0\.1|\*|::1)"
+    exit 0
+fi
+
+for PORT in "$@"; do
+    # Strip any non-digit characters
+    PORT_CLEAN=$(echo "$PORT" | tr -dc '0-9')
+    if [ -z "$PORT_CLEAN" ]; then
+        continue
+    fi
+
+    echo "🔍 Checking port $PORT_CLEAN..."
+    PIDS=$(lsof -ti tcp:"$PORT_CLEAN")
+
+    if [ -z "$PIDS" ]; then
+        echo "ℹ️  No process listening on port $PORT_CLEAN."
+    else
+        for PID in $PIDS; do
+            PROC_NAME=$(ps -p "$PID" -o comm= 2>/dev/null)
+            echo "🛑 Stopping $PROC_NAME (PID: $PID) on port $PORT_CLEAN..."
+            kill -9 "$PID" 2>/dev/null
+            if [ $? -eq 0 ]; then
+                echo "✅ Successfully terminated PID $PID on port $PORT_CLEAN."
+            else
+                echo "⚠️  Failed to kill PID $PID (may require sudo)."
+            fi
+        done
+    fi
+done

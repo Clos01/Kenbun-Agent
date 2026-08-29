@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Sidebar from "@/components/Sidebar";
 import { 
   GitBranch, 
@@ -74,29 +74,28 @@ export default function WorkflowsPage() {
   const [selectedEnvelope, setSelectedEnvelope] = useState<AgentEnvelope | null>(null);
   const [selectedWorkflow, setSelectedWorkflow] = useState<WorkflowSession | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    const loadWorkflows = async () => {
-      try {
-        const res = await fetch("/api/workflows");
-        const data = await res.json();
-        if (active && data.success) {
-          setWorkflows(data.workflows);
-          setSelectedWorkflow((prev) => (!prev && data.workflows.length > 0 ? data.workflows[0] : prev));
-        }
-      } catch (err) {
-        console.error("Failed to load workflows:", err);
-      } finally {
-        if (active) setLoading(false);
+  const loadWorkflows = useCallback(async () => {
+    try {
+      const res = await fetch("/api/workflows");
+      const data = await res.json();
+      if (data.success) {
+        setWorkflows(data.workflows);
+        setSelectedWorkflow((prev) => (!prev && data.workflows.length > 0 ? data.workflows[0] : prev));
       }
-    };
+    } catch (err) {
+      console.error("Failed to load workflows:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
     loadWorkflows();
     const interval = setInterval(loadWorkflows, 6000);
     return () => {
-      active = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [loadWorkflows]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -130,7 +129,7 @@ export default function WorkflowsPage() {
 
           <div className="flex items-center gap-3">
             <button 
-              onClick={() => { setLoading(true); fetchWorkflows(); }}
+              onClick={() => { setLoading(true); loadWorkflows(); }}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-card border border-border/80 hover:border-primary/50 text-foreground transition-all cursor-pointer hover:shadow-sm"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />

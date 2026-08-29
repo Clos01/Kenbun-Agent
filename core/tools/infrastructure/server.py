@@ -34,6 +34,11 @@ from tools.strategy.orchestration_tools import *
 from tools.utils.helpers import *
 
 
+def _build_orchestrate_registry():
+    """Helper for test suites to retrieve the registered tools mapping."""
+    return getattr(registry, "_tools", {})
+
+
 class ProtocolShield(io.TextIOBase):
     def write(self, s):
         sys.stderr.write(s)

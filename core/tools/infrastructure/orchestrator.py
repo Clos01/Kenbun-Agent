@@ -682,6 +682,7 @@ async def run_pipeline(
 
     step_count = 0
     consecutive_failures = 0
+    error_msg = ""
 
     for step in steps:
         step_count += 1
@@ -1111,28 +1112,45 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     project must stay unspecified.
     """
     import asyncio
+    import threading
 
-    # Single source of truth for the pipeline toolset.
-    #
-    # This used to build its own dict inline, which had drifted to 24 tools
-    # against build_pipeline_tools' 35 — every kanban_* tool, detect_hardware and
-    # run_self_improvement_cycle were missing here. A workflow step calling one
-    # of those silently got nothing, with no error, depending only on which
-    # entry point the caller happened to reach.
     tools = build_pipeline_tools(project_path)
-
-    # Run the async pipeline
-    return asyncio.run(run_pipeline(
-        workflow=workflow,
-        task=task,
-        tools=tools,
-        project_path=project_path,
-        file_path=file_path,
-        code_snippet=code_snippet,
-        tech_key=tech_key,
-        project_id=project_id,
-        fast=fast
-    ))
+    
+    result_box = []
+    err_box = []
+    
+    def _runner():
+        try:
+            # Always create a brand new loop for this thread to guarantee no conflicts
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            result = new_loop.run_until_complete(run_pipeline(
+                workflow=workflow,
+                task=task,
+                tools=tools,
+                project_path=project_path,
+                file_path=file_path,
+                code_snippet=code_snippet,
+                tech_key=tech_key,
+                project_id=project_id,
+                fast=fast
+            ))
+            result_box.append(result)
+        except Exception as e:
+            err_box.append(e)
+        finally:
+            try:
+                new_loop.close()
+            except:
+                pass
+                
+    t = threading.Thread(target=_runner)
+    t.start()
+    t.join()
+    
+    if err_box:
+        raise err_box[0]
+    return result_box[0]
 
 # Alias for backwards compatibility with orchestration_tools.py
 run_orchestration_pipeline = orchestrate
@@ -1144,12 +1162,21 @@ def swarm(objective: str, project_path: str = "."):
     """
     import asyncio
 
-    # Same registry the pipelines use. This built its own 19-tool dict, so a
-    # swarm run silently had a different, smaller capability set than an
-    # orchestrate run of the same objective.
     tools = build_pipeline_tools(project_path)
 
-    return asyncio.run(spawn_swarm(objective, tools, project_path))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        def _run_in_thread():
+            return asyncio.run(spawn_swarm(objective, tools, project_path))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(_run_in_thread).result()
+    else:
+        return asyncio.run(spawn_swarm(objective, tools, project_path))
 
 if __name__ == "__main__":
     # Example usage

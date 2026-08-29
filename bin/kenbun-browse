@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#
+# Kenbun Autonomous Browser CLI
+# Usage:
+#   bin/kenbun-browse https://bids.contractorsplanroom.com/secure/ --mode ui_tars
+#   bin/kenbun-browse https://nevermiss.ai --mode playwright
+#   bin/kenbun-browse https://nevermiss.ai --mode hybrid --goal "Extract pricing"
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VENV_PYTHON="$REPO_ROOT/core/.venv/bin/python"
+
+if [ ! -f "$VENV_PYTHON" ]; then
+    VENV_PYTHON="python3"
+fi
+
+if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "🌐 Kenbun Autonomous Browser CLI"
+    echo ""
+    echo "Usage:"
+    echo "  bin/kenbun-browse <url> [options]"
+    echo ""
+    echo "Options:"
+    echo "  --mode <hybrid|playwright|ui_tars>   Execution engine (default: hybrid)"
+    echo "  --goal <description>                 High-level objective string"
+    echo "  --json                               Output full machine-readable JSON"
+    echo "  -h, --help                           Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  bin/kenbun-browse https://bids.contractorsplanroom.com/secure/ --mode ui_tars"
+    echo "  bin/kenbun-browse https://nevermiss.ai --mode playwright"
+    exit 0
+fi
+
+TARGET_URL="$1"
+shift
+
+MODE="hybrid"
+GOAL="Navigate and inspect website"
+JSON_OUTPUT=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --mode)
+            MODE="$2"
+            shift 2
+            ;;
+        --goal)
+            GOAL="$2"
+            shift 2
+            ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+export PYTHONPATH="$REPO_ROOT/core"
+
+"$VENV_PYTHON" -c "
+import sys
+import json
+from tools.gui.autonomous_browser_agent import dispatch_autonomous_browser
+
+url = '$TARGET_URL'
+mode = '$MODE'
+goal = '$GOAL'
+json_out = True if '$JSON_OUTPUT' == 'true' else False
+
+print(f'🚀 [Kenbun Browse] Target: {url} | Engine: {mode}')
+receipt = dispatch_autonomous_browser(url=url, goal=goal, mode=mode)
+
+if json_out:
+    print(json.dumps(receipt, indent=2))
+else:
+    print('\n' + '='*50)
+    print(f'🎯 Status: {receipt.get(\"status\")}')
+    print(f'⚙️ Engine Used: {receipt.get(\"engine_used\")}')
+    print(f'📄 Page Title: {receipt.get(\"page_title\")}')
+    print(f'⏱️ Duration: {receipt.get(\"duration_seconds\")}s')
+    if receipt.get('screenshot_path'):
+        print(f'📸 Screenshot: {receipt.get(\"screenshot_path\")}')
+    if receipt.get('extracted_data'):
+        print('\n📊 Extracted Data:')
+        print(json.dumps(receipt.get('extracted_data'), indent=2))
+    if receipt.get('execution_trace'):
+        print(f'\n📝 Completed Steps: {len(receipt.get(\"execution_trace\"))}')
+    print('='*50)
+"

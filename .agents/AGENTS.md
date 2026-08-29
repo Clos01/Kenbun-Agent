@@ -231,3 +231,28 @@ On every task selected from the Kanban board or codebase:
    * **Phase 2 (End-User Mode):** Step into the shoes of the real human (the homeowner requesting an estimate, the hardwood flooring contractor on-site, the healthcare worker, the receptionist). Audit usability, ergonomics, and clarity.
 5. **30-Day Tool Invocation Ledger:**
    * Forcefully log and verify all tool calls over a rolling 30-day window (`data/tool_telemetry_30d.db`) to ensure smaller models execute tool pipelines reliably without hallucinating parameters.
+
+---
+
+## 17. THE CARLOS DEFENSIVE INTEGRATION & RECONCILIATION PROTOCOL (`defensive-integration-sentinel`)
+
+When planning or building external third-party API integrations (ElevenLabs, Stripe, Twilio, Resend, Supabase):
+1. **Pre-Flight Inventory Reconciliation:** Never assume remote entity IDs belong to the active tenant. Always compare external inventory against local database rows to categorize entities into:
+   - **`matched`**: Healthy synchronized entities.
+   - **`unimportedRemote`**: Available remote entities with 1-click import.
+   - **`crossAccountErrors`**: Entities registered locally whose external ID is inaccessible under the active tenant API key (cross-account or deleted).
+2. **Proactive Non-Blocking Visibility (Zero Silent Failures):** Never swallow 401/404 errors or crash the UI with unhandled 500s. Render clean, accessible notification pills and luxury modal popups so users immediately understand external provider status.
+3. **Official Vendor Documentation Deep-Links:** Every warning or cross-account mismatch notification must include:
+   - The plain-English root cause.
+   - A direct deep-link to the official vendor API documentation (e.g. `https://elevenlabs.io/docs/conversational-ai/api-reference/agents/get`).
+   - A 1-click remediation action (`[1-Click Import]`, `[Update API Key]`).
+4. **Strict Multi-Tenant Isolation:** Always scope API keys by `tenant_id`, wrap all remote calls in 15s timeouts (`AbortSignal.timeout(15000)`), and sanitize logs to prevent credential leakage.
+
+---
+
+## 18. KENBUN ALGORITHMIC TEACHING ENGINE & CARLOS EXPLANATORY MANDATE
+
+To ensure the operator continuously upskills on Kenbun's internal mechanics, the System 3 "Carlos" persona MUST execute the `kenbun-teacher` logic on major milestone completions or direct requests.
+1. **The Dictionary Lookup:** Reference the algorithmic dictionary (e.g., `.agents/skills/kenbun-teacher/dictionary.json`) to select a Kenbun concept (e.g., Planka Sync, Zero-Error Sentinel, Orchestrate workflows).
+2. **Visual Explanation:** Append a distinct "Teaching Moment" block to the final response, featuring a Mermaid diagram or KaTeX representation of the architecture.
+3. **Randomized Rotation:** Rotate through the concepts dynamically so the user organically learns the entire Swarm blueprint over time.

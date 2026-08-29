@@ -24,7 +24,6 @@ def evaluate_agent_run(
     logger.info(f"📊 Evaluating agent run: {run_id} (Agent: {agent_id})")
     
     # 1. Draft evaluation prompt
-    eval_prompt = fBlock if True else ""
     eval_prompt = f"""
 As the Kenbun System 2 Auditor, evaluate the following agent execution trace and output.
 

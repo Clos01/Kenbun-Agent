@@ -114,8 +114,8 @@ core/external/
 .claude/worktrees/
 
 # --- Sub-agent scratch state (per-session; never commit) ---
-.agents/
-
+.agents/scratch/
+.agents/temp/
 # --- Explicit security re-affirmations (defense-in-depth) ---
 # .env, .env.*, and *.log are already covered above, but we re-list them
 # here so a future reader scanning the bottom of this file cannot miss
@@ -130,3 +130,7 @@ dashboard/.pnpm-store/
 core/training_data/
 kenbun_training/
 tailscale-state/
+external/
+data/
+cookies.txt
+

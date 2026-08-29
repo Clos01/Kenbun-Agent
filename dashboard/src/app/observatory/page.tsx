@@ -2476,7 +2476,7 @@ export default function BuildConsole() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {displaySignals.map((signal: { timestamp?: string; action?: string; summary?: string; details?: string; concept?: string }, idx: number) => (
+                  {displaySignals.map((signal: { timestamp?: string; action?: string; summary?: string; details?: string; concept?: string; file?: string; line?: number | string; content?: string }, idx: number) => (
                     <motion.div 
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -2491,16 +2491,16 @@ export default function BuildConsole() {
                       )}
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">Signal Node</span>
-                        <span className="text-[9px] font-bold opacity-20">POS_L{signal.line}</span>
+                        <span className="text-[9px] font-bold opacity-20">POS_L{signal.line ?? idx + 1}</span>
                       </div>
                       
                       <div className="space-y-2">
-                        <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{signal.file.split(':').pop()?.split('/').pop()}</div>
-                        <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file}</div>
+                        <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{(signal.file || signal.summary || "SIGNAL_NODE").split(':').pop()?.split('/').pop()}</div>
+                        <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file || signal.concept || "neural://memory"}</div>
                       </div>
 
                       <div className="text-xs font-bold text-primary/80 bg-primary/[0.02] p-5 leading-relaxed border border-primary/5 rounded-xl overflow-hidden whitespace-pre-wrap min-h-[140px] max-h-[200px] overflow-y-auto custom-scrollbar font-mono">
-                        {signal.content}
+                        {signal.content || signal.details || "No details provided"}
                       </div>
                       
                       <div className="pt-4 border-t border-primary/5 flex items-center justify-between">

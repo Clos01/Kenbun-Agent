@@ -180,23 +180,36 @@ def orchestrate(
                 )
                 fallback_reason = f"http_{http_err.code}"
         except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
             debug_log(
                 f"⚠️ Async dispatch failed (workflow={workflow}, err={e}). "
-                f"Falling back to inline execution."
+                f"Falling back to inline execution.\n{tb}"
             )
             fallback_reason = f"{e.__class__.__name__}:{str(e)[:120]}"
 
         _record_dispatch_fallback(workflow, fallback_reason)
-        inline_result = _execute_orchestration(
-            workflow, task, project_path, file_path, code_snippet, tech_key, project_id
-        )
-        return (
-            f"_⚠️ Persistent-server dispatch unavailable; ran inline instead._ "
-            f"_(reason: `{fallback_reason}` — see brain_health/dispatch_fallbacks.jsonl)_\n\n"
-            f"{inline_result}"
-        )
+        
+        try:
+            inline_result = _execute_orchestration(
+                workflow, task, project_path, file_path, code_snippet, tech_key, project_id
+            )
+            return (
+                f"_⚠️ Persistent-server dispatch unavailable; ran inline instead._ "
+                f"_(reason: `{fallback_reason}` — see brain_health/dispatch_fallbacks.jsonl)_\n\n"
+                f"{inline_result}"
+            )
+        except Exception as inline_e:
+            import traceback
+            tb = traceback.format_exc()
+            return f"❌ Inline orchestration crashed: {inline_e}\n\nTraceback:\n{tb}"
 
-    return _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key, project_id)
+    try:
+        return _execute_orchestration(workflow, task, project_path, file_path, code_snippet, tech_key, project_id)
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        return f"❌ Inline orchestration crashed (wait mode): {e}\n\nTraceback:\n{tb}"
 
 
 @sovereign_tool()

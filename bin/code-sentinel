@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""
+Universal Code Integrity Sentinel CLI (Kenbun Engine).
+Usage:
+  bin/code-sentinel check [file.py | --diff | --all]
+  bin/code-sentinel fix [file.py | --all]
+  bin/code-sentinel watch
+"""
+
+import sys
+import os
+import time
+import argparse
+import json
+
+# Add core to sys.path
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, os.path.join(REPO_ROOT, "core"))
+
+from tools.codebase.code_integrity_sentinel import CodeIntegritySentinel
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Universal Code Integrity Sentinel CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # Check command
+    check_parser = subparsers.add_parser("check", help="Check files for missing imports and undefined variables")
+    check_parser.add_argument("target", nargs="?", default=None, help="File path or target directory")
+    check_parser.add_argument("--diff", action="store_true", help="Scan git modified files")
+    check_parser.add_argument("--json", action="store_true", help="Output results as JSON")
+
+    # Fix command
+    fix_parser = subparsers.add_parser("fix", help="Automatically fix missing standard imports and unquoted dict lookups")
+    fix_parser.add_argument("target", help="File path to autofix")
+
+    # Watch command
+    watch_parser = subparsers.add_parser("watch", help="Continuously monitor workspace for changes and report issues")
+
+    args = parser.parse_args()
+    sentinel = CodeIntegritySentinel(workspace_root=REPO_ROOT)
+
+    if args.command == "check" or args.command is None:
+        target = getattr(args, "target", None)
+        diff_flag = getattr(args, "diff", False)
+        if diff_flag or target is None or target == "--diff":
+            print("🔍 [Code Sentinel] Scanning Git modified files...")
+            res = sentinel.audit_workspace_changes()
+            if getattr(args, "json", False):
+                print(json.dumps(res, indent=2))
+                return
+
+            if res.get("status") == "PASSED":
+                print(f"✅ All {res.get('scanned_files_count', 0)} modified files passed static integrity checks with 0 errors.")
+            else:
+                print(f"⚠️ Found {res.get('issues_count', 0)} issue(s) across {len(res.get('problematic_files', []))} file(s):")
+                for item in res.get("problematic_files", []):
+                    print(f"\n📄 {item['filename']}:")
+                    if item.get("syntax_error"):
+                        syn = item["syntax_error"]
+                        print(f"  ❌ SyntaxError: {syn['message']} (Line {syn['line']})")
+                    for un in item.get("undefined_names", []):
+                        print(f"  ⚠️ Undefined Identifier: '{un['symbol']}' (Line {un['line']})")
+                    for mi in item.get("missing_imports", []):
+                        print(f"  📦 Missing Import: '{mi['suggested_import']}' (Line {mi['line']})")
+                    for uq in item.get("unquoted_dict_lookups", []):
+                        print(f"  🔑 Unquoted Dict Key: .get({uq['variable_passed']}) -> .get('{uq['variable_passed']}') (Line {uq['line']})")
+                sys.exit(1)
+        else:
+            res = sentinel.audit_file(target)
+            if getattr(args, "json", False):
+                print(json.dumps(res, indent=2))
+            elif res.get("valid"):
+                print(f"✅ File '{target}' passed code integrity audit with 0 issues.")
+            else:
+                print(f"⚠️ Issues detected in '{target}':")
+                for un in res.get("undefined_names", []):
+                    print(f"  ⚠️ Undefined Identifier: '{un['symbol']}' (Line {un['line']})")
+                for mi in res.get("missing_imports", []):
+                    print(f"  📦 Missing Import: '{mi['suggested_import']}' (Line {mi['line']})")
+                for uq in res.get("unquoted_dict_lookups", []):
+                    print(f"  🔑 Unquoted Dict Key: .get({uq['variable_passed']}) -> .get('{uq['variable_passed']}') (Line {uq['line']})")
+                sys.exit(1)
+
+    elif args.command == "fix":
+        print(f"🔧 [Code Sentinel] Auto-fixing '{args.target}'...")
+        res = sentinel.autofix_file(args.target)
+        if res.get("status") == "FIXED":
+            print(f"✅ Applied {len(res.get('fixes_applied', []))} fix(es) to '{args.target}':")
+            for fix in res["fixes_applied"]:
+                print(f"  - {fix}")
+        elif res.get("status") == "CLEAN":
+            print(f"✨ File '{args.target}' is already clean. No fixes needed.")
+        else:
+            print(f"Skipped: {res.get('status')}")
+
+    elif args.command == "watch":
+        print("👀 [Code Sentinel] Background Watchdog active. Monitoring workspace changes (Ctrl+C to stop)...")
+        last_status = None
+        try:
+            while True:
+                res = sentinel.audit_workspace_changes()
+                cur_status = (res.get("status"), res.get("issues_count"))
+                if cur_status != last_status:
+                    last_status = cur_status
+                    if cur_status[0] == "PASSED":
+                        print(f"[{time.strftime('%H:%M:%S')}] ✅ Workspace clean ({res.get('scanned_files_count', 0)} files).")
+                    else:
+                        print(f"[{time.strftime('%H:%M:%S')}] ⚠️ Code Sentinel detected {res.get('issues_count')} issue(s)!")
+                        for item in res.get("problematic_files", []):
+                            print(f"  📄 {os.path.basename(item['filename'])}: {item.get('issues_count')} issue(s)")
+                time.sleep(2.0)
+        except KeyboardInterrupt:
+            print("\n👋 Code Sentinel Watchdog stopped.")
+
+
+if __name__ == "__main__":
+    main()

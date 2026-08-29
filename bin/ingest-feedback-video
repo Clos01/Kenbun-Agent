@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+#
+# Kenbun Video Feedback Intelligence CLI
+# Converts client walkthrough & feedback videos into structured intelligence,
+# verbatim quotes, UI route mappings, and AST codebase symbol lookups.
+#
+# Usage:
+#   bin/ingest-feedback-video path/to/video.mp4
+#   bin/ingest-feedback-video path/to/video.mp4 --project eko-veritas-prod
+#   bin/ingest-feedback-video --query "prompt sync"
+#   bin/ingest-feedback-video --stats
+#
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VENV_PYTHON="$REPO_ROOT/core/.venv/bin/python"
+
+if [ ! -f "$VENV_PYTHON" ]; then
+    VENV_PYTHON="python3"
+fi
+
+if [ -z "$1" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "🎬 Kenbun Video Feedback Intelligence Ingestor"
+    echo ""
+    echo "Usage:"
+    echo "  bin/ingest-feedback-video <video_path> [options]"
+    echo "  bin/ingest-feedback-video --query <search_term>"
+    echo "  bin/ingest-feedback-video --stats"
+    echo ""
+    echo "Options:"
+    echo "  --project <name>      Target codebase project (default: eko-veritas-prod)"
+    echo "  --query <term>        Search existing indexed quotes and code groundings"
+    echo "  --stats               View database statistics"
+    echo "  -h, --help            Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  bin/ingest-feedback-video ~/Downloads/adrian_review_part1.mp4"
+    echo "  bin/ingest-feedback-video --query 'approval feed'"
+    exit 0
+fi
+
+export PYTHONPATH="$REPO_ROOT/core"
+
+if [ "$1" = "--stats" ]; then
+    "$VENV_PYTHON" -c "
+from tools.memory.feedback_knowledge_store import FeedbackKnowledgeStore
+store = FeedbackKnowledgeStore()
+print('📁 Feedback Knowledge Graph Stats:')
+print(store.get_stats())
+"
+    exit 0
+fi
+
+if [ "$1" = "--query" ]; then
+    QUERY_TERM="$2"
+    "$VENV_PYTHON" -c "
+import json
+from tools.memory.feedback_knowledge_store import FeedbackKnowledgeStore
+store = FeedbackKnowledgeStore()
+results = store.query_feedback('$QUERY_TERM')
+print(f'🔍 Query Results for \"$QUERY_TERM\" ({len(results)} found):')
+print(json.dumps(results, indent=2))
+"
+    exit 0
+fi
+
+VIDEO_PATH="$1"
+shift
+PROJECT_NAME="eko-veritas-prod"
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project)
+            PROJECT_NAME="$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+"$VENV_PYTHON" -c "
+import sys
+import json
+from tools.multimodal.video_feedback_transcriber import VideoFeedbackTranscriber
+from tools.codebase.codebase_feedback_mapper import CodebaseFeedbackMapper
+from tools.memory.feedback_knowledge_store import FeedbackKnowledgeStore
+
+video_path = '$VIDEO_PATH'
+project = '$PROJECT_NAME'
+
+print(f'🎬 Ingesting video feedback: {video_path} for project: {project}...')
+
+# 1. Transcribe & Decompose
+transcriber = VideoFeedbackTranscriber()
+video_env = transcriber.process_video(video_path, project_name=project)
+
+# 2. Ground to Codebase
+mapper = CodebaseFeedbackMapper(target_project_path=f'/Users/carlosrivas/Dev/Projects/{project}')
+grounding_env = mapper.ground_feedback_envelope(video_env['intelligence'])
+
+# 3. Triple-Memory Persistence
+store = FeedbackKnowledgeStore()
+res = store.persist_feedback_envelope(video_env, grounding_env)
+
+print('\n' + '='*60)
+print('🎯 VIDEO FEEDBACK INTELLIGENCE INGESTED:')
+print(f'Video ID: {res[\"video_id\"]}')
+print(f'Grounded Quotes: {res[\"sqlite_saved\"][\"quotes_count\"]}')
+print(f'Action Items: {res[\"sqlite_saved\"][\"action_items_count\"]}')
+print(f'Chroma Sync: {res[\"chroma_sync\"]}')
+print(f'Hivemind Sync: {res[\"hivemind_sync\"]}')
+print(f'Involved Files: {len(grounding_env[\"involved_codebase_files\"])}')
+for f in grounding_env['involved_codebase_files'][:5]:
+    print(f'  📄 {f}')
+print('='*60)
+"

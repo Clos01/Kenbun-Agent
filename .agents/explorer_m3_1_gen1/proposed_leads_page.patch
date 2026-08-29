@@ -1,0 +1,201 @@
+diff --git a/dashboard/src/app/leads/page.tsx b/dashboard/src/app/leads/page.tsx
+--- a/dashboard/src/app/leads/page.tsx
++++ b/dashboard/src/app/leads/page.tsx
+@@ -2,2 +2,4 @@
+ "use client";
+ 
++import { MetadataTransformer } from "@/lib/metadataTransformer";
++import { METADATA_COMPONENTS, ListCard } from "@/components/MetadataRegistry";
+ import React, { useEffect, useState, useCallback } from "react";
+@@ -20,5 +22,1 @@
+-  CircleDollarSign,
+-  CheckSquare,
+-  Square,
+-  Repeat
+ } from "lucide-react";
+@@ -129,168 +127,24 @@
+ const CustomMetadataBento = ({ metadata }: { metadata: Lead["metadata"] }) => {
+   if (!metadata) return null;
+ 
+-  const formatBudget = (value: number) => {
+-    return new Intl.NumberFormat("en-US", {
+-      style: "currency",
+-      currency: "USD",
+-      maximumFractionDigits: 0
+-    }).format(value);
+-  };
+-
+-  const formatDate = (dateStr: string) => {
+-    try {
+-      const date = new Date(dateStr + "T00:00:00");
+-      return date.toLocaleDateString("en-US", {
+-        month: "long",
+-        day: "numeric",
+-        year: "numeric"
+-      });
+-    } catch {
+-      return dateStr;
+-    }
+-  };
++  // Transform raw metadata into normalized visual fields
++  const fields = MetadataTransformer.transform(metadata);
++  
++  // Determine grid alignment context based on siblings
++  const hasRecurring = fields.some((f) => f.key === "recurring");
+ 
+   return (
+     <div className="space-y-4">
+       <h2 className="text-[10px] font-black uppercase tracking-[0.3em] text-tertiary">
+         Project Proposal Metadata
+       </h2>
+       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-data">
+-        {/* Expected Budget Card */}
+-        <motion.div
+-          whileHover={{ scale: 1.01, translateY: -2 }}
+-          className="md:col-span-2 bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm"
+-        >
+-          <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+-          <div className="flex items-center justify-between">
+-            <span className="text-[9px] font-black uppercase tracking-wider text-secondary">
+-              Expected Budget
+-            </span>
+-            <CircleDollarSign className="w-4.5 h-4.5 text-tertiary" />
+-          </div>
+-          <div className="mt-4">
+-            <span className="text-3xl font-black italic tracking-tighter text-primary">
+-              {formatBudget(metadata.budget)}
+-            </span>
+-          </div>
+-        </motion.div>
+-
+-        {/* Requested Date Card */}
+-        <motion.div
+-          whileHover={{ scale: 1.01, translateY: -2 }}
+-          className="bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm"
+-        >
+-          <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+-          <div className="flex items-center justify-between">
+-            <span className="text-[9px] font-black uppercase tracking-wider text-secondary">
+-              Requested On
+-            </span>
+-            <Calendar className="w-4.5 h-4.5 text-tertiary" />
+-          </div>
+-          <div className="mt-4">
+-            <span className="text-sm font-bold text-primary">
+-              {formatDate(metadata.request_date)}
+-            </span>
+-          </div>
+-        </motion.div>
+-
+-        {/* Commercial Project Card */}
+-        <motion.div
+-          whileHover={{ scale: 1.01, translateY: -2 }}
+-          className="bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm"
+-        >
+-          <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+-          <div className="flex items-center justify-between">
+-            <span className="text-[9px] font-black uppercase tracking-wider text-secondary">
+-              Commercial Project
+-            </span>
+-            {metadata.commercial ? (
+-              <CheckSquare className="w-4.5 h-4.5 text-tertiary" />
+-            ) : (
+-              <Square className="w-4.5 h-4.5 text-secondary/40" />
+-            )}
+-          </div>
+-          <div className="mt-4 flex items-center gap-2">
+-            <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-sm border ${
+-              metadata.commercial 
+-                ? "bg-tertiary/10 text-tertiary border-tertiary/20" 
+-                : "bg-secondary/10 text-secondary border-secondary/20"
+-            }`}>
+-              {metadata.commercial ? "Commercial" : "Residential"}
+-            </span>
+-          </div>
+-        </motion.div>
+-
+-        {/* Target Location Card */}
+-        {metadata.location && (
+-          <motion.div
+-            whileHover={{ scale: 1.01, translateY: -2 }}
+-            className="bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm"
+-          >
+-            <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+-            <div className="flex items-center justify-between">
+-              <span className="text-[9px] font-black uppercase tracking-wider text-secondary">
+-                Target Location
+-              </span>
+-              <MapPin className="w-4.5 h-4.5 text-tertiary" />
+-            </div>
+-            <div className="mt-4">
+-              <span className="text-sm font-bold text-primary">
+-                {metadata.location}
+-              </span>
+-            </div>
+-          </motion.div>
+-        )}
+-
+-        {/* Service Frequency Card */}
+-        {metadata.recurring && (
+-          <motion.div
+-            whileHover={{ scale: 1.01, translateY: -2 }}
+-            className="bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm"
+-          >
+-            <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+-            <div className="flex items-center justify-between">
+-              <span className="text-[9px] font-black uppercase tracking-wider text-secondary">
+-                Service Frequency
+-              </span>
+-              <Repeat className="w-4.5 h-4.5 text-tertiary" />
+-            </div>
+-            <div className="mt-4">
+-              <span className="text-sm font-bold text-primary uppercase tracking-widest">
+-                {metadata.recurring}
+-              </span>
+-            </div>
+-          </motion.div>
+-        )}
+-
+-        {/* Collections Card */}
+-        {metadata.collections && metadata.collections.length > 0 && (
+-          <motion.div
+-            whileHover={{ scale: 1.01, translateY: -2 }}
+-            className={`bg-card border border-primary/5 p-5 rounded-sm relative overflow-hidden group flex flex-col justify-between min-h-[120px] transition-all duration-300 shadow-sm ${
+-              metadata.recurring ? "md:col-span-1" : "md:col-span-2"
+-            }`}
+-          >
+-            <div className="absolute inset-0 bg-gradient-to-br from-tertiary/[0.02] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+-            <div className="flex items-center justify-between">
+-              <span className="text-[9px] font-black uppercase tracking-wider text-secondary">
+-                Collections
+-              </span>
+-              <Tag className="w-4.5 h-4.5 text-tertiary" />
+-            </div>
+-            <div className="mt-4 flex flex-wrap gap-1.5">
+-              {metadata.collections.map((col, idx) => (
+-                <span
+-                  key={idx}
+-                  className="bg-primary/5 text-primary border border-primary/5 text-[9px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-sm"
+-                >
+-                  {col}
+-                </span>
+-              ))}
+-            </div>
+-          </motion.div>
+-        )}
++        <AnimatePresence mode="popLayout">
++          {fields.map((field) => {
++            const Component = METADATA_COMPONENTS[field.type];
++            if (!Component) return null;
++            
++            if (field.type === "list") {
++              return <ListCard key={field.key} field={field} hasRecurring={hasRecurring} />;
++            }
++            
++            return <Component key={field.key} field={field} />;
++          })}
++        </AnimatePresence>
+       </div>
+     </div>
+   );
+ };

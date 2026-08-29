@@ -1,0 +1,36 @@
+#!/bin/bash
+
+echo "🚀 Activating YOLO Mode for Antigravity CLI..."
+
+CONFIG_DIR="$HOME/.gemini/antigravity-cli"
+CONFIG_FILE="$CONFIG_DIR/settings.json"
+
+# Ensure the config directory exists
+mkdir -p "$CONFIG_DIR"
+
+# If the file doesn't exist, create a baseline
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "{}" > "$CONFIG_FILE"
+fi
+
+# Use standard sed or python to update the JSON keys to 'always-proceed'
+python3 -c '
+import json, sys
+filepath = sys.argv[1]
+try:
+    with open(filepath, "r") as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+
+# Set Yolo Mode Keys
+data["toolPermission"] = "always-proceed"
+data["artifactReviewPolicy"] = "always-proceed"
+
+with open(filepath, "w") as f:
+    json.dump(data, f, indent=4)
+' "$CONFIG_FILE"
+
+echo "✅ YOLO Mode Activated!"
+echo "Your Antigravity CLI will now automatically execute all tools and terminal commands without prompting for permission."
+echo "Settings updated in: $CONFIG_FILE"
