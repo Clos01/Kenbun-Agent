@@ -341,10 +341,24 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
     )
     
     try:
-        # Use Gemini 3.1 Pro for high-reasoning decomposition
-        from tools.audit.gemini_reviewer import call_gemini_pro
-        raw_decomposition = call_gemini_pro(queen_prompt)
-        
+        # DSH-06: high-reasoning decomposition is no longer a single point of
+        # failure. The Resolver tries gemini -> deepseek -> local LLM gateway;
+        # Gemini stays first so the happy path is unchanged, but a 429 / quota
+        # exhaustion now demotes it and the next provider serves the swarm.
+        from tools.strategy.decomposition import run_decomposition, ResolverExhausted
+        try:
+            # run_decomposition logs which provider served (and warns on failover);
+            # the returned name is available here if a caller ever needs to branch.
+            _served_by, raw_decomposition = run_decomposition(
+                queen_prompt,
+                is_usable=lambda t: bool(extract_json_array(t)),
+            )
+        except ResolverExhausted:
+            # per-provider failure detail is already logged by the Resolver;
+            # keep the user-facing string generic (no raw exception text).
+            return ("❌ Swarm decomposition failed: every reasoning provider is currently "
+                    "unavailable. Check API quotas / provider health, then retry.")
+
         # Simple extraction of JSON from markdown if needed
         json_str = extract_json_array(raw_decomposition)
         if not json_str:
