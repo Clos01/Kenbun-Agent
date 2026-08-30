@@ -63,16 +63,50 @@ class PipelineEntry(BaseModel):
         arbitrary_types_allowed = True
 
 class SovereignRegistry:
-    """Thread-safe global registry for all dynamically discovered Kenbun tools and pipelines."""
-    
-    def __init__(self):
+    """Thread-safe global registry for all dynamically discovered Kenbun tools and pipelines.
+
+    Registration is a *revertible effect* (DSH-01, docs/deepseek-harness-study.md):
+    ``register_tool`` / ``register_pipeline`` return a zero-arg **disposer** that
+    removes exactly what they added. The disposer is idempotent and will not evict
+    a later re-registration made under the same name. Consumers that mirror the
+    registry elsewhere -- the FastMCP tool list in ``server.py`` is the one that
+    matters today -- subscribe via ``add_removal_listener`` and tear their copy
+    down when a disposer fires. This is the first step toward unloading a tool
+    from a running swarm without a process restart.
+
+    Removal is atomic: the dict mutation and the listener notifications happen
+    under one hold of ``self._lock`` so a mirror can never observe a removal event
+    for a name that a concurrent thread has already re-registered. The lock is an
+    ``RLock``, so a listener may call back into the registry on the same thread;
+    a listener MUST NOT block on another thread that needs this lock, and MUST
+    return quickly -- it runs on the remover's thread inside the critical section.
+    A listener that raises is logged at ``error`` (the mirror is now desynced) and
+    the remaining listeners and the removal itself still complete.
+    """
+
+    def __init__(self) -> None:
         self._tools: Dict[str, ToolEntry] = {}
         self._pipelines: Dict[str, PipelineEntry] = {}
         self._lock = threading.RLock()
+        self._tool_removal_listeners: List[Callable[[str], None]] = []
+        self._pipeline_removal_listeners: List[Callable[[str], None]] = []
 
-    def register_tool(self, entry: ToolEntry) -> None:
+    # ------------------------------------------------------------------ tools
+    def register_tool(self, entry: ToolEntry) -> Callable[[], None]:
         with self._lock:
             self._tools[entry.name] = entry
+        return self._make_disposer(self._tools, entry.name, entry, self._notify_tool_removed)
+
+    def unregister_tool(self, name: str) -> bool:
+        """Remove whatever tool is under ``name``. Returns True if one existed.
+
+        Removal and notification are one atomic critical section (see class doc).
+        """
+        with self._lock:
+            removed = self._tools.pop(name, None) is not None
+            if removed:
+                self._notify_tool_removed(name)
+        return removed
 
     def get_tool(self, name: str) -> Optional[ToolEntry]:
         with self._lock:
@@ -82,9 +116,26 @@ class SovereignRegistry:
         with self._lock:
             return dict(self._tools)
 
-    def register_pipeline(self, entry: PipelineEntry) -> None:
+    def add_removal_listener(self, fn: Callable[[str], None]) -> Callable[[], None]:
+        """Call ``fn(tool_name)`` whenever a tool is removed. Returns a detach disposer.
+
+        A listener that raises is logged and skipped -- one broken mirror must not
+        block teardown of the others, nor the removal itself.
+        """
+        return self._add_listener(self._tool_removal_listeners, fn)
+
+    # -------------------------------------------------------------- pipelines
+    def register_pipeline(self, entry: PipelineEntry) -> Callable[[], None]:
         with self._lock:
             self._pipelines[entry.name] = entry
+        return self._make_disposer(self._pipelines, entry.name, entry, self._notify_pipeline_removed)
+
+    def unregister_pipeline(self, name: str) -> bool:
+        with self._lock:
+            removed = self._pipelines.pop(name, None) is not None
+            if removed:
+                self._notify_pipeline_removed(name)
+        return removed
 
     def get_pipeline(self, name: str) -> Optional[PipelineEntry]:
         with self._lock:
@@ -94,10 +145,77 @@ class SovereignRegistry:
         with self._lock:
             return dict(self._pipelines)
 
+    def add_pipeline_removal_listener(self, fn: Callable[[str], None]) -> Callable[[], None]:
+        return self._add_listener(self._pipeline_removal_listeners, fn)
+
+    # ---------------------------------------------------------------- shared
+    def _make_disposer(self, store: dict, name: str, entry: Any,
+                       notify: Callable[[str], None]) -> Callable[[], None]:
+        armed = True
+
+        def _dispose() -> None:
+            nonlocal armed
+            with self._lock:
+                if not armed:
+                    return
+                armed = False
+                # Only remove what we put there: a later register_* under the same
+                # name replaces the value (a new object -> `is` fails even if its
+                # fields were mutated), and disposing the stale handle must not
+                # evict the live one.
+                if store.get(name) is not entry:
+                    return
+                del store[name]
+                # notify while still holding the lock -- a mirror must not see this
+                # removal for a name another thread has already re-registered.
+                notify(name)
+
+        return _dispose
+
+    def _add_listener(self, listeners: list, fn: Callable[[str], None]) -> Callable[[], None]:
+        with self._lock:
+            listeners.append(fn)
+
+        def _detach() -> None:
+            with self._lock:
+                try:
+                    listeners.remove(fn)
+                except ValueError:
+                    pass
+
+        return _detach
+
+    def _notify_tool_removed(self, name: str) -> None:
+        self._fire(self._tool_removal_listeners, name)
+
+    def _notify_pipeline_removed(self, name: str) -> None:
+        self._fire(self._pipeline_removal_listeners, name)
+
+    def _fire(self, listeners: list, name: str) -> None:
+        # Always called with self._lock already held (RLock). Snapshot so a
+        # listener that detaches itself mid-iteration does not corrupt the walk.
+        with self._lock:
+            snapshot = list(listeners)
+            for fn in snapshot:
+                try:
+                    fn(name)
+                except Exception as e:
+                    logger.error(
+                        f"registry removal listener {getattr(fn, '__name__', fn)!r} "
+                        f"failed for '{name}' -- its mirror is now desynced: {e}",
+                        exc_info=True,
+                    )
+
     def clear(self) -> None:
         with self._lock:
+            tool_names = list(self._tools)
+            pipeline_names = list(self._pipelines)
             self._tools.clear()
             self._pipelines.clear()
+            for n in tool_names:
+                self._notify_tool_removed(n)
+            for n in pipeline_names:
+                self._notify_pipeline_removed(n)
 
 # Thread-safe global registry instance
 registry = SovereignRegistry()
@@ -222,7 +340,12 @@ def sovereign_tool(
             requires_env=requires_env or []
         )
 
-        registry.register_tool(entry)
+        # DSH-01: keep the unload handle reachable from the decorated function so
+        # a caller (or a self-modification pipeline) can retract the tool at
+        # runtime -- registry.get_tool(name) disappears, server.py drops it from
+        # FastMCP -- without restarting the process.
+        wrapper._sovereign_tool_name = tool_name
+        wrapper._sovereign_disposer = registry.register_tool(entry)
 
         return wrapper
     return decorator

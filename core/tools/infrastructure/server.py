@@ -88,6 +88,9 @@ discovered_modules = harvest_and_register_tools()
 logger.info(f"🛡️ Dynamic Harvester completed sweep across {len(discovered_modules)} domain module(s).")
 
 registered_names = set()
+# DSH-01: registry name -> the sanitized name FastMCP knows it by, so a later
+# registry removal can pull the exact same tool out of the live FastMCP list.
+_fastmcp_tool_names: dict = {}
 for name, tool_entry in registry.get_all_tools().items():
     if len(registered_names) >= MAX_TOOLS:
         logger.warning(f"⚠️ Maximum tool registration capacity ({MAX_TOOLS}) reached. Halting registration.")
@@ -115,12 +118,34 @@ for name, tool_entry in registry.get_all_tools().items():
 
         mcp.tool(name=clean_name, description=sanitized_desc)(handler)
         registered_names.add(clean_name)
+        _fastmcp_tool_names[str(raw_name)] = clean_name
         logger.debug(f"✅ FastMCP registered tool: {clean_name}")
     except Exception as e:
         safe_err = _sanitize_string(str(e), 256)
         logger.error(f"❌ Error registering tool into FastMCP: {safe_err}")
 
 logger.info(f"🚀 FastMCP Server initialized with {len(registered_names)} active sovereign tools.")
+
+
+def _unregister_from_fastmcp(registry_name: str) -> None:
+    """DSH-01: when the registry drops a tool, drop it from the live FastMCP list too.
+
+    Fired by ``registry.add_removal_listener``. Idempotent from this side: an
+    unknown name is a no-op, and FastMCP's own ``remove_tool`` raising on an
+    already-gone tool is swallowed.
+    """
+    clean_name = _fastmcp_tool_names.pop(registry_name, None)
+    if clean_name is None:
+        return
+    try:
+        mcp.remove_tool(clean_name)
+    except Exception as e:
+        logger.warning(f"FastMCP remove_tool('{clean_name}') failed: {_sanitize_string(str(e), 128)}")
+    registered_names.discard(clean_name)
+    logger.info(f"🗑️  FastMCP unregistered tool: {clean_name}")
+
+
+registry.add_removal_listener(_unregister_from_fastmcp)
 
 if __name__ == "__main__":
     install_mcp_safe_print()
