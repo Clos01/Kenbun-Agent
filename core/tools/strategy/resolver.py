@@ -115,6 +115,24 @@ class Resolver(Generic[P]):
         c = self.candidates()
         return c[0] if c else None
 
+    def snapshot(self) -> List[dict]:
+        """Read-only health view for observability / UI, in configured (insertion)
+        order. Does not mutate -- a lapsed cooldown still reads as healthy here
+        but is only cleared on the next ``candidates()`` call."""
+        now = time.monotonic()
+        with self._lock:
+            out: List[dict] = []
+            for i, e in enumerate(self._entries):
+                demoted = bool(e.demoted_until and now < e.demoted_until)
+                out.append({
+                    "name": e.name,
+                    "healthy": not demoted,
+                    "primary": i == 0,
+                    "fail_count": e.fail_count,
+                    "cooldown_remaining_s": round(e.demoted_until - now, 1) if demoted else 0.0,
+                })
+            return out
+
     def run(
         self,
         call: Callable[[P], R],

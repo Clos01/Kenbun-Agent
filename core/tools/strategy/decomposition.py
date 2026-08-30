@@ -59,6 +59,7 @@ def _env_cooldown_s() -> float:
 # one (e.g. to keep the objective away from DeepSeek). Unknown names are ignored.
 _DEFAULT_ORDER = ("gemini", "deepseek", "local")
 _PROVIDERS_ENV = "KENBUN_QUEEN_PROVIDERS"
+_PRIMARY = _DEFAULT_ORDER[0]      # the provider whose loss counts as a "failover"
 
 _QUEEN_SYSTEM = (
     "You are the Kenbun Queen, a high-reasoning task decomposer. "
@@ -183,7 +184,19 @@ def run_decomposition(
         name, raw = res.run(lambda provider: provider(queen_prompt), is_unavailable=_unavailable)
     except ResolverExhausted as e:
         logger.error("Queen decomposition: every reasoning provider is unavailable (%s)", e)
+        _record_event("exhausted", provider=None, detail=str(e), resolver=res)
         raise
-    if name != "gemini":
-        logger.warning("Queen decomposition served by fallback provider %r (gemini unavailable)", name)
+    if name != _PRIMARY:
+        logger.warning("Queen decomposition served by fallback provider %r (%s unavailable)", name, _PRIMARY)
+        _record_event("failover", provider=name, detail=f"{_PRIMARY} unavailable", resolver=res)
     return name, raw
+
+
+def _record_event(kind: str, *, provider: Optional[str], detail: str, resolver: Resolver) -> None:
+    try:
+        from tools.strategy.resolver_events import record
+
+        record(kind, capability="queen_decomposition", provider=provider,
+               detail=detail, providers_order=resolver.names())
+    except Exception as e:  # noqa: BLE001 -- telemetry must never break a swarm run
+        logger.debug("decomposition: could not record %s event: %s", kind, e)

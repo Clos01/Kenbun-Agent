@@ -207,6 +207,81 @@ def test_run_decomposition_uses_the_singleton_and_its_providers(monkeypatch):
         decomposition._RESOLVER = None
 
 
+# ------------------------------------------------- failover telemetry
+def test_a_failover_records_a_cross_process_event(tmp_path, monkeypatch):
+    from tools.infrastructure.config import settings
+    from tools.strategy import resolver_events
+
+    monkeypatch.setattr(settings, "BRAIN_HEALTH_DIR", tmp_path)
+
+    r = _resolver(
+        ("gemini", lambda p: (_ for _ in ()).throw(RuntimeError("429"))),
+        ("deepseek", lambda p: _JSON),
+    )
+    run_decomposition("decompose X", resolver=r)
+
+    events = resolver_events.recent(10)
+    assert len(events) == 1
+    assert events[0]["kind"] == "failover"
+    assert events[0]["provider"] == "deepseek"
+    assert events[0]["capability"] == "queen_decomposition"
+    assert events[0]["providers_order"] == ["gemini", "deepseek"]
+
+
+def test_concurrent_records_never_corrupt_or_lose_a_line(tmp_path, monkeypatch):
+    """The flock + threading.Lock guard means N racing recorders each land a
+    complete, parseable line (up to the _MAX_LINES cap)."""
+    import json as _json
+    import threading
+
+    from tools.infrastructure.config import settings
+    from tools.strategy import resolver_events
+
+    monkeypatch.setattr(settings, "BRAIN_HEALTH_DIR", tmp_path)
+
+    per_thread = 40
+    threads_n = 8
+    total = per_thread * threads_n                           # 320 > _MAX_LINES (200)
+
+    def worker(n: int) -> None:
+        for i in range(per_thread):
+            resolver_events.record("failover", capability="cap",
+                                   provider=f"p{n}", detail=f"{n}-{i}")
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(threads_n)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    raw = (tmp_path / "resolver_events.jsonl").read_text().splitlines()
+    lines = [ln for ln in raw if ln.strip()]
+    assert total > resolver_events._MAX_LINES
+    assert len(lines) == resolver_events._MAX_LINES          # capped exactly, no over/undercount
+    seen = set()
+    for ln in lines:
+        obj = _json.loads(ln)                                # every surviving line is intact JSON
+        seen.add(obj["detail"])
+    assert len(seen) == resolver_events._MAX_LINES           # no dupes -> no torn/duplicated writes
+
+
+def test_total_exhaustion_records_an_event(tmp_path, monkeypatch):
+    from tools.infrastructure.config import settings
+    from tools.strategy import resolver_events
+
+    monkeypatch.setattr(settings, "BRAIN_HEALTH_DIR", tmp_path)
+
+    r = _resolver(
+        ("gemini", lambda p: (_ for _ in ()).throw(RuntimeError("a"))),
+        ("deepseek", lambda p: (_ for _ in ()).throw(RuntimeError("b"))),
+    )
+    with pytest.raises(ResolverExhausted):
+        run_decomposition("decompose X", resolver=r)
+
+    kinds = [e["kind"] for e in resolver_events.recent(10)]
+    assert "exhausted" in kinds
+
+
 # ------------------------------------------------- orchestrator is actually wired
 def test_orchestrator_spawn_swarm_no_longer_calls_gemini_directly():
     import inspect

@@ -110,3 +110,24 @@ def test_run_returns_last_unavailable_result_when_all_are_unavailable():
 def test_run_raises_when_no_providers_registered():
     with pytest.raises(ResolverExhausted):
         Resolver().run(lambda p: p)
+
+
+# ------------------------------------------------------------------- snapshot
+def test_snapshot_reports_health_in_configured_order():
+    r = Resolver(cooldown_s=100)
+    r.add("gemini", "G"); r.add("deepseek", "D"); r.add("local", "L")
+    r.mark_unhealthy("gemini")
+
+    snap = r.snapshot()
+    assert [s["name"] for s in snap] == ["gemini", "deepseek", "local"]   # insertion order, not candidate order
+    assert snap[0] == {"name": "gemini", "healthy": False, "primary": True,
+                       "fail_count": 1, "cooldown_remaining_s": pytest.approx(100, abs=2)}
+    assert snap[1]["healthy"] and not snap[1]["primary"]
+    assert snap[2]["cooldown_remaining_s"] == 0.0
+
+
+def test_snapshot_is_read_only():
+    r = Resolver(cooldown_s=100)
+    r.add("a", 1)
+    r.snapshot(); r.snapshot()
+    assert r.names() == ["a"]

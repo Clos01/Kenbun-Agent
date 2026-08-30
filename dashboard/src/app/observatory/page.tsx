@@ -26,7 +26,6 @@ import {
   Pause,
   Play,
   Filter,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Layers,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
   RefreshCw,
@@ -46,6 +45,7 @@ import {
 import { SharpAreaChart, SquareDonut, AccuracyGauge, ContextWindowBar } from "@/components/Visuals";
 import GalaxyMap from "@/components/GalaxyMap";
 import GuidedTour, { TourStep } from "@/components/GuidedTour";
+import DSHResiliencePanel from "@/components/DSHResiliencePanel";
 // import RoamingMascot from "@/components/RoamingMascot";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -100,7 +100,7 @@ const getToolDescription = (toolId: string): string => {
   return dict[toolId] || "Performs autonomous back-office pipelines and agentic actions.";
 };
 
-type TabId = "overview" | "intelligence" | "memory" | "feed" | "workspace";
+type TabId = "overview" | "intelligence" | "memory" | "feed" | "workspace" | "resilience";
 
 interface TelemetryTrendPoint {
   accuracy: number;
@@ -960,6 +960,7 @@ export default function BuildConsole() {
     { id: "intelligence", label: "Intelligence", icon: BrainCircuit },
     { id: "memory", label: "Memory", icon: Database },
     { id: "workspace", label: "Workspace", icon: Target },
+    { id: "resilience", label: "Resilience", icon: Layers },
     { id: "feed", label: "Activity Log", icon: Activity },
   ] as const;
 
@@ -2829,6 +2830,10 @@ export default function BuildConsole() {
               </div>
             );
           })()}
+
+          {activeTab === "resilience" && (
+            <DSHResiliencePanel apiBase={API_BASE} />
+          )}
         </motion.div>
 
         {/* <RoamingMascot /> */}
