@@ -19,53 +19,6 @@ from pathlib import Path
 MAX_FULL_OUTPUT_CHARS = 24000
 
 
-def _run_coro_blocking(coro):
-    """Run an async coroutine to completion from a synchronous caller.
-
-    orchestrate()/swarm() are registered as *sync* MCP tools, and this build of
-    FastMCP invokes sync tools directly on its own running event loop rather
-    than off-loading them to a worker thread. A plain ``asyncio.run()`` from
-    that context raises ``asyncio.run() cannot be called from a running event
-    loop`` and the whole orchestration crashes before a single pipeline step
-    runs -- which is exactly how the MCP ``orchestrate`` tool has been failing.
-
-    When no loop is running (CLI, tests, the FastAPI executor) we run inline.
-    When one is, we hand the coroutine to a dedicated thread with its own fresh
-    loop and block on it, so the pipeline still executes synchronously from the
-    caller's point of view.
-    """
-    import threading
-
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-
-    result_box: list = []
-    err_box: list = []
-
-    def _runner():
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            result_box.append(loop.run_until_complete(coro))
-        except BaseException as exc:  # re-raised on the caller's thread below
-            err_box.append(exc)
-        finally:
-            try:
-                loop.close()
-            finally:
-                asyncio.set_event_loop(None)
-
-    worker = threading.Thread(target=_runner, name="orchestrate-loop", daemon=True)
-    worker.start()
-    worker.join()
-
-    if err_box:
-        raise err_box[0]
-    return result_box[0]
-
-
 # Import centralized settings
 from tools.infrastructure.config import settings
 
