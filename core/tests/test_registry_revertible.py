@@ -10,12 +10,22 @@ import threading
 import anyio
 import pytest
 
-from tools.registry import SovereignRegistry, ToolEntry, PipelineEntry
+from tools.registry import (
+    PipelineEntry,
+    SovereignRegistry,
+    ToolEntry,
+    build_sovereign_wrapper,
+    is_sovereign_wrapper,
+)
 
 
 def _tool(name: str = "t") -> ToolEntry:
+    # A real sovereign wrapper, so these tests mirror the decorator path and
+    # register_tool does not rescue/rewrap the handler (which would change its
+    # identity and break the `is` assertions below).
+    handler = build_sovereign_wrapper(lambda: None, tool_name=name, category="Test")
     return ToolEntry(name=name, category="Test", description="d",
-                     handler=lambda: None, is_async=False)
+                     handler=handler, is_async=False)
 
 
 def _pipeline(name: str = "p") -> PipelineEntry:
@@ -149,6 +159,24 @@ def test_concurrent_register_and_dispose_stays_consistent():
 
     assert r.get_all_tools() == {}
     assert sorted(removed) == sorted(f"tool_{i}" for i in range(50))
+
+
+def test_register_tool_rescues_a_raw_handler_so_nothing_unguarded_reaches_tools():
+    r = SovereignRegistry()
+    raw = ToolEntry(name="rawtool", category="Test", description="d",
+                    handler=lambda: "hi", is_async=False)      # not a sovereign wrapper
+    assert not is_sovereign_wrapper(raw.handler)
+
+    dispose = r.register_tool(raw)
+    stored = r.get_tool("rawtool")
+    assert stored is not None
+    assert is_sovereign_wrapper(stored.handler)               # auto-wrapped on the way in
+    assert stored.handler() == "hi"                           # and still works
+
+    # the disposer returned for a RESCUED entry must still remove it -- no leak
+    dispose()
+    assert r.get_tool("rawtool") is None
+    dispose()                                                 # idempotent
 
 
 def test_exclusive_register_rejects_a_duplicate_name_atomically():

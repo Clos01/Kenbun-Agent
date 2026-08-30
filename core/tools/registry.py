@@ -118,7 +118,27 @@ class SovereignRegistry:
         overwriting it. Two concurrent hot-mounts of the same name cannot then
         both "win" and leak one disposer. Default (``False``) overwrites, as the
         ``@sovereign_tool`` decorator relies on at import time.
+
+        Defence in depth (DSH-05 follow-up): if ``entry.handler`` is not a
+        ``sovereign_tool`` wrapper -- a hand-built ToolEntry carrying a raw
+        callable -- it is rescued here: re-wrapped so the stdout guard and
+        telemetry apply, and the stored entry carries the wrapped handler. So
+        NOTHING unguarded can live in ``_tools`` (not just "cannot reach MCP").
         """
+        if not is_sovereign_wrapper(entry.handler):
+            logger.warning(
+                "registry: tool %r registered with a raw (non-@sovereign_tool) "
+                "handler -- auto-wrapping it with the stdout guard + telemetry",
+                entry.name,
+            )
+            wrapped = build_sovereign_wrapper(
+                entry.handler, tool_name=entry.name, category=entry.category,
+            )
+            entry = entry.model_copy(update={"handler": wrapped}) if hasattr(entry, "model_copy") \
+                else ToolEntry(name=entry.name, category=entry.category,
+                               description=entry.description, handler=wrapped,
+                               is_async=entry.is_async, requires_env=list(entry.requires_env))
+
         with self._lock:
             if exclusive and entry.name in self._tools:
                 raise KeyError(f"a tool named {entry.name!r} is already registered")
@@ -327,71 +347,72 @@ def sovereign_tool(
     """
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         tool_name = name or func.__name__
-        
-        # Parse and sanitize docstrings for model readability
+
         raw_doc = func.__doc__ or "No description provided."
-        doc_lines = [line.strip() for line in raw_doc.strip().split("\n")]
-        description = "\n".join(doc_lines)
-        
+        description = "\n".join(line.strip() for line in raw_doc.strip().split("\n"))
         is_async = inspect.iscoroutinefunction(func)
 
-        if is_async:
-            @functools.wraps(func)
-            async def wrapper(*args: Any, **kwargs: Any) -> Any:
-                # Stdout guard around the entire coroutine: any stray print()
-                # inside async tool bodies (or their awaited internals) gets
-                # routed to stderr so the MCP JSON-RPC channel stays clean.
-                with _silence_stdout_during_tool_call():
-                    try:
-                        res = await func(*args, **kwargs)
-                    except Exception:
-                        _record_tool_outcome(tool_name, category, False)
-                        raise
-                    if isinstance(res, str):
-                        res = res.encode("utf-8", "replace").decode("utf-8")
-                    _record_tool_outcome(tool_name, category, True)
-                    return res
-        else:
-            @functools.wraps(func)
-            def wrapper(*args: Any, **kwargs: Any) -> Any:
-                with _silence_stdout_during_tool_call():
-                    try:
-                        res = func(*args, **kwargs)
-                    except Exception:
-                        _record_tool_outcome(tool_name, category, False)
-                        raise
-                    if isinstance(res, str):
-                        res = res.encode("utf-8", "replace").decode("utf-8")
-                    _record_tool_outcome(tool_name, category, True)
-                    return res
+        wrapper = build_sovereign_wrapper(func, tool_name=tool_name, category=category)
 
-        # Register the WRAPPER, not the bare function.
-        #
-        # server.py exposes every tool to FastMCP via
-        # ``mcp.tool(...)(tool_entry.handler)``, so whatever lands in this entry
-        # is what actually serves MCP traffic. Registering ``func`` here meant
-        # every MCP call bypassed all three guarantees the wrapper exists to
-        # provide: the stdout guard that keeps stray print() out of the JSON-RPC
-        # framing, the surrogate sanitisation of str returns, and outcome
-        # telemetry. functools.wraps sets __wrapped__, so inspect.signature()
-        # still resolves the real signature and FastMCP's schema generation is
-        # unaffected.
         entry = ToolEntry(
             name=tool_name,
             category=category,
             description=description,
             handler=wrapper,
             is_async=is_async,
-            requires_env=requires_env or []
+            requires_env=requires_env or [],
         )
 
         # DSH-01: keep the unload handle reachable from the decorated function so
         # a caller (or a self-modification pipeline) can retract the tool at
         # runtime -- registry.get_tool(name) disappears, server.py drops it from
         # FastMCP -- without restarting the process.
-        wrapper._sovereign_tool_name = tool_name
-        _SOVEREIGN_WRAPPERS.add(wrapper)
         wrapper._sovereign_disposer = registry.register_tool(entry, exclusive=exclusive)
-
         return wrapper
+
     return decorator
+
+
+def build_sovereign_wrapper(
+    func: Callable[..., Any], *, tool_name: str, category: str = "General",
+) -> Callable[..., Any]:
+    """Wrap ``func`` with the three guarantees every registered tool must carry:
+    the stdout guard (stray ``print`` stays out of the MCP JSON-RPC framing),
+    surrogate sanitisation of ``str`` returns, and outcome telemetry.
+
+    The returned wrapper is stamped ``._sovereign_tool_name`` and recorded in
+    ``_SOVEREIGN_WRAPPERS`` -- the identity set ``is_sovereign_wrapper`` checks and
+    ``server.py`` gates MCP exposure on. This is the ONE place a guarded handler
+    is minted; the decorator uses it, and ``register_tool`` uses it to rescue a
+    raw callable so nothing unguarded can reach ``_tools``.
+    """
+    if inspect.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with _silence_stdout_during_tool_call():
+                try:
+                    res = await func(*args, **kwargs)
+                except Exception:
+                    _record_tool_outcome(tool_name, category, False)
+                    raise
+                if isinstance(res, str):
+                    res = res.encode("utf-8", "replace").decode("utf-8")
+                _record_tool_outcome(tool_name, category, True)
+                return res
+    else:
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            with _silence_stdout_during_tool_call():
+                try:
+                    res = func(*args, **kwargs)
+                except Exception:
+                    _record_tool_outcome(tool_name, category, False)
+                    raise
+                if isinstance(res, str):
+                    res = res.encode("utf-8", "replace").decode("utf-8")
+                _record_tool_outcome(tool_name, category, True)
+                return res
+
+    wrapper._sovereign_tool_name = tool_name
+    _SOVEREIGN_WRAPPERS.add(wrapper)
+    return wrapper

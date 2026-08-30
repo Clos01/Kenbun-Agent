@@ -156,20 +156,36 @@ def test_hot_mounted_tool_reaches_the_live_fastmcp_surface_and_leaves_on_revert(
     assert "dsh05_bad" not in names()          # guard failed -> never surfaced
 
 
-def test_fastmcp_listener_refuses_a_non_sovereign_handler():
-    """A hand-built ToolEntry with a raw callable (no @sovereign_tool wrapper,
-    so no stdout guard) must not reach the live MCP surface."""
+def test_raw_handler_registered_normally_is_rescued_then_reaches_mcp_guarded():
+    """DSH-05 follow-up: register_tool auto-wraps a raw handler, so it DOES reach
+    MCP -- but guarded, not raw."""
     import anyio
 
     import tools.infrastructure.server as server
-    from tools.registry import ToolEntry, registry
+    from tools.registry import ToolEntry, is_sovereign_wrapper, registry
 
     raw = ToolEntry(name="dsh05_raw", category="X", description="d",
-                    handler=lambda: "unguarded", is_async=False)
+                    handler=lambda: "hi", is_async=False)
     dispose = registry.register_tool(raw)
     try:
+        assert is_sovereign_wrapper(registry.get_tool("dsh05_raw").handler)
         listed = {t.name for t in anyio.run(server.mcp.list_tools)}
-        assert "dsh05_raw" not in listed          # refused by the handler check
+        assert "dsh05_raw" in listed
     finally:
         dispose()
         registry.unregister_tool("dsh05_raw")
+
+
+def test_fastmcp_listener_still_refuses_a_raw_handler_as_belt_and_suspenders():
+    """If something ever bypasses register_tool's rescue and fires the listener
+    with a raw ToolEntry directly, the MCP boundary still refuses it."""
+    import anyio
+
+    import tools.infrastructure.server as server
+    from tools.registry import ToolEntry
+
+    raw = ToolEntry(name="dsh05_direct_raw", category="X", description="d",
+                    handler=lambda: "unguarded", is_async=False)
+    server._register_into_fastmcp(raw)          # bypass register_tool entirely
+    listed = {t.name for t in anyio.run(server.mcp.list_tools)}
+    assert "dsh05_direct_raw" not in listed
