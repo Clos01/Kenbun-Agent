@@ -355,13 +355,9 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
           What we&apos;ve been building
         </SectionLabel>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {phases.map((ph, i) => (
-            <motion.div
+          {phases.map((ph) => (
+            <div
               key={ph.id}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.04 }}
               className="p-5 border border-primary/5 bg-card/60 backdrop-blur-xl rounded-md flex flex-col gap-3"
             >
               <div className="flex items-center justify-between gap-2">
@@ -382,7 +378,7 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
                   {ph.commit}
                 </span>
               )}
-            </motion.div>
+            </div>
           ))}
         </div>
       </section>
