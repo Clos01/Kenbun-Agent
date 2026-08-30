@@ -151,6 +151,42 @@ def test_concurrent_register_and_dispose_stays_consistent():
     assert sorted(removed) == sorted(f"tool_{i}" for i in range(50))
 
 
+def test_exclusive_register_rejects_a_duplicate_name_atomically():
+    r = SovereignRegistry()
+    first = _tool("alpha")
+    r.register_tool(first)
+    with pytest.raises(KeyError):
+        r.register_tool(_tool("alpha"), exclusive=True)
+    assert r.get_tool("alpha") is first          # original untouched
+    # non-exclusive still overwrites (the decorator's import-time behaviour)
+    second = _tool("alpha")
+    r.register_tool(second)
+    assert r.get_tool("alpha") is second
+
+
+def test_registration_listener_fires_with_the_entry():
+    r = SovereignRegistry()
+    seen: list = []
+    detach = r.add_registration_listener(seen.append)
+    e = _tool("alpha")
+    r.register_tool(e)
+    assert seen == [e]
+    detach()
+    r.register_tool(_tool("beta"))
+    assert seen == [e]                       # detached, no beta
+
+
+def test_a_raising_registration_listener_does_not_block_registration():
+    r = SovereignRegistry()
+    r.add_registration_listener(lambda e: (_ for _ in ()).throw(RuntimeError("mirror down")))
+    got: list = []
+    r.add_registration_listener(got.append)
+    e = _tool("alpha")
+    r.register_tool(e)
+    assert r.get_tool("alpha") is e
+    assert got == [e]
+
+
 def test_clear_notifies_for_every_removed_entry():
     r = SovereignRegistry()
     tools_seen: list[str] = []

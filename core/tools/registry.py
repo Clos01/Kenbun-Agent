@@ -5,6 +5,7 @@ import inspect
 import logging
 import sys
 import threading
+import weakref
 from typing import Any, Callable, Dict, List, Optional, Tuple, Set
 try:
     from pydantic import BaseModel, Field
@@ -17,6 +18,22 @@ except ImportError:
         return None
 
 logger = logging.getLogger("registry")
+
+# Identity set of every wrapper `sovereign_tool` has produced. A mirror
+# (server.py's FastMCP list) checks membership before exposing a handler, so a
+# hand-built ToolEntry carrying a raw callable cannot reach an MCP client -- the
+# raw callable is not in here and cannot be added without importing this private
+# module and calling .add (by which point the caller is already running
+# arbitrary in-process code). WeakSet: a disposed tool's wrapper is collected.
+_SOVEREIGN_WRAPPERS: "weakref.WeakSet[Callable]" = weakref.WeakSet()
+
+
+def is_sovereign_wrapper(fn: object) -> bool:
+    """True iff ``fn`` is a callable that ``sovereign_tool`` built (identity check)."""
+    try:
+        return fn in _SOVEREIGN_WRAPPERS
+    except TypeError:
+        return False  # unhashable arg -> definitely not one of our wrappers
 
 
 @contextlib.contextmanager
@@ -90,11 +107,27 @@ class SovereignRegistry:
         self._lock = threading.RLock()
         self._tool_removal_listeners: List[Callable[[str], None]] = []
         self._pipeline_removal_listeners: List[Callable[[str], None]] = []
+        self._tool_registration_listeners: List[Callable[[ToolEntry], None]] = []
 
     # ------------------------------------------------------------------ tools
-    def register_tool(self, entry: ToolEntry) -> Callable[[], None]:
+    def register_tool(self, entry: ToolEntry, *, exclusive: bool = False) -> Callable[[], None]:
+        """Register ``entry`` and return its disposer.
+
+        ``exclusive=True`` makes the check-and-insert atomic: if a tool is
+        already registered under this name, raise ``KeyError`` instead of
+        overwriting it. Two concurrent hot-mounts of the same name cannot then
+        both "win" and leak one disposer. Default (``False``) overwrites, as the
+        ``@sovereign_tool`` decorator relies on at import time.
+        """
         with self._lock:
+            if exclusive and entry.name in self._tools:
+                raise KeyError(f"a tool named {entry.name!r} is already registered")
             self._tools[entry.name] = entry
+            # Registration and notification are one atomic critical section, same
+            # as removal -- a mirror (server.py's FastMCP list) sees a consistent
+            # add. This is what lets a tool mounted AFTER startup (DSH-05
+            # hot_mount) still reach the live MCP surface, no restart.
+            self._fire(self._tool_registration_listeners, entry)
         return self._make_disposer(self._tools, entry.name, entry, self._notify_tool_removed)
 
     def unregister_tool(self, name: str) -> bool:
@@ -115,6 +148,12 @@ class SovereignRegistry:
     def get_all_tools(self) -> Dict[str, ToolEntry]:
         with self._lock:
             return dict(self._tools)
+
+    def add_registration_listener(self, fn: Callable[[ToolEntry], None]) -> Callable[[], None]:
+        """Call ``fn(entry)`` whenever a tool is registered. Returns a detach
+        disposer. Same contract as ``add_removal_listener``: runs on the
+        registering thread inside the lock, must be fast, a raise is logged."""
+        return self._add_listener(self._tool_registration_listeners, fn)
 
     def add_removal_listener(self, fn: Callable[[str], None]) -> Callable[[], None]:
         """Call ``fn(tool_name)`` whenever a tool is removed. Returns a detach disposer.
@@ -191,18 +230,20 @@ class SovereignRegistry:
     def _notify_pipeline_removed(self, name: str) -> None:
         self._fire(self._pipeline_removal_listeners, name)
 
-    def _fire(self, listeners: list, name: str) -> None:
+    def _fire(self, listeners: list, arg: Any) -> None:
         # Always called with self._lock already held (RLock). Snapshot so a
         # listener that detaches itself mid-iteration does not corrupt the walk.
+        # `arg` is a tool name (removal) or a ToolEntry (registration).
+        label = getattr(arg, "name", arg)
         with self._lock:
             snapshot = list(listeners)
             for fn in snapshot:
                 try:
-                    fn(name)
+                    fn(arg)
                 except Exception as e:
                     logger.error(
-                        f"registry removal listener {getattr(fn, '__name__', fn)!r} "
-                        f"failed for '{name}' -- its mirror is now desynced: {e}",
+                        f"registry listener {getattr(fn, '__name__', fn)!r} failed "
+                        f"for '{label}' -- its mirror is now desynced: {e}",
                         exc_info=True,
                     )
 
@@ -268,17 +309,21 @@ def _record_tool_outcome(tool_name: str, category: str, success: bool) -> None:
 
 
 def sovereign_tool(
-    name: Optional[str] = None, 
-    category: str = "General", 
-    requires_env: Optional[List[str]] = None
+    name: Optional[str] = None,
+    category: str = "General",
+    requires_env: Optional[List[str]] = None,
+    exclusive: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """
     Decorator to designate a function as an active sovereign tool in the Swarm.
-    
+
     Args:
         name: Optional override for the tool ID (defaults to function name).
         category: Operational swarm module (e.g. 'Strategy', 'Sensory', 'Memory').
         requires_env: Optional list of environment variable names required for enablement.
+        exclusive: If True, raise KeyError instead of overwriting a same-named tool
+            (atomic check-and-insert). Used by DSH-05 hot_mount so two racing
+            self-improvement loops cannot both register the same name.
     """
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         tool_name = name or func.__name__
@@ -345,7 +390,8 @@ def sovereign_tool(
         # runtime -- registry.get_tool(name) disappears, server.py drops it from
         # FastMCP -- without restarting the process.
         wrapper._sovereign_tool_name = tool_name
-        wrapper._sovereign_disposer = registry.register_tool(entry)
+        _SOVEREIGN_WRAPPERS.add(wrapper)
+        wrapper._sovereign_disposer = registry.register_tool(entry, exclusive=exclusive)
 
         return wrapper
     return decorator
