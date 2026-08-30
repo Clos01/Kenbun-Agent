@@ -107,4 +107,18 @@ Static template strings lacked business entity regex filtering and trade tone en
 
 ### Fix
 Purged informal slang from all templates. Implemented smart corporate regex filtering to fallback to `"Hi Estimating Team,"` or `"Hi Dash-In Team,"` when corporate names (LLC, Inc, Retail, Corp) are detected. Stored tone rules in Honcho Hivemind memory.
+## 2026-08-29: Antigravity 2.0 Remote Control Daemon & Protobuf Deserializer Fix
 
+### Symptoms
+`https://antigravity.google.com/` remained stuck on the "Connect your first instance" onboarding shell despite the daemon and Desktop IDE running locally. DevTools console displayed `Failed to attach portal to header bar: Error: X` and `TypeError: Failed to fetch` in `m=base:13`. Network tab showed `ListInstances` returning 200 OK with an empty 22-byte payload.
+
+### Root Cause
+1. **Protobuf JSON Schema Syntax Error**: `~/.gemini/config/config.json` had unbalanced curly braces (4 open, 3 closed). Google's Go language server (`user_config_io.go:38`) failed with `proto: unexpected EOF`, silently defaulting `RemoteControlEnabled` to `false` (`Staying disconnected: Remote Control user setting is off`).
+2. **Google Multi-Account Index Mismatch**: The active browser tab queried `x-goog-authuser: 0` (`carlos123939@gmail.com`) or `x-goog-authuser: 3` (`velocitybaskets00@gmail.com`), whereas the daemon had authenticated to `cjrivas00@gmail.com`.
+3. **PWA Service Worker Cache Corruption**: Chrome's service worker (`m=base`) was serving a stale offline onboarding shell and rejecting fetch promises.
+
+### Fix
+1. Repaired `~/.gemini/config/config.json` structure, validated syntax with `json.loads`, and explicitly set `"remoteControlEnabled": true` and `"cliRemoteControlHostname": "Kenbun-Swarm-Node"`.
+2. Bounced the daemon via `bash agy-daemon.sh restart`, establishing a live V2 WebChannel tunnel to `jetski-webchannel.googleapis.com:443`.
+3. Unregistered the corrupted Service Worker in DevTools -> Application -> Storage -> Clear Site Data.
+4. Aligned the Google account session in the browser to `cjrivas00@gmail.com`. Both instances (`Kenbun-Swarm-Node` daemon and Desktop IDE) immediately turned `🟢 Online`.

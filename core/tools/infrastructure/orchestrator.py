@@ -389,10 +389,24 @@ async def spawn_swarm(objective: str, tools: dict, project_path: str = "") -> st
     )
     
     try:
-        # Use Gemini 3.1 Pro for high-reasoning decomposition
-        from tools.audit.gemini_reviewer import call_gemini_pro
-        raw_decomposition = call_gemini_pro(queen_prompt)
-        
+        # DSH-06: high-reasoning decomposition is no longer a single point of
+        # failure. The Resolver tries gemini -> deepseek -> local LLM gateway;
+        # Gemini stays first so the happy path is unchanged, but a 429 / quota
+        # exhaustion now demotes it and the next provider serves the swarm.
+        from tools.strategy.decomposition import run_decomposition, ResolverExhausted
+        try:
+            # run_decomposition logs which provider served (and warns on failover);
+            # the returned name is available here if a caller ever needs to branch.
+            _served_by, raw_decomposition = run_decomposition(
+                queen_prompt,
+                is_usable=lambda t: bool(extract_json_array(t)),
+            )
+        except ResolverExhausted:
+            # per-provider failure detail is already logged by the Resolver;
+            # keep the user-facing string generic (no raw exception text).
+            return ("❌ Swarm decomposition failed: every reasoning provider is currently "
+                    "unavailable. Check API quotas / provider health, then retry.")
+
         # Simple extraction of JSON from markdown if needed
         json_str = extract_json_array(raw_decomposition)
         if not json_str:
@@ -730,6 +744,7 @@ async def run_pipeline(
 
     step_count = 0
     consecutive_failures = 0
+    error_msg = ""
 
     for step in steps:
         step_count += 1
@@ -1159,31 +1174,45 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     project must stay unspecified.
     """
     import asyncio
+    import threading
 
-    # Single source of truth for the pipeline toolset.
-    #
-    # This used to build its own dict inline, which had drifted to 24 tools
-    # against build_pipeline_tools' 35 — every kanban_* tool, detect_hardware and
-    # run_self_improvement_cycle were missing here. A workflow step calling one
-    # of those silently got nothing, with no error, depending only on which
-    # entry point the caller happened to reach.
     tools = build_pipeline_tools(project_path)
-
-    # Run the async pipeline. Uses _run_coro_blocking rather than asyncio.run()
-    # because this function is invoked as a sync MCP tool from inside FastMCP's
-    # own running event loop -- asyncio.run() there raises "cannot be called
-    # from a running event loop".
-    return _run_coro_blocking(run_pipeline(
-        workflow=workflow,
-        task=task,
-        tools=tools,
-        project_path=project_path,
-        file_path=file_path,
-        code_snippet=code_snippet,
-        tech_key=tech_key,
-        project_id=project_id,
-        fast=fast
-    ))
+    
+    result_box = []
+    err_box = []
+    
+    def _runner():
+        try:
+            # Always create a brand new loop for this thread to guarantee no conflicts
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            result = new_loop.run_until_complete(run_pipeline(
+                workflow=workflow,
+                task=task,
+                tools=tools,
+                project_path=project_path,
+                file_path=file_path,
+                code_snippet=code_snippet,
+                tech_key=tech_key,
+                project_id=project_id,
+                fast=fast
+            ))
+            result_box.append(result)
+        except Exception as e:
+            err_box.append(e)
+        finally:
+            try:
+                new_loop.close()
+            except:
+                pass
+                
+    t = threading.Thread(target=_runner)
+    t.start()
+    t.join()
+    
+    if err_box:
+        raise err_box[0]
+    return result_box[0]
 
 # Alias for backwards compatibility with orchestration_tools.py
 run_orchestration_pipeline = orchestrate
@@ -1193,12 +1222,23 @@ def swarm(objective: str, project_path: str = "."):
     Synchronous entry point for triggering a full autonomous swarm.
     Usage: swarm("Build a new landing page for the burger shop")
     """
-    # Same registry the pipelines use. This built its own 19-tool dict, so a
-    # swarm run silently had a different, smaller capability set than an
-    # orchestrate run of the same objective.
+    import asyncio
+
     tools = build_pipeline_tools(project_path)
 
-    return _run_coro_blocking(spawn_swarm(objective, tools, project_path))
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        import concurrent.futures
+        def _run_in_thread():
+            return asyncio.run(spawn_swarm(objective, tools, project_path))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            return executor.submit(_run_in_thread).result()
+    else:
+        return asyncio.run(spawn_swarm(objective, tools, project_path))
 
 if __name__ == "__main__":
     # Example usage

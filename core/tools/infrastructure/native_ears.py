@@ -14,6 +14,7 @@ from tools.audit.supervisor_agent import run_supervisor_audit
 try:
     import Speech
     import AVFoundation
+    import objc
     from Foundation import NSRunLoop, NSDate, NSObject
     from AppKit import NSSpeechSynthesizer
 except ImportError as e:

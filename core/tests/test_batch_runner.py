@@ -5,9 +5,10 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 import pytest
 
-# Insert project root in sys.path to resolve batch_runner
+# Insert project root and scripts/maintenance in sys.path to resolve batch_runner
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(project_root / "scripts" / "maintenance"))
 
 import batch_runner
 

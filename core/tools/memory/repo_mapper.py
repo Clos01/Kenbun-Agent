@@ -11,7 +11,10 @@ Uses regex-based extraction for .js/.ts/.tsx files.
 import ast
 import os
 import re
+import logging
 from pathlib import Path
+
+logger = logging.getLogger("tools.memory.repo_mapper")
 
 
 # --- CONFIGURATION ---
@@ -222,6 +225,35 @@ def scan_repo(
 
             output_lines.extend(items)
             total_items += len(items)
+
+    # Optional Code Integrity Sentinel Audit
+    try:
+        from tools.codebase.code_integrity_sentinel import CodeIntegritySentinel
+        sentinel = CodeIntegritySentinel(workspace_root=str(root))
+        integrity_issues = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d not in IGNORE_DIRS]
+            for fn in filenames:
+                if fn.endswith(".py"):
+                    fp = os.path.join(dirpath, fn)
+                    res = sentinel.audit_file(fp)
+                    if not res.get("valid", True):
+                        integrity_issues.append((fp, res))
+
+        if integrity_issues:
+            output_lines.append("\n" + "="*50)
+            output_lines.append(f"🛡️ [Code Integrity Sentinel]: Found {len(integrity_issues)} file(s) with static hygiene issues:")
+            for fp, res in integrity_issues:
+                rel = os.path.relpath(fp, root)
+                output_lines.append(f"  📄 {rel}:")
+                for un in res.get("undefined_names", []):
+                    output_lines.append(f"    ⚠️ Undefined Variable: '{un['symbol']}' (Line {un['line']})")
+                for mi in res.get("missing_imports", []):
+                    output_lines.append(f"    📦 Missing Import: '{mi['suggested_import']}' (Line {mi['line']})")
+                for uq in res.get("unquoted_dict_lookups", []):
+                    output_lines.append(f"    🔑 Unquoted Dict Key: .get({uq['variable_passed']}) -> .get('{uq['variable_passed']}') (Line {uq['line']})")
+    except Exception as e:
+        logger.debug(f"Code Integrity scan_repo integration note: {e}")
 
     # Summary footer
     output_lines.insert(1, f"Files: {total_files} | Symbols: {total_items}\n")

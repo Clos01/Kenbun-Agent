@@ -1,0 +1,32 @@
+{
+  "teaching_moments": [
+    {
+      "id": "planka_sync",
+      "title": "Phase 2: CRM & Planka Board Sync",
+      "concept": "Automated Task Management",
+      "explanation": "When dealing with inbound leads, never manually manage state. Always pipe clean webhook data directly into Planka boards via the `planka_create_card` and `planka_move_card` tools. Use UUIDs as card titles or references to sync external Database records.",
+      "visual_mermaid": "graph TD\n    A[Inbound Webhook] --> B{Clean Data}\n    B -->|Valid| C[Create DB Row UUID]\n    C --> D[Planka Create Card]\n    D --> E[Move Card based on State]\n    B -->|Invalid| F[Error Trigger Node]"
+    },
+    {
+      "id": "orchestrate_heavy",
+      "title": "The Orchestrate Tool & Heavy Workflows",
+      "concept": "Asynchronous Kenbun Pipelines",
+      "explanation": "Heavy tasks like `design_ui`, `research_implement`, and `code_review` should never block your immediate response loop. Call the `orchestrate` MCP tool to dispatch the task to a background Kenbun Swarm. It returns a Job ID immediately. You can poll `orchestrate_status()` later, ensuring the operator never experiences a frozen UI.",
+      "visual_mermaid": "sequenceDiagram\n    participant Operator\n    participant Antigravity\n    participant Kenbun_Swarm\n    Operator->>Antigravity: 'Build a new dashboard'\n    Antigravity->>Kenbun_Swarm: orchestrate(workflow: 'design_ui')\n    Kenbun_Swarm-->>Antigravity: Returns Job ID\n    Antigravity-->>Operator: 'Job started. Proceeding with other tasks.'\n    Antigravity->>Kenbun_Swarm: orchestrate_status(Job ID)\n    Kenbun_Swarm-->>Antigravity: Status: Complete"
+    },
+    {
+      "id": "zero_error_sentinel",
+      "title": "Zero-Error Pre-Flight Sentinel",
+      "concept": "Proactive Bug Prevention",
+      "explanation": "Never mark a task complete without executing `console-sentinel`. The standard demands 0 console errors, 0 SSR hydration mismatches, and 0 database statement timeouts. Catching it before the operator sees it is what separates a junior script from a Senior System 3 Swarm.",
+      "visual_mermaid": "graph LR\n    A[Code Changes Done] --> B[Run console-sentinel]\n    B --> C{Errors Found?}\n    C -->|Yes| D[Autonomous Auto-Fix Loop]\n    D --> B\n    C -->|No| E[Mark Task Complete]"
+    },
+    {
+      "id": "defensive_integration",
+      "title": "Defensive Integration & Reconciliation",
+      "concept": "API Reliability",
+      "explanation": "Never assume an external ID (like an ElevenLabs Agent ID) belongs to your active tenant. Always cross-reference your local DB (`matched`, `unimportedRemote`, `crossAccountErrors`). If it fails, wrap it in a non-blocking UI modal with a deep-link to the official docs.",
+      "visual_mermaid": "graph TD\n    A[Fetch Remote API] --> B{Match Local DB?}\n    B -->|Yes| C[Render Dashboard]\n    B -->|No - Missing DB| D[Flag as unimportedRemote]\n    B -->|No - 401/404| E[Flag as crossAccountErrors]\n    E --> F[Render Warning Modal + Docs Link]"
+    }
+  ]
+}

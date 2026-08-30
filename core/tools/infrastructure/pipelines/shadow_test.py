@@ -137,8 +137,8 @@ def build_shadow_test_pipeline(tools):
         },
         {
             "id": "guardrail_audit",
-            "label": "🛡️ System 2c: Local Guardrail Audit ($0)",
-            "tool": tools["guardrail_audit"],
+            "label": "🛡️ System 2c: Continuous Guardrail Audit ($0)",
+            "tool": tools.get("audit_guardrail") or tools.get("guardrail_audit"),
             "input": lambda s: {
                 "code_snippet": _extract_code(s.get("test_draft", "")),
                 "task_context": "Verify the logic of this drafted unit test."

@@ -92,7 +92,7 @@ For each slide, walk shapes from the dump and check against expected layout rule
 | 多處 | em (Playfair italic) 未保留 | 🟡 |
 ```
 
-Severity rubric:
+Severity Classification Criteria:
 
 - 🔴 **critical** — content cropped, text invisible, footer overlap, off-canvas. Must fix.
 - 🟠 **high** — content visible but visual hierarchy broken, no breathing room, hero not centered. Should fix.

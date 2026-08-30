@@ -26,7 +26,6 @@ import {
   Pause,
   Play,
   Filter,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
   Layers,
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
   RefreshCw,
@@ -46,6 +45,7 @@ import {
 import { SharpAreaChart, SquareDonut, AccuracyGauge, ContextWindowBar } from "@/components/Visuals";
 import GalaxyMap from "@/components/GalaxyMap";
 import GuidedTour, { TourStep } from "@/components/GuidedTour";
+import DSHResiliencePanel from "@/components/DSHResiliencePanel";
 // import RoamingMascot from "@/components/RoamingMascot";
 import { motion, AnimatePresence } from "framer-motion";
 import { CONFIG } from "@/lib/config";
@@ -100,7 +100,7 @@ const getToolDescription = (toolId: string): string => {
   return dict[toolId] || "Performs autonomous back-office pipelines and agentic actions.";
 };
 
-type TabId = "overview" | "intelligence" | "memory" | "feed" | "workspace";
+type TabId = "overview" | "intelligence" | "memory" | "feed" | "workspace" | "resilience";
 
 interface TelemetryTrendPoint {
   accuracy: number;
@@ -960,6 +960,7 @@ export default function BuildConsole() {
     { id: "intelligence", label: "Intelligence", icon: BrainCircuit },
     { id: "memory", label: "Memory", icon: Database },
     { id: "workspace", label: "Workspace", icon: Target },
+    { id: "resilience", label: "Resilience", icon: Layers },
     { id: "feed", label: "Activity Log", icon: Activity },
   ] as const;
 
@@ -2476,7 +2477,7 @@ export default function BuildConsole() {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {displaySignals.map((signal: { timestamp?: string; action?: string; summary?: string; details?: string; concept?: string }, idx: number) => (
+                  {displaySignals.map((signal: { timestamp?: string; action?: string; summary?: string; details?: string; concept?: string; file?: string; line?: number | string; content?: string }, idx: number) => (
                     <motion.div 
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -2491,16 +2492,16 @@ export default function BuildConsole() {
                       )}
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-black text-tertiary uppercase tracking-[0.2em]">Signal Node</span>
-                        <span className="text-[9px] font-bold opacity-20">POS_L{signal.line}</span>
+                        <span className="text-[9px] font-bold opacity-20">POS_L{signal.line ?? idx + 1}</span>
                       </div>
                       
                       <div className="space-y-2">
-                        <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{signal.file.split(':').pop()?.split('/').pop()}</div>
-                        <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file}</div>
+                        <div className="text-base font-black italic text-primary group-hover:text-tertiary transition-colors truncate uppercase tracking-tighter">{(signal.file || signal.summary || "SIGNAL_NODE").split(':').pop()?.split('/').pop()}</div>
+                        <div className="text-[10px] font-bold opacity-40 uppercase tracking-widest truncate italic">{signal.file || signal.concept || "neural://memory"}</div>
                       </div>
 
                       <div className="text-xs font-bold text-primary/80 bg-primary/[0.02] p-5 leading-relaxed border border-primary/5 rounded-xl overflow-hidden whitespace-pre-wrap min-h-[140px] max-h-[200px] overflow-y-auto custom-scrollbar font-mono">
-                        {signal.content}
+                        {signal.content || signal.details || "No details provided"}
                       </div>
                       
                       <div className="pt-4 border-t border-primary/5 flex items-center justify-between">
@@ -2829,6 +2830,10 @@ export default function BuildConsole() {
               </div>
             );
           })()}
+
+          {activeTab === "resilience" && (
+            <DSHResiliencePanel apiBase={API_BASE} />
+          )}
         </motion.div>
 
         {/* <RoamingMascot /> */}

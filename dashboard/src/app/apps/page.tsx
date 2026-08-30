@@ -121,6 +121,16 @@ const DEFAULT_APPS: WebApp[] = [
     icon: Sliders
   },
   {
+    id: "chromadb",
+    name: "ChromaDB",
+    description: "System 3 Semantic Vector Database for AST code indexing and neural recall.",
+    defaultPort: 8000,
+    path: "/docs",
+    pingPath: "/api/v2/heartbeat",
+    hostType: "tailscale",
+    icon: Database
+  },
+  {
     id: "excalidraw",
     name: "Excalidraw",
     description: "Sovereign wireframing canvas for visual UI design and swarm architecture.",
@@ -221,6 +231,7 @@ export default function AppsPortal() {
     if (app.id === "gitea" && config.GITEA_PORT) return parseInt(config.GITEA_PORT, 10);
     if (app.id === "planka" && config.PLANKA_PORT) return parseInt(config.PLANKA_PORT, 10);
     if (app.id === "honcho" && config.HONCHO_PORT) return parseInt(config.HONCHO_PORT, 10);
+    if (app.id === "chromadb" && (config.CHROMA_PORT || config.CHROMA_DB_PORT)) return parseInt(config.CHROMA_PORT || config.CHROMA_DB_PORT, 10);
     if (app.id === "n8n" && config.N8N_PORT) return parseInt(config.N8N_PORT, 10);
     return app.defaultPort;
   }, [config]);

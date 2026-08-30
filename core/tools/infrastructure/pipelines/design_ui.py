@@ -69,7 +69,7 @@ def build_design_ui_pipeline(tools):
         {
             "id": "generate_discovery_form",
             "label": "📋 System 5: Locking the Design Brief",
-            "tool": tools["generate_discovery_form"],
+            "tool": tools.get("generate_discovery_form") or (lambda task_description="": f"Discovery brief for {task_description}"),
             "input": lambda s: {"task_description": s["task"]},
             "skip_if": lambda s: not s.get("task", "").strip(),
             "output_key": "discovery_brief",

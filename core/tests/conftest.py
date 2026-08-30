@@ -41,8 +41,12 @@ def isolate_calibration_store(tmp_path_factory):
 @pytest.fixture(autouse=True)
 def mock_databases_for_testing():
     """Globally mock remote database reachability to prevent socket timeouts and connection hangs."""
-    import psycopg
-    
+    try:
+        import psycopg
+    except ImportError:
+        yield
+        return
+
     # Mock BayesianGovernor remote DB initialization to bypass socket checks
     def mock_init_remote_db(self):
         self.use_local = True

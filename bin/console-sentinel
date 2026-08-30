@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""
+Console & Network Sentinel CLI (Kenbun Sovereign Pre-Flight Engine).
+
+Usage:
+  bin/console-sentinel probe [http://localhost:3000] [--routes /voice-agents,/fleet-overview]
+  bin/console-sentinel audit-db [--url postgres://...]
+  bin/console-sentinel watch [http://localhost:3000]
+"""
+
+import sys
+import os
+import time
+import argparse
+import json
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT = os.path.dirname(SCRIPT_DIR)
+sys.path.insert(0, os.path.join(REPO_ROOT, "core"))
+
+from tools.infrastructure.console_network_sentinel import ConsoleNetworkSentinel, profile_database_performance
+
+
+def print_banner():
+    print("""
+┌─────────────────────────────────────────────────────────────┐
+│ 🛡️  KENBUN CONSOLE & NETWORK PRE-FLIGHT SENTINEL            │
+│    Zero-Error Pre-Flight Catching & Runtime Diagnostics      │
+└─────────────────────────────────────────────────────────────┘
+""")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Console & Network Sentinel CLI")
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # Probe command
+    probe_parser = subparsers.add_parser("probe", help="Probe application routes for console errors & network latency")
+    probe_parser.add_argument("url", nargs="?", default="http://localhost:3000", help="Base URL to probe")
+    probe_parser.add_argument("--routes", default="/,/fleet-overview,/voice-agents,/call-telemetry,/feedback,/settings", help="Comma-separated routes")
+    probe_parser.add_argument("--timeout", type=float, default=12.0, help="Per-route timeout in seconds")
+    probe_parser.add_argument("--json", action="store_true", help="Output JSON format")
+
+    # Watch command
+    watch_parser = subparsers.add_parser("watch", help="Continuously monitor routes every N seconds")
+    watch_parser.add_argument("url", nargs="?", default="http://localhost:3000", help="Base URL to watch")
+    watch_parser.add_argument("--interval", type=int, default=10, help="Poll interval in seconds")
+
+    args = parser.parse_args()
+
+    if args.command == "probe" or args.command is None:
+        base_url = getattr(args, "url", "http://localhost:3000") or "http://localhost:3000"
+        routes_raw = getattr(args, "routes", "/,/fleet-overview,/voice-agents,/call-telemetry,/feedback,/settings")
+        routes = [r.strip() for r in routes_raw.split(",") if r.strip()]
+        timeout_sec = getattr(args, "timeout", 12.0)
+
+        if not getattr(args, "json", False):
+            print_banner()
+            print(f"📡 Probing {len(routes)} routes on {base_url} (Timeout: {timeout_sec}s)...\n")
+
+        sentinel = ConsoleNetworkSentinel(base_url=base_url, default_timeout=timeout_sec)
+        report = sentinel.audit_all_routes(routes=routes)
+
+        if getattr(args, "json", False):
+            print(json.dumps(report, indent=2))
+            return
+
+        for r in report["route_details"]:
+            status_icon = "✅" if r["status"] == "HEALTHY" else ("⚠️" if r["warnings"] else "❌")
+            latency_str = f"{r['latency_ms']}ms"
+            status_code = f"HTTP {r['status_code']}" if r['status_code'] else r['status']
+            
+            print(f"{status_icon} {r['route']:<20} {status_code:<12} {latency_str:<10} [{r['status']}]")
+            
+            if r["errors_detected"]:
+                for err in r["errors_detected"]:
+                    print(f"   🚨 {err['category']}: {err['signature']}")
+            if r["warnings"]:
+                for w in r["warnings"]:
+                    print(f"   ⚡ {w}")
+
+        print("\n" + "─" * 60)
+        if report["overall_status"] == "PASSED":
+            print(f"🎉 PRE-FLIGHT AUDIT PASSED: All {report['total_routes_checked']} routes healthy with 0 runtime errors.")
+        else:
+            print(f"❌ PRE-FLIGHT AUDIT FAILED: {report['errors_found_count']} runtime error(s) detected across {report['total_routes_checked']} routes!")
+            sys.exit(1)
+
+    elif args.command == "watch":
+        base_url = getattr(args, "url", "http://localhost:3000") or "http://localhost:3000"
+        interval = getattr(args, "interval", 10)
+        print_banner()
+        print(f"👁️ Sentinel Watchdog Active: Monitoring {base_url} every {interval}s (Ctrl+C to stop)...")
+        
+        sentinel = ConsoleNetworkSentinel(base_url=base_url)
+        try:
+            while True:
+                report = sentinel.audit_all_routes()
+                ts = time.strftime("%H:%M:%S")
+                if report["overall_status"] == "PASSED":
+                    print(f"[{ts}] ✅ All routes healthy ({report['total_routes_checked']} routes, max latency: {max((r['latency_ms'] for r in report['route_details']), default=0):.0f}ms)")
+                else:
+                    print(f"[{ts}] 🚨 ERRORS DETECTED: {report['errors_found_count']} issue(s) found!")
+                    for r in report["route_details"]:
+                        if r["errors_detected"]:
+                            print(f"   ❌ {r['route']}: {[e['signature'] for e in r['errors_detected']]}")
+                time.sleep(interval)
+        except KeyboardInterrupt:
+            print("\nSentinel Watchdog stopped.")
+
+
+if __name__ == "__main__":
+    main()

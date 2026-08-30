@@ -181,12 +181,14 @@ from tools.infrastructure.routers.supervisor import router as supervisor_router
 from tools.infrastructure.routers.swarm import router as swarm_router
 from tools.infrastructure.routers.telemetry import router as telemetry_router
 from tools.infrastructure.routers.sentry import router as sentry_router
+from tools.infrastructure.routers.resilience import router as resilience_router
 
 app.include_router(health_router)
 app.include_router(config_router)
 app.include_router(telemetry_router)
 app.include_router(sentry_router)
 app.include_router(intelligence_router)
+app.include_router(resilience_router)
 app.include_router(chat_router)
 app.include_router(swarm_router)
 app.include_router(legacy_router)

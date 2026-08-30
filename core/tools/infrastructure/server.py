@@ -13,7 +13,7 @@ from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from tools.harvester import harvest_and_register_tools
 from tools.infrastructure.config import settings
-from tools.registry import registry
+from tools.registry import ToolEntry, is_sovereign_wrapper, registry
 from tools.utils.helpers import debug_log
 from tools.utils.path_utils import get_project_root
 
@@ -32,6 +32,11 @@ from tools.infrastructure.workspace_tools import *
 from tools.memory.hivemind_tools import *
 from tools.strategy.orchestration_tools import *
 from tools.utils.helpers import *
+
+
+def _build_orchestrate_registry():
+    """Helper for test suites to retrieve the registered tools mapping."""
+    return getattr(registry, "_tools", {})
 
 
 class ProtocolShield(io.TextIOBase):
@@ -83,6 +88,9 @@ discovered_modules = harvest_and_register_tools()
 logger.info(f"🛡️ Dynamic Harvester completed sweep across {len(discovered_modules)} domain module(s).")
 
 registered_names = set()
+# DSH-01: registry name -> the sanitized name FastMCP knows it by, so a later
+# registry removal can pull the exact same tool out of the live FastMCP list.
+_fastmcp_tool_names: dict = {}
 for name, tool_entry in registry.get_all_tools().items():
     if len(registered_names) >= MAX_TOOLS:
         logger.warning(f"⚠️ Maximum tool registration capacity ({MAX_TOOLS}) reached. Halting registration.")
@@ -110,12 +118,76 @@ for name, tool_entry in registry.get_all_tools().items():
 
         mcp.tool(name=clean_name, description=sanitized_desc)(handler)
         registered_names.add(clean_name)
+        _fastmcp_tool_names[str(raw_name)] = clean_name
         logger.debug(f"✅ FastMCP registered tool: {clean_name}")
     except Exception as e:
         safe_err = _sanitize_string(str(e), 256)
         logger.error(f"❌ Error registering tool into FastMCP: {safe_err}")
 
 logger.info(f"🚀 FastMCP Server initialized with {len(registered_names)} active sovereign tools.")
+
+
+def _unregister_from_fastmcp(registry_name: str) -> None:
+    """DSH-01: when the registry drops a tool, drop it from the live FastMCP list too.
+
+    Fired by ``registry.add_removal_listener``. Idempotent from this side: an
+    unknown name is a no-op, and FastMCP's own ``remove_tool`` raising on an
+    already-gone tool is swallowed.
+    """
+    clean_name = _fastmcp_tool_names.pop(registry_name, None)
+    if clean_name is None:
+        return
+    try:
+        mcp.remove_tool(clean_name)
+    except Exception as e:
+        logger.warning(f"FastMCP remove_tool('{clean_name}') failed: {_sanitize_string(str(e), 128)}")
+    registered_names.discard(clean_name)
+    logger.info(f"🗑️  FastMCP unregistered tool: {clean_name}")
+
+
+def _register_into_fastmcp(tool_entry: ToolEntry) -> None:
+    """DSH-05: when a tool is registered AFTER startup (hot_mount), add it to the
+    live FastMCP list so an MCP client sees it without a restart.
+
+    Fired by ``registry.add_registration_listener``. Idempotent: a name already
+    served is skipped. Runs the same sanitisation/validation as the startup loop.
+    ``tool_entry.handler`` is the ``@sovereign_tool`` wrapper -- every ToolEntry
+    is built by that decorator, so the stdout guard / telemetry are already on
+    it, exactly as the startup loop assumes.
+    """
+    try:
+        raw_name = getattr(tool_entry, "name", "")
+        clean_name = _sanitize_string(str(raw_name), 64)
+        if not clean_name or not IDENTIFIER_REGEX.match(clean_name):
+            return
+        if clean_name in registered_names:
+            return
+        handler = getattr(tool_entry, "handler", None)
+        if not callable(handler):
+            return
+        # Defence in depth: only expose a handler `sovereign_tool` actually built
+        # (identity check against registry._SOVEREIGN_WRAPPERS, not a forgeable
+        # attribute). The wrapper carries the stdout guard + telemetry; a
+        # hand-built ToolEntry with a raw callable is refused, not served to MCP.
+        if not is_sovereign_wrapper(handler):
+            logger.warning(f"FastMCP runtime add refused for {clean_name!r}: handler is not a @sovereign_tool wrapper")
+            return
+        sanitized_desc = _sanitize_string(str(getattr(tool_entry, "description", "") or ""), 1024)
+        mcp.tool(name=clean_name, description=sanitized_desc)(handler)
+        registered_names.add(clean_name)
+        _fastmcp_tool_names[str(raw_name)] = clean_name
+        logger.info(f"➕ FastMCP registered tool at runtime: {clean_name}")
+    except Exception as e:
+        # Fail-safe: the tool stays in the SovereignRegistry (pipelines still see
+        # it) but is NOT on the live MCP surface. Restart or re-register to retry.
+        logger.warning(
+            f"FastMCP runtime add failed for {clean_name!r} -- NOT on the MCP "
+            f"surface: {_sanitize_string(str(e), 128)}"
+        )
+
+
+registry.add_removal_listener(_unregister_from_fastmcp)
+registry.add_registration_listener(_register_into_fastmcp)
 
 if __name__ == "__main__":
     install_mcp_safe_print()
