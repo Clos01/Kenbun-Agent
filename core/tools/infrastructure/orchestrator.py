@@ -18,6 +18,54 @@ from pathlib import Path
 # Upper bound on any single step full output appended to the report.
 MAX_FULL_OUTPUT_CHARS = 24000
 
+
+def _run_coro_blocking(coro):
+    """Run an async coroutine to completion from a synchronous caller.
+
+    orchestrate()/swarm() are registered as *sync* MCP tools, and this build of
+    FastMCP invokes sync tools directly on its own running event loop rather
+    than off-loading them to a worker thread. A plain ``asyncio.run()`` from
+    that context raises ``asyncio.run() cannot be called from a running event
+    loop`` and the whole orchestration crashes before a single pipeline step
+    runs -- which is exactly how the MCP ``orchestrate`` tool has been failing.
+
+    When no loop is running (CLI, tests, the FastAPI executor) we run inline.
+    When one is, we hand the coroutine to a dedicated thread with its own fresh
+    loop and block on it, so the pipeline still executes synchronously from the
+    caller's point of view.
+    """
+    import threading
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result_box: list = []
+    err_box: list = []
+
+    def _runner():
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            result_box.append(loop.run_until_complete(coro))
+        except BaseException as exc:  # re-raised on the caller's thread below
+            err_box.append(exc)
+        finally:
+            try:
+                loop.close()
+            finally:
+                asyncio.set_event_loop(None)
+
+    worker = threading.Thread(target=_runner, name="orchestrate-loop", daemon=True)
+    worker.start()
+    worker.join()
+
+    if err_box:
+        raise err_box[0]
+    return result_box[0]
+
+
 # Import centralized settings
 from tools.infrastructure.config import settings
 
@@ -1121,8 +1169,11 @@ def orchestrate(workflow: str, task: str, file_path: str = "", project_path: str
     # entry point the caller happened to reach.
     tools = build_pipeline_tools(project_path)
 
-    # Run the async pipeline
-    return asyncio.run(run_pipeline(
+    # Run the async pipeline. Uses _run_coro_blocking rather than asyncio.run()
+    # because this function is invoked as a sync MCP tool from inside FastMCP's
+    # own running event loop -- asyncio.run() there raises "cannot be called
+    # from a running event loop".
+    return _run_coro_blocking(run_pipeline(
         workflow=workflow,
         task=task,
         tools=tools,
@@ -1142,14 +1193,12 @@ def swarm(objective: str, project_path: str = "."):
     Synchronous entry point for triggering a full autonomous swarm.
     Usage: swarm("Build a new landing page for the burger shop")
     """
-    import asyncio
-
     # Same registry the pipelines use. This built its own 19-tool dict, so a
     # swarm run silently had a different, smaller capability set than an
     # orchestrate run of the same objective.
     tools = build_pipeline_tools(project_path)
 
-    return asyncio.run(spawn_swarm(objective, tools, project_path))
+    return _run_coro_blocking(spawn_swarm(objective, tools, project_path))
 
 if __name__ == "__main__":
     # Example usage

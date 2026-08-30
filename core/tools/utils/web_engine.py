@@ -5,6 +5,7 @@ import asyncio
 from typing import List, Dict, Any
 import requests
 from tools.infrastructure.config import settings
+from tools.utils.helpers import _run_async_safely
 
 logger = logging.getLogger("web_engine")
 
@@ -392,8 +393,11 @@ class WebExtractEngine:
             if not content.strip():
                 content = raw_extract(url)
 
-            # Apply Tiered Content Compression
-            compressed_content = asyncio.run(compressor.compress(content))
+            # Apply Tiered Content Compression. _run_async_safely (not
+            # asyncio.run) because extract() is reached both standalone and
+            # nested inside an orchestrator pipeline already on an event loop,
+            # where asyncio.run() raises "cannot be called from a running loop".
+            compressed_content = _run_async_safely(compressor.compress(content))
             
             extracted_results.append({
                 "url": url,
