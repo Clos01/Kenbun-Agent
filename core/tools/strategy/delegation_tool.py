@@ -9,6 +9,73 @@ from tools.infrastructure.orchestrator import spawn_swarm
 
 logger = logging.getLogger("delegation_tool")
 
+_FULL_TOOLSETS = {"terminal", "file", "web"}
+_LEAF_TIMEOUT_S = 900  # a leaf delegation that runs longer than this is hung
+
+
+def _toolsets_restricted(toolsets: Any) -> bool:
+    """True iff the caller asked for a strict subset of {terminal, file, web}.
+
+    A restricted request must keep the exact old spawn_swarm route with its
+    scoped tool advertising -- the subagent seam gives a child the full
+    build_pipeline_tools surface, which would widen a deliberately-narrow
+    delegation. None / "" / the full set -> not restricted -> seam is fine.
+    """
+    if toolsets in (None, "", []):
+        return False
+    resolved: set
+    if isinstance(toolsets, str):
+        s = toolsets.strip()
+        try:
+            parsed = json.loads(s) if s.startswith("[") else None
+        except json.JSONDecodeError:
+            parsed = None
+        resolved = set(parsed) if isinstance(parsed, list) else {
+            t.strip() for t in s.split(",") if t.strip()
+        }
+    elif isinstance(toolsets, list):
+        resolved = set(toolsets)
+    else:
+        return False
+    return bool(resolved) and not _FULL_TOOLSETS.issubset(resolved)
+
+
+def _sanitize_error(e: BaseException) -> str:
+    """One-line, path-free label for an exception surfaced to a child agent."""
+    return type(e).__name__
+
+
+async def _run_leaf(goal: str, context: str) -> str:
+    """One leaf delegation, through the DSH-04 subagent seam.
+
+    The seam's default provider is the same in-process Queen+workers swarm this
+    tool always used, so the happy path is unchanged -- but when it reports itself
+    unavailable (Gemini decomposition 429), `fallback=True` walks to the next
+    registered provider (e.g. an external `claude` CLI) instead of dead-ending.
+    `subagent.run` is sync; `to_thread` gives it a loop-free worker so the
+    provider's own `asyncio.run(spawn_swarm(...))` bridge is clean.
+    """
+    from tools.execution.subagent import subagent
+
+    try:
+        res = await asyncio.wait_for(
+            asyncio.to_thread(
+                subagent.run, goal, context=context, cwd=str(settings.PROJECT_ROOT),
+            ),
+            timeout=_LEAF_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("delegate_task: leaf delegation exceeded %ss", _LEAF_TIMEOUT_S)
+        return f"❌ delegation timed out after {_LEAF_TIMEOUT_S}s"
+
+    if res.ok:
+        return res.output
+    # Failure: hand the child only the seam-controlled reason (clean, no host
+    # paths / stack). The provider's raw output goes to the log, not the child.
+    logger.warning("delegate_task: leaf delegation failed via %s: %s",
+                   res.provider, res.output[:2000])
+    return f"❌ delegation failed: {res.error or 'subagent unavailable'}"
+
 def get_tools_for_toolsets(toolsets: Any, is_orchestrator: bool = False) -> Dict[str, Any]:
     from tools.audit.gemini_reviewer import gemini_code_review, gemini_research
     from tools.memory.repo_mapper import scan_repo
@@ -20,8 +87,11 @@ def get_tools_for_toolsets(toolsets: Any, is_orchestrator: bool = False) -> Dict
     from tools.infrastructure.server import write_website_content
     
     def _local_view_file(AbsolutePath: str) -> str:
-        path = os.path.abspath(AbsolutePath)
-        if not path.startswith(settings.PROJECT_ROOT):
+        path = os.path.realpath(AbsolutePath)
+        root = os.path.realpath(str(settings.PROJECT_ROOT))
+        # Boundary-aware: a bare startswith lets '/app/project_secrets' pass when
+        # root is '/app/project'. Require an exact match or a real separator.
+        if path != root and not path.startswith(root + os.sep):
             raise PermissionError("Access denied: Path is outside the PROJECT_ROOT.")
         with open(path, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
@@ -50,7 +120,11 @@ def get_tools_for_toolsets(toolsets: Any, is_orchestrator: bool = False) -> Dict
         "recall_fix": ("file", recall_fix),
         "remember_fix": ("file", remember_fix),
     }
-    
+
+    _bad = {c for c, _ in all_tool_mappings.values()} - _FULL_TOOLSETS
+    if _bad:  # a mistyped or new category would silently never be advertised
+        logger.error("delegate_task: tool categories %s are not in _FULL_TOOLSETS", _bad)
+
     # Resolve toolsets list
     toolsets_list = []
     if isinstance(toolsets, str):
@@ -58,8 +132,9 @@ def get_tools_for_toolsets(toolsets: Any, is_orchestrator: bool = False) -> Dict
         if val_clean.startswith("[") and val_clean.endswith("]"):
             try:
                 toolsets_list = json.loads(val_clean)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("delegate_task: malformed toolsets JSON %r (%s); "
+                               "falling back to comma-split", val_clean, e)
         if not toolsets_list:
             toolsets_list = [t.strip() for t in val_clean.split(",") if t.strip()]
     elif isinstance(toolsets, list):
@@ -106,10 +181,20 @@ async def delegate_task(
       toolsets: Comma-separated list or JSON array of tool groups the child can access: 'terminal', 'file', 'web'. Defaults to all.
       tasks: JSON array of task definitions for parallel execution: [{"goal": "...", "context": "...", "toolsets": [...]}, ...]
       role: 'leaf' (default) prevents child from delegating further; 'orchestrator' permits nested delegation.
-      max_iterations: Maximum iteration turns permitted for the subagent run (default: 50).
+      max_iterations: Advisory only today -- accepted for forward compatibility; not yet
+        enforced by the in-process swarm or the seam.
     """
-    is_orchestrator = (role.strip().lower() == "orchestrator")
-    
+    is_orchestrator = (str(role).strip().lower() == "orchestrator")
+
+    # The subagent seam (DSH-04) gives the "leaf" path a provider-fallback when
+    # the in-process swarm hits a Gemini quota wall. It is used only when it
+    # changes nothing else:
+    #   * role="orchestrator" -> nested delegation, which the seam does not model
+    #   * a restricted `toolsets` -> the seam would hand the child the full tool
+    #     surface, widening a deliberately-narrow delegation
+    # Either case keeps the original spawn_swarm route with its scoped tools.
+    use_seam = not is_orchestrator and not _toolsets_restricted(toolsets)
+
     # 1. Parallel Batch Delegation
     if tasks:
         parsed_tasks = []
@@ -130,23 +215,27 @@ async def delegate_task(
             t_goal = t_spec.get("goal", "")
             t_context = t_spec.get("context", "")
             t_toolsets = t_spec.get("toolsets", ["terminal", "file", "web"])
-            
+
             if not t_goal:
                 return f"❌ Task index {i} is missing 'goal'."
-                
-            t_tools = get_tools_for_toolsets(t_toolsets, is_orchestrator=is_orchestrator)
-            t_prompt = f"OBJECTIVE: {t_goal}\n\nCONTEXT:\n{t_context}"
-            
-            # Append task run to gather
-            async_tasks.append(spawn_swarm(t_prompt, t_tools, project_path=settings.PROJECT_ROOT))
-            
+
+            # per-task: seam only when this task is neither orchestrator-scoped
+            # nor toolset-restricted (see the use_seam comment above).
+            if not is_orchestrator and not _toolsets_restricted(t_spec.get("toolsets")):
+                async_tasks.append(_run_leaf(t_goal, t_context))
+            else:
+                t_tools = get_tools_for_toolsets(t_toolsets, is_orchestrator=is_orchestrator)
+                t_prompt = f"OBJECTIVE: {t_goal}\n\nCONTEXT:\n{t_context}"
+                async_tasks.append(spawn_swarm(t_prompt, t_tools, project_path=settings.PROJECT_ROOT))
+
         logger.info(f"⚡ Spawning {len(async_tasks)} parallel subagents...")
         results = await asyncio.gather(*async_tasks, return_exceptions=True)
         
         report = []
         for i, res in enumerate(results):
-            if isinstance(res, Exception):
-                report.append(f"### Subagent Task {i+1} Failed\nError: {res}\n")
+            if isinstance(res, BaseException):
+                logger.warning("delegate_task: batch task %d raised", i + 1, exc_info=res)
+                report.append(f"### Subagent Task {i+1} Failed\nError: {_sanitize_error(res)}\n")
             else:
                 report.append(f"### Subagent Task {i+1} Summary\n{res}\n")
         return "\n".join(report)
@@ -155,13 +244,17 @@ async def delegate_task(
     else:
         if not goal:
             return "❌ Parameter 'goal' is required for single task delegation."
-            
-        t_tools = get_tools_for_toolsets(toolsets, is_orchestrator=is_orchestrator)
-        t_prompt = f"OBJECTIVE: {goal}\n\nCONTEXT:\n{context}"
-        
-        logger.info(f"⚡ Spawning single subagent for goal: {goal[:50]}...")
+
+        from tools.execution.subagent.definition import task_label
+        logger.info("⚡ Spawning single subagent for goal: %s", task_label(goal))
         try:
-            result = await spawn_swarm(t_prompt, t_tools, project_path=settings.PROJECT_ROOT)
+            if use_seam:
+                result = await _run_leaf(goal, context)
+            else:
+                t_tools = get_tools_for_toolsets(toolsets, is_orchestrator=is_orchestrator)
+                t_prompt = f"OBJECTIVE: {goal}\n\nCONTEXT:\n{context}"
+                result = await spawn_swarm(t_prompt, t_tools, project_path=settings.PROJECT_ROOT)
             return f"### Subagent Task Summary\n{result}"
         except Exception as e:
-            return f"❌ Subagent execution failed: {e}"
+            logger.warning("delegate_task: single delegation raised", exc_info=True)
+            return f"❌ Subagent execution failed ({_sanitize_error(e)}) -- see delegation_tool logs"
