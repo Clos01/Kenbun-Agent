@@ -167,3 +167,57 @@ def test_redact_command_never_leaks_a_value_bearing_first_token(cmd):
     assert "ghp_" not in out
     assert "=" not in out
     assert out.startswith("<redacted command,")
+
+
+# --------------------------------------------------- DSH-02 s2: real caller migrated
+def test_execute_cli_command_routes_through_the_shell_seam(monkeypatch):
+    """server_deps.execute_cli_command dispatches via shell.run, so swapping the
+    active provider swaps what that tool executes -- with no code change."""
+    from tools.execution.shell import shell
+    from tools.infrastructure import server_deps
+
+    seen = {}
+
+    class Spy:
+        name = "spy"
+
+        def run(self, command, *, cwd=None, timeout=30.0):
+            seen["command"] = command
+            return ShellResult(command=command, exit_code=0, stdout="spied-ok",
+                               stderr="", provider=self.name)
+
+    dispose = shell.register_provider(Spy(), make_active=True)
+    monkeypatch.setattr("scripts.terminal_chat.scrub_secrets", lambda s: s, raising=False)
+    try:
+        out = server_deps.execute_cli_command("git status --porcelain")
+        assert seen["command"] == "git status --porcelain"
+        assert "spied-ok" in out
+    finally:
+        dispose()
+
+
+def test_execute_cli_command_maps_blocked_and_timeout(monkeypatch):
+    from tools.execution.shell import shell
+    from tools.execution.shell.definition import EXIT_BLOCKED, EXIT_TIMEOUT
+    from tools.infrastructure import server_deps
+
+    class Rejector:
+        name = "rej"
+
+        def __init__(self, kind):
+            self.kind = kind
+
+        def run(self, command, *, cwd=None, timeout=30.0):
+            if self.kind == "blocked":
+                return ShellResult(command=command, exit_code=EXIT_BLOCKED, stdout="",
+                                   stderr="binary 'x' not allowed", blocked=True, provider=self.name)
+            return ShellResult(command=command, exit_code=EXIT_TIMEOUT, stdout="",
+                               stderr="", timed_out=True, provider=self.name)
+
+    monkeypatch.setattr("scripts.terminal_chat.scrub_secrets", lambda s: s, raising=False)
+    for kind, needle in (("blocked", "Security Violation"), ("timeout", "timed out")):
+        dispose = shell.register_provider(Rejector(kind), make_active=True)
+        try:
+            assert needle in server_deps.execute_cli_command("x --y")
+        finally:
+            dispose()

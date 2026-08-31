@@ -155,35 +155,35 @@ def execute_cli_command(command: str) -> str:
     The previous ``is_yolo_safe`` substring filter is intentionally NOT used:
     it inspected *shell* strings, which is fragile. The argv allowlist below
     is strictly stronger because the shell is never invoked.
+
+    DSH-02 s2: dispatched through the ``shell`` capability seam
+    (``tools.execution.shell``) rather than ``safe_run`` directly, so an operator
+    can point this at a sandbox provider for a session without touching this code.
+    The default ``local`` provider *is* ``safe_run`` -- identical behaviour.
     """
-    import subprocess
-    from tools.infrastructure.config import settings
-    from tools.utils.safe_exec import safe_run, UnsafeCommandError
+    from tools.execution.shell import shell
 
     try:
-        res = safe_run(
-            command,
-            cwd=str(settings.PROJECT_ROOT),
-            timeout=30.0,
-        )
-    except UnsafeCommandError as e:
-        return f"❌ Security Violation: {e}"
-    except subprocess.TimeoutExpired:
-        return "❌ Error: Command execution timed out after 30 seconds."
+        res = shell.run(command, cwd=str(settings.PROJECT_ROOT), timeout=30.0)
     except FileNotFoundError as e:
         return f"❌ Error: Binary not found: {e}"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 -- surface any provider failure to the caller
         return f"❌ Error: Command execution failed: {e}"
+
+    if res.blocked:
+        return f"❌ Security Violation: {res.stderr or 'blocked by allowlist'}"
+    if res.timed_out:
+        return "❌ Error: Command execution timed out after 30 seconds."
 
     output = res.stdout or ""
     if res.stderr:
         output += f"\n{res.stderr}"
-        
+
     # Scrub secrets defensively before returning command output to client
     from scripts.terminal_chat import scrub_secrets
     output = scrub_secrets(output)
-    
+
     if not output.strip():
-        output = f"Command completed with exit code {res.returncode}."
+        output = f"Command completed with exit code {res.exit_code}."
     return f"```\n{output}\n```"
 
