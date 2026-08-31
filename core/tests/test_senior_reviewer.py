@@ -7,7 +7,7 @@ import pytest
 
 from tools.strategy import senior_reviewer
 from tools.strategy.resolver import Resolver
-from tools.strategy.senior_reviewer import ResolverExhausted, run_senior_review
+from tools.strategy.senior_reviewer import ResolverExhausted, run_audit_scan, run_senior_review
 
 _OK = '{"status": "APPROVED", "critique": "CLEAN"}'
 
@@ -153,6 +153,49 @@ def test_failover_records_a_cross_process_event(tmp_path, monkeypatch):
     assert events[0]["kind"] == "failover"
     assert events[0]["capability"] == "senior_reviewer"
     assert events[0]["provider"] == "deepseek"
+
+
+# --------------------------------------------------------------- audit scan (s3b)
+def test_audit_scan_uses_the_audit_endpoint_first():
+    r = _resolver(("audit", lambda sp, um, mt: _OK),
+                  ("gateway", lambda sp, um, mt: pytest.fail("not reached")))
+    name, out = run_audit_scan("sys", "code", resolver=r)
+    assert name == "audit" and out == _OK
+
+
+def test_audit_scan_falls_through_to_gateway():
+    r = _resolver(
+        ("audit", lambda sp, um, mt: (_ for _ in ()).throw(ConnectionError("audit endpoint down"))),
+        ("gateway", lambda sp, um, mt: _OK),
+    )
+    name, _ = run_audit_scan("sys", "code", resolver=r)
+    assert name == "gateway"
+
+
+def test_audit_scan_default_order_and_deepseek_opt_in(monkeypatch):
+    monkeypatch.delenv("KENBUN_AUDIT_PROVIDERS", raising=False)
+    senior_reviewer._AUDIT_CAP.reset()
+    try:
+        assert senior_reviewer.audit_scan_resolver().names() == ["audit", "gateway"]
+    finally:
+        senior_reviewer._AUDIT_CAP.reset()
+    monkeypatch.setenv("KENBUN_AUDIT_PROVIDERS", "audit,deepseek,gateway")
+    senior_reviewer._AUDIT_CAP.reset()
+    try:
+        assert senior_reviewer.audit_scan_resolver().names() == ["audit", "deepseek", "gateway"]
+    finally:
+        senior_reviewer._AUDIT_CAP.reset()
+
+
+def test_audit_scan_raises_resolver_exhausted_when_endpoint_and_gateway_are_down():
+    """consult_supervisor's _audit_pass catches this and degrades to None -- the
+    historical 'this pass produced nothing' behaviour."""
+    r = _resolver(
+        ("audit", lambda sp, um, mt: (_ for _ in ()).throw(RuntimeError("audit down"))),
+        ("gateway", lambda sp, um, mt: (_ for _ in ()).throw(RuntimeError("gateway down"))),
+    )
+    with pytest.raises(ResolverExhausted):
+        run_audit_scan("sys", "code", resolver=r)
 
 
 # --------------------------------------------- supervisor_agent integration

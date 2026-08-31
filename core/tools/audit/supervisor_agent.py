@@ -252,14 +252,13 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
         
     context = f"PROPOSAL: {user_proposal}\nMEMORY: {memory_context}{rules_context}"
     
-    # --- TWO-PASS CLOUD AUDIT (Anthropic) ---
-    # Read from settings, never hardcoded. This is the strong rung of the
-    # oversight ladder: pinning it to a fixed model id means it silently ages
-    # behind the executors it audits, inverting the supervisor/student gap the
-    # whole tier exists to maintain.
-    AUDIT_MODEL = settings.AUDIT_LLM_MODEL
-    AUDIT_URL = settings.AUDIT_LLM_URL
-    print(f"🏛️ [SYSTEM 2] Tier 2 audit model: {AUDIT_MODEL}")
+    # --- TWO-PASS CLOUD AUDIT ---
+    # The strong rung of the oversight ladder. The configured audit endpoint
+    # (settings.AUDIT_LLM_MODEL) is the *preferred* provider; DSH-06 s3b puts it
+    # behind a Resolver (audit -> gateway) so a dead endpoint degrades to a
+    # weaker fallback instead of to nothing -- each pass logs which provider
+    # actually served so a fallback audit is never silent.
+    logger.info("[SYSTEM 2] Tier-2 audit -- preferred model: %s", settings.AUDIT_LLM_MODEL)
     
     pass_1_prompt = (
         "You are a code security auditor. Perform a QUICK initial scan of the code.\n"
@@ -290,15 +289,28 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
     )
     
     try:
-        from tools.utils.llm_router import call_llm_gateway
-        
+        from tools.strategy.senior_reviewer import run_audit_scan, ResolverExhausted
+
+        def _audit_pass(label: str, system_prompt: str, user_message: str,
+                        max_tokens: int) -> Optional[str]:
+            """DSH-06 s3b: audit endpoint -> gateway, logging which provider served.
+            Returns None when both are down -- 'this pass produced nothing', the
+            same degrade a raw endpoint outage caused."""
+            try:
+                provider, raw = run_audit_scan(system_prompt, user_message, max_tokens=max_tokens)
+                if provider != "audit":
+                    logger.warning("[SYSTEM 2] %s ran on fallback provider %r (audit endpoint unavailable)",
+                                   label, provider)
+                else:
+                    logger.info("[SYSTEM 2] %s ran on the audit endpoint", label)
+                return raw
+            except ResolverExhausted:
+                logger.error("[SYSTEM 2] %s: audit endpoint and gateway both unavailable", label)
+                return None
+
         # ── PASS 1: Quick critical scan ──
-        print("🔍 [SYSTEM 2] Pass 1: Quick critical scan via Anthropic...")
         user_message = f"CONTEXT:\n{context}\n\nCODE:\n{code_snippet}"
-        pass_1_raw = call_llm_gateway(
-            pass_1_prompt, user_message, max_tokens=2000,
-            url_override=AUDIT_URL, model_override=AUDIT_MODEL
-        )
+        pass_1_raw = _audit_pass("Pass 1", pass_1_prompt, user_message, 2000)
         
         pass_1_obj = extract_json(pass_1_raw) if pass_1_raw else None
         pass_1_critique = ""
@@ -310,14 +322,10 @@ async def _tier_2_cloud(user_proposal: str, code_snippet: str, memory_context: s
             print(f"🔍 [SYSTEM 2] Pass 1 result: {pass_1_status} — {pass_1_critique[:100]}")
         
         # ── PASS 2: Deep scan excluding Pass 1 findings ──
-        print("🔍 [SYSTEM 2] Pass 2: Deep scan via Anthropic (excluding Pass 1 findings)...")
         pass_2_system = pass_2_prompt_template.format(
             pass_1_finding=pass_1_critique or "No critical issues found in Pass 1."
         )
-        pass_2_raw = call_llm_gateway(
-            pass_2_system, user_message, max_tokens=4000,
-            url_override=AUDIT_URL, model_override=AUDIT_MODEL
-        )
+        pass_2_raw = _audit_pass("Pass 2", pass_2_system, user_message, 4000)
         
         pass_2_obj = extract_json(pass_2_raw) if pass_2_raw else None
         pass_2_critique = ""

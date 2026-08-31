@@ -24,6 +24,12 @@ fails (or returns empty / error text), the Resolver demotes it for a cooldown
 and the next provider serves. "Kill the LM Studio box -> the supervisor still
 returns a verdict."
 
+The same module also covers the **two-pass cloud audit** (Pass 1 / Pass 2 in
+``consult_supervisor``), which used to pin ``settings.AUDIT_LLM_URL`` /
+``AUDIT_LLM_MODEL`` -- another single endpoint. ``run_audit_scan`` routes it
+through a Resolver: ``audit -> gateway`` (DeepSeek opt-in via
+``KENBUN_AUDIT_PROVIDERS``).
+
 Data boundary: the code under review is sent to whichever provider serves -- see
 the module note above; an unconfigured client raises before any network I/O.
 """
@@ -38,7 +44,11 @@ from tools.strategy.capability_resolver import (
 )
 from tools.strategy.resolver import Resolver
 
-__all__ = ["run_senior_review", "senior_reviewer_resolver", "ResolverExhausted"]
+__all__ = [
+    "run_senior_review", "senior_reviewer_resolver",
+    "run_audit_scan", "audit_scan_resolver",
+    "ResolverExhausted",
+]
 
 
 # --------------------------------------------------------------------- providers
@@ -72,6 +82,17 @@ def _gateway_provider(system_prompt: str, user_message: str, max_tokens: int) ->
     return call_llm_gateway(system_prompt, user_message, max_tokens=max_tokens)
 
 
+def _audit_endpoint_provider(system_prompt: str, user_message: str, max_tokens: int) -> str:
+    # The configured strong-rung audit endpoint (settings.AUDIT_LLM_URL / MODEL).
+    from tools.infrastructure.config import settings
+    from tools.utils.llm_router import call_llm_gateway
+
+    return call_llm_gateway(
+        system_prompt, user_message, max_tokens=max_tokens,
+        url_override=settings.AUDIT_LLM_URL, model_override=settings.AUDIT_LLM_MODEL,
+    )
+
+
 _CAP = CapabilityResolver(
     "senior_reviewer",
     {
@@ -85,10 +106,46 @@ _CAP = CapabilityResolver(
 )
 
 
+_AUDIT_CAP = CapabilityResolver(
+    "audit_scan",
+    {
+        "audit": lambda sp, um, mt: _audit_endpoint_provider(sp, um, mt),
+        "gateway": lambda sp, um, mt: _gateway_provider(sp, um, mt),
+        "deepseek": lambda sp, um, mt: _deepseek_provider(sp, um, mt),
+    },
+    providers_env="KENBUN_AUDIT_PROVIDERS",
+    cooldown_env="KENBUN_AUDIT_COOLDOWN_S",
+    default_order=("audit", "gateway"),   # deepseek opt-in for the commit gate
+)
+
+
 def senior_reviewer_resolver() -> Resolver:
     """The process-wide senior-reviewer Resolver (lazily built; order from
     KENBUN_SENIOR_PROVIDERS or the default lmstudio -> gateway)."""
     return _CAP.resolver()
+
+
+def audit_scan_resolver() -> Resolver:
+    """The process-wide two-pass-audit Resolver (audit endpoint -> gateway)."""
+    return _AUDIT_CAP.resolver()
+
+
+def run_audit_scan(
+    system_prompt: str,
+    user_message: str,
+    *,
+    max_tokens: int = 3000,
+    resolver: Optional[Resolver] = None,
+) -> Tuple[str, str]:
+    """One pass of the two-pass cloud audit, health-aware. Returns
+    ``(provider_name, content)``; raises :class:`ResolverExhausted` only if the
+    audit endpoint *and* the gateway are both unavailable -- callers should treat
+    that as "this pass produced nothing" (the historical degrade behaviour)."""
+    return _AUDIT_CAP.run(
+        lambda provider: provider(system_prompt, user_message, max_tokens),
+        is_unavailable=text_unavailable,
+        resolver=resolver,
+    )
 
 
 def run_senior_review(
