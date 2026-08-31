@@ -97,3 +97,62 @@ def test_session_log_round_trips_through_sessions_db(tmp_path, monkeypatch):
     ]
     # the invariant holds for history derived from the log itself
     assert_model_visible_is_logged(log.model_messages(), events)
+
+
+# ------------------------------------------- DSH-03 s2: model-visible <=> logged
+import pytest as _pytest
+
+
+@_pytest.fixture
+def _session(tmp_path, monkeypatch):
+    import tools.utils.sessions_db as sdb
+    monkeypatch.setattr(sdb, "get_db_path", lambda: str(tmp_path / "state.db"))
+    sdb.init_db()
+    monkeypatch.delenv("KENBUN_MODEL_LOG", raising=False)
+    return sdb.create_session(source="test")
+
+
+def test_ensure_system_prompt_logged_appends_once_then_dedups(_session):
+    from tools.memory.session_log import SessionLog, ensure_system_prompt_logged
+
+    ensure_system_prompt_logged(_session, "SYSTEM PROMPT")
+    ensure_system_prompt_logged(_session, "SYSTEM PROMPT")     # identical -> no-op
+    ensure_system_prompt_logged(_session, "  SYSTEM PROMPT ")  # whitespace-only diff -> no-op
+
+    sp_events = [e for e in SessionLog(_session).events() if e.kind == "system_prompt"]
+    assert len(sp_events) == 1
+
+
+def test_guard_passes_after_the_write_site_logged_it(_session):
+    from tools.memory.session_log import ensure_system_prompt_logged, guard_model_dispatch
+
+    ensure_system_prompt_logged(_session, "SP")
+    assert guard_model_dispatch(_session, "SP") is True
+
+
+def test_guard_returns_false_and_records_on_a_gap(_session, tmp_path, monkeypatch):
+    from tools.infrastructure.config import settings
+    from tools.memory.session_log import guard_model_dispatch
+    from tools.strategy import resolver_events
+    monkeypatch.setattr(settings, "BRAIN_HEALTH_DIR", tmp_path)
+
+    assert guard_model_dispatch(_session, "an unlogged system prompt") is False
+    ev = resolver_events.recent(3)
+    assert ev and ev[0]["kind"] == "session_log_gap"
+    assert "an unlogged system prompt" not in str(ev[0])   # no content in telemetry
+
+
+def test_guard_raises_in_strict_mode(_session, monkeypatch):
+    from tools.memory.session_log import UnloggedModelInput, guard_model_dispatch
+    monkeypatch.setenv("KENBUN_MODEL_LOG", "strict")
+    with _pytest.raises(UnloggedModelInput) as ei:
+        guard_model_dispatch(_session, "unlogged system prompt")
+    assert "unlogged system prompt" not in str(ei.value)   # no content in the exception
+
+
+def test_guard_never_raises_in_default_mode(_session, monkeypatch):
+    from tools.memory.session_log import guard_model_dispatch
+    monkeypatch.delenv("KENBUN_MODEL_LOG", raising=False)
+    # unknown/empty session, unlogged prompt: returns a bool, never raises
+    assert guard_model_dispatch("does-not-exist", "sp") is False
+    assert guard_model_dispatch(_session, "") is True            # nothing to check

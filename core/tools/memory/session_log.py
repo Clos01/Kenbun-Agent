@@ -15,12 +15,29 @@ reached the model. This slice adds, as standalone tested pieces:
   * `SessionLog`                       -- reads events off the existing sessions_db
                                           message table (no third store)
 
-Wiring the assertion into the live LLM call path is a later slice.
+Slice 2 wires this into the live dashboard-chat LLM call. The *fix* is at the
+write site -- ``chat.py`` now ``SessionLog.append``s the system prompt and the
+composite user message as events before dispatching -- so the invariant holds by
+construction. ``guard_model_dispatch`` is a pure **observe** check right before
+the model call: if something is still missing (an upstream bug), it records a
+``session_log_gap`` telemetry event and moves on. ``KENBUN_MODEL_LOG=strict``
+makes it raise ``UnloggedModelInput`` (kind + session only, never content) --
+for tests / CI.
 """
 from __future__ import annotations
 
+import logging
+import os
+import threading
 from dataclasses import dataclass, field
 from typing import Iterable, List, Optional
+
+logger = logging.getLogger("kenbun.session_log")
+
+# Serialises the check-then-append in ``ensure_system_prompt_logged`` so two
+# concurrent same-session chat turns in one process can't both append the
+# system prompt. (Cross-process is a non-issue: one uvicorn worker owns chat.)
+_ensure_lock = threading.Lock()
 
 # Every event kind whose content can end up inside a model request. If a kind is
 # not here, the projector drops it and the invariant ignores it.
@@ -117,6 +134,75 @@ def assert_model_visible_is_logged(
                 f"records it: {key[1][:120]!r}"
             )
         logged[key] -= 1
+
+
+def _strict() -> bool:
+    return os.getenv("KENBUN_MODEL_LOG", "").strip().lower() == "strict"
+
+
+def ensure_system_prompt_logged(session_id: str, system_prompt: str) -> None:
+    """DSH-03 s2 write-site fix: append ``system_prompt`` as a ``system_prompt``
+    event iff an identical one is not already in this session's log. The raw
+    user directive is already logged by the caller; the composite 'history +
+    directive' message the model sees is a *rendering* of events already in the
+    log, so only the system prompt is genuinely unlogged. Dedup by content keeps
+    the log from growing one system-prompt event per turn."""
+    if not system_prompt or not system_prompt.strip():
+        return
+    want = _norm(system_prompt)
+    try:
+        with _ensure_lock:
+            log = SessionLog(session_id)
+            if any(_norm(e.content) == want
+                   for e in log.events() if e.kind == "system_prompt"):
+                return
+            log.append("system_prompt", system_prompt)
+    except Exception as e:  # noqa: BLE001 -- best-effort; the guard will notice a gap
+        logger.debug("DSH-03: could not log system prompt for %s (%s)", session_id, type(e).__name__)
+
+
+def guard_model_dispatch(
+    session_id: str,
+    system_prompt: str,
+    *,
+    strict: Optional[bool] = None,
+) -> bool:
+    """DSH-03 s2 -- observe-only check right before a model request. Returns
+    ``True`` if ``system_prompt`` is covered by a logged event for
+    ``session_id``. On a gap: records a ``session_log_gap`` telemetry event and
+    returns ``False`` -- or, with ``strict`` / ``KENBUN_MODEL_LOG=strict``,
+    raises :class:`UnloggedModelInput` carrying only the session id, never
+    content. Never appends, never raises in the default mode."""
+    if not system_prompt or not system_prompt.strip():
+        return True
+    enforce = _strict() if strict is None else strict
+    try:
+        logged = {_norm(e.content) for e in SessionLog(session_id).events() if _norm(e.content)}
+    except Exception as e:  # noqa: BLE001 -- a read for a telemetry check must not break a chat turn
+        logger.debug("guard_model_dispatch: session %s unreadable (%s)", session_id, type(e).__name__)
+        return True   # can't check -> don't cry wolf, and never block the turn
+
+    if _norm(system_prompt) in logged:
+        return True
+
+    if enforce:
+        raise UnloggedModelInput(
+            f"session {session_id}: the system prompt reached the model but was not "
+            f"logged as an event"
+        )
+    logger.warning("DSH-03: session %s dispatched an unlogged system prompt to the model", session_id)
+    _record_gap()
+    return False
+
+
+def _record_gap() -> None:
+    # No session id / content in the trail -- it is read back through /resilience.
+    try:
+        from tools.strategy.resolver_events import record
+        record("session_log_gap", capability="session_log", provider=None,
+               detail="a system prompt reached the model without a logged event")
+    except Exception:  # noqa: BLE001 -- telemetry is best-effort
+        pass
 
 
 class SessionLog:

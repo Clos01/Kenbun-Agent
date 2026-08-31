@@ -122,6 +122,23 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
 
         full_user_message = f"CONVERSATIONAL HISTORY:{history_context}\n\nLATEST USER DIRECTIVE: {req.message}"
 
+        # DSH-03 s2: model-visible <=> logged. The raw user directive is already
+        # logged (step 2); the composite message is a rendering of logged events;
+        # the system prompt is the one genuinely-unlogged model-visible input --
+        # log it (dedup by content), then run the observe-only guard.
+        # UnloggedModelInput only escapes under KENBUN_MODEL_LOG=strict.
+        from tools.memory.session_log import (
+            UnloggedModelInput, ensure_system_prompt_logged, guard_model_dispatch,
+        )
+        ensure_system_prompt_logged(session_id, system_prompt)
+        try:
+            guard_model_dispatch(session_id, system_prompt)
+        except UnloggedModelInput:
+            raise
+        except Exception as _dsh03_err:  # noqa: BLE001 -- observability, never blocks the turn
+            logging.getLogger("kenbun.session_log").debug(
+                "guard_model_dispatch skipped: %s", type(_dsh03_err).__name__)
+
         try:
             # 5. Call LLM (with auto-execution loop for System 1-6 tools)
             max_iterations = 3
