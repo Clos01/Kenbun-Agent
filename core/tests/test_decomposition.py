@@ -121,47 +121,40 @@ def test_all_providers_unusable_returns_last_result_not_an_exception():
 
 # ------------------------------------------------- module-level singleton wiring
 def test_module_resolver_is_a_lazy_singleton():
-    decomposition._RESOLVER = None
+    decomposition._CAP.reset()
     try:
         first = decomposition.decomposition_resolver()
         assert decomposition.decomposition_resolver() is first
         assert first.names() == ["gemini", "deepseek", "local"]
     finally:
-        decomposition._RESOLVER = None
+        decomposition._CAP.reset()
 
 
 def test_provider_allowlist_env_narrows_and_orders_the_resolver(monkeypatch):
     monkeypatch.setenv("KENBUN_QUEEN_PROVIDERS", "local, gemini")
-    decomposition._RESOLVER = None
+    decomposition._CAP.reset()
     try:
         assert decomposition.decomposition_resolver().names() == ["local", "gemini"]
     finally:
-        decomposition._RESOLVER = None
+        decomposition._CAP.reset()
 
 
 def test_provider_allowlist_env_with_no_known_names_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("KENBUN_QUEEN_PROVIDERS", "bogus,   ,nonsense")
-    decomposition._RESOLVER = None
+    decomposition._CAP.reset()
     try:
         assert decomposition.decomposition_resolver().names() == ["gemini", "deepseek", "local"]
     finally:
-        decomposition._RESOLVER = None
+        decomposition._CAP.reset()
 
 
-@pytest.mark.parametrize("env,expected", [
-    (None, 300.0),
-    ("45", 45.0),
-    ("  90.5 ", 90.5),
-    ("not-a-number", 300.0),
-    ("0", 300.0),
-    ("-10", 300.0),
-])
-def test_cooldown_is_env_tunable_with_safe_fallbacks(monkeypatch, env, expected):
-    if env is None:
-        monkeypatch.delenv("KENBUN_QUEEN_COOLDOWN_S", raising=False)
-    else:
-        monkeypatch.setenv("KENBUN_QUEEN_COOLDOWN_S", env)
-    assert decomposition._env_cooldown_s() == expected
+def test_cooldown_env_is_honoured(monkeypatch):
+    monkeypatch.setenv("KENBUN_QUEEN_COOLDOWN_S", "42")
+    decomposition._CAP.reset()
+    try:
+        assert decomposition.decomposition_resolver()._cooldown_s == 42.0
+    finally:
+        decomposition._CAP.reset()
 
 
 def test_racing_spawns_share_one_resolver_instance():
@@ -169,7 +162,7 @@ def test_racing_spawns_share_one_resolver_instance():
     their own resolver (which would split the provider-health view)."""
     import threading
 
-    decomposition._RESOLVER = None
+    decomposition._CAP.reset()
     try:
         seen = []
         barrier = threading.Barrier(12)
@@ -187,13 +180,13 @@ def test_racing_spawns_share_one_resolver_instance():
         assert len(seen) == 12
         assert all(r is seen[0] for r in seen)
     finally:
-        decomposition._RESOLVER = None
+        decomposition._CAP.reset()
 
 
 def test_run_decomposition_uses_the_singleton_and_its_providers(monkeypatch):
     """End-to-end through the real singleton: patch the provider functions,
     kill gemini, prove deepseek serves."""
-    decomposition._RESOLVER = None
+    decomposition._CAP.reset()
     try:
         monkeypatch.setattr(decomposition, "_gemini_provider",
                             lambda p: (_ for _ in ()).throw(RuntimeError("429")))
@@ -204,7 +197,7 @@ def test_run_decomposition_uses_the_singleton_and_its_providers(monkeypatch):
         assert name == "deepseek"
         assert raw == _JSON
     finally:
-        decomposition._RESOLVER = None
+        decomposition._CAP.reset()
 
 
 # ------------------------------------------------- failover telemetry

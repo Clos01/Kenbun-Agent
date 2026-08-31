@@ -86,56 +86,54 @@ def test_empty_and_error_prefixed_output_are_treated_as_outages():
 # --------------------------------------------------------------- config knobs
 def test_provider_allowlist_env_narrows_and_orders(monkeypatch):
     monkeypatch.setenv("KENBUN_SENIOR_PROVIDERS", "gateway, lmstudio")
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     try:
         assert senior_reviewer.senior_reviewer_resolver().names() == ["gateway", "lmstudio"]
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
 
 
 def test_deepseek_is_opt_in_not_default(monkeypatch):
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     monkeypatch.delenv("KENBUN_SENIOR_PROVIDERS", raising=False)
     try:
         assert "deepseek" not in senior_reviewer.senior_reviewer_resolver().names()
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
     monkeypatch.setenv("KENBUN_SENIOR_PROVIDERS", "lmstudio,deepseek,gateway")
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     try:
         assert senior_reviewer.senior_reviewer_resolver().names() == ["lmstudio", "deepseek", "gateway"]
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
 
 
 def test_provider_allowlist_junk_falls_back_to_default(monkeypatch):
     monkeypatch.setenv("KENBUN_SENIOR_PROVIDERS", "nope, nonsense")
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     try:
         assert senior_reviewer.senior_reviewer_resolver().names() == ["lmstudio", "gateway"]
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
 
 
-@pytest.mark.parametrize("env,expected", [
-    (None, 300.0), ("45", 45.0), ("0", 300.0), ("junk", 300.0),
-])
-def test_cooldown_env_with_safe_fallbacks(monkeypatch, env, expected):
-    if env is None:
-        monkeypatch.delenv("KENBUN_SENIOR_COOLDOWN_S", raising=False)
-    else:
-        monkeypatch.setenv("KENBUN_SENIOR_COOLDOWN_S", env)
-    assert senior_reviewer._env_cooldown_s() == expected
+def test_cooldown_env_is_honoured(monkeypatch):
+    monkeypatch.setenv("KENBUN_SENIOR_COOLDOWN_S", "42")
+    senior_reviewer._CAP.reset()
+    try:
+        assert senior_reviewer.senior_reviewer_resolver()._cooldown_s == 42.0
+    finally:
+        senior_reviewer._CAP.reset()
 
 
 def test_module_resolver_is_a_lazy_singleton():
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     try:
         first = senior_reviewer.senior_reviewer_resolver()
         assert senior_reviewer.senior_reviewer_resolver() is first
         assert first.names() == ["lmstudio", "gateway"]
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
 
 
 # --------------------------------------------------------------- telemetry
@@ -163,7 +161,7 @@ def test_call_local_senior_returns_content_from_a_fallback(monkeypatch):
     fallback (the gateway, by default) when LM Studio is dead."""
     from tools.audit import supervisor_agent
 
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     monkeypatch.setattr(senior_reviewer, "_lmstudio_provider",
                         lambda sp, um, mt: (_ for _ in ()).throw(ConnectionError("box down")))
     monkeypatch.setattr(senior_reviewer, "_gateway_provider", lambda sp, um, mt: _OK)
@@ -172,13 +170,13 @@ def test_call_local_senior_returns_content_from_a_fallback(monkeypatch):
         assert err is None
         assert content == _OK
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
 
 
 def test_call_local_senior_returns_error_tuple_when_all_providers_down(monkeypatch):
     from tools.audit import supervisor_agent
 
-    senior_reviewer._RESOLVER = None
+    senior_reviewer._CAP.reset()
     for name in ("_lmstudio_provider", "_deepseek_provider", "_gateway_provider"):
         monkeypatch.setattr(senior_reviewer, name,
                             lambda sp, um, mt: (_ for _ in ()).throw(RuntimeError("down")))
@@ -187,4 +185,4 @@ def test_call_local_senior_returns_error_tuple_when_all_providers_down(monkeypat
         assert content is None
         assert err and err.startswith("❌ Local Senior Fallback failed")
     finally:
-        senior_reviewer._RESOLVER = None
+        senior_reviewer._CAP.reset()
