@@ -1,8 +1,12 @@
 import os
 import json
 import asyncio
+import logging
 from pathlib import Path
+from typing import Optional, Tuple
 from tools.utils.llm_utils import extract_json
+
+logger = logging.getLogger("kenbun.supervisor")
 
 # --- 1. ENSEMBLE INTEGRATION ---
 from tools.infrastructure.config import settings
@@ -116,60 +120,49 @@ def _proposal_expects_code(user_proposal: str) -> bool:
     ))
 
 
-def _call_local_senior(system_prompt: str, user_message: str, max_tokens: int = 3000):
-    """Call the hardware-agnostic LLM gateway.
+def _record_senior_feedback(*, success: bool, latency: float) -> None:
+    """Feed the routing bandit's "local" arm (success + latency for the
+    senior-review path). A fixed ``task`` label -- no proposal / code text flows
+    into the bandit's context store; which provider actually served is in the
+    resolver_events trail instead."""
+    try:
+        from tools.strategy.decision_logic import router
+        router.record_model_feedback(
+            model="local", task="senior-review", success=success, latency=latency, cost=0.0,
+        )
+    except Exception as routing_err:  # noqa: BLE001 -- telemetry is not load-bearing
+        logger.warning("Failed to record senior-review model feedback: %s", routing_err)
+
+
+def _call_local_senior(system_prompt: str, user_message: str,
+                       max_tokens: int = 3000) -> Tuple[Optional[str], Optional[str]]:
+    """Get a senior-reviewer response, health-aware across providers.
+
+    DSH-06: routes through tools.strategy.senior_reviewer, a Resolver over
+    ``lmstudio -> gateway`` (deepseek opt-in). LM Studio is still tried first, so
+    the healthy path is unchanged; if that box is unreachable the commit gate
+    keeps working from a fallback instead of degrading. Returns
+    ``(content, error)`` -- exactly one is non-None.
 
     `max_tokens` is passed through explicitly so small local models (LM Studio
     Gemma/Qwen variants in particular) don't truncate the JSON verdict mid-string.
-    The historical default was 4000 but only when the caller passed it — most
-    supervisor callers didn't, so the model often had ~150 tokens of headroom.
     """
     import time
+    from tools.strategy.senior_reviewer import ResolverExhausted, run_senior_review
+
     start_time = time.time()
     try:
-        from tools.utils.llm_router import call_llm_gateway
-        
-        # Override to ensure the local senior ALWAYS uses LM Studio
-        lm_url = f"http://{settings.SWARM_PC_IP or 'localhost'}:{settings.models.lm_studio_port}/v1"
-        # Read the model from settings (maps to LM_STUDIO_MODEL in .env), fallback to 26B
-        lm_model = settings.models.lm_studio_model or "google/gemma-4-26b-a4b"
-        
-        content = call_llm_gateway(
-            system_prompt, 
-            user_message, 
-            max_tokens=max_tokens, 
-            url_override=lm_url, 
-            model_override=lm_model
+        _provider, content = run_senior_review(
+            system_prompt, user_message, max_tokens=max_tokens,
         )
-        duration = time.time() - start_time
-        
-        try:
-            from tools.strategy.decision_logic import router
-            router.record_model_feedback(
-                model="local",
-                task=user_message,
-                success=True,
-                latency=duration,
-                cost=0.0
-            )
-        except Exception as routing_err:
-            print(f"⚠️ Failed to record local model feedback: {routing_err}")
-            
+        _record_senior_feedback(success=True, latency=time.time() - start_time)
         return content, None
-    except Exception as e:
-        duration = time.time() - start_time
-        try:
-            from tools.strategy.decision_logic import router
-            router.record_model_feedback(
-                model="local",
-                task=user_message,
-                success=False,
-                latency=duration,
-                cost=0.0
-            )
-        except Exception as routing_err:
-            print(f"⚠️ Failed to record local model feedback: {routing_err}")
-            
+    except ResolverExhausted as e:
+        _record_senior_feedback(success=False, latency=time.time() - start_time)
+        return None, f"❌ Local Senior Fallback failed: {e}"
+    except Exception as e:  # noqa: BLE001 -- keep the (content, error) contract, but this one is unexpected
+        logger.exception("Unexpected error in _call_local_senior")
+        _record_senior_feedback(success=False, latency=time.time() - start_time)
         return None, f"❌ Local Senior Fallback failed: {e}"
 
 class TriageManager:
