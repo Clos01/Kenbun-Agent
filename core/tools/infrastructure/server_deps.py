@@ -160,8 +160,32 @@ def execute_cli_command(command: str) -> str:
     (``tools.execution.shell``) rather than ``safe_run`` directly, so an operator
     can point this at a sandbox provider for a session without touching this code.
     The default ``local`` provider *is* ``safe_run`` -- identical behaviour.
+
+    DSH-05 (hooks): a ``PreToolUse`` hook fires before dispatch with the same
+    payload shape Claude Code uses (``tool_name`` = ``"Bash"``, ``tool_input`` =
+    ``{"command": ...}``), so an operator's existing ``~/.claude/hooks.json``
+    Bash guards apply here too. A hook that exits 2 / returns ``deny`` blocks the
+    command; ``updatedInput.command`` rewrites it before it runs.
     """
     from tools.execution.shell import shell
+
+    _hook_context = ""
+    try:
+        from tools.hooks import default_registry
+        _pre = default_registry().fire(
+            "PreToolUse", "Bash",
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash",
+             "tool_input": {"command": command}, "cwd": str(settings.PROJECT_ROOT)},
+            cwd=str(settings.PROJECT_ROOT),
+        )
+        if _pre.blocked:
+            return f"❌ Blocked by PreToolUse hook: {_pre.reason or 'command denied'}"
+        if isinstance(_pre.updated_input, dict) and isinstance(_pre.updated_input.get("command"), str):
+            command = _pre.updated_input["command"]
+        if _pre.context_blob:
+            _hook_context = _pre.context_blob
+    except Exception as _hook_err:  # noqa: BLE001 -- a hook fault must never break the tool
+        logging.debug("PreToolUse hook fire failed (%s)", type(_hook_err).__name__)
 
     try:
         res = shell.run(command, cwd=str(settings.PROJECT_ROOT), timeout=30.0)
@@ -185,5 +209,8 @@ def execute_cli_command(command: str) -> str:
 
     if not output.strip():
         output = f"Command completed with exit code {res.exit_code}."
-    return f"```\n{output}\n```"
+    rendered = f"```\n{output}\n```"
+    if _hook_context:
+        rendered = f"ℹ️ PreToolUse hook: {_hook_context}\n\n{rendered}"
+    return rendered
 

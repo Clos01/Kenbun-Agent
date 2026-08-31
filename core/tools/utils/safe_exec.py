@@ -111,6 +111,22 @@ class UnsafeCommandError(ValueError):
     """Raised when a command string fails the safety gate."""
 
 
+_SECRET_KEY_MARKERS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "PASSWD", "AUTH")
+
+
+def scrubbed_env(base: Optional[dict] = None) -> dict:
+    """A copy of ``base`` (default ``os.environ``) with obvious-secret vars
+    dropped -- any key containing KEY / TOKEN / SECRET / PASSWORD / CREDENTIAL /
+    PASSWD / AUTH. The one place this rule lives; ``safe_run`` and the hook
+    runner both use it."""
+    import os
+    src = os.environ if base is None else base
+    return {
+        k: v for k, v in src.items()
+        if not any(m in k.upper() for m in _SECRET_KEY_MARKERS)
+    }
+
+
 def _validate(command: str) -> list[str]:
     """Parse + validate ``command``. Returns the argv list on success."""
     if not isinstance(command, str):
@@ -272,16 +288,8 @@ def safe_run(
     subprocess.TimeoutExpired
         Propagated from ``subprocess.run`` on timeout.
     """
-    import os
     argv = _validate(command)
-    
-    # Scrub parent process secrets
-    child_env = os.environ.copy() if env is None else env.copy()
-    child_env = {
-        k: v for k, v in child_env.items()
-        if not any(sec in k.upper() for sec in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "PASSWD", "AUTH"))
-    }
-    
+    child_env = scrubbed_env(env)
     logger.info("safe_run dispatching argv=%r cwd=%s timeout=%s", argv, cwd, timeout)
     return subprocess.run(
         argv,
@@ -309,7 +317,6 @@ def safe_run_argv(
     Variant for callers that already have an argv list (skip ``shlex.split``).
     Still runs the allowlist + subcommand-denylist gates.
     """
-    import os
     if not argv:
         raise UnsafeCommandError("empty argv")
     binary = Path(argv[0]).name
@@ -317,14 +324,8 @@ def safe_run_argv(
         raise UnsafeCommandError(f"binary {binary!r} is not in the allowlist")
     if binary in DENIED_SUBCOMMANDS and len(argv) > 1 and argv[1] in DENIED_SUBCOMMANDS[binary]:
         raise UnsafeCommandError(f"{binary} {argv[1]!r} is denied by policy")
-        
-    # Scrub parent process secrets
-    child_env = os.environ.copy() if env is None else env.copy()
-    child_env = {
-        k: v for k, v in child_env.items()
-        if not any(sec in k.upper() for sec in ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL", "PASSWD", "AUTH"))
-    }
-    
+
+    child_env = scrubbed_env(env)
     logger.info("safe_run_argv dispatching argv=%r cwd=%s timeout=%s", list(argv), cwd, timeout)
     return subprocess.run(
         list(argv),
@@ -346,4 +347,5 @@ __all__ = [
     "parse_argv",
     "safe_run",
     "safe_run_argv",
+    "scrubbed_env",
 ]
