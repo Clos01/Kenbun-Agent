@@ -70,23 +70,25 @@ DSH_PHASES: List[Dict[str, str]] = [
         "id": "DSH-06",
         "title": "No single point of failure, anywhere",
         "status": "in_progress",
-        "commit": "6cd3785",
+        "commit": "555a295",
         "blurb": (
             "A capability with exactly one provider is a single fixed choice in a "
-            "load-bearing spot -- when it's down, you're just down. The fix: every seam "
-            "gets 2+ providers and a resolver that DEMOTES a failing one (for a cooldown) "
-            "instead of stopping. First seam wired: the swarm Queen's task decomposition. "
-            "Kill Gemini and the swarm still plans its work."
+            "load-bearing spot -- when it's down, you're just down. The fix: every "
+            "load-bearing LLM call gets 2+ providers and a resolver that DEMOTES a "
+            "failing one (for a cooldown) instead of stopping. Wired so far: the swarm "
+            "Queen's decomposition, the supervisor's senior reviewer, the two-pass "
+            "audit, and the misc reasoning callers. Kill any one provider and the "
+            "swarm keeps working."
         ),
     },
 ]
 
-# The one capability wired onto the resolver so far.
+# The capabilities wired onto a Resolver so far (shown in the panel).
 WIRED_CAPABILITY: Dict[str, str] = {
-    "name": "Queen task decomposition",
-    "where": "spawn_swarm() -- breaks an objective into atomic tasks",
-    "was": "one direct call to Gemini; a 429 meant no swarm at all",
-    "now": "gemini -> deepseek -> local, health-aware, auto-recovering",
+    "name": "load-bearing LLM calls",
+    "where": "decomposition, senior review, two-pass audit, misc reasoning callers",
+    "was": "one hardcoded provider each; a 429 or a dead box killed the feature",
+    "now": "each behind a health-aware Resolver, auto-recovering",
 }
 
 # Condensed composability primer for the panel footer.

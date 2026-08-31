@@ -46,8 +46,19 @@ type Phase = {
 
 type PrimerItem = { term: string; line: string };
 
+type Capability = {
+  name: string;
+  blurb: string;
+  providers: Provider[];
+  error: string | null;
+  healthy_count: number;
+  total_count: number;
+  spof: boolean;
+};
+
 type ResiliencePayload = {
   capability: { name?: string; where?: string; was?: string; now?: string };
+  capabilities?: Capability[];
   providers: Provider[];
   provider_error: string | null;
   healthy_count: number;
@@ -63,7 +74,10 @@ type ResiliencePayload = {
 const PROVIDER_META: Record<string, { label: string; sub: string; Icon: React.ComponentType<{ className?: string }> }> = {
   gemini: { label: "Gemini", sub: "Google · high-reasoning", Icon: Sparkles },
   deepseek: { label: "DeepSeek", sub: "DeepSeek-V3 · cloud", Icon: Server },
-  local: { label: "Local Gateway", sub: "llm_router · your box", Icon: Cpu },
+  local: { label: "Local Gateway", sub: "llm_router · PRIMARY/FALLBACK", Icon: Cpu },
+  lmstudio: { label: "LM Studio", sub: "your box · SWARM_PC_IP", Icon: Cpu },
+  gateway: { label: "LLM Gateway", sub: "llm_router · PRIMARY/FALLBACK", Icon: Cpu },
+  audit: { label: "Audit Endpoint", sub: "the strong rung · AUDIT_LLM_URL", Icon: ShieldCheck },
 };
 
 function timeAgo(iso: string): string {
@@ -86,7 +100,7 @@ const FALLBACK_PHASES: Phase[] = [
   { id: "DSH-03", title: "One honest record of what the model saw", status: "done", commit: "59f5449", blurb: "The session event log is the single source of truth for model context. A guard raises if anything reaches the model unlogged." },
   { id: "DSH-04", title: "One way to hand work to a sub-agent", status: "done", commit: "00e8cfa", blurb: "One interface, pluggable drivers. When one reports 'unavailable', the seam walks to the next — where the 429 quota failure first got a real fallback." },
   { id: "DSH-05", title: "Mount a new tool while the swarm runs", status: "done", commit: "ca6858f", blurb: "Hand the swarm a fresh tool, smoke-test it, keep it only if it passes — otherwise auto-reverted. Self-modification without a restart." },
-  { id: "DSH-06", title: "No single point of failure, anywhere", status: "in_progress", commit: "6cd3785", blurb: "Every seam gets 2+ providers and a resolver that demotes a failing one instead of stopping. First seam wired: the swarm Queen's task decomposition." },
+  { id: "DSH-06", title: "No single point of failure, anywhere", status: "in_progress", commit: "555a295", blurb: "Every load-bearing LLM call gets 2+ providers and a resolver that demotes a failing one instead of stopping. Wired so far: Queen decomposition, the supervisor's senior reviewer, the two-pass audit, and the misc reasoning callers." },
 ];
 const FALLBACK_PRIMER: PrimerItem[] = [
   { term: "Static composition", line: "Decided once, at build time. Changing it means editing code and restarting — and a restart wipes every bit of in-memory state." },
@@ -205,7 +219,24 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
     };
   }, [apiBase]);
 
-  const nextHop = useMemo(() => data?.providers.find((p) => p.healthy)?.name ?? null, [data]);
+  const capabilities: Capability[] = useMemo(() => {
+    if (data?.capabilities?.length) return data.capabilities;
+    if (data?.providers?.length) {
+      return [{
+        name: data.capability?.name ?? "Queen decomposition",
+        blurb: data.capability?.where ?? "",
+        providers: data.providers,
+        error: data.provider_error,
+        healthy_count: data.healthy_count,
+        total_count: data.total_count,
+        spof: data.spof,
+      }];
+    }
+    return [];
+  }, [data]);
+
+  const totalHealthy = capabilities.reduce((n, c) => n + c.healthy_count, 0);
+  const totalProviders = capabilities.reduce((n, c) => n + c.total_count, 0);
 
   if (loading && !data) {
     return (
@@ -216,11 +247,11 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
     );
   }
 
-  const providers = data?.providers ?? [];
   const events = data?.events ?? [];
   const phases = data?.phases?.length ? data.phases : FALLBACK_PHASES;
   const primer = data?.primer?.length ? data.primer : FALLBACK_PRIMER;
-  const allHealthy = (data?.healthy_count ?? 0) === (data?.total_count ?? 0) && (data?.total_count ?? 0) > 0;
+  const anySpof = capabilities.some((c) => c.spof);
+  const allHealthy = totalHealthy === totalProviders && totalProviders > 0;
 
   return (
     <div className="space-y-12 animate-fade-in text-left pb-4">
@@ -229,17 +260,17 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <div className="flex items-center gap-2">
-              {data?.spof ? <ShieldAlert className="w-4 h-4 text-amber-500" /> : <ShieldCheck className="w-4 h-4 text-emerald-500" />}
+              {anySpof ? <ShieldAlert className="w-4 h-4 text-amber-500" /> : <ShieldCheck className="w-4 h-4 text-emerald-500" />}
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">No single point of failure</span>
             </div>
             <h2 className="font-heading text-2xl lg:text-3xl leading-tight text-primary">
               If one brain goes down, the swarm keeps thinking.
             </h2>
             <p className="text-[12px] leading-relaxed text-secondary opacity-80">
-              The <strong>{data?.capability?.name ?? "Queen decomposition"}</strong> used to be{" "}
-              <span className="line-through opacity-60">{data?.capability?.was ?? "one call to Gemini"}</span>. Now it&apos;s{" "}
-              <strong className="text-tertiary">{data?.capability?.now ?? "gemini → deepseek → local, health-aware"}</strong>. A provider
-              that fails gets <em>demoted</em> for a cooldown — not switched off — and quietly comes back when it recovers.
+              {capabilities.length} load-bearing {capabilities.length === 1 ? "capability" : "capabilities"} that used to be{" "}
+              <span className="line-through opacity-60">one hardcoded call each</span> now run through a{" "}
+              <strong className="text-tertiary">health-aware resolver</strong>. A provider that fails gets{" "}
+              <em>demoted</em> for a cooldown — not switched off — and quietly comes back when it recovers.
             </p>
           </div>
           <div className="shrink-0 flex lg:flex-col items-center gap-3 lg:min-w-[140px]">
@@ -249,8 +280,8 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
               }`}
             >
               <div className="text-2xl font-black tracking-tighter text-primary">
-                {data?.healthy_count ?? "—"}
-                <span className="opacity-30"> / {data?.total_count ?? "—"}</span>
+                {totalProviders ? totalHealthy : "—"}
+                <span className="opacity-30"> / {totalProviders || "—"}</span>
               </div>
               <div className="text-[8px] font-black uppercase tracking-[0.25em] text-secondary opacity-70 mt-0.5">providers up</div>
             </div>
@@ -263,30 +294,57 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
         )}
       </div>
 
-      {/* ---------- provider rail ---------- */}
-      <section className="space-y-5">
-        <SectionLabel icon={Network} hint="tried in this order · gemini first">
-          The fallback chain
+      {/* ---------- per-capability fallback chains ---------- */}
+      <section className="space-y-6">
+        <SectionLabel icon={Network} hint={`${capabilities.length} seams · each tried in order, first choice first`}>
+          The fallback chains
         </SectionLabel>
-        <div className="relative flex flex-col md:flex-row items-stretch gap-3 md:gap-2">
-          {providers.map((p, i) => (
-            <React.Fragment key={p.name}>
-              <ProviderCard p={p} isNextHop={p.name === nextHop} />
-              {i < providers.length - 1 && (
-                <div className="flex md:flex-col items-center justify-center px-1 text-primary/20">
-                  <ArrowRight className="w-4 h-4 rotate-90 md:rotate-0" />
+        {capabilities.length === 0 ? (
+          <p className="text-[11px] text-secondary opacity-60 italic">
+            Live resolver health needs the API server — the narrative below still reads.
+          </p>
+        ) : (
+          <div className="space-y-5">
+            {capabilities.map((cap) => {
+              const nextHop = cap.providers.find((p) => p.healthy)?.name ?? null;
+              const primary = cap.providers[0]?.name;
+              return (
+                <div key={cap.name} className="space-y-2.5">
+                  <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[11px] font-black uppercase tracking-widest text-primary">{cap.name}</span>
+                      <span className="text-[9px] font-bold text-secondary opacity-50 italic">{cap.blurb}</span>
+                    </div>
+                    <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${
+                      cap.healthy_count === cap.total_count ? "text-emerald-600" : "text-amber-600"
+                    }`}>
+                      {cap.healthy_count}/{cap.total_count} up
+                    </span>
+                  </div>
+                  <div className="relative flex flex-col md:flex-row items-stretch gap-2">
+                    {cap.providers.map((p, i) => (
+                      <React.Fragment key={p.name}>
+                        <ProviderCard p={p} isNextHop={p.name === nextHop} />
+                        {i < cap.providers.length - 1 && (
+                          <div className="flex md:flex-col items-center justify-center px-1 text-primary/20">
+                            <ArrowRight className="w-4 h-4 rotate-90 md:rotate-0" />
+                          </div>
+                        )}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  <p className="text-[9.5px] leading-relaxed text-secondary opacity-55 italic">
+                    {nextHop
+                      ? nextHop === primary
+                        ? `Serving from ${PROVIDER_META[nextHop]?.label ?? nextHop}.`
+                        : `${PROVIDER_META[primary ?? ""]?.label ?? primary} is cooling down — ${PROVIDER_META[nextHop]?.label ?? nextHop} is covering.`
+                      : "Every provider is cooling down — the resolver still tries the least-recently-failed one rather than give up."}
+                  </p>
                 </div>
-              )}
-            </React.Fragment>
-          ))}
-        </div>
-        <p className="text-[10px] leading-relaxed text-secondary opacity-60 italic">
-          {nextHop
-            ? nextHop === providers[0]?.name
-              ? `Right now the request goes straight to ${PROVIDER_META[nextHop]?.label ?? nextHop}.`
-              : `${PROVIDER_META[providers[0]?.name]?.label ?? providers[0]?.name} is cooling down — ${PROVIDER_META[nextHop]?.label ?? nextHop} is covering.`
-            : "Every provider is cooling down — the resolver will still try the least-recently-failed one rather than give up."}
-        </p>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* ---------- failover feed ---------- */}
@@ -305,7 +363,7 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
                 <span className="relative flex h-2 w-2">
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
-                No failovers on record. Gemini&apos;s been holding — nothing has had to reroute.
+                No failovers on record. Every first-choice provider is holding — nothing has had to reroute.
               </motion.div>
             ) : (
               events.map((ev, i) => (
