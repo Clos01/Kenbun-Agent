@@ -59,26 +59,29 @@ DSH_PHASES: List[Dict[str, str]] = [
         "id": "DSH-05",
         "title": "Mount a new tool while the swarm is running",
         "status": "done",
-        "commit": "ca6858f",
+        "commit": "e680f35",
         "blurb": (
             "Hand the swarm a freshly-built tool, run a smoke test on it, and keep it only "
-            "if it passes -- otherwise it's auto-reverted and never surfaces. The capstone: "
-            "self-modification without a restart."
+            "if it passes -- otherwise it's auto-reverted and never surfaces. The other "
+            "half: lifecycle hooks -- an operator can drop a hooks.json next to the swarm "
+            "and a shell command of theirs runs before a tool does, free to block it, "
+            "rewrite its input, or add a note. Same protocol Claude Code uses. Together: "
+            "self-modification and operator control, both without a restart."
         ),
     },
     {
         "id": "DSH-06",
         "title": "No single point of failure, anywhere",
-        "status": "in_progress",
-        "commit": "555a295",
+        "status": "done",
+        "commit": "578632d",
         "blurb": (
             "A capability with exactly one provider is a single fixed choice in a "
             "load-bearing spot -- when it's down, you're just down. The fix: every "
             "load-bearing LLM call gets 2+ providers and a resolver that DEMOTES a "
-            "failing one (for a cooldown) instead of stopping. Wired so far: the swarm "
+            "failing one (for a cooldown) instead of stopping. Wired: the swarm "
             "Queen's decomposition, the supervisor's senior reviewer, the two-pass "
-            "audit, and the misc reasoning callers. Kill any one provider and the "
-            "swarm keeps working."
+            "audit, the misc reasoning callers, and memory reads. Kill any one "
+            "provider and the swarm keeps working."
         ),
     },
 ]

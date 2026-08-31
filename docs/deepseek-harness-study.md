@@ -57,11 +57,12 @@ Ordered so each phase ships value on its own and de-risks the next. Phases 1–4
 | Phase | State | Landed as |
 |---|---|---|
 | DSH-01 revertible registry | ✅ done | `8297614` |
-| DSH-02 shell seam | ✅ slice 1 (`26fa15d`); slice 2 (17 `safe_run` callers) open |
-| DSH-03 session log | ✅ slice 1 (`59f5449`); slice 2 (wire into the *live* LLM path) open — riskiest |
+| DSH-02 shell seam | ✅ slice 1 (`26fa15d`) + slice 2 (`execute_cli_command` → `shell.run`, `e8b9f7f`) |
+| DSH-03 session log | ✅ slice 1 (`59f5449`) + slice 2 (write-site fix + observe-only guard on the live chat path, `23b3f55`) |
 | DSH-04 subagent seam | ✅ slices 1+2 (`0df52e6`, `00e8cfa`) — 429 fallback live in `delegate_task` |
-| DSH-05 hot mount | ✅ slice 1 (`ca6858f`) + follow-up (`ad68569`); slice 2 (source→callable sandbox) open |
-| **DSH-06 no-SPOF resolvers** | 🔄 slices 1-4 + Observatory panel + `CapabilityResolver` extraction | `f292e09` `6cd3785` `15ec53f` `54a19f9` `becfe22` `99eb154` `96debee` |
+| DSH-05 hot mount | ✅ slice 1 (`ca6858f`) + follow-up (`ad68569`) + slice 2 (source→callable, AST allowlist + restricted `exec`, `e2b1702`) |
+| DSH-05 hooks | ✅ command-hook wire-protocol (matcher + outcome codec + runner + registry) wired as `PreToolUse` in `execute_cli_command` (`e680f35`) |
+| **DSH-06 no-SPOF resolvers** | ✅ slices 1-5 + Observatory panel + `CapabilityResolver` extraction | `f292e09` `6cd3785` `15ec53f` `54a19f9` `becfe22` `99eb154` `96debee` `578632d` |
 
 **DSH-06** = "compose with configuration" from the DSH dev-preview blurb, applied
 to provider choice: `core/tools/strategy/{resolver,capability_resolver,decomposition,
@@ -87,6 +88,10 @@ One `Subagent` interface; drivers: `claude-code` (the new `scripts/kenbun` CLI /
 
 ### DSH-05 — Hooks bridge + self-modification loop *(1–2 wk, Python)*
 Port `hooks/hook-protocol` wire format; make Kenbun a structured hook target for Claude Code **and** expose its own hook events. Wire `agent_self_improve` / `awareness_engine` to use the DSH-01 unload/reload path instead of a restart. **DoD:** the swarm can mount a freshly-generated tool plugin into a *running* process and revert it if a guard fails. Target: `core/dev/self_evolution/awareness_engine.py`, `core/tools/infrastructure/pipelines/self_improve.py`, `.claude/hooks/`.
+
+**Done:**
+- Hot mount + guarded revert — `core/tools/self_modification/{hot_mount,compile_source}.py` (`ca6858f`, `ad68569`, `e2b1702`). `compile_tool_source` takes source text → callable behind an AST allowlist + restricted `exec` (defence in depth, not a hardened sandbox — gaps named in the docstring).
+- **Hook wire-protocol** — `core/tools/hooks/{protocol,registry}.py` (`e680f35`). `matches_matcher` (Claude-literal vs regex dialects), `parse_hook_output` (total outcome codec: exit 2 → block; exit 0 + JSON → structured decision / `hookSpecificOutput` behind a `hookEventName` guard; else non-blocking), `run_hook` (shell line + JSON payload on stdin + secret-scrubbed env, never raises), `HookRegistry.load`/`fire`. Wired one point: `PreToolUse` in `execute_cli_command` — a hook can veto or rewrite a CLI command before the shell seam. Not yet wired: `UserPromptSubmit`, `Stop`, `PostToolUse`; Kenbun does not yet *emit* its own hook events for an external Claude Code to consume (the reverse-bridge direction).
 
 ### DSH-05b *(optional / large)* — TS core on Cordis
 Only if DSH-00 picks (b) or (c). Rebuild `core/` (agent, agent-loop, session, system-prompt, tools) as Cordis plugins in TypeScript; keep Python tools reachable via an MCP or subprocess provider during migration. This is "build kenbun on Cordis" for real — scope it as its own project after 00–05 land.

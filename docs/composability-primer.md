@@ -41,11 +41,12 @@ scoreboard in Part 7 for how each DSH slice maps to a DeepSeek-Harness idea.
 - Two hard problems: **clean removal** (undo everything a part did) and
   **who-needs-whom** (parts that depend on each other).
 - What Kenbun now has: **the undo button** (DSH‑01), **the 3‑piece capability**
-  (DSH‑02/04), **live mount** (DSH‑05), and **health-aware provider resolution**
-  (DSH‑06 — no single point of failure).
+  (DSH‑02/04), **live mount + lifecycle hooks** (DSH‑05), **one honest record of
+  what the model saw** (DSH‑03), and **health-aware provider resolution**
+  (DSH‑06 — no single point of failure). DSH‑01…06 are all landed and deployed.
 - **Your insight:** relying on *one* Gemini key / *one* LLM / *one* of anything is
   the **same mistake** as static composition — a single fixed choice in a
-  load‑bearing spot. Part 6 develops it; DSH‑06 (Part 7) is the fix landing.
+  load‑bearing spot. Part 6 develops it; DSH‑06 (Part 7) is the fix, now landed.
 
 ---
 
@@ -177,13 +178,14 @@ template. It needs to be true of *every* capability, not just subagents.
 | **DSH‑02** | shell capability seam (local / e2b providers) | tools + sandboxes **as plugins** | ✅ `main` |
 | **DSH‑03** | session event log + "model‑visible ⟺ logged" check | **"every run is traceable"** — one append-only stream | ✅ slice 1 |
 | **DSH‑04** | subagent seam + **fallback** (429 → next provider) | subagent scheduling **as a plugin** | ✅ slice 1 + 2 |
-| **DSH‑05** | mount a self‑generated tool live, revert if a guard fails | Cordis plugin **mount** at runtime | ✅ slice 1 |
-| **DSH‑06** | **health-aware multi-provider resolver** — no single point of failure | **"compose with configuration"** — provider is a runtime choice, not an `import` | 🔄 slices 1‑4 + panel |
+| **DSH‑05** | mount a self‑generated tool live (revert if a guard fails) **+ lifecycle hooks** (operator shell command runs before a tool, can block / rewrite / annotate) | Cordis plugin **mount** at runtime + the **hook wire‑protocol** | ✅ s1 + s2 + hooks |
+| **DSH‑06** | **health-aware multi-provider resolver** — no single point of failure | **"compose with configuration"** — provider is a runtime choice, not an `import` | ✅ s1‑5 + panel |
 
 `main` chain: `…00e8cfa` (DSH‑04 s2) → `ad68569` (DSH‑05fu) → `f292e09` (DSH‑06 s1)
 → `6cd3785` (s2) → `15ec53f`/`54a19f9` (Observatory panel) → `becfe22` (s3) →
-`99eb154` (extract `CapabilityResolver`) → `96debee` (s4). ~200 tests, zero
-regressions. Deployed to lg2025.
+`99eb154` (extract `CapabilityResolver`) → `96debee` (s4) → `578632d` (s5, memory)
+→ `e8b9f7f` (DSH‑02 s2) → `e2b1702` (DSH‑05 s2) → `23b3f55` (DSH‑03 s2) →
+`e680f35` (DSH‑05 hooks). ~300 tests, zero regressions. Deployed to lg2025.
 
 ### DSH‑06 in detail
 
@@ -213,16 +215,36 @@ endpoints only*; a third party (DeepSeek) is opt-in. Task-planning text
 | **Queen task decomposition** | ✅ DSH‑06 s2 — Resolver `gemini→deepseek→local` | `tools/strategy/decomposition.py` |
 | **Supervisor local senior reviewer** | ✅ DSH‑06 s3 — Resolver `lmstudio→gateway` | `tools/strategy/senior_reviewer.py` |
 | **kanban / self-improve / evaluator / git-watcher** | ✅ DSH‑06 s4 — `tools/strategy/reasoning.py` | (4 call sites) |
-| **Supervisor Pass 1 / Pass 2 scan** (`AUDIT_URL`) | ⬜ s3b — still one endpoint | `tools/audit/supervisor_agent.py` |
-| **Memory** — Honcho only; `except` → silent empty | ⬜ s5 | `tools/memory/honcho_connect.py` |
-| **Vector store** — Chroma / one Postgres | ⬜ s5 | `tools/memory/postgres_client.py` |
+| **Supervisor Pass 1 / Pass 2 scan** (`AUDIT_URL`) | ✅ DSH‑06 s3b — `_AUDIT_CAP` Resolver `audit→gateway` | `tools/audit/supervisor_agent.py` |
+| **Memory** — Honcho only; `except` → silent empty | ✅ DSH‑06 s5 — degradation is now an observable `degraded` event | `tools/memory/honcho_connect.py` |
+| **Vector store** — Chroma / one Postgres | ✅ DSH‑06 s5 — `/resilience` reports a memory SPOF when only one store is healthy | `tools/memory/honcho_connect.py` |
 | **LLM gateway** — primary→fallback, but 1 fallback, not health-aware | ⬜ later — fold into a Resolver | `tools/utils/llm_router.py` |
 | **The `GEMINI_API_KEY` itself** — free tier `limit: 0` | ⬜ operational, not code | `.env` |
 
-Still open, non‑DSH‑06: **DSH‑02 s2** (migrate 17 `safe_run` callers → `shell.run`),
-**DSH‑03 s2** (wire the model-visible⟺logged gate into the *live* LLM path — the
-riskiest), **DSH‑05 s2** (compile generated source → callable, so
-`agent_self_improve` can mount code it wrote).
+Closed since: **DSH‑02 s2** (`execute_cli_command` → `shell.run` seam, `e8b9f7f`),
+**DSH‑03 s2** (model-visible⟺logged fix at the write site + observe-only guard on
+the live chat path, `23b3f55`), **DSH‑05 s2** (compile generated source → callable
+behind an AST allowlist + restricted `exec`, `e2b1702`), **DSH‑05 hooks** (the
+command-hook wire-protocol — matcher + outcome codec + runner + registry, wired
+as `PreToolUse` in `execute_cli_command`, `e680f35`).
+
+### DSH‑05 hooks in detail
+
+An operator drops a `hooks.json` (`$KENBUN_HOOKS_FILE` or `~/.claude/hooks.json`,
+same schema Claude Code uses). Before a guarded action, every hook whose matcher
+selects the query runs as a shell line with a JSON payload on stdin:
+
+- **exit 2** → block, stderr is the reason the model sees
+- **exit 0 + `{…}` stdout** → structured: `decision` approve/block,
+  `hookSpecificOutput.{permissionDecision, additionalContext, updatedInput}`
+  (behind a `hookEventName` discriminator guard), `continue:false` + `stopReason`
+- **any other exit / a spawn failure** → non-blocking (the action proceeds)
+
+Hook commands are operator config (git-hook trust model) — deliberately **not**
+run through the model-command argv allowlist — but the child env still has
+`KEY`/`TOKEN`/`SECRET`/… scrubbed. `run_hook` never raises. Wired point so far:
+`PreToolUse` in `execute_cli_command` — a hook can veto or rewrite a CLI command
+before it reaches the shell seam.
 
 ---
 
@@ -242,6 +264,10 @@ riskiest), **DSH‑05 s2** (compile generated source → callable, so
   provider adapters, a health-aware resolver, config-driven order, failover
   telemetry — small enough to hold in your head. `subagent/__init__.py` (~180)
   is the same shape for the seam idea.
+- For the hook wire-protocol, read `core/tools/hooks/protocol.py` (~210) — a
+  total decoder (`parse_hook_output`) is a good study in "every input maps to
+  exactly one outcome, malformed included". Compare it against the TypeScript
+  original at `~/Dev/deepseek-harness/packages/hooks/hook-protocol/src/codec.ts`.
 
 ---
 
