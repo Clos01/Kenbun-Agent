@@ -29,7 +29,7 @@ type Provider = {
 
 type FailoverEvent = {
   ts: string;
-  kind: "failover" | "exhausted" | "recovered" | string;
+  kind: "failover" | "exhausted" | "recovered" | "degraded" | string;
   capability: string;
   provider: string | null;
   detail: string;
@@ -78,6 +78,8 @@ const PROVIDER_META: Record<string, { label: string; sub: string; Icon: React.Co
   lmstudio: { label: "LM Studio", sub: "your box · SWARM_PC_IP", Icon: Cpu },
   gateway: { label: "LLM Gateway", sub: "llm_router · PRIMARY/FALLBACK", Icon: Cpu },
   audit: { label: "Audit Endpoint", sub: "the strong rung · AUDIT_LLM_URL", Icon: ShieldCheck },
+  chroma: { label: "ChromaDB", sub: "vector store · fast recall", Icon: Server },
+  honcho: { label: "Honcho", sub: "reasoned representation", Icon: Sparkles },
 };
 
 function timeAgo(iso: string): string {
@@ -375,13 +377,18 @@ export default function DSHResiliencePanel({ apiBase }: { apiBase: string }) {
                 >
                   <span
                     className={`mt-0.5 shrink-0 w-1.5 h-1.5 rounded-full ${
-                      ev.kind === "exhausted" ? "bg-red-500" : "bg-amber-500"
+                      ev.kind === "exhausted" ? "bg-red-500" : ev.kind === "degraded" ? "bg-orange-500" : "bg-amber-500"
                     }`}
                   />
                   <div className="flex-1 min-w-0 space-y-0.5">
                     <p className="text-[11px] font-bold text-primary leading-snug">
                       {ev.kind === "exhausted" ? (
-                        <>Every provider was down — decomposition could not run.</>
+                        <>Every provider for <span className="uppercase">{ev.capability.replace(/_/g, " ")}</span> was down.</>
+                      ) : ev.kind === "degraded" ? (
+                        <>
+                          <span className="uppercase">{ev.capability.replace(/_/g, " ")}</span> degraded —{" "}
+                          <span className="text-orange-600">{PROVIDER_META[ev.provider ?? ""]?.label ?? ev.provider} unreachable</span>
+                        </>
                       ) : (
                         <>
                           {ev.detail || "primary unavailable"} →{" "}

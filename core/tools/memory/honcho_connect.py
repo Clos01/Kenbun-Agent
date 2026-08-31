@@ -7,6 +7,24 @@ from tools.infrastructure.config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _record_memory_degraded(store: str, err: BaseException) -> None:
+    """DSH-06 s5: a memory read that fell through to empty because the store was
+    unreachable (not because there were genuinely no matches) is recorded to the
+    cross-process resolver_events trail, so the Observatory Resilience panel
+    shows memory is degraded instead of it being silent.
+
+    Only the exception *type* is recorded -- raw client error strings can embed
+    internal hostnames / connection URLs and this trail is read back out through
+    the /resilience endpoint."""
+    try:
+        from tools.strategy.resolver_events import record
+        record("degraded", capability="memory", provider=store,
+               detail=f"{store} read failed ({type(err).__name__})")
+    except Exception as rec_err:  # noqa: BLE001 -- telemetry must never break a memory read
+        logger.debug("resolver_events unavailable for memory-degraded event: %s", type(rec_err).__name__)
+
+
 HONCHO_BASE_URL = os.getenv("HONCHO_BASE_URL", "http://127.0.0.1:8000")
 _HONCHO_CLIENT = None
 _CHROMA_CLIENT = None
@@ -131,7 +149,8 @@ def retrieve_memory(query_text: str, n_results: int = 5, category: str = "concep
                 
         return results
     except Exception as e:
-        logger.error(f"⚠️ [HONCHO] Query failed: {e}")
+        logger.error("⚠️ [HONCHO] Query failed (%s)", type(e).__name__)
+        _record_memory_degraded("honcho", e)
         return []
 
 def search_messages(query_text: str, n_results: int = 5, category: str = "concepts"):
@@ -149,7 +168,8 @@ def search_messages(query_text: str, n_results: int = 5, category: str = "concep
     try:
         results = client.session(safe_session_name(category)).search(query_text)
     except Exception as e:
-        logger.error(f"⚠️ [HONCHO] Message search failed: {e}")
+        logger.error("⚠️ [HONCHO] Message search failed (%s)", type(e).__name__)
+        _record_memory_degraded("honcho", e)
         return []
 
     contents = []
@@ -180,7 +200,8 @@ def upsert_embedding(id: str, document: str, metadata: dict, collection_name: st
             collection.upsert(ids=[id], documents=[document], metadatas=[metadata])
             return
         except Exception as e:
-            logger.warning(f"⚠️ [CHROMA] Upsert failed: {e}. Falling back to Honcho.")
+            logger.warning("⚠️ [CHROMA] Upsert failed (%s). Falling back to Honcho.", type(e).__name__)
+            _record_memory_degraded("chroma", e)
             
     content = f"METADATA: {metadata}\n\nCONTENT:\n{document}"
     add_memory(content, category=category)
@@ -200,7 +221,8 @@ def query_embeddings(query_text: str, n_results: int = 5, category: str = "conce
                     "metadatas": res.get("metadatas", [[]])
                 }
         except Exception as e:
-            logger.warning(f"⚠️ [CHROMA] Query failed: {e}. Falling back to Honcho.")
+            logger.warning("⚠️ [CHROMA] Query failed (%s). Falling back to Honcho.", type(e).__name__)
+            _record_memory_degraded("chroma", e)
 
     results = retrieve_memory(query_text, n_results=n_results, category=category)
     return {

@@ -39,13 +39,26 @@ def test_every_wired_capability_is_reported(client):
     caps = {c["name"]: c for c in client.get("/api/v1/resilience").json()["capabilities"]}
     assert set(caps) == {
         "Queen decomposition", "Supervisor senior reviewer",
-        "Two-pass cloud audit", "Reasoning (misc callers)",
+        "Two-pass cloud audit", "Reasoning (misc callers)", "Memory read",
     }
     assert [p["name"] for p in caps["Queen decomposition"]["providers"]] == ["gemini", "deepseek", "local"]
     assert [p["name"] for p in caps["Supervisor senior reviewer"]["providers"]] == ["lmstudio", "gateway"]
-    for c in caps.values():
+    assert [p["name"] for p in caps["Memory read"]["providers"]] == ["chroma", "honcho"]
+    for name, c in caps.items():
+        if name == "Memory read":
+            continue  # infra-dependent in the test env
         assert c["spof"] is False
         assert c["healthy_count"] == c["total_count"] >= 2
+
+
+def test_a_memory_degradation_is_recorded_and_surfaced(client, tmp_path):
+    from tools.strategy.resolver_events import record
+    record("degraded", capability="memory", provider="honcho", detail="connection refused")
+    body = client.get("/api/v1/resilience").json()
+    ev = body["events"][0]
+    assert ev["kind"] == "degraded"
+    assert ev["capability"] == "memory"
+    assert ev["provider"] == "honcho"
 
 
 def test_backcompat_top_level_fields_track_the_first_capability(client):
@@ -53,7 +66,9 @@ def test_backcompat_top_level_fields_track_the_first_capability(client):
     assert [p["name"] for p in body["providers"]] == ["gemini", "deepseek", "local"]
     assert body["providers"][0]["primary"] is True
     assert body["healthy_count"] == body["total_count"] == 3
-    assert body["spof"] is False
+    # top-level spof is the aggregate "is any capability a SPOF right now"; the
+    # first (decomposition) capability itself is not
+    assert body["capabilities"][0]["spof"] is False
 
 
 def test_a_recorded_failover_shows_up_in_events(client, tmp_path):
