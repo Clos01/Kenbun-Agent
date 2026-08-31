@@ -9,13 +9,13 @@ from tools.memory.hardware_bridge import hardware_bridge
 
 @pytest.mark.unit
 def test_optimize_agent_prompt(monkeypatch):
-    # Mock call_gemini_pro to return a dummy prompt
+    # Mock the reasoning fallback (DSH-06) to return a dummy prompt
     expected_prompt = "You are a highly optimized coding agent that uses detailed reasoning loops."
     
-    def mock_call_gemini_pro(prompt, temperature=0.5):
+    def mock_reason(prompt, temperature=0.5):
         return f"```markdown\n{expected_prompt}\n```"
         
-    monkeypatch.setattr("services.self_improvement_daemon.call_gemini_pro", mock_call_gemini_pro)
+    monkeypatch.setattr("services.self_improvement_daemon.reason", mock_reason)
 
     result = optimize_agent_prompt(
         agent_id="coder",
@@ -38,10 +38,10 @@ def test_run_self_improvement_cycle(monkeypatch):
         return c
     monkeypatch.setattr(hardware_bridge, "detect_capabilities", mock_detect)
 
-    # Mock call_gemini_pro
+    # Mock the reasoning fallback (DSH-06)
     expected_prompt = "You are an optimized coder agent."
     monkeypatch.setattr(
-        "services.self_improvement_daemon.call_gemini_pro",
+        "services.self_improvement_daemon.reason",
         lambda prompt, temperature=0.5: f"```markdown\n{expected_prompt}\n```"
     )
 

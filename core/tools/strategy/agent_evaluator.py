@@ -1,7 +1,7 @@
 import json
 import logging
 from typing import Dict, Any
-from tools.audit.gemini_reviewer import call_gemini_pro
+from tools.strategy.reasoning import reason  # DSH-06: health-aware fallback (gemini -> local; deepseek opt-in)
 from tools.memory.hardware_bridge import hardware_bridge
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ JSON:
 
     # 2. Call LLM
     try:
-        raw_response = call_gemini_pro(eval_prompt)
+        raw_response = reason(eval_prompt)
         # Extract JSON from markdown response if present
         start_idx = raw_response.find('{')
         end_idx = raw_response.rfind('}')

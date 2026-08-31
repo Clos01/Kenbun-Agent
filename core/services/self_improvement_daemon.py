@@ -4,7 +4,7 @@ import hashlib
 import asyncio
 from typing import Optional, Dict
 from tools.memory.hardware_bridge import hardware_bridge
-from tools.audit.gemini_reviewer import call_gemini_pro
+from tools.strategy.reasoning import reason  # DSH-06: health-aware fallback (gemini -> local; deepseek opt-in)
 
 logger = logging.getLogger(__name__)
 
@@ -124,8 +124,8 @@ INSTRUCTIONS FOR OPTIMIZATION:
 OPTIMIZED SYSTEM PROMPT:
 """
     try:
-        raw_response = call_gemini_pro(prompt)
-        
+        raw_response = reason(prompt)
+
         # Extract prompt from markdown block
         start_tag = "```markdown"
         end_tag = "```"

@@ -206,8 +206,8 @@ class KanbanDispatcher:
             )
             
             try:
-                from tools.audit.gemini_reviewer import call_gemini_pro
-                raw_out = call_gemini_pro(prompt)
+                from tools.strategy.reasoning import reason  # DSH-06: health-aware fallback (gemini -> local; deepseek opt-in)
+                raw_out = reason(prompt)
                 
                 start = raw_out.find("[")
                 end = raw_out.rfind("]") + 1

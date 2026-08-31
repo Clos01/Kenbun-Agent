@@ -7,7 +7,7 @@ import logging
 from typing import Any, Optional
 from tools.registry import sovereign_tool
 from tools.infrastructure.config import settings
-from tools.audit.gemini_reviewer import call_gemini_pro
+from tools.strategy.reasoning import reason  # DSH-06: health-aware fallback (gemini -> local; deepseek opt-in)
 from tools.utils.backtracker import save_checkpoint
 from tools.audit.linter_autofix import _resolve_paths
 
@@ -251,7 +251,7 @@ def analyze_push_changes(repo_url: str, commit_data: str, project_path: str = ".
     )
 
     # Call LLM to design the integration
-    response = call_gemini_pro(f"{system_prompt}\n\nUser Content:\n{user_message}")
+    response = reason(f"{system_prompt}\n\nUser Content:\n{user_message}")
 
     # Robust JSON extraction
     response_clean = response.strip()
