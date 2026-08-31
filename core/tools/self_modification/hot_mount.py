@@ -16,10 +16,12 @@ No process restart either way. This is the loop `agent_self_improve` needs: try 
 candidate tool against a smoke check, keep it if it works, drop it if it does not.
 
 **Trust boundary.** `hot_mount_tool` takes an *already-defined Python callable*,
-not source text -- it does not `exec` anything. Turning generated source into a
-callable safely (sandbox / subprocess / import allowlist) is a separate step and
-a later slice; this module assumes the callable it is handed came from Kenbun's
-own generation pipeline, never from a tool argument or routed model/user input.
+not source text -- it does not `exec` anything. To go from generated *source* to
+a callable, use `guarded_mount_source` (DSH-05 s2): it runs
+`compile_source.compile_tool_source` first -- an AST allowlist + a restricted
+`exec` -- then hands the callable to `guarded_mount`. That is defence in depth,
+not a hardened sandbox: the source must still come from Kenbun's own generation
+pipeline, never from a tool argument or routed model/user input.
 
 **Known limitation.** `bayesian._known_tool_ids()` is cached from the last
 harvest, so a hot-mounted tool is invisible to routing telemetry until a fresh
@@ -121,6 +123,35 @@ def guarded_mount(
     logger.info("guarded_mount: %r passed its guard and stays live", name)
     return MountResult(name=name, mounted=True, reverted=False,
                        guard_passed=True, dispose=dispose)
+
+
+def guarded_mount_source(
+    source: str,
+    *,
+    name: str,
+    func_name: str,
+    guard: Callable[[Callable], bool],
+    category: str = "SelfMod",
+    requires_env: Optional[List[str]] = None,
+    allow_extra_imports: Optional[List[str]] = None,
+) -> MountResult:
+    """DSH-05 s2: compile ``source`` to a callable (AST allowlist + restricted
+    exec, see ``compile_source``), then ``guarded_mount`` it. A source that fails
+    the static check is rejected *before it runs* and comes back as
+    ``MountResult(mounted=False, error=...)`` -- nothing was executed or mounted.
+    """
+    from .compile_source import UnsafeSourceError, compile_tool_source
+
+    try:
+        fn = compile_tool_source(source, func_name=func_name,
+                                 allow_extra_imports=allow_extra_imports)
+    except (UnsafeSourceError, SyntaxError, TypeError, ValueError) as e:
+        logger.warning("guarded_mount_source: %r rejected before exec (%s)", name, type(e).__name__)
+        logger.debug("guarded_mount_source: %r rejection detail: %s", name, e)
+        return MountResult(name=name, mounted=False, reverted=False,
+                           guard_passed=None, error=f"source rejected: {e}")
+    return guarded_mount(fn, name=name, guard=guard, category=category,
+                         requires_env=requires_env)
 
 
 def _revert(name: str, dispose: Callable[[], None], *, why: str) -> MountResult:
