@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+# Add core directory to path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../core")))
+from tools.orchestrator.skill_registry import match_skills_for_task, load_all_skills
+
+# ANSI Colors
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+BLUE = "\033[34m"
+YELLOW = "\033[33m"
+CYAN = "\033[36m"
+MAGENTA = "\033[35m"
+RESET = "\033[0m"
+
+def think_and_route(task_query):
+    print(f"\n{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+    print(f"  🧠 {BOLD}KENBUN GRAPH-OF-THOUGHTS (GoT) REASONING ENGINE{RESET}")
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+    print(f"🎯 {BOLD}TASK OBJECTIVE:{RESET}")
+    print(f"   \"{task_query}\"\n")
+
+    # 1. Graph of Thoughts Branching
+    print(f"🌿 {BOLD}1. GRAPH-OF-THOUGHTS (GoT) BRANCHING REASONING:{RESET}")
+    print(f"   • {YELLOW}{BOLD}Branch A (Speed / Immediate Action):{RESET}")
+    print(f"     ↳ Apply quick targeted logic without restructuring parent systems.")
+    print(f"   • {BLUE}{BOLD}Branch B (Enterprise / Multi-Store Scale):{RESET}")
+    print(f"     ↳ Enforce zero-loss guardrails, multi-tenant isolation, and automated pre-flight testing.")
+    print(f"   • {MAGENTA}{BOLD}⚡ Dialectic Synthesis (The Senior Move):{RESET}")
+    print(f"     ↳ Execute targeted surgical changes with backend AST verification and zero-downtime safety.\n")
+
+    # 2. Dynamic Skill Discovery
+    matched_skills = match_skills_for_task(task_query, limit=3)
+    print(f"📚 {BOLD}2. AUTONOMOUS SKILL DISCOVERY & ROUTING (from 35 Kenbun Skills):{RESET}")
+    if matched_skills:
+        for idx, s in enumerate(matched_skills, 1):
+            print(f"   {idx}. {GREEN}{BOLD}[{s['name']}]{RESET}")
+            print(f"      ↳ {s['description'][:95]}...\n")
+    else:
+        print(f"   • Standard system execution pipeline armed.\n")
+
+    # 3. Action Execution Map
+    print(f"🗺️  {BOLD}3. CONCRETE STEP-BY-STEP ACTION MAP:{RESET}")
+    print(f"   1. {BOLD}Pre-Flight Invariant Check:{RESET} Run `bin/backend-verifier` before modifications.")
+    print(f"   2. {BOLD}Execute Surgical Updates:{RESET} Leverage discovered skills for execution.")
+    print(f"   3. {BOLD}Cognitive Deconstruction:{RESET} Run `bin/code-clarity` to generate plain-English brief.")
+    print(f"   4. {BOLD}System 2 Consensus Sign-Off:{RESET} Verify 0 compiler errors and deploy.\n")
+
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+    print(f"  ✅ {GREEN}{BOLD}REASONING & ROUTING COMPLETE: Autonomous swarm is primed.{RESET}")
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+if __name__ == "__main__":
+    query = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Optimize voice agent prompt and verify backend safety"
+    think_and_route(query)

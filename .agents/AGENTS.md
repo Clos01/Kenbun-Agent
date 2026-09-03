@@ -256,3 +256,52 @@ To ensure the operator continuously upskills on Kenbun's internal mechanics, the
 1. **The Dictionary Lookup:** Reference the algorithmic dictionary (e.g., `.agents/skills/kenbun-teacher/dictionary.json`) to select a Kenbun concept (e.g., Planka Sync, Zero-Error Sentinel, Orchestrate workflows).
 2. **Visual Explanation:** Append a distinct "Teaching Moment" block to the final response, featuring a Mermaid diagram or KaTeX representation of the architecture.
 3. **Randomized Rotation:** Rotate through the concepts dynamically so the user organically learns the entire Swarm blueprint over time.
+
+---
+
+## 19. THE RESPONSIVE UI & VIEWPORT SENTINEL PROTOCOL (`responsive-ui-sentinel`)
+
+When architecting, reviewing, or modifying web components, modals, and tables:
+1. **Zero Intrinsic Collapse:** Never use `items-center` on absolute overlay flex containers without explicit width constraints (`items-stretch`, `w-full min-w-full`).
+2. **13-Inch Laptop Optimization:** Enforce proportional sizing on 1280px–1440px displays: `max-w-lg`, `max-h-[90vh]`, `p-4 sm:p-6`. Avoid oversized rigid dialogs (`max-w-[620px]`).
+3. **Mobile Card Transformation:** Multi-column tables must render as touch-optimized card lists on mobile viewports (`< 768px`).
+
+---
+
+## 20. THE NEURODIVERGENT & ADHD COGNITIVE PEDAGOGY PROTOCOL (`neurodivergent-clarity-bridge`)
+
+When explaining code, teaching the operator, or delivering architectural debriefs:
+1. **The Divergent Advantage:** Recognize that neurodivergent/ADHD operators connect ideas rapidly in non-linear bursts. The bottleneck is not technical capacity; it is cognitive text fatigue caused by dense AI prose.
+2. **Visual-First Mental Models:** Always open with a clean, high-signal Mermaid diagram showing mechanical cause-and-effect (A -> B -> C).
+3. **Zero-Fluff High-Signal Chunking:** Eradicate loose metaphors, rhetorical filler, and corporate fluff. Use 3-4 bite-sized, bulleted concepts.
+4. **Concrete Step-by-Step Action Maps:** Format instructions as direct, numbered physical actions: *"Click X -> See Y -> Verify Z"*.
+5. **1-Sentence Mechanical Grounding:** State exactly why code works in plain English: *"X happens because Server Action Y executes Database Query Z."*
+
+---
+
+## 21. MANDATORY BACKEND VERIFICATION & ZERO-COSMETIC-FALLBACK PROTOCOL (`backend-verification-sentinel`)
+
+The Swarm is strictly forbidden from applying superficial frontend warnings or cosmetic UI band-aids to mask backend AI errors:
+1. **Zero-Cosmetic Rule:** Never rely on frontend warning banners to catch backend hallucinations after the fact. The backend must enforce invariants *before* data is saved to PostgreSQL or surfaced to the user.
+2. **5-Point Backend Pre-Flight Gate:** Every AI proposal (code modification, prompt patch, database migration) must pass AST validation, typechecking, zero-line-loss business continuity checks, and surgical anchor self-healing.
+3. **Surgical Self-Healing Mandate:** If an LLM returns a truncated excerpt, the backend must autonomously reconstruct the full document in-place using anchor replacement before database insertion.
+4. **Verified Seal Sign-Off:** Only verified, clean artifacts are signed off and rendered in the operator interface.
+
+---
+
+## 22. THE AUTONOMOUS SKILL ROUTING & GRAPH-OF-THOUGHTS REASONING PROTOCOL (`deep-thinking-orchestrator`)
+
+When addressing complex engineering, architectural, or multi-step tasks:
+1. **Graph-of-Thoughts (GoT) Branching:** Always generate parallel hypotheses (Speed vs Enterprise Scalability) and formulate a Dialectic Synthesis before committing to code.
+2. **Autonomous Skill Discovery:** Inspect the dynamic skill registry (`.agents/skills/`) and auto-match task requirements to the top 2-3 specialized skills.
+3. **Transparent Execution Maps:** Output clear, numbered action maps and verify all changes through the `bin/kenbun-harness` pre-flight gate.
+
+---
+
+## 23. THE DYNAMIC ARCHITECTURE & BLACK-BOX ILLUMINATION PROTOCOL (`dynamic-architecture-sentinel`)
+
+Across all projects (Kenbun core, client SaaS apps, background scripts):
+1. **Zero-Hardcoding Law:** Strictly prohibit static switch/case routing or hardcoded lists for plugins, skills, agents, or tools. Everything must dynamically auto-discover via directory scans, configs, or typed registry hooks.
+2. **Strict Pattern Contracts:** All dynamic modules must adhere to explicit schema interfaces (TypeScript interfaces, Pydantic models, or `SKILL.md` frontmatter) so new features drop in with zero friction.
+3. **Black-Box Illumination:** Every AI decision, skill selection, and next-move branch must output visible, transparent telemetry so the operator is never in the dark.
+4. **Autonomous Next-Move Selection:** Allow agents to dynamically select their next action based on real-time state evaluation, guided by strict pre-flight validation gates.

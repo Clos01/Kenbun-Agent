@@ -27,6 +27,13 @@
       "concept": "API Reliability",
       "explanation": "Never assume an external ID (like an ElevenLabs Agent ID) belongs to your active tenant. Always cross-reference your local DB (`matched`, `unimportedRemote`, `crossAccountErrors`). If it fails, wrap it in a non-blocking UI modal with a deep-link to the official docs.",
       "visual_mermaid": "graph TD\n    A[Fetch Remote API] --> B{Match Local DB?}\n    B -->|Yes| C[Render Dashboard]\n    B -->|No - Missing DB| D[Flag as unimportedRemote]\n    B -->|No - 401/404| E[Flag as crossAccountErrors]\n    E --> F[Render Warning Modal + Docs Link]"
+    },
+    {
+      "id": "prompt_feedback_dispatcher",
+      "title": "The Feedback Action Dispatcher & Claude 3.5 Calibration Brain",
+      "concept": "Surgical In-Place Prompt Calibration & Evaluation Synthesis",
+      "explanation": "When operator critiques or call transcripts arrive, never rewrite prompts from scratch or copy-paste raw user words. Dispatch the exact 3-layer payload to Claude 3.5 Sonnet using enforced tool-calling (`record_diagnosis`). Claude locates the exact anchor paragraph, embeds a surgical in-place patch, and synthesizes 1..N objective binary evaluation criteria.",
+      "visual_mermaid": "sequenceDiagram\n    participant Operator as Operator / Webhook\n    participant Server as Server Action (feedback-actions)\n    participant Claude as Claude 3.5 Sonnet (Tool Use)\n    participant DB as PostgreSQL (prompt_revisions)\n    participant ElevenLabs as ElevenLabs API\n    Operator->>Server: Submit Directive ('Bands on website now')\n    Server->>Claude: Dispatch System + Current Prompt + Directive\n    Claude-->>Server: Returns In-Place Diff + Eval Criteria Suite\n    Server->>DB: Store Pending Revision & Criteria Array\n    Operator->>Server: Click 'Approve & Deploy'\n    Server->>ElevenLabs: PATCH conversation_config.agent.prompt.prompt & Append Criteria"
     }
   ]
 }

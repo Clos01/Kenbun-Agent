@@ -1,0 +1,489 @@
+#!/usr/bin/env python3
+"""
+kenbun — one-command harness for the Kenbun swarm.
+
+Talks to the swarm over the ONLY sanctioned transport (per ~/.claude/CLAUDE.md):
+    ssh lg2025 docker exec -i portable_fastmcp python -m tools.infrastructure.server
+i.e. the MCP server via JSON-RPC over stdio. No local .venv, no HTTP port.
+
+Every dispatch does: resolve path -> (optional) sync -> dispatch -> poll to done
+-> verify the swarm actually read the repo you meant -> print result.
+
+Commands:
+    kenbun doctor
+    kenbun scan   <path> [--ext .py,.ts,.tsx]
+    kenbun review <path> [--task "..."] [--sync] [--no-sync]
+    kenbun fix    <path> --task "..."   [--sync] [--no-sync]
+    kenbun research --task "..." [<path>]
+    kenbun shadow <path> --task "..."
+    kenbun supervisor <file>
+    kenbun recall "<query>"
+    kenbun sync [--hard]
+    kenbun push-repo <local_path> [--name NAME]
+    kenbun status <job_id>
+    kenbun tool <name> [--args '<json>'] [--file <path>]
+
+Env:
+    KENBUN_SSH_HOST   ssh alias for the swarm host   (default: lg2025)
+    KENBUN_CONTAINER  container name                 (default: portable_fastmcp)
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+SSH_HOST = os.environ.get("KENBUN_SSH_HOST", "lg2025")
+CONTAINER = os.environ.get("KENBUN_CONTAINER", "portable_fastmcp")
+MAC_KENBUN = Path(os.environ.get("KENBUN_REPO", str(Path.home() / "Dev" / "Kenbun"))).resolve()
+REMOTE_KENBUN = "/home/carlos/dev/workspace/kenbun"          # the /app bind-mount source on the host
+REMOTE_REPOS = "/home/carlos/dev/workspace/repos"            # host dir bind-mounted read-only at /repos
+STATE_DIR = Path.home() / ".kenbun-cli"
+REPOMAP = STATE_DIR / "repos.json"
+
+HEAVY = {"bug_fix", "code_review", "research_implement", "shadow_test", "wireframe",
+         "design_ui", "agent_self_improve", "sdlc_loop", "git_push_integration"}
+
+# Kenbun-internal path fragments — if a review of some OTHER repo cites these,
+# the swarm almost certainly scanned /app instead of the target.
+KENBUN_TELLS = ("tools/infrastructure/", "brain_health/", "orchestrator.py",
+                "tools/strategy/", "swarm.py", "hivemind", "portable_fastmcp")
+
+
+def die(msg: str, code: int = 1):
+    print(f"\033[31m✗ {msg}\033[0m", file=sys.stderr)
+    sys.exit(code)
+
+
+def info(msg: str):
+    print(f"\033[36m▸ {msg}\033[0m", file=sys.stderr)
+
+
+def warn(msg: str):
+    print(f"\033[33m⚠ {msg}\033[0m", file=sys.stderr)
+
+
+def ok(msg: str):
+    print(f"\033[32m✓ {msg}\033[0m", file=sys.stderr)
+
+
+def sh(args: list[str], **kw) -> subprocess.CompletedProcess:
+    return subprocess.run(args, capture_output=True, text=True, **kw)
+
+
+def ssh(remote_cmd: str, timeout: int = 60) -> subprocess.CompletedProcess:
+    return sh(["ssh", "-o", "ConnectTimeout=10", SSH_HOST, remote_cmd], timeout=timeout)
+
+
+# ─────────────────────────── MCP client (JSON-RPC / stdio) ───────────────────────────
+class MCP:
+    def __init__(self):
+        self.p: subprocess.Popen | None = None
+        self._id = 0
+
+    def __enter__(self):
+        self.p = subprocess.Popen(
+            ["ssh", "-o", "ConnectTimeout=10", SSH_HOST,
+             "docker", "exec", "-i", CONTAINER, "python", "-m", "tools.infrastructure.server"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1,
+        )
+        self._rpc("initialize", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "kenbun-cli", "version": "1.0.0"},
+        })
+        self._notify("notifications/initialized")
+        return self
+
+    def __exit__(self, *exc):
+        if self.p:
+            try:
+                self.p.stdin.close()
+                self.p.terminate()
+                self.p.wait(timeout=5)
+            except Exception:
+                self.p.kill()
+
+    def _send(self, obj: dict):
+        self.p.stdin.write(json.dumps(obj) + "\n")
+        self.p.stdin.flush()
+
+    def _notify(self, method: str, params: dict | None = None):
+        self._send({"jsonrpc": "2.0", "method": method, "params": params or {}})
+
+    def _rpc(self, method: str, params: dict, timeout: float = 240.0) -> dict:
+        self._id += 1
+        rid = self._id
+        self._send({"jsonrpc": "2.0", "id": rid, "method": method, "params": params})
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            line = self.p.stdout.readline()
+            if not line:
+                err = self.p.stderr.read() if self.p.stderr else ""
+                raise RuntimeError(f"MCP server closed the connection.\n{err[-2000:]}")
+            line = line.strip()
+            if not line or not line.startswith("{"):
+                continue
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if msg.get("id") != rid:
+                continue
+            if "error" in msg:
+                raise RuntimeError(f"{method} failed: {json.dumps(msg['error'])}")
+            return msg.get("result", {})
+        raise TimeoutError(f"{method} timed out after {timeout}s")
+
+    def call(self, tool: str, arguments: dict, timeout: float = 240.0) -> str:
+        res = self._rpc("tools/call", {"name": tool, "arguments": arguments}, timeout=timeout)
+        parts = []
+        for item in res.get("content", []):
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+            else:
+                parts.append(json.dumps(item, indent=2))
+        return "\n".join(parts)
+
+
+# ─────────────────────────── path resolution ───────────────────────────
+def load_repomap() -> dict:
+    if REPOMAP.exists():
+        return json.loads(REPOMAP.read_text())
+    return {}
+
+
+def save_repomap(m: dict):
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    REPOMAP.write_text(json.dumps(m, indent=2))
+
+
+def resolve(local_path: str) -> tuple[str, str]:
+    """Return (container_path, kind) where kind is 'kenbun' | 'repo'. Raises on unmapped."""
+    real = Path(local_path).expanduser().resolve()
+    if not real.exists():
+        die(f"{real} does not exist locally")
+    try:
+        rel = real.relative_to(MAC_KENBUN)
+        return (f"/app/{rel}".rstrip("/") if str(rel) != "." else "/app", "kenbun")
+    except ValueError:
+        pass
+    for mac_root, name in load_repomap().items():
+        try:
+            rel = real.relative_to(Path(mac_root))
+            base = f"/repos/{name}"
+            return (f"{base}/{rel}".rstrip("/") if str(rel) != "." else base, "repo")
+        except ValueError:
+            continue
+    die(f"{real} is not visible to the swarm.\n"
+        f"   Run:  kenbun push-repo {real}\n"
+        f"   or review a subtree of {MAC_KENBUN} (mounted at /app).")
+
+
+# ─────────────────────────── verification ───────────────────────────
+def verify_target(result: str, container_path: str, kind: str):
+    if kind != "kenbun":
+        hits = [t for t in KENBUN_TELLS if t in result]
+        if hits:
+            warn(f"result mentions Kenbun-internal paths {hits} but you targeted "
+                 f"{container_path}. The swarm may have scanned /app instead. INSPECT before acting.")
+    cited = set(re.findall(r"[\w./-]+\.(?:py|ts|tsx|js|jsx|md|json|ya?ml)", result))
+    if cited:
+        info(f"result cites {len(cited)} file(s); sample: {', '.join(list(cited)[:5])}")
+    else:
+        warn("result cites no file paths — it may not have read any code.")
+
+
+# ─────────────────────────── commands ───────────────────────────
+def cmd_doctor(a):
+    r = ssh("echo ok")
+    if r.returncode != 0:
+        die(f"ssh {SSH_HOST} failed: {r.stderr.strip()}")
+    ok(f"ssh {SSH_HOST}")
+    r = ssh(f'docker inspect {CONTAINER} --format "{{{{.State.Health.Status}}}}"')
+    print(f"   container: {r.stdout.strip() or r.stderr.strip()}")
+    r = ssh(f"git -C {REMOTE_KENBUN} rev-parse --short HEAD; "
+            f"git -C {REMOTE_KENBUN} status --porcelain | wc -l | tr -d ' '")
+    remote_head, dirt = (r.stdout.strip().splitlines() + ["?", "?"])[:2]
+    mac = sh(["git", "-C", str(MAC_KENBUN), "rev-parse", "--short", "HEAD"]).stdout.strip()
+    print(f"   /app HEAD:  {remote_head}  ({dirt} dirty)   mac HEAD: {mac}")
+    if remote_head != mac:
+        warn("/app is out of sync with your Mac checkout — run `kenbun sync` before reviewing Kenbun.")
+    r = ssh(f"ls /repos 2>/dev/null")
+    print(f"   /repos:     {r.stdout.split() or '(empty)'}")
+    for mac_root, name in load_repomap().items():
+        print(f"     {name}  ->  {mac_root}")
+
+
+def cmd_sync(a):
+    info("pushing Mac Kenbun -> Gitea (sovereign/main)")
+    r = sh(["git", "-C", str(MAC_KENBUN), "push", "sovereign", "HEAD:main"])
+    print(r.stdout + r.stderr, file=sys.stderr)
+    if r.returncode != 0:
+        die("push failed — resolve locally and retry")
+    info("fetching on lg2025 and inspecting divergence")
+    script = (f"cd {REMOTE_KENBUN} && git fetch gitea --quiet && "
+              f"echo AHEAD=$(git rev-list --count gitea/main..HEAD) "
+              f"BEHIND=$(git rev-list --count HEAD..gitea/main) "
+              f"DIRTY=$(git status --porcelain | wc -l | tr -d ' ')")
+    r = ssh(script)
+    print("   " + r.stdout.strip(), file=sys.stderr)
+    if a.hard:
+        warn("--hard: stashing lg2025 local changes and resetting to gitea/main")
+        r = ssh(f"cd {REMOTE_KENBUN} && git stash push -u -m kenbun-cli-$(date +%s) && "
+                f"git reset --hard gitea/main && git rev-parse --short HEAD")
+        print("   " + r.stdout.strip() + r.stderr.strip(), file=sys.stderr)
+        ok("lg2025 /app reset to gitea/main")
+    else:
+        m = re.search(r"AHEAD=(\d+) BEHIND=(\d+) DIRTY=(\d+)", r.stdout)
+        if m and (m.group(1) != "0" or m.group(3) != "0"):
+            warn(f"lg2025 checkout is ahead {m.group(1)} / dirty {m.group(3)} — "
+                 f"it will NOT fast-forward cleanly. Re-run `kenbun sync --hard` "
+                 f"to force (local changes get stashed), or resolve on lg2025.")
+        else:
+            r = ssh(f"cd {REMOTE_KENBUN} && git merge --ff-only gitea/main && git rev-parse --short HEAD")
+            print("   " + r.stdout.strip() + r.stderr.strip(), file=sys.stderr)
+            ok("lg2025 /app fast-forwarded")
+
+
+def cmd_push_repo(a):
+    src = Path(a.local_path).expanduser().resolve()
+    if not (src / ".git").exists():
+        warn(f"{src} has no .git — syncing anyway")
+    name = a.name or src.name
+    dest = f"{REMOTE_REPOS}/{name}"
+    ssh(f"mkdir -p {dest}")
+    info(f"rsync {src}/  ->  {SSH_HOST}:{dest}/")
+    r = sh(["rsync", "-az", "--delete",
+            "--exclude", ".git", "--exclude", "node_modules", "--exclude", ".next",
+            "--exclude", ".venv", "--exclude", "__pycache__", "--exclude", "dist",
+            f"{src}/", f"{SSH_HOST}:{dest}/"])
+    if r.returncode != 0:
+        die(f"rsync failed: {r.stderr}")
+    m = load_repomap()
+    m[str(src)] = name
+    save_repomap(m)
+    ok(f"{name} synced and mapped. Review it with:  kenbun review {src}")
+
+
+def _dispatch(workflow: str, task: str, *, project_path: str | None = None,
+              verify_path: str | None = None, kind: str | None = None,
+              extra: dict | None = None, poll_timeout: int = 900):
+    args = {"workflow": workflow, "task": task}
+    if project_path:
+        args["project_path"] = project_path
+    if extra:
+        args.update(extra)
+    vpath = verify_path or project_path
+    with MCP() as m:
+        info(f"dispatch {workflow}  "
+             + (f"project_path={project_path}" if project_path else "code_snippet inline"))
+        out = m.call("orchestrate", args, timeout=120)
+        job = re.search(r"Job ID:\*\*\s*`([a-f0-9]+)`", out) or re.search(r"\b([a-f0-9]{12})\b", out)
+        if workflow in HEAVY and job:
+            jid = job.group(1)
+            info(f"job {jid} — polling (timeout {poll_timeout}s)")
+            deadline = time.time() + poll_timeout
+            last = ""
+            while time.time() < deadline:
+                st = m.call("orchestrate_status", {"job_id": jid}, timeout=60)
+                tag = "running" if "running" in st.lower() or "pending" in st.lower() else "done"
+                if tag != last:
+                    info(f"status: {tag}")
+                    last = tag
+                if tag == "done":
+                    print("\n" + st)
+                    _flag_no_source(st)
+                    if vpath:
+                        verify_target(st, vpath, kind or "repo")
+                    return
+                time.sleep(12)
+            die(f"job {jid} still running after {poll_timeout}s — check later: kenbun status {jid}")
+        else:
+            print("\n" + out)
+            _flag_no_source(out)
+            if vpath:
+                verify_target(out, vpath, kind or "repo")
+
+
+def _flag_no_source(result: str):
+    # Real abort markers only — NOT the "⏭️ Skipped: 🛑 No source to review" step label,
+    # which appears in every successful code_snippet run.
+    if "review aborted" in result.lower() or "No source loaded" in result:
+        warn("the pipeline reported it had NO SOURCE to review. For a directory, "
+             "code_review only looks at `git diff HEAD` — point at a single file for a "
+             "full-file review, or make sure /app is synced and has the diff.")
+
+
+def _maybe_sync(kind: str, a):
+    if kind != "kenbun":
+        return
+    if getattr(a, "no_sync", False):
+        return
+    mac = sh(["git", "-C", str(MAC_KENBUN), "rev-parse", "--short", "HEAD"]).stdout.strip()
+    rhead = ssh(f"git -C {REMOTE_KENBUN} rev-parse --short HEAD").stdout.strip()
+    if mac != rhead:
+        if getattr(a, "sync", False):
+            cmd_sync(argparse.Namespace(hard=False))
+        else:
+            warn(f"/app ({rhead}) != mac ({mac}). Pass --sync to sync first, or --no-sync to ignore.")
+
+
+def cmd_scan(a):
+    cp, kind = resolve(a.path)
+    with MCP() as m:
+        out = m.call("scan_repo", {"project_path": cp, **({"extensions": a.ext} if a.ext else {})}, timeout=180)
+    print(out)
+
+
+def _file_or_dir(local_path: str):
+    """(container_path, kind, real_path, is_file)."""
+    real = Path(local_path).expanduser().resolve()
+    cp, kind = resolve(local_path)
+    return cp, kind, real, real.is_file()
+
+
+def cmd_review(a):
+    cp, kind, real, is_file = _file_or_dir(a.path)
+    if is_file:
+        # Review the ACTUAL file contents (from the Mac copy — current, no /app sync needed).
+        code = real.read_text(errors="replace")[:200_000]
+        _dispatch("code_review",
+                  a.task or f"Review {cp} for correctness, security and design issues.",
+                  verify_path=cp, kind=kind,
+                  extra={"code_snippet": code, "file_path": cp}, poll_timeout=a.timeout)
+    else:
+        _maybe_sync(kind, a)
+        info(f"{cp} is a directory — code_review reviews `git diff HEAD` under it "
+             f"(uncommitted changes only). Point at one file for a full-file review.")
+        _dispatch("code_review", a.task or f"Review the uncommitted changes under {cp}.",
+                  project_path=cp, kind=kind, poll_timeout=a.timeout)
+
+
+def cmd_fix(a):
+    cp, kind, real, is_file = _file_or_dir(a.path)
+    if is_file:
+        code = real.read_text(errors="replace")[:200_000]
+        _dispatch("bug_fix", a.task, verify_path=cp, kind=kind,
+                  extra={"code_snippet": code, "file_path": cp}, poll_timeout=a.timeout)
+    else:
+        _maybe_sync(kind, a)
+        _dispatch("bug_fix", a.task, project_path=cp, kind=kind, poll_timeout=a.timeout)
+
+
+def cmd_research(a):
+    cp = kind = None
+    if a.path:
+        cp, kind = resolve(a.path)
+    _dispatch("research_implement", a.task, project_path=cp, kind=kind, poll_timeout=a.timeout)
+
+
+def cmd_shadow(a):
+    cp, kind = resolve(a.path)
+    _dispatch("shadow_test", a.task, project_path=cp, kind=kind, poll_timeout=a.timeout)
+
+
+def cmd_supervisor(a):
+    f = Path(a.file).expanduser().resolve()
+    if not f.is_file():
+        die(f"{f} is not a file (consult_supervisor takes a single file)")
+    with MCP() as m:
+        out = m.call("consult_supervisor", {"code_snippet": f.read_text()[:60000],
+                                            "user_proposal": a.task or f"Review {f.name}"}, timeout=240)
+    print(out)
+
+
+def cmd_recall(a):
+    with MCP() as m:
+        print(m.call("recall_fix", {"error_message": a.query}, timeout=60))
+
+
+def cmd_status(a):
+    with MCP() as m:
+        print(m.call("orchestrate_status", {"job_id": a.job_id}, timeout=60))
+
+
+def cmd_tool(a):
+    args = json.loads(a.args) if a.args else {}
+    if a.file:
+        args["code_snippet"] = Path(a.file).expanduser().read_text()
+    with MCP() as m:
+        print(m.call(a.name, args, timeout=a.timeout))
+
+
+# ─────────────────────────── arg parsing ───────────────────────────
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="kenbun", description="One-command harness for the Kenbun swarm.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("doctor", help="preflight: ssh / container / sync state / mounts").set_defaults(fn=cmd_doctor)
+
+    s = sub.add_parser("sync", help="push Mac Kenbun -> Gitea, fast-forward lg2025 /app")
+    s.add_argument("--hard", action="store_true", help="stash lg2025 local changes and reset --hard to gitea/main")
+    s.set_defaults(fn=cmd_sync)
+
+    s = sub.add_parser("push-repo", help="rsync a local repo into lg2025:/repos/<name> and map it")
+    s.add_argument("local_path")
+    s.add_argument("--name")
+    s.set_defaults(fn=cmd_push_repo)
+
+    s = sub.add_parser("scan", help="scan_repo skeleton map")
+    s.add_argument("path")
+    s.add_argument("--ext", help="comma list, e.g. .py,.ts,.tsx")
+    s.set_defaults(fn=cmd_scan)
+
+    for name, fn, needs_task in [("review", cmd_review, False), ("fix", cmd_fix, True), ("shadow", cmd_shadow, True)]:
+        s = sub.add_parser(name, help=f"orchestrate {name}")
+        s.add_argument("path")
+        s.add_argument("--task", required=needs_task)
+        s.add_argument("--sync", action="store_true", help="sync Kenbun /app first if stale")
+        s.add_argument("--no-sync", dest="no_sync", action="store_true", help="skip the staleness check")
+        s.add_argument("--timeout", type=int, default=900, help="poll timeout seconds")
+        s.set_defaults(fn=fn)
+
+    s = sub.add_parser("research", help="orchestrate research_implement")
+    s.add_argument("path", nargs="?")
+    s.add_argument("--task", required=True)
+    s.add_argument("--timeout", type=int, default=1200)
+    s.set_defaults(fn=cmd_research)
+
+    s = sub.add_parser("supervisor", help="consult_supervisor on one file")
+    s.add_argument("file")
+    s.add_argument("--task")
+    s.set_defaults(fn=cmd_supervisor)
+
+    s = sub.add_parser("recall", help="recall_fix")
+    s.add_argument("query")
+    s.set_defaults(fn=cmd_recall)
+
+    s = sub.add_parser("status", help="orchestrate_status <job_id>")
+    s.add_argument("job_id")
+    s.set_defaults(fn=cmd_status)
+
+    s = sub.add_parser("tool", help="call any MCP tool directly")
+    s.add_argument("name")
+    s.add_argument("--args", help="JSON object")
+    s.add_argument("--file", help="inject file contents as code_snippet")
+    s.add_argument("--timeout", type=float, default=240)
+    s.set_defaults(fn=cmd_tool)
+
+    return p
+
+
+def main():
+    a = build_parser().parse_args()
+    try:
+        a.fn(a)
+    except KeyboardInterrupt:
+        die("interrupted", 130)
+    except (RuntimeError, TimeoutError) as e:
+        die(str(e))
+
+
+if __name__ == "__main__":
+    main()

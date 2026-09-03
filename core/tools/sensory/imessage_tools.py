@@ -36,14 +36,21 @@ async def list_imessage_chats(limit: int = 10) -> Dict[str, Any]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
-        
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return {
+                "success": False,
+                "error": "imsg timed out after 10s — the CLI may be hung or iMessage permissions are missing."
+            }
+
         if proc.returncode != 0:
             return {
                 "success": False,
                 "error": f"imsg command failed with exit code {proc.returncode}: {stderr.decode(errors='ignore')}"
             }
-            
+
         data = json.loads(stdout.decode(errors='ignore'))
         return {
             "success": True,
@@ -86,14 +93,21 @@ async def get_imessage_history(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
-        
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=10.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return {
+                "success": False,
+                "error": "imsg timed out after 10s — the CLI may be hung or iMessage permissions are missing."
+            }
+
         if proc.returncode != 0:
             return {
                 "success": False,
                 "error": f"imsg command failed with exit code {proc.returncode}: {stderr.decode(errors='ignore')}"
             }
-            
+
         data = json.loads(stdout.decode(errors='ignore'))
         return {
             "success": True,
@@ -155,14 +169,21 @@ async def send_imessage(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
-        stdout, stderr = await proc.communicate()
-        
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30.0)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return {
+                "success": False,
+                "error": "imsg send timed out after 30s — iMessage delivery may have stalled."
+            }
+
         if proc.returncode != 0:
             return {
                 "success": False,
                 "error": f"imsg command failed with exit code {proc.returncode}: {stderr.decode(errors='ignore')}"
             }
-            
+
         return {
             "success": True,
             "message": f"Successfully sent message to {to}"

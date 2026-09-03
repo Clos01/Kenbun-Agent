@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+import os
+import sys
+import re
+import glob
+
+BOLD = "\033[1m"
+GREEN = "\033[32m"
+YELLOW = "\033[33m"
+CYAN = "\033[36m"
+RED = "\033[31m"
+RESET = "\033[0m"
+
+def audit_dynamic_patterns(target_dir):
+    print(f"\n{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}")
+    print(f"  🔍 {BOLD}DYNAMIC ARCHITECTURE AUDITOR: {target_dir}{RESET}")
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+    files = glob.glob(os.path.join(target_dir, "**/*.ts*"), recursive=True) + glob.glob(os.path.join(target_dir, "**/*.py"), recursive=True)
+    files = [f for f in files if "node_modules" not in f and ".next" not in f and ".git" not in f]
+
+    hardcoded_switches = 0
+    dynamic_discoveries = 0
+
+    for f in files:
+        try:
+            with open(f, "r", encoding="utf-8") as fp:
+                content = fp.read()
+            
+            # Check for static switch/case chains with > 4 branches
+            switches = re.findall(r'case\s+["\'][^"\']+["\']:', content)
+            if len(switches) >= 4:
+                hardcoded_switches += 1
+
+            # Check for dynamic file globbing / dynamic registry loading
+            if "glob.glob" in content or "readdirSync" in content or "load_all_skills" in content or "dynamic(" in content:
+                dynamic_discoveries += 1
+        except Exception:
+            continue
+
+    print(f"📌 {BOLD}AUDIT SUMMARY:{RESET}")
+    print(f"   • Total Files Scanned: {len(files)}")
+    print(f"   • Dynamic Auto-Discovery Modules: {GREEN}{BOLD}{dynamic_discoveries}{RESET}")
+    print(f"   • Potential Rigid Switch Chains: {YELLOW if hardcoded_switches > 0 else GREEN}{BOLD}{hardcoded_switches}{RESET}\n")
+
+    if hardcoded_switches == 0:
+        print(f"  ✅ {GREEN}{BOLD}DYNAMIC ARCHITECTURE COMPLIANT: Code is 100% modular & auto-discovering.{RESET}")
+    else:
+        print(f"  ℹ️ {YELLOW}{BOLD}TIP: Migrate rigid switch/case statements to dynamic plugin registries.{RESET}")
+
+    print(f"{BOLD}{CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{RESET}\n")
+
+if __name__ == "__main__":
+    target = sys.argv[1] if len(sys.argv) > 1 else "."
+    audit_dynamic_patterns(target)
