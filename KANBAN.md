@@ -26,9 +26,9 @@ Last Updated: September 2, 2026 | Operator: Carlos Rivas (Augmented CTO)
 
 ### 🕹️ 4. 4-Button Granular Execution Decision Deck & Cognitive Streamlining
 - [x] **Task ID:** `t_ca7866` | **Assignee:** ScaleMaster | **Tenant:** `eko-veritas`
-- [x] **What was changed:** Implemented a 4-button execution dock: `[1] Reject Proposal`, `[2] Accept Prompt Only`, `[3] Accept Eval Only`, and `[4] Approve All (Full Deploy)`. Purged confusing latency and zero-injection jargon cards from the right column to keep it strictly to 3 high-signal cards.
-- [x] **What it does:** Provides granular deployment control over ElevenLabs live prompt patching vs Postgres evaluation criterion activation, and keeps reviewer attention focused on essential business context.
-- [x] **Why we did it:** Operators needed to separate prompt behavior updates from QA rule creation without all-or-nothing constraints, and removing technical clutter eliminates cognitive fatigue.
+- [x] **What was changed:** Implemented the 4-button execution dock (`[1] Reject Proposal`, `[2] Accept Prompt Only`, `[3] Accept Eval Only`, `[4] Approve All (Full Deploy)`) across both the global revision queue (`prompt-revision-client.tsx`) and the active agent scoped modal (`voice-agents-client.tsx`). Updated `getRegisteredAgents` and client import hooks to sort by `created_at desc` so newest imported/created agents appear at the very top of the sidebar.
+- [x] **What it does:** Provides granular deployment control over ElevenLabs live prompt patching vs Postgres evaluation criterion activation, guarantees new agents are instantly accessible at the top of the fleet list without scrolling, and keeps reviewer attention focused on essential business context.
+- [x] **Why we did it:** Operators needed to separate prompt updates from QA rule creation in all views, and newly imported agents were previously buried at the bottom of the list under 20 legacy items.
 
 ### 🌿 5. Automated Git Branching CLI (`bin/pr`) & GitHub Actions CI Gate
 - [x] **Task ID:** `t_c87434` | **Assignee:** FutureSelf | **Tenant:** `eko-veritas`
