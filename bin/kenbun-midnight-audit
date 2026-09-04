@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Kenbun Midnight System Audit Sentinel
+# ------------------------------------------------------------------------------
+# Autonomous 5-Pillar System Health, Cluster Hardware, and Resilience Auditor.
+# Usage:
+#   bin/kenbun-midnight-audit         # Standard human-readable audit execution
+#   bin/kenbun-midnight-audit --json  # Outputs raw JSON report
+# ==============================================================================
+
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+# Select Python environment
+if [ -f "$REPO_ROOT/.venv/bin/python3" ]; then
+    PYTHON_EXEC="$REPO_ROOT/.venv/bin/python3"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_EXEC="python3"
+else
+    echo "❌ Error: Python 3 not found." >&2
+    exit 1
+fi
+
+export PYTHONPATH="$REPO_ROOT/core:$PYTHONPATH"
+
+if [ "$1" == "--json" ]; then
+    "$PYTHON_EXEC" -c "
+from tools.audit.midnight_auditor import run_midnight_audit
+import json
+res = run_midnight_audit()
+print(json.dumps(res, indent=2))
+"
+    exit 0
+fi
+
+BOLD="\033[1m"
+GREEN="\033[32m"
+YELLOW="\033[33m"
+CYAN="\033[36m"
+RED="\033[31m"
+RESET="\033[0m"
+
+echo -e "\n${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "  🌙 ${BOLD}KENBUN MIDNIGHT SYSTEM AUDIT SENTINEL${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"
+
+"$PYTHON_EXEC" -c "
+import sys
+from tools.audit.midnight_auditor import run_midnight_audit
+
+res = run_midnight_audit()
+verdict = res.get('verdict', 'UNKNOWN')
+hw = res.get('cluster_hardware', {}).get('nodes', {})
+db = res.get('database_resilience', {})
+cg = res.get('code_and_git', {})
+telem = res.get('tool_telemetry', {})
+
+color = '\033[32m' if verdict == 'HEALTHY' else '\033[31m'
+print(f'📌 \033[1mSYSTEM VERDICT: {color}{verdict}\033[0m')
+print(f'   • Timestamp: {res.get(\"timestamp\")}')
+print(f'   • Audit ID:  {res.get(\"audit_id\")}\n')
+
+print(f'🖥️  \033[1mCLUSTER HARDWARE TOPOLOGY:\033[0m')
+for k, n in hw.items():
+    print(f'   • \033[1m{n.get(\"display_name\")}\033[0m ({n.get(\"hardware_type\")})')
+    for s_name, probe in n.get('services', {}).items():
+        st = probe.get('status')
+        badge = '🟢' if st == 'reachable' else ('🟡' if 'sandbox' in st else '🔴')
+        print(f'     - {badge} {s_name} (port {probe.get(\"port\")}): {st}')
+
+print(f'\n🗄️  \033[1mDATABASE & RESILIENCE:\033[0m')
+print(f'   • Active Source:    \033[1m{db.get(\"active_source\")}\033[0m')
+print(f'   • Fallback Active:  {db.get(\"fallback_active\")}')
+print(f'   • Remote Primary:   {db.get(\"remote_node\")} (Reachable: {db.get(\"primary_reachable\")})')
+if db.get('alert_message'):
+    print(f'   • Active Alert:     \033[33m{db.get(\"alert_message\")}\033[0m')
+
+print(f'\n🧠 \033[1mCODE, GIT & TELEMETRY:\033[0m')
+print(f'   • Git Branch:       {cg.get(\"git\", {}).get(\"branch\")} (Clean: {cg.get(\"git\", {}).get(\"clean\")})')
+print(f'   • Python AST Check: {cg.get(\"ast_validation\", {}).get(\"files_scanned\")} files (0 syntax errors: {cg.get(\"ast_validation\", {}).get(\"passed\")})')
+print(f'   • Bayesian Tool Distributions: {telem.get(\"bayesian_distributions_tracked\")} tracked')
+print(f'   • 30-Day Tool Invocations:     {telem.get(\"tool_invocations_30d\")}')
+"
+
+echo -e "\n${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+echo -e "  📄 Full report saved: ${BOLD}brain_health/midnight_audit_latest.md${RESET}"
+echo -e "${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}\n"

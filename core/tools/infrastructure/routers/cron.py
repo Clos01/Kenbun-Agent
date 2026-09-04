@@ -33,6 +33,7 @@ class CronJobCreate(BaseModel):
     prompt: str = Field(..., description="Prompt directive to execute")
     schedule: str = Field(..., description="Standard 5-field cron expression")
     deliver: str = Field("local", description="Delivery target: local, telegram, email")
+    action: Optional[str] = Field("prompt", description="Action type: prompt, audit")
 
 # ── Lock Protection ──────────────────────────────────────────────────────────
 
@@ -54,13 +55,27 @@ def _release_lock():
     except Exception as e:
         logger.error(f"Error releasing cron lock: {e}")
 
+DEFAULT_CRON_JOBS: List[Dict] = [
+    {
+        "id": "cron_midnight_audit",
+        "name": "Kenbun Midnight System Audit",
+        "prompt": "Run autonomous 5-pillar system verification across cluster hardware topology, database resilience, memory stores, code integrity, and tool telemetry.",
+        "schedule": "0 0 * * *",
+        "deliver": "local",
+        "action": "audit",
+        "enabled": True,
+        "last_run": None,
+    }
+]
+
 def _load_jobs() -> List[Dict]:
     if not DB_FILE.exists():
-        return []
+        _save_jobs(DEFAULT_CRON_JOBS)
+        return list(DEFAULT_CRON_JOBS)
     try:
         with open(DB_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip()
-            return json.loads(content) if content else []
+            return json.loads(content) if content else list(DEFAULT_CRON_JOBS)
     except Exception as e:
         logger.error(f"Failed to load cron jobs: {e}")
         return []
@@ -112,20 +127,26 @@ async def execute_cron_job_task(job: Dict):
         session_id = session["id"]
         chat_history_manager.add_message_to_session(session_id, "user", job["prompt"])
         
-        # 2. Compile system prompt
-        from scripts.terminal_chat import build_system_prompt
-        system_prompt = build_system_prompt("cloud", "Cron-Scheduler-Daemon")
-        
-        # 3. Call LLM gateway in threadpool
         loop = asyncio.get_running_loop()
-        response_text = await loop.run_in_executor(
-            None,
-            lambda: call_llm_gateway(
-                system_prompt=system_prompt,
-                user_message=job["prompt"],
-                temperature=0.3
+        action_type = job.get("action", "prompt")
+        if action_type == "audit" or "audit" in job.get("name", "").lower():
+            from tools.audit.midnight_auditor import run_midnight_audit, generate_markdown_report
+            audit_res = await loop.run_in_executor(None, run_midnight_audit)
+            response_text = generate_markdown_report(audit_res)
+        else:
+            # 2. Compile system prompt
+            from scripts.terminal_chat import build_system_prompt
+            system_prompt = build_system_prompt("cloud", "Cron-Scheduler-Daemon")
+            
+            # 3. Call LLM gateway in threadpool
+            response_text = await loop.run_in_executor(
+                None,
+                lambda: call_llm_gateway(
+                    system_prompt=system_prompt,
+                    user_message=job["prompt"],
+                    temperature=0.3
+                )
             )
-        )
         
         if response_text:
             chat_history_manager.add_message_to_session(session_id, "kenbun", response_text)
@@ -224,6 +245,7 @@ async def create_cron_job(payload: CronJobCreate):
         "prompt": payload.prompt,
         "schedule": payload.schedule,
         "deliver": payload.deliver,
+        "action": payload.action or "prompt",
         "enabled": True,
         "last_run": datetime.now(timezone.utc).isoformat()
     }
