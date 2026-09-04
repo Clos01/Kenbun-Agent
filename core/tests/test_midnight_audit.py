@@ -49,6 +49,8 @@ def test_run_midnight_audit_generates_reports():
     assert "memory_stores" in data
     assert "code_and_git" in data
     assert "tool_telemetry" in data
+    assert "session_replay_evals" in data
+    assert data["session_replay_evals"]["status"] in ("PASSED", "FAILED")
 
     json_path = settings.BRAIN_HEALTH_DIR / "midnight_audit_latest.json"
     md_path = settings.BRAIN_HEALTH_DIR / "midnight_audit_latest.md"
@@ -58,6 +60,7 @@ def test_run_midnight_audit_generates_reports():
     saved_json = json.loads(json_path.read_text(encoding="utf-8"))
     assert saved_json["verdict"] == data["verdict"]
     assert "LG 2025 (Legion PC)" in md_path.read_text(encoding="utf-8")
+    assert "Session Replay & Regression Eval Gate" in md_path.read_text(encoding="utf-8")
 
 
 def test_generate_markdown_report():

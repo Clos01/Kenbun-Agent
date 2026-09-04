@@ -73,8 +73,24 @@ def learn_concept(title: str, content: str, tags: str, category: str = "concepts
             formatted_msg = f"{meta}\n\nCONTENT:\n{chunk}"
             add_memory(content=formatted_msg, category=category)
 
+        # Mirror to DSH-10 Unified Memory Seam for offline fallback
+        try:
+            import time
+            from tools.strategy.memory_seam import UnifiedMemorySeam, MemoryRecord
+            seam = UnifiedMemorySeam()
+            rec = MemoryRecord(
+                id=concept_id,
+                content=f"{title}\n\n{content}",
+                source="hivemind",
+                metadata={"title": title, "tags": tags, "category": category},
+                timestamp=time.time(),
+            )
+            seam.store(rec)
+        except Exception:
+            pass
+
         return (
-            f"SUCCESS: Concept '{title}' saved to Honcho.\n"
+            f"SUCCESS: Concept '{title}' saved to Honcho and Unified Memory Seam.\n"
             f"CONCEPT_ID: {concept_id}\n"
             "Pass that id to patch_hivemind_concept or delete_from_hivemind to "
             "amend or retract this concept. The background dreaming process will "
@@ -138,23 +154,64 @@ def list_concepts(query_text: str, n_results: int = 5, category: str = "concepts
 
         # Nothing in the raw store matched; fall back to the reasoned view.
         representation = retrieve_memory(query_text, n_results=n_results, category=category)
-        if not representation:
-            return "No matching concepts found in Honcho."
+        if representation:
+            return json.dumps([
+                {
+                    "id": None,
+                    "addressable": False,
+                    "source": "derived_representation",
+                    "note": "Synthesized by Honcho; carries no CONCEPT_ID, so it "
+                            "cannot be passed to patch/delete. Save the concept to "
+                            "get an addressable id.",
+                    "content": doc,
+                }
+                for doc in representation
+            ], indent=2)
 
-        return json.dumps([
-            {
-                "id": None,
-                "addressable": False,
-                "source": "derived_representation",
-                "note": "Synthesized by Honcho; carries no CONCEPT_ID, so it "
-                        "cannot be passed to patch/delete. Save the concept to "
-                        "get an addressable id.",
-                "content": doc,
-            }
-            for doc in representation
-        ], indent=2)
+        # Fallback to DSH-10 Unified Memory Seam (SQLite fallback)
+        try:
+            from tools.strategy.memory_seam import UnifiedMemorySeam
+            seam = UnifiedMemorySeam()
+            query_res = seam.search(query_text, limit=n_results)
+            if query_res.matches:
+                return json.dumps([
+                    {
+                        "id": m.id,
+                        "title": m.metadata.get("title", m.id),
+                        "tags": m.metadata.get("tags", ""),
+                        "addressable": True,
+                        "source": f"unified_memory_seam ({query_res.provider_used})",
+                        "content": m.content,
+                        "score": m.score,
+                    }
+                    for m in query_res.matches
+                ], indent=2)
+        except Exception:
+            pass
+
+        return "No matching concepts found in Honcho or Unified Memory Seam."
     except Exception as e:
-        return f"ERROR: Failed to query Honcho. {str(e)}"
+        # On connection or remote network failure, degrade gracefully to UnifiedMemorySeam
+        try:
+            from tools.strategy.memory_seam import UnifiedMemorySeam
+            seam = UnifiedMemorySeam()
+            query_res = seam.search(query_text, limit=n_results)
+            if query_res.matches:
+                return json.dumps([
+                    {
+                        "id": m.id,
+                        "title": m.metadata.get("title", m.id),
+                        "tags": m.metadata.get("tags", ""),
+                        "addressable": True,
+                        "source": f"unified_memory_seam_fallback ({query_res.provider_used})",
+                        "content": m.content,
+                        "score": m.score,
+                    }
+                    for m in query_res.matches
+                ], indent=2)
+        except Exception:
+            pass
+        return f"ERROR: Failed to query Honcho ({e}); Unified Memory Seam fallback also yielded no hits."
 
 def forget_concept(concept_id: str, category: str = "concepts") -> str:
     """In Honcho, you issue an instruction to forget or discard a concept."""

@@ -35,29 +35,33 @@ _RESOLVERS = [
 
 
 def _snapshot_memory() -> Dict[str, Any]:
-    """Memory reads aren't a CapabilityResolver -- they're a hand-rolled
-    chroma -> honcho -> empty chain (honcho_connect.py). Ping both and shape the
-    result like a capability so the panel renders it alongside the others.
-    Degradation events land in the same resolver_events trail (capability='memory').
-
-    Blocking (network) -- the caller runs it in a thread with a timeout."""
+    """Snapshots the DSH-10 Unified Memory Seam (Honcho, Chroma, SQLite)."""
+    from tools.strategy.memory_seam import UnifiedMemorySeam
+    seam = UnifiedMemorySeam()
     providers: List[Dict[str, Any]] = []
-    for name, checker in (("chroma", _chroma_ok), ("honcho", _honcho_ok)):
-        ok = False
+    for p in seam._providers:
+        healthy = False
         try:
-            ok = checker()
-        except Exception as e:  # noqa: BLE001 -- a ping: any failure == unreachable
-            logger.warning("resilience: memory %s unreachable (%s)", name, type(e).__name__)
+            healthy = p.is_healthy()
+        except Exception:
+            healthy = False
         providers.append({
-            "name": name, "healthy": ok, "primary": name == "chroma",
-            "fail_count": 0, "cooldown_remaining_s": 0.0,
+            "name": p.name,
+            "healthy": healthy,
+            "primary": p.priority == 90,
+            "priority": p.priority,
+            "fail_count": 0 if healthy else 1,
+            "cooldown_remaining_s": 0.0,
         })
-    healthy = [p for p in providers if p["healthy"]]
+    healthy_providers = [p for p in providers if p["healthy"]]
     return {
-        "name": "Memory read", "blurb": "concept recall -- chroma, then honcho's reasoned representation",
-        "providers": providers, "error": None,
-        "healthy_count": len(healthy), "total_count": len(providers),
-        "spof": len(healthy) <= 1 and len(providers) > 1,
+        "name": "DSH-10 Unified Memory Seam",
+        "blurb": "System 3 concepts & embeddings -- Honcho (remote), Chroma (vectors), local SQLite fallback",
+        "providers": providers,
+        "error": None if any(p["healthy"] for p in providers) else "All memory providers unreachable",
+        "healthy_count": len(healthy_providers),
+        "total_count": len(providers),
+        "spof": len(healthy_providers) <= 1 and len(providers) > 1,
     }
 
 
@@ -187,3 +191,33 @@ async def get_resilience() -> Dict[str, Any]:
         "phases": DSH_PHASES,
         "primer": PRIMER,
     }
+
+
+@router.get("/api/v1/replay/eval")
+async def get_replay_eval(session_id: Optional[str] = None, strict: bool = False) -> Dict[str, Any]:
+    """Runs DSH-09 session replay evaluation for the Observatory.
+
+    Evaluates the specified session or a representative session turn stream,
+    verifying model-visible <=> logged invariant and reporting fidelity score.
+    """
+    from tools.strategy.session_replay import SessionReplayEngine
+    from tools.memory.session_log import SessionEvent
+
+    engine = SessionReplayEngine(strict=strict)
+    if session_id:
+        report = engine.evaluate_session(session_id)
+    else:
+        # Default representative baseline verification
+        sample_events = [
+            SessionEvent(seq=1, kind="system_prompt", role="system", content="You are Kenbun, the CTO agent."),
+            SessionEvent(seq=2, kind="user_message", role="user", content="Check memory seam and replay gate."),
+            SessionEvent(seq=3, kind="assistant_message", role="assistant", content="Running verification suite."),
+            SessionEvent(seq=4, kind="tool_result", role="tool", content="OK", tool_name="get_db_status"),
+            SessionEvent(seq=5, kind="assistant_message", role="assistant", content="All invariants verified."),
+        ]
+        report = engine.evaluate_session(sample_events, session_id="live_observatory_eval")
+
+    badge = "PASSED" if report.passed else "REGRESSION_DETECTED"
+    res = report.to_dict()
+    res["badge"] = badge
+    return res

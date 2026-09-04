@@ -84,6 +84,13 @@ print(f'   • Git Branch:       {cg.get(\"git\", {}).get(\"branch\")} (Clean: {
 print(f'   • Python AST Check: {cg.get(\"ast_validation\", {}).get(\"files_scanned\")} files (0 syntax errors: {cg.get(\"ast_validation\", {}).get(\"passed\")})')
 print(f'   • Bayesian Tool Distributions: {telem.get(\"bayesian_distributions_tracked\")} tracked')
 print(f'   • 30-Day Tool Invocations:     {telem.get(\"tool_invocations_30d\")}')
+
+rep = res.get('session_replay_evals', {})
+rep_badge = '🟢' if rep.get('status') == 'PASSED' else '🔴'
+print(f'\n🔁 \033[1mSESSION REPLAY & REGRESSION GATE (DSH-09):\033[0m')
+print(f'   • Gate Status:      {rep_badge} \033[1m{rep.get(\"status\")}\033[0m')
+print(f'   • Replay Fidelity:  {rep.get(\"fidelity_score\", 0.0) * 100:.1f}% ({rep.get(\"passed_turns\")}/{rep.get(\"total_turns\")} turns passed)')
+print(f'   • Violations Found: {rep.get(\"violations_count\")}')
 "
 
 echo -e "\n${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
