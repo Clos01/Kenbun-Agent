@@ -14,8 +14,8 @@ The **Cluster Hardware Topology** skill provides dynamic, non-hardcoded resoluti
 Whenever communicating database health, server statuses, container deployments, or network connectivity to the operator (Carlos), the Swarm **MUST NEVER** use ambiguous phrases like "the remote PC" or naked IP addresses like `100.104.211.61` without identifying the physical hardware node.
 
 Always dynamically resolve and state the exact machine:
-* **LG 2025 (Legion PC)** — Windows 11 / WSL2, Tailscale `100.104.211.61` / `100.92.127.1`. Hosts PostgreSQL (:5432), LM Studio (RTX 5070 :2065), and Nginx wildcard SSL proxy (:443).
-* **P330 (ThinkStation Tiny)** — Lenovo ThinkStation P330 SFF, Tailscale `100.100.199.127`. Hosts Proxmox / Ubuntu, n8n automations (:5678), Planka (:1337), and RTX 4090 / CPU Ollama embeddings.
+* **LG 2025 (Legion PC)** — Lenovo Legion Gaming PC (Windows 11 / WSL2, NVIDIA GeForce RTX 5070 OC Overclocked, Tailscale `100.104.211.61` / `100.92.127.1`). Hosts primary PostgreSQL (:5432), LM Studio (:2065), and Nginx wildcard SSL proxy (:443).
+* **P330 (ThinkStation Tiny)** — Lenovo ThinkStation P330 SFF Server (16 GB RAM, 2 GB Low-Profile GPU, ~500 GB Storage, Proxmox / Ubuntu, Tailscale `100.100.199.127`). Hosts n8n automations (:5678), Planka task board (:1337), and headless background microservices.
 * **Local Mac (Workstation)** — Apple Silicon development host (`localhost` / `127.0.0.1`). Hosts FastMCP server (:8001), Next.js dashboard (:3000), and local SQLite fallback (`brain_health/kenbun_intelligence.db`).
 * **Legion Sentry (Raspberry Pi)** — Dedicated Pi-hole DNS sinkhole (`192.168.1.183` / `100.102.104.66`) resolving local `.lan` hostnames.
 

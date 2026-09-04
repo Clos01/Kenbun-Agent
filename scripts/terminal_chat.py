@@ -2810,9 +2810,9 @@ def main():
                                 print(f"\n{C_D}⚡ Probing Kenbun 3-Node Cluster latency & health...{C_R}")
                                 nodes = [
                                     {"name": "Host (M-Series)", "url": "http://localhost:3000", "role": "FastMCP Gateway & Local Next.js"},
-                                    {"name": "Remote P330", "url": "http://100.100.199.127:3000", "role": "RTX 4090 GPU Embeddings & Ollama"},
+                                    {"name": "Remote P330", "url": "http://100.100.199.127:3000", "role": "2GB GPU / 16GB RAM n8n & Planka Automation Node"},
                                     {"name": "Legion Sentry", "url": "http://192.168.1.183:80", "role": "Pi-hole DNS Sinkhole (:183)"},
-                                    {"name": "Primary Server (lg2025)", "url": "http://100.104.211.61:3000", "role": "Production Docker Stack"},
+                                    {"name": "Primary Server (lg2025)", "url": "http://100.104.211.61:3000", "role": "RTX 5070 OC LM Studio & Production Docker Stack"},
                                 ]
                                 cluster_lines = []
                                 for n in nodes:

@@ -5,11 +5,15 @@
   "nodes": {
     "lg2025": {
       "display_name": "LG 2025 (Legion PC)",
-      "hardware_type": "Lenovo Legion Gaming PC (Windows 11 / WSL2)",
+      "hardware_type": "Lenovo Legion Gaming PC (RTX 5070 OC, Windows 11 / WSL2)",
+      "specs": {
+        "gpu": "NVIDIA GeForce RTX 5070 OC (Overclocked)",
+        "os": "Windows 11 / WSL2 Ubuntu"
+      },
       "roles": [
         "Primary PostgreSQL Database (Port 5432)",
         "Production Docker Stack & Gitea Remote (Port 2222)",
-        "LM Studio Local Inference (RTX 5070, Port 2065)",
+        "LM Studio Local Inference (RTX 5070 OC, Port 2065)",
         "Reverse Proxy Nginx (*.lan SSL wildcard, Port 443/80)",
         "ChromaDB Remote Vector Store (Port 8000)"
       ],
@@ -28,11 +32,17 @@
     },
     "p330": {
       "display_name": "P330 (ThinkStation Tiny)",
-      "hardware_type": "Lenovo ThinkStation P330 SFF Server (Proxmox / Ubuntu)",
+      "hardware_type": "Lenovo ThinkStation P330 SFF Server (16GB RAM, 2GB GPU, ~500GB Storage, Proxmox / Ubuntu)",
+      "specs": {
+        "gpu": "2 GB Low-Profile GPU",
+        "ram": "16 GB RAM",
+        "storage": "~500 GB Storage",
+        "os": "Proxmox / Ubuntu Server"
+      },
       "roles": [
         "Autonomous Automation Pipelines (n8n, Port 5678)",
         "Kanban Task Dispatcher (Planka, Port 1337)",
-        "Local GPU Embeddings & Ollama Worker (RTX 4090 / CPU)",
+        "Lightweight 2GB GPU / 16GB RAM Headless Worker",
         "GUI & Vision Agent Execution Node (Display :0)"
       ],
       "ips": {
