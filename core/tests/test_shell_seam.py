@@ -221,3 +221,40 @@ def test_execute_cli_command_maps_blocked_and_timeout(monkeypatch):
             assert needle in server_deps.execute_cli_command("x --y")
         finally:
             dispose()
+
+
+def test_execute_cli_command_fires_post_tool_use_hook(monkeypatch):
+    from tools.execution.shell import shell
+    from tools.infrastructure import server_deps
+    from tools.hooks.registry import FiredResult
+
+    fired = {}
+
+    class FakeRegistry:
+        def fire(self, point, query, payload, cwd=None):
+            fired[point] = payload
+            if point == "PostToolUse":
+                return FiredResult(added_context=["post-audit-ok"])
+            return FiredResult()
+
+    monkeypatch.setattr("tools.hooks.default_registry", lambda: FakeRegistry())
+    monkeypatch.setattr("scripts.terminal_chat.scrub_secrets", lambda s: s, raising=False)
+
+    class FastSpy:
+        name = "fastspy"
+
+        def run(self, command, *, cwd=None, timeout=30.0):
+            return ShellResult(command=command, exit_code=0, stdout="hello world", stderr="", provider=self.name)
+
+    dispose = shell.register_provider(FastSpy(), make_active=True)
+    try:
+        out = server_deps.execute_cli_command("echo hello")
+        assert "hello world" in out
+        assert "PostToolUse" in fired
+        assert fired["PostToolUse"]["tool_name"] == "Bash"
+        assert fired["PostToolUse"]["tool_input"] == {"command": "echo hello"}
+        assert fired["PostToolUse"]["exit_code"] == 0
+        assert "PostToolUse hook: post-audit-ok" in out
+    finally:
+        dispose()
+

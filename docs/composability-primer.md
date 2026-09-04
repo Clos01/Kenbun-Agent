@@ -218,7 +218,7 @@ endpoints only*; a third party (DeepSeek) is opt-in. Task-planning text
 | **Supervisor Pass 1 / Pass 2 scan** (`AUDIT_URL`) | ✅ DSH‑06 s3b — `_AUDIT_CAP` Resolver `audit→gateway` | `tools/audit/supervisor_agent.py` |
 | **Memory** — Honcho only; `except` → silent empty | ✅ DSH‑06 s5 — degradation is now an observable `degraded` event | `tools/memory/honcho_connect.py` |
 | **Vector store** — Chroma / one Postgres | ✅ DSH‑06 s5 — `/resilience` reports a memory SPOF when only one store is healthy | `tools/memory/honcho_connect.py` |
-| **LLM gateway** — primary→fallback, but 1 fallback, not health-aware | ⬜ later — fold into a Resolver | `tools/utils/llm_router.py` |
+| **LLM gateway** — primary→fallback, but 1 fallback, not health-aware | ✅ DSH‑07 — Resolver `primary→fallback→gemini` | `tools/utils/llm_router.py` |
 | **The `GEMINI_API_KEY` itself** — free tier `limit: 0` | ⬜ operational, not code | `.env` |
 
 Closed since: **DSH‑02 s2** (`execute_cli_command` → `shell.run` seam, `e8b9f7f`),
@@ -226,7 +226,9 @@ Closed since: **DSH‑02 s2** (`execute_cli_command` → `shell.run` seam, `e8b9
 the live chat path, `23b3f55`), **DSH‑05 s2** (compile generated source → callable
 behind an AST allowlist + restricted `exec`, `e2b1702`), **DSH‑05 hooks** (the
 command-hook wire-protocol — matcher + outcome codec + runner + registry, wired
-as `PreToolUse` in `execute_cli_command`, `e680f35`).
+as `PreToolUse` and `PostToolUse` in `execute_cli_command`, `e680f35`), **DSH‑07**
+(LLM gateway health-aware failover via `CapabilityResolver` with auto-cooldown
+demotion and resilience telemetry).
 
 ### DSH‑05 hooks in detail
 
@@ -242,9 +244,9 @@ selects the query runs as a shell line with a JSON payload on stdin:
 
 Hook commands are operator config (git-hook trust model) — deliberately **not**
 run through the model-command argv allowlist — but the child env still has
-`KEY`/`TOKEN`/`SECRET`/… scrubbed. `run_hook` never raises. Wired point so far:
-`PreToolUse` in `execute_cli_command` — a hook can veto or rewrite a CLI command
-before it reaches the shell seam.
+`KEY`/`TOKEN`/`SECRET`/… scrubbed. `run_hook` never raises. Wired points so far:
+`PreToolUse` (veto or rewrite CLI commands) and `PostToolUse` (fold context /
+telemetry into tool output) in `execute_cli_command`.
 
 ---
 

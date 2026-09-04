@@ -29,6 +29,8 @@ _RESOLVERS = [
      "tools.strategy.senior_reviewer", "audit_scan_resolver"),
     ("Reasoning (misc callers)", "kanban decomposition, prompt rewrites, output scoring, git-push design",
      "tools.strategy.reasoning", "reasoning_resolver"),
+    ("LLM gateway", "general model requests -- primary, fallback, and native fallbacks",
+     "tools.utils.llm_router", "llm_gateway_resolver"),
 ]
 
 

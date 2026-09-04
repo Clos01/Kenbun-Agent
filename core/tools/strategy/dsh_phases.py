@@ -84,12 +84,24 @@ DSH_PHASES: List[Dict[str, str]] = [
             "provider and the swarm keeps working."
         ),
     },
+    {
+        "id": "DSH-07",
+        "title": "LLM Gateway health-aware failover",
+        "status": "done",
+        "commit": "HEAD",
+        "blurb": (
+            "The general LLM gateway (call_llm_gateway) now routes through a "
+            "CapabilityResolver with auto-cooldown demotion and resilience telemetry. "
+            "If the primary endpoint is down or hits quota, the swarm falls back "
+            "seamlessly without repeated timeout stalls on subsequent turns."
+        ),
+    },
 ]
 
 # The capabilities wired onto a Resolver so far (shown in the panel).
 WIRED_CAPABILITY: Dict[str, str] = {
     "name": "load-bearing LLM calls",
-    "where": "decomposition, senior review, two-pass audit, misc reasoning callers",
+    "where": "decomposition, senior review, two-pass audit, misc reasoning callers, general LLM gateway",
     "was": "one hardcoded provider each; a 429 or a dead box killed the feature",
     "now": "each behind a health-aware Resolver, auto-recovering",
 }

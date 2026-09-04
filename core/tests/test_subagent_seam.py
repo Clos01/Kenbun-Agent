@@ -35,15 +35,14 @@ class FakeProvider:
 
 @pytest.fixture(autouse=True)
 def _reset_subagent():
-    for n in subagent.providers():
-        if n != _BUILTIN:
-            subagent._providers.pop(n, None)
-    subagent._active = _BUILTIN
+    with subagent._lock:
+        saved_providers = dict(subagent._providers)
+        saved_active = subagent._active
     yield
-    for n in subagent.providers():
-        if n != _BUILTIN:
-            subagent._providers.pop(n, None)
-    subagent._active = _BUILTIN
+    with subagent._lock:
+        subagent._providers.clear()
+        subagent._providers.update(saved_providers)
+        subagent._active = saved_active
 
 
 # --------------------------------------------------------------- the interface
@@ -123,6 +122,7 @@ def test_task_label_redacts_every_secret_shape(s):
 
 # --------------------------------------------------- the fallback (429) story
 def test_unavailable_active_provider_falls_through_to_a_working_one():
+    subagent._providers.pop(_BUILTIN, None)
     dead = FakeProvider("dead", ok=False, unavailable=True)     # simulates Gemini 429
     alive = FakeProvider("alive", ok=True, output="handled it")
     register_subagent_provider(alive, make_active=False)
@@ -140,6 +140,7 @@ def test_unavailable_active_provider_falls_through_to_a_working_one():
 def test_a_real_failure_does_NOT_fall_through():
     """A provider that ran and genuinely failed (not 'unavailable') must not have
     the same task silently re-run elsewhere -- it may have had side effects."""
+    subagent._providers.pop(_BUILTIN, None)
     broke = FakeProvider("broke", ok=False, unavailable=False)
     backup = FakeProvider("backup", ok=True)
     register_subagent_provider(backup, make_active=False)
@@ -153,6 +154,7 @@ def test_a_real_failure_does_NOT_fall_through():
 
 
 def test_fallback_can_be_disabled():
+    subagent._providers.pop(_BUILTIN, None)
     dead = FakeProvider("dead", ok=False, unavailable=True)
     alive = FakeProvider("alive", ok=True)
     register_subagent_provider(alive, make_active=False)

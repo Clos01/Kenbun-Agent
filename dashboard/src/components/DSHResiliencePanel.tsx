@@ -77,6 +77,8 @@ const PROVIDER_META: Record<string, { label: string; sub: string; Icon: React.Co
   local: { label: "Local Gateway", sub: "llm_router · PRIMARY/FALLBACK", Icon: Cpu },
   lmstudio: { label: "LM Studio", sub: "your box · SWARM_PC_IP", Icon: Cpu },
   gateway: { label: "LLM Gateway", sub: "llm_router · PRIMARY/FALLBACK", Icon: Cpu },
+  primary: { label: "Primary Gateway", sub: "PRIMARY_LLM_URL · local box", Icon: Cpu },
+  fallback: { label: "Fallback Gateway", sub: "FALLBACK_LLM_URL · secondary", Icon: Cpu },
   audit: { label: "Audit Endpoint", sub: "the strong rung · AUDIT_LLM_URL", Icon: ShieldCheck },
   chroma: { label: "ChromaDB", sub: "vector store · fast recall", Icon: Server },
   honcho: { label: "Honcho", sub: "reasoned representation", Icon: Sparkles },
@@ -103,6 +105,7 @@ const FALLBACK_PHASES: Phase[] = [
   { id: "DSH-04", title: "One way to hand work to a sub-agent", status: "done", commit: "00e8cfa", blurb: "One interface, pluggable drivers. When one reports 'unavailable', the seam walks to the next — where the 429 quota failure first got a real fallback." },
   { id: "DSH-05", title: "Mount a new tool while the swarm runs", status: "done", commit: "e680f35", blurb: "Hand the swarm a fresh tool, smoke-test it, keep it only if it passes — otherwise auto-reverted. The other half: lifecycle hooks — drop a hooks.json next to the swarm and a shell command of yours runs before a tool, free to block it, rewrite its input, or add a note. Same protocol Claude Code uses." },
   { id: "DSH-06", title: "No single point of failure, anywhere", status: "done", commit: "578632d", blurb: "Every load-bearing LLM call gets 2+ providers and a resolver that demotes a failing one instead of stopping. Wired: Queen decomposition, the supervisor's senior reviewer, the two-pass audit, the misc reasoning callers, and memory reads. Kill any one provider and the swarm keeps working." },
+  { id: "DSH-07", title: "LLM Gateway health-aware failover", status: "done", commit: "HEAD", blurb: "The general LLM gateway (call_llm_gateway) now routes through a CapabilityResolver with auto-cooldown demotion and resilience telemetry. Kill the primary endpoint and the swarm falls back seamlessly without repeated timeout stalls." },
 ];
 const FALLBACK_PRIMER: PrimerItem[] = [
   { term: "Static composition", line: "Decided once, at build time. Changing it means editing code and restarting — and a restart wipes every bit of in-memory state." },

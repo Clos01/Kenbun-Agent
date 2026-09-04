@@ -184,6 +184,11 @@ _HOOKS_JSON = {
          "hooks": [{"type": "command",
                     "command": """python3 -c 'import json,sys;sys.stdin.read();print(json.dumps({"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"be careful"}}))'"""}]},
     ],
+    "PostToolUse": [
+        {"matcher": "Bash",
+         "hooks": [{"type": "command",
+                    "command": """python3 -c 'import json,sys;sys.stdin.read();print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"audit verified"}}))'"""}]},
+    ],
     "Stop": [
         {"hooks": [
             {"type": "http", "url": "https://example.test/hook"},          # skipped
@@ -201,7 +206,7 @@ def registry(tmp_path) -> HookRegistry:
 
 
 def test_load_parses_points_and_skips_non_command(registry):
-    assert registry.points() == ["PreToolUse", "Stop"]
+    assert registry.points() == ["PostToolUse", "PreToolUse", "Stop"]
     # the http handler was dropped, the command one kept
     stop_groups = registry._points["Stop"]
     assert len(stop_groups) == 1
@@ -231,6 +236,12 @@ def test_fire_folds_additional_context(registry):
     res = registry.fire("PreToolUse", "Edit", {})
     assert res.blocked is False
     assert res.context_blob == "be careful"
+
+
+def test_fire_post_tool_use_folds_context(registry):
+    res = registry.fire("PostToolUse", "Bash", {"exit_code": 0, "tool_response": "ok"})
+    assert res.blocked is False
+    assert res.context_blob == "audit verified"
 
 
 def test_fire_unknown_point_is_noop(registry):

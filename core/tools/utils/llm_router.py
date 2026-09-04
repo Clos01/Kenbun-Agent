@@ -356,34 +356,59 @@ def _make_openai_compatible_call(
         
     return content
 
-def call_llm_gateway(system_prompt: str, user_message: str, temperature: float = 0.1, max_tokens: int = 4000, url_override: str = None, model_override: str = None) -> str:
-    """
-    Standardized, hardware-agnostic LLM router.
-    Routes queries to PRIMARY_LLM_URL and falls back to FALLBACK_LLM_URL upon failure.
-    Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
-    """
-    primary_url = url_override or settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
-    primary_model = model_override or settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
-    fallback_url = settings.FALLBACK_LLM_URL or ""
-    fallback_model = settings.FALLBACK_LLM_MODEL or ""
-    
-    # Auto-resolve models from OpenAI-compatible local servers (LM Studio / Ollama)
-    def resolve_auto_model(url: str, model: str) -> str:
-        if not model or model.lower() == "auto":
-            try:
-                models = probe_openai_models(base_url=url, timeout=3.0)
-                if models:
-                    logging.info(f"✨ Auto-resolved model for {url}: {models[0]}")
-                    return models[0]
-            except Exception as e:
-                logging.warning(f"Auto-model resolution failed for {url}: {e}")
-            return "local-model"  # generic fallback
-        return model
+def _try_endpoint(
+    url: str,
+    model: str,
+    system_prompt: str,
+    user_message: str,
+    temperature: float,
+    max_tokens: int,
+    label: str,
+) -> str:
+    if not url:
+        raise RuntimeError(f"{label} endpoint not configured")
+    if url.endswith("/"):
+        url = url[:-1]
+    try:
+        is_lmstudio = (
+            "127.0.0.1" in url
+            or "localhost" in url
+            or "lmstudio" in url.lower()
+            or (settings.SWARM_PC_IP and settings.SWARM_PC_IP in url)
+            or str(settings.models.lm_studio_port) in url
+            or "lg2025" in url.lower()
+        )
+        if is_lmstudio:
+            ensure_lmstudio_model_loaded(
+                model, url, timeout=settings.models.lm_studio_read_timeout
+            )
+    except Exception as pre_err:
+        logging.debug(f"LM Studio pre-load failed or skipped for {label.lower()}: {pre_err}")
+    content = _make_openai_compatible_call(
+        url, model, system_prompt, user_message, temperature, max_tokens
+    )
+    if not content or not str(content).strip():
+        raise RuntimeError(f"{label} endpoint returned empty content")
+    return content
 
+
+def resolve_auto_model(url: str, model: str) -> str:
+    if not model or model.lower() == "auto":
+        try:
+            models = probe_openai_models(base_url=url, timeout=3.0)
+            if models:
+                logging.info(f"✨ Auto-resolved model for {url}: {models[0]}")
+                return models[0]
+        except Exception as e:
+            logging.warning(f"Auto-model resolution failed for {url}: {e}")
+        return "local-model"  # generic fallback
+    return model
+
+
+def _primary_provider(system_prompt: str, user_message: str, temperature: float, max_tokens: int) -> str:
+    primary_url = settings.PRIMARY_LLM_URL or "http://localhost:11434/v1"
+    primary_model = settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
     primary_model = resolve_auto_model(primary_url, primary_model)
-    if fallback_url:
-        fallback_model = resolve_auto_model(fallback_url, fallback_model)
-    
     # Dynamic Budget-Aware Swapping (System 4)
     try:
         from tools.strategy.token_governor import token_governor
@@ -391,82 +416,93 @@ def call_llm_gateway(system_prompt: str, user_message: str, temperature: float =
         if resolved_model != primary_model:
             logging.info(f"📉 Budget Governor dynamically swapped model '{primary_model}' ➔ '{resolved_model}'")
             primary_model = resolved_model
-            # If forced to local, prefer the user's configured PRIMARY_LLM_URL.
-            # Only fall back to the docker-internal `ollama_server` hostname when
-            # PRIMARY_LLM_URL is unset — otherwise we'd clobber an externally
-            # reachable endpoint (e.g. http://127.0.0.1:11434/v1 on the host)
-            # with a name that only resolves on the compose network.
             if primary_model == "local":
                 if not settings.PRIMARY_LLM_URL:
                     primary_url = "http://ollama_server:11434/v1"
-                # llama3.2:1b was never actually pulled by OLLAMA_PULL_MODELS
-                # (qwen2.5:1.5b, deepseek-r1:8b, llama3.2:3b are) — this
-                # emergency downgrade path would 404 against a real Ollama.
                 primary_model = "qwen2.5:1.5b"
     except Exception as e:
         logging.warning(f"Failed to resolve budget-aware model from TokenGovernor: {e}")
-    
-    # Clean trailing slash in URLs
-    if primary_url and primary_url.endswith("/"):
-        primary_url = primary_url[:-1]
-    if fallback_url and fallback_url.endswith("/"):
-        fallback_url = fallback_url[:-1]
-        
-    # Attempt an endpoint; treat empty/whitespace content as a failure so the
-    # caller falls back instead of silently returning None (e.g. a reasoning
-    # model that spends its whole token budget on `reasoning_content`).
-    def _try_endpoint(url: str, model: str, label: str) -> str:
-        if not url:
-            raise RuntimeError(f"{label} endpoint not configured")
-        try:
-            is_lmstudio = (
-                "127.0.0.1" in url
-                or "localhost" in url
-                or "lmstudio" in url.lower()
-                or (settings.SWARM_PC_IP and settings.SWARM_PC_IP in url)
-                or str(settings.models.lm_studio_port) in url
-                or "lg2025" in url.lower()
-            )
-            if is_lmstudio:
-                ensure_lmstudio_model_loaded(
-                    model, url, timeout=settings.models.lm_studio_read_timeout
-                )
-        except Exception as pre_err:
-            logging.debug(f"LM Studio pre-load failed or skipped for {label.lower()}: {pre_err}")
-        content = _make_openai_compatible_call(
-            url, model, system_prompt, user_message, temperature, max_tokens
-        )
-        if not content or not str(content).strip():
-            raise RuntimeError(f"{label} endpoint returned empty content")
-        return content
+    return _try_endpoint(primary_url, primary_model, system_prompt, user_message, temperature, max_tokens, "Primary")
 
-    # Try Primary, then Fallback. Either an exception OR empty content advances
-    # to the next endpoint; if both fail we raise (never silently return None).
-    logging.info(f"🔮 LLM_ROUTER: Attempting Primary Endpoint: {primary_url} ({primary_model})")
-    try:
-        return _try_endpoint(primary_url, primary_model, "Primary")
-    except Exception as primary_err:
-        logging.warning(
-            f"⚠️ LLM_ROUTER: Primary failed: {primary_err}. "
-            f"Attempting Fallback: {fallback_url} ({fallback_model})"
+
+def _fallback_provider(system_prompt: str, user_message: str, temperature: float, max_tokens: int) -> str:
+    fallback_url = settings.FALLBACK_LLM_URL or ""
+    fallback_model = settings.FALLBACK_LLM_MODEL or ""
+    if not fallback_url:
+        raise RuntimeError("Fallback endpoint not configured")
+    fallback_model = resolve_auto_model(fallback_url, fallback_model)
+    return _try_endpoint(fallback_url, fallback_model, system_prompt, user_message, temperature, max_tokens, "Fallback")
+
+
+def _gemini_provider(system_prompt: str, user_message: str, temperature: float, max_tokens: int) -> str:
+    from tools.audit.gemini_reviewer import _call_gemini
+    return _call_gemini(
+        system_prompt=system_prompt,
+        user_message=user_message,
+        temperature=temperature,
+        model_override=None,
+    )
+
+
+def _deepseek_provider(system_prompt: str, user_message: str, temperature: float, max_tokens: int) -> str:
+    from tools.utils.deepseek_client import call_deepseek
+    return call_deepseek(system_prompt=system_prompt, user_message=user_message)
+
+
+from tools.strategy.capability_resolver import (
+    CapabilityResolver,
+    ResolverExhausted,
+    text_unavailable,
+)
+from tools.strategy.resolver import Resolver
+
+_LLM_GATEWAY_CAP = CapabilityResolver(
+    "llm_gateway",
+    {
+        "primary": lambda p: _primary_provider(*p),
+        "fallback": lambda p: _fallback_provider(*p),
+        "gemini": lambda p: _gemini_provider(*p),
+        "deepseek": lambda p: _deepseek_provider(*p),
+    },
+    providers_env="KENBUN_LLM_GATEWAY_PROVIDERS",
+    cooldown_env="KENBUN_LLM_GATEWAY_COOLDOWN_S",
+    default_order=("primary", "fallback", "gemini"),
+)
+
+
+def llm_gateway_resolver() -> Resolver:
+    """The process-wide LLM gateway Resolver (DSH-07)."""
+    return _LLM_GATEWAY_CAP.resolver()
+
+
+def call_llm_gateway(
+    system_prompt: str,
+    user_message: str,
+    temperature: float = 0.1,
+    max_tokens: int = 4000,
+    url_override: Optional[str] = None,
+    model_override: Optional[str] = None,
+) -> str:
+    """
+    Standardized, hardware-agnostic LLM router (DSH-07).
+    Routes queries through a health-aware CapabilityResolver ('primary', 'fallback', 'gemini').
+    Supports local Ollama/LM Studio and cloud gateways (OpenAI, Anthropic, Gemini).
+    """
+    if url_override:
+        target_model = model_override or settings.PRIMARY_LLM_MODEL or "llama3.2:3b"
+        target_model = resolve_auto_model(url_override, target_model)
+        return _try_endpoint(
+            url_override, target_model, system_prompt, user_message, temperature, max_tokens, "Override"
         )
-        try:
-            return _try_endpoint(fallback_url, fallback_model, "Fallback")
-        except Exception as fallback_err:
-            try:
-                logging.warning("⚠️ LLM_ROUTER: Both OpenAI primary/fallback failed. Attempting native Google GenAI SDK fallback...")
-                from tools.audit.gemini_reviewer import _call_gemini
-                return _call_gemini(
-                    system_prompt=system_prompt,
-                    user_message=user_message,
-                    temperature=temperature,
-                    model_override=None
-                )
-            except Exception as gemini_err:
-                error_msg = (
-                    f"❌ LLM_ROUTER CRITICAL: All endpoints failed (Primary, Fallback, and Native Gemini). "
-                    f"Primary error: {primary_err}. Fallback error: {fallback_err}. Native Gemini error: {gemini_err}"
-                )
-                logging.error(error_msg)
-                raise RuntimeError(error_msg)
+
+    try:
+        _name, content = _LLM_GATEWAY_CAP.run(
+            lambda fn: fn((system_prompt, user_message, temperature, max_tokens)),
+            is_unavailable=text_unavailable,
+        )
+        return content
+    except ResolverExhausted as e:
+        error_msg = f"❌ LLM_ROUTER CRITICAL: All endpoints failed ({e})"
+        logging.error(error_msg)
+        raise RuntimeError(error_msg) from e
 

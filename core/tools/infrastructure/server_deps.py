@@ -207,10 +207,27 @@ def execute_cli_command(command: str) -> str:
     from scripts.terminal_chat import scrub_secrets
     output = scrub_secrets(output)
 
+    _post_context = ""
+    try:
+        from tools.hooks import default_registry
+        _post = default_registry().fire(
+            "PostToolUse", "Bash",
+            {"hook_event_name": "PostToolUse", "tool_name": "Bash",
+             "tool_input": {"command": command}, "tool_response": output,
+             "exit_code": res.exit_code, "cwd": str(settings.PROJECT_ROOT)},
+            cwd=str(settings.PROJECT_ROOT),
+        )
+        if _post.context_blob:
+            _post_context = _post.context_blob
+    except Exception as _hook_err:  # noqa: BLE001 -- a hook fault must never break the tool
+        logging.debug("PostToolUse hook fire failed (%s)", type(_hook_err).__name__)
+
     if not output.strip():
         output = f"Command completed with exit code {res.exit_code}."
     rendered = f"```\n{output}\n```"
     if _hook_context:
         rendered = f"ℹ️ PreToolUse hook: {_hook_context}\n\n{rendered}"
+    if _post_context:
+        rendered = f"{rendered}\n\nℹ️ PostToolUse hook: {_post_context}"
     return rendered
 

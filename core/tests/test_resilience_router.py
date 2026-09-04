@@ -11,6 +11,11 @@ from tools.strategy import decomposition, reasoning, senior_reviewer
 def client(tmp_path, monkeypatch):
     from tools.infrastructure.config import settings
     monkeypatch.setattr(settings, "BRAIN_HEALTH_DIR", tmp_path)
+    from tools.infrastructure.routers import resilience
+    monkeypatch.setattr(resilience, "_chroma_ok", lambda: False)
+    monkeypatch.setattr(resilience, "_honcho_ok", lambda: False)
+    from tools.utils import llm_router
+    llm_router._LLM_GATEWAY_CAP.reset()
     for mod in (decomposition, reasoning):
         mod._CAP.reset()
     senior_reviewer._CAP.reset()
@@ -24,6 +29,7 @@ def client(tmp_path, monkeypatch):
             mod._CAP.reset()
         senior_reviewer._CAP.reset()
         senior_reviewer._AUDIT_CAP.reset()
+        llm_router._LLM_GATEWAY_CAP.reset()
 
 
 def test_endpoint_shape(client):
@@ -40,9 +46,11 @@ def test_every_wired_capability_is_reported(client):
     assert set(caps) == {
         "Queen decomposition", "Supervisor senior reviewer",
         "Two-pass cloud audit", "Reasoning (misc callers)", "Memory read",
+        "LLM gateway",
     }
     assert [p["name"] for p in caps["Queen decomposition"]["providers"]] == ["gemini", "deepseek", "local"]
     assert [p["name"] for p in caps["Supervisor senior reviewer"]["providers"]] == ["lmstudio", "gateway"]
+    assert [p["name"] for p in caps["LLM gateway"]["providers"]] == ["primary", "fallback", "gemini"]
     assert [p["name"] for p in caps["Memory read"]["providers"]] == ["chroma", "honcho"]
     for name, c in caps.items():
         if name == "Memory read":
@@ -80,6 +88,6 @@ def test_a_recorded_failover_shows_up_in_events(client, tmp_path):
     assert body["events"][0]["provider"] == "gateway"
 
 
-def test_phases_cover_dsh_01_through_06(client):
+def test_phases_cover_dsh_01_through_07(client):
     ids = [p["id"] for p in client.get("/api/v1/resilience").json()["phases"]]
-    assert ids == ["DSH-01", "DSH-02", "DSH-03", "DSH-04", "DSH-05", "DSH-06"]
+    assert ids == ["DSH-01", "DSH-02", "DSH-03", "DSH-04", "DSH-05", "DSH-06", "DSH-07"]
