@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Kenbun DSH-09 Automated Session Replay & Regression Eval Gate
+# ------------------------------------------------------------------------------
+# Keyless deterministic session playback and regression evaluator.
+# Usage:
+#   bin/kenbun-replay-evals --file <path-to-json-or-jsonl>
+#   bin/kenbun-replay-evals --session-id <id>
+#   bin/kenbun-replay-evals --suite <fixtures-dir>
+#   bin/kenbun-replay-evals --json
+# ==============================================================================
+
+set -eo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$REPO_ROOT"
+
+if [ -f "$REPO_ROOT/.venv/bin/python3" ]; then
+    PYTHON_EXEC="$REPO_ROOT/.venv/bin/python3"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_EXEC="python3"
+else
+    echo "❌ Error: Python 3 not found." >&2
+    exit 1
+fi
+
+export PYTHONPATH="$REPO_ROOT/core:$PYTHONPATH"
+
+"$PYTHON_EXEC" -c "
+import sys
+import argparse
+import json
+from pathlib import Path
+from tools.strategy.session_replay import SessionReplayEngine
+
+parser = argparse.ArgumentParser(description='Kenbun Session Replay & Regression Eval Gate')
+parser.add_argument('--file', type=str, help='Path to session JSON/JSONL file')
+parser.add_argument('--session-id', type=str, help='Session ID from sessions_db')
+parser.add_argument('--suite', type=str, help='Directory containing session fixtures')
+parser.add_argument('--strict', action='store_true', default=True, help='Strict gating (default: True)')
+parser.add_argument('--json', action='store_true', help='Output raw JSON report')
+
+args, unknown = parser.parse_known_args()
+engine = SessionReplayEngine(strict=args.strict)
+
+if args.suite:
+    suite_dir = Path(args.suite)
+    files = list(suite_dir.glob('*.json')) + list(suite_dir.glob('*.jsonl'))
+    if not files:
+        print(f'❌ No test session fixtures found in {args.suite}')
+        sys.exit(1)
+    res = engine.evaluate_suite(files)
+    if args.json:
+        print(json.dumps(res, indent=2))
+    else:
+        status = '✅ PASSED' if res['overall_passed'] else '❌ FAILED'
+        print(f'{status} Suite Evaluation ({res[\"passed_sessions\"]}/{res[\"total_sessions\"]} passed, fidelity: {res[\"mean_fidelity\"]*100:.1f}%)')
+    sys.exit(0 if res['overall_passed'] else 1)
+
+source = args.file or args.session_id
+if not source:
+    # Run built-in self-test verification
+    from tools.memory.session_log import SessionEvent
+    sample_events = [
+        SessionEvent(seq=1, kind='system_prompt', role='system', content='You are Kenbun.'),
+        SessionEvent(seq=2, kind='user_message', role='user', content='Check system health.'),
+        SessionEvent(seq=3, kind='assistant_message', role='assistant', content='Running diagnostic checks.'),
+        SessionEvent(seq=4, kind='tool_result', role='tool', content='OK', tool_name='get_db_status'),
+    ]
+    report = engine.evaluate_session(sample_events, session_id='smoke_test')
+else:
+    report = engine.evaluate_session(source, session_id=args.session_id)
+
+if args.json:
+    print(json.dumps(report.to_dict(), indent=2))
+else:
+    print(report.to_markdown())
+
+sys.exit(0 if report.passed else 1)
+" "$@"

@@ -1,8 +1,69 @@
 import logging
+import math
 import random
 import time
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Set, Any
+from typing import Dict, List, Optional, Tuple, Set, Any, NamedTuple
+
+
+# ── PURE FUNCTIONAL DATA LAYER (IEEE-754 DOMAIN PROTECTED) ─────────────────
+
+class BayesianDistribution(NamedTuple):
+    """Immutable functional record representing a Beta(alpha, beta) distribution."""
+    alpha: float
+    beta: float
+    success_count: int = 0
+    failure_count: int = 0
+
+
+def pure_update_posterior(
+    current: BayesianDistribution,
+    success: bool,
+    weight: float = 1.0,
+) -> BayesianDistribution:
+    """
+    Pure functional transformation: returns a new immutable BayesianDistribution
+    with strict IEEE-754 domain validation. Zero side-effects.
+    """
+    if not math.isfinite(weight) or weight < 0:
+        raise ValueError("Weight must be a finite, non-negative number.")
+    if not math.isfinite(current.alpha) or current.alpha < 0 or not math.isfinite(current.beta) or current.beta < 0:
+        raise ValueError("Alpha and beta parameters must be finite non-negative numbers.")
+
+    alpha_inc = weight if success else 0.0
+    beta_inc = 0.0 if success else weight
+    s_inc = 1 if success else 0
+    f_inc = 0 if success else 1
+
+    return BayesianDistribution(
+        alpha=max(0.01, current.alpha + alpha_inc),
+        beta=max(0.01, current.beta + beta_inc),
+        success_count=max(0, current.success_count + s_inc),
+        failure_count=max(0, current.failure_count + f_inc),
+    )
+
+
+def pure_expected_confidence(dist: BayesianDistribution) -> float:
+    """
+    Pure functional calculation: E[p] = alpha / (alpha + beta) with IEEE-754 zero-division protection.
+    """
+    if not math.isfinite(dist.alpha) or dist.alpha < 0 or not math.isfinite(dist.beta) or dist.beta < 0:
+        return 0.5
+    total = dist.alpha + dist.beta
+    if not math.isfinite(total) or total <= 0:
+        return 0.5
+    return max(0.0, min(1.0, dist.alpha / total))
+
+
+def pure_thompson_sample(dist: BayesianDistribution, random_generator: Optional[Any] = None) -> float:
+    """
+    Pure functional Thompson sampling draw: Beta(alpha, beta).
+    """
+    rng = random_generator if random_generator is not None else random
+    a = max(0.01, dist.alpha)
+    b = max(0.01, dist.beta)
+    return rng.betavariate(a, b)
+
 try:
     from tools.memory.postgres_client import get_connection
 except Exception:
@@ -214,10 +275,13 @@ def tune_swarm(tool_id: str, success: bool, category: str = "global"):
         logger.warning(f"tune_swarm: rejecting unknown/hallucinated tool_id '{tool_id}'; skipping write.")
         return f"REJECTED: '{tool_id}' is not a registered tool"
 
-    alpha_inc = 1.0 if success else 0.0
-    beta_inc = 0.0 if success else 1.0
-    s_inc = 1 if success else 0
-    f_inc = 0 if success else 1
+    # Mathematical derivation performed via pure functional transformation
+    unit_prior = BayesianDistribution(alpha=1.0, beta=1.0, success_count=0, failure_count=0)
+    updated = pure_update_posterior(unit_prior, success=success, weight=1.0)
+    alpha_inc = updated.alpha - unit_prior.alpha
+    beta_inc = updated.beta - unit_prior.beta
+    s_inc = updated.success_count - unit_prior.success_count
+    f_inc = updated.failure_count - unit_prior.failure_count
 
     try:
         with get_connection() as conn:
@@ -322,11 +386,10 @@ def tune_swarm(tool_id: str, success: bool, category: str = "global"):
     return f"✅ Synaptic Weight Tuned: {tool_id} ({category}) -> {'SUCCESS' if success else 'FAILURE'}"
 
 def get_confidence(tool_id: str, category: str = "global") -> float:
-    """Calculates the expected probability of success E[p] = Alpha / (Alpha + Beta)."""
+    """Calculates the expected probability of success E[p] = Alpha / (Alpha + Beta) via pure FP."""
     alpha, beta = get_posterior_params(tool_id, category)
-    if alpha + beta <= 0:
-        return 0.5
-    return alpha / (alpha + beta)
+    dist = BayesianDistribution(alpha=alpha, beta=beta)
+    return pure_expected_confidence(dist)
 
 
 def get_posterior_params(tool_id: str, category: str = "global") -> Tuple[float, float]:
@@ -458,6 +521,18 @@ def _resolve_posteriors(tool_ids: List[str], category: str) -> Dict[str, Tuple[f
     return resolved
 
 
+def calculate_thompson_sample(
+    alpha: float,
+    beta: float,
+    temperature: float = 1.0,
+    random_generator: Optional[Any] = None,
+) -> float:
+    """Calculates a Thompson sampling draw using the pure functional sampler."""
+    t = max(temperature, 0.01)
+    dist = BayesianDistribution(alpha=max(alpha / t, 0.01), beta=max(beta / t, 0.01))
+    return pure_thompson_sample(dist, random_generator=random_generator)
+
+
 def rank_tools_thompson(
     category: str,
     candidate_tools: list,
@@ -480,16 +555,17 @@ def rank_tools_thompson(
     if not ids:
         raise ValueError("candidate_tools list cannot be empty")
 
-    params = _resolve_posteriors(ids, category)
+    params = posteriors if posteriors is not None else _resolve_posteriors(ids, category)
     t = max(temperature, 0.01)
 
     scored: List[Tuple[str, float]] = []
     for tid in ids:
         alpha, beta = params.get(tid, (1.0, 1.0))
+        dist = BayesianDistribution(alpha=alpha, beta=beta)
         if exploration_mode:
-            score = random.betavariate(max(alpha / t, 0.01), max(beta / t, 0.01))
+            score = calculate_thompson_sample(alpha, beta, temperature=t)
         else:
-            score = alpha / (alpha + beta) if (alpha + beta) > 0 else 0.5
+            score = pure_expected_confidence(dist)
         scored.append((tid, score))
 
     scored.sort(key=lambda pair: pair[1], reverse=True)
@@ -507,7 +583,7 @@ def sample_tool_thompson(category: str, candidate_tools: list, temperature: floa
     if len(candidate_tools) == 1:
         # No arms to trade off against: report the mean, not a noisy draw.
         alpha, beta = get_posterior_params(candidate_tools[0], category)
-        conf = alpha / (alpha + beta) if (alpha + beta) > 0 else 0.5
+        conf = pure_expected_confidence(BayesianDistribution(alpha=alpha, beta=beta))
         return candidate_tools[0], conf
 
     return rank_tools_thompson(category, candidate_tools, exploration_mode=True, temperature=temperature)[0]

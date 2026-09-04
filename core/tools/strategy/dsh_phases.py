@@ -100,12 +100,37 @@ DSH_PHASES: List[Dict[str, str]] = [
         "id": "DSH-08",
         "title": "Spatiotemporal Reactive Coeffects & Context Engine",
         "status": "done",
-        "commit": "HEAD",
+        "commit": "e50330f",
         "blurb": (
             "A pure OOP spatiotemporal context engine (ContextEngine). Capabilities declare "
             "what they require via reactive coeffects (inject); when a provider appears, updates, "
             "or fails, the context engine notifies and refreshes dependent fibers automatically. "
             "Revertible effects clean up LIFO on teardown. Zero hardcoding, cycle-safe."
+        ),
+    },
+    {
+        "id": "DSH-09",
+        "title": "Automated Session Replay & Regression Eval Gate",
+        "status": "done",
+        "commit": "HEAD",
+        "blurb": (
+            "Keyless deterministic session playback and regression gating harness "
+            "mirroring DeepSeek-Harness test protocol. Replays recorded conversational "
+            "turns, validates the 'model-visible <=> logged' invariant at each step, "
+            "detects unlogged context injections, and scores replay fidelity with "
+            "zero paid API key dependency."
+        ),
+    },
+    {
+        "id": "DSH-10",
+        "title": "Unified Memory Capability Seam (Definition/Provider/Consumer)",
+        "status": "done",
+        "commit": "HEAD",
+        "blurb": (
+            "A unified memory capability seam abstracting SQLite, ChromaDB, and Honcho. "
+            "Query results and memory embeddings use immutable records (MemoryRecord, "
+            "MemoryEmbedding) with health-aware automatic failover to local SQLite "
+            "fallback when remote stores are unreachable."
         ),
     },
 ]
