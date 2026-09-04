@@ -52,8 +52,10 @@ const nextConfig: NextConfig = {
   // itself (the host serving this app) — omitting it breaks HMR and Turbopack
   // client hydration for every visitor. 100.100.199.127 is p330.
   allowedDevOrigins: [
+    "100.104.211.61",
     "100.92.127.1",
     "100.100.199.127",
+    "lg2025.tailbe4852.ts.net",
     "kenbun.lan"
   ],
   async headers() {
