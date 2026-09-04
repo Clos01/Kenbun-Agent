@@ -67,14 +67,17 @@ def _chroma_ok() -> bool:
     client = get_chroma_client()
     if client is None:
         return False
-    client.heartbeat()
-    return True
+    try:
+        client.heartbeat()
+        return True
+    except Exception:
+        return False
 
 
 def _honcho_ok() -> bool:
-    from tools.memory.honcho_connect import get_honcho_client
+    from tools.memory.honcho_connect import is_honcho_ready
 
-    return get_honcho_client() is not None
+    return is_honcho_ready()
 
 
 def _snapshot_capability(label: str, blurb: str, module: str, getter: str) -> Dict[str, Any]:
