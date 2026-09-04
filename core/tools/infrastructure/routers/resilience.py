@@ -80,6 +80,39 @@ def _honcho_ok() -> bool:
     return is_honcho_ready()
 
 
+def _snapshot_database() -> Dict[str, Any]:
+    """Snapshots the Bayesian intelligence database state: remote PostgreSQL -> local SQLite fallback."""
+    from tools.utils.bayesian import get_db_status
+
+    status = get_db_status()
+    providers = [
+        {
+            "name": "postgres",
+            "healthy": status["primary_reachable"],
+            "primary": True,
+            "fail_count": 1 if status["fallback_active"] else 0,
+            "cooldown_remaining_s": 0.0,
+        },
+        {
+            "name": "sqlite_local",
+            "healthy": True,
+            "primary": False,
+            "fail_count": 0,
+            "cooldown_remaining_s": 0.0,
+        },
+    ]
+    healthy = [p for p in providers if p["healthy"]]
+    return {
+        "name": "Database & Bayesian intelligence",
+        "blurb": "weights & synaptic tuning -- remote PostgreSQL, then local SQLite fallback",
+        "providers": providers,
+        "error": None if status["primary_reachable"] else "Remote PostgreSQL unreachable; using SQLite fallback",
+        "healthy_count": len(healthy),
+        "total_count": len(providers),
+        "spof": len(healthy) <= 1 and len(providers) > 1,
+    }
+
+
 def _snapshot_capability(label: str, blurb: str, module: str, getter: str) -> Dict[str, Any]:
     import importlib
 
@@ -120,6 +153,11 @@ async def get_resilience() -> Dict[str, Any]:
         capabilities.append(await asyncio.wait_for(asyncio.to_thread(_snapshot_memory), timeout=3.0))
     except Exception as e:  # noqa: BLE001 -- incl. TimeoutError; the panel drops the row
         logger.warning("resilience: memory snapshot skipped (%s)", type(e).__name__)
+
+    try:
+        capabilities.append(await asyncio.wait_for(asyncio.to_thread(_snapshot_database), timeout=3.5))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("resilience: database snapshot skipped (%s)", type(e).__name__)
 
     try:
         from tools.strategy.resolver_events import recent

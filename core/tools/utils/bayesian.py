@@ -49,10 +49,107 @@ def is_valid_tool_id(tool_id) -> bool:
         return True
     return tool_id in known
 
+
+_last_db_fallback_event: Optional[Dict[str, Any]] = None
+
+
+def record_db_fallback(operation: str, reason: str, details: Optional[Dict[str, Any]] = None) -> None:
+    """Records a database fallback event and logs a prominent operator alert."""
+    global _last_db_fallback_event
+    _last_db_fallback_event = {
+        "timestamp": time.time(),
+        "operation": operation,
+        "reason": str(reason),
+        "details": details or {},
+    }
+    logger.warning(
+        f"🚨 [DATABASE FALLBACK ALERT]: Remote PostgreSQL unreachable during '{operation}' ({reason}). "
+        f"Operating on local SQLite fallback."
+    )
+
+
+def get_db_status() -> Dict[str, Any]:
+    """Returns the live database health status, indicating if system is in fallback mode."""
+    reachable = False
+    error_msg = None
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1;")
+                reachable = True
+    except Exception as exc:
+        error_msg = str(exc)
+
+    fallback_active = not reachable
+    alert_message = (
+        f"⚠️ Remote PostgreSQL unreachable ({error_msg}); operating on local SQLite fallback."
+        if fallback_active
+        else "✅ Connected to primary remote PostgreSQL."
+    )
+    return {
+        "primary_reachable": reachable,
+        "active_source": "postgres (primary)" if reachable else "sqlite (fallback)",
+        "fallback_active": fallback_active,
+        "last_fallback": _last_db_fallback_event,
+        "alert_message": alert_message,
+    }
+
+
+def sync_local_to_postgres() -> Dict[str, Any]:
+    """Synchronizes all learned Bayesian tool distributions from local SQLite to remote PostgreSQL.
+
+    Reads every record in `intelligence` and upserts it into PostgreSQL `bayesian_weights`
+    merging alphas, betas, and counts.
+    """
+    import sqlite3
+    from tools.infrastructure.config import settings
+
+    local_path = settings.INTELLIGENCE_DB_PATH
+    try:
+        conn_local = sqlite3.connect(local_path)
+        cur_local = conn_local.cursor()
+        cur_local.execute(
+            "SELECT tool_id, category, alpha, beta, success_count, failure_count FROM intelligence"
+        )
+        rows = cur_local.fetchall()
+        conn_local.close()
+    except Exception as e:
+        return {"status": "error", "message": f"Failed to read local SQLite: {e}", "synced_count": 0}
+
+    if not rows:
+        return {"status": "success", "message": "No local distributions to sync.", "synced_count": 0}
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for row in rows:
+                    tool_id, category, alpha, beta, s_count, f_count = row
+                    cur.execute("""
+                        INSERT INTO bayesian_weights (tool_id, category, alpha, beta, success_count, failure_count, last_updated)
+                        VALUES (%s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+                        ON CONFLICT (tool_id, category) DO UPDATE SET
+                            alpha = GREATEST(bayesian_weights.alpha, EXCLUDED.alpha),
+                            beta = GREATEST(bayesian_weights.beta, EXCLUDED.beta),
+                            success_count = GREATEST(bayesian_weights.success_count, EXCLUDED.success_count),
+                            failure_count = GREATEST(bayesian_weights.failure_count, EXCLUDED.failure_count),
+                            last_updated = CURRENT_TIMESTAMP
+                    """, (tool_id, category, float(alpha), float(beta), int(s_count), int(f_count)))
+                conn.commit()
+        return {
+            "status": "success",
+            "message": f"Successfully synchronized {len(rows)} distributions to remote PostgreSQL.",
+            "synced_count": len(rows),
+        }
+    except Exception as e:
+        logger.error(f"Failed to sync local distributions to PostgreSQL: {e}")
+        return {"status": "error", "message": f"PostgreSQL sync failed: {e}", "synced_count": 0}
+
+
 def load_weights():
     """
     Maintains legacy structure for compatibility if anything calls this expecting a dict.
     Fetches all weights from postgres and formats them into the old dict structure.
+    Falls back to local SQLite if remote PostgreSQL is unreachable.
     """
     weights = {"categories": {}, "global": {}, "last_updated": time.time()}
     try:
@@ -72,6 +169,24 @@ def load_weights():
                         weights["categories"][cat][tool] = {"alpha": alpha, "beta": beta}
     except Exception as e:
         logger.error(f"❌ Failed to load bayesian weights from DB: {e}")
+        record_db_fallback("load_weights", str(e))
+        try:
+            import sqlite3
+            from tools.infrastructure.config import settings
+            conn = sqlite3.connect(settings.INTELLIGENCE_DB_PATH)
+            cur = conn.cursor()
+            cur.execute("SELECT tool_id, category, alpha, beta FROM intelligence")
+            for row in cur:
+                tool, cat, alpha, beta = row[0], row[1], float(row[2]), float(row[3])
+                if cat == "global":
+                    weights["global"][tool] = {"alpha": alpha, "beta": beta}
+                else:
+                    if cat not in weights["categories"]:
+                        weights["categories"][cat] = {}
+                    weights["categories"][cat][tool] = {"alpha": alpha, "beta": beta}
+            conn.close()
+        except Exception:
+            pass
     return weights
 
 def tune_swarm(tool_id: str, success: bool, category: str = "global"):
@@ -133,6 +248,7 @@ def tune_swarm(tool_id: str, success: bool, category: str = "global"):
                 conn.commit()
     except Exception as e:
         logger.error(f"❌ DB tuning error: {e}. Falling back to SQLite...")
+        record_db_fallback("tune_swarm", str(e), {"tool_id": tool_id, "category": category, "success": success})
         try:
             import sqlite3
             from tools.infrastructure.config import settings
@@ -215,6 +331,7 @@ def get_posterior_params(tool_id: str, category: str = "global") -> Tuple[float,
                     return max(alpha, 0.01), max(beta, 0.01)
     except Exception as e:
         logger.error(f"❌ Error getting posterior params: {e}")
+        record_db_fallback("get_posterior_params", str(e), {"tool_id": tool_id, "category": category})
         try:
             import sqlite3
             from tools.infrastructure.config import settings
@@ -278,6 +395,7 @@ def get_posterior_params_batch(tool_ids: List[str], category: str = "global") ->
         return resolved
     except Exception as e:
         logger.error(f"❌ Batch posterior fetch failed ({e}); trying local intelligence DB.")
+        record_db_fallback("get_posterior_params_batch", str(e), {"tool_ids": ids, "category": category})
 
     # Local SQLite mirror, also batched. Doing this per-tool instead would mean
     # one 3s connect timeout PER CANDIDATE every time Postgres is unreachable,

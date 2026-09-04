@@ -14,6 +14,7 @@ exclude = [".venv*", "external*", "artifacts*", "design_systems*", "ingestion*",
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+norecursedirs = ["scratch", "tests/scratch", "external", ".venv", "node_modules"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

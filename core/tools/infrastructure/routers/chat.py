@@ -90,6 +90,32 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
     # 2. Append user message to history
     user_msg = chat_history_manager.add_message_to_session(session_id, "user", req.message)
 
+    # 2b. Fire UserPromptSubmit lifecycle hook
+    _hook_prompt_context = ""
+    try:
+        from tools.hooks import default_registry
+        from tools.infrastructure.config import settings
+        _reg = default_registry()
+        _hook_res = _reg.fire(
+            "UserPromptSubmit", "",
+            {
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": req.message,
+                "session_id": session_id,
+                "cwd": str(settings.PROJECT_ROOT),
+            },
+            cwd=str(settings.PROJECT_ROOT),
+        )
+        if _hook_res.blocked:
+            return JSONResponse(
+                status_code=400,
+                content={"error": f"Prompt blocked by security hook: {_hook_res.reason or 'forbidden'}"}
+            )
+        if _hook_res.context_blob:
+            _hook_prompt_context = _hook_res.context_blob
+    except Exception as _hook_err:  # noqa: BLE001
+        logging.debug("UserPromptSubmit hook skipped (%s)", type(_hook_err).__name__)
+
     # 3. Direct /run Command Hook (Sovereign Command Execution on Hardware)
     msg_strip = req.message.strip()
     if msg_strip.startswith("/run ") or msg_strip.startswith("run: "):
@@ -121,6 +147,8 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
             history_context += f"\n- {msg['sender'].upper()}: {msg['content']}"
 
         full_user_message = f"CONVERSATIONAL HISTORY:{history_context}\n\nLATEST USER DIRECTIVE: {req.message}"
+        if _hook_prompt_context:
+            full_user_message = f"HOOK CONTEXT:\n{_hook_prompt_context}\n\n{full_user_message}"
 
         # DSH-03 s2: model-visible <=> logged. The raw user directive is already
         # logged (step 2); the composite message is a rendering of logged events;
@@ -199,6 +227,24 @@ async def post_message_to_session(session_id: str, req: ChatSessionMessageReques
         session_id, "kenbun", response_text, metrics=metrics, tool_calls=tool_calls
     )
 
+    # Fire Stop lifecycle hook upon turn completion
+    try:
+        from tools.hooks import default_registry
+        from tools.infrastructure.config import settings
+        default_registry().fire(
+            "Stop", "",
+            {
+                "hook_event_name": "Stop",
+                "session_id": session_id,
+                "status": "completed",
+                "output": response_text[:2000] if 'response_text' in locals() else "",
+                "cwd": str(settings.PROJECT_ROOT),
+            },
+            cwd=str(settings.PROJECT_ROOT),
+        )
+    except Exception as _stop_err:  # noqa: BLE001
+        logging.debug("Stop hook skipped (%s)", type(_stop_err).__name__)
+
     # Reload session to return latest state
     updated_session = chat_history_manager.get_session(session_id)
 
@@ -221,6 +267,30 @@ async def chat_with_kenbun(req: ChatRequest):
     """
     try:
         from tools.utils.llm_router import call_llm_gateway
+        from tools.hooks import default_registry
+        from tools.infrastructure.config import settings
+
+        # Pre-execution: Fire UserPromptSubmit lifecycle hook
+        _stateless_hook_context = ""
+        try:
+            _stateless_hook = default_registry().fire(
+                "UserPromptSubmit", "",
+                {
+                    "hook_event_name": "UserPromptSubmit",
+                    "prompt": req.message,
+                    "cwd": str(settings.PROJECT_ROOT),
+                },
+                cwd=str(settings.PROJECT_ROOT),
+            )
+            if _stateless_hook.blocked:
+                return {
+                    "response": f"Prompt blocked by security hook: {_stateless_hook.reason or 'forbidden'}",
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                }
+            if _stateless_hook.context_blob:
+                _stateless_hook_context = _stateless_hook.context_blob
+        except Exception as _sh_err:
+            logging.debug("Stateless UserPromptSubmit hook skipped (%s)", type(_sh_err).__name__)
 
         msg_strip = req.message.strip()
 
@@ -231,7 +301,6 @@ async def chat_with_kenbun(req: ChatRequest):
         else:
             # 2. Functional Chat Pass-Through to the LLM
             from pathlib import Path
-            from tools.infrastructure.config import settings
 
             scripts_dir = Path("/app/scripts")
             if not scripts_dir.exists():
@@ -243,10 +312,14 @@ async def chat_with_kenbun(req: ChatRequest):
             from scripts.terminal_chat import build_system_prompt
             system_prompt = build_system_prompt("cloud", "Dashboard-Primary-LLM")
 
+            user_prompt = req.message
+            if _stateless_hook_context:
+                user_prompt = f"HOOK CONTEXT:\n{_stateless_hook_context}\n\n{user_prompt}"
+
             response_text = await run_in_threadpool(
                 call_llm_gateway,
                 system_prompt=system_prompt,
-                user_message=req.message,
+                user_message=user_prompt,
                 temperature=0.3
             )
 
@@ -268,6 +341,21 @@ async def chat_with_kenbun(req: ChatRequest):
                     temperature=0.3
                 )
                 response_text = response_text + "\n\n" + final_text
+
+        # Fire Stop lifecycle hook
+        try:
+            default_registry().fire(
+                "Stop", "",
+                {
+                    "hook_event_name": "Stop",
+                    "status": "completed",
+                    "output": response_text[:2000] if 'response_text' in locals() else "",
+                    "cwd": str(settings.PROJECT_ROOT),
+                },
+                cwd=str(settings.PROJECT_ROOT),
+            )
+        except Exception as _stop_err:
+            logging.debug("Stateless Stop hook skipped (%s)", type(_stop_err).__name__)
 
         return {
             "response": response_text,
