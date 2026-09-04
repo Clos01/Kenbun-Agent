@@ -1,0 +1,85 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-09-04",
+  "cluster_name": "Kenbun Sovereign Multi-Node Cluster",
+  "nodes": {
+    "lg2025": {
+      "display_name": "LG 2025 (Legion PC)",
+      "hardware_type": "Lenovo Legion Gaming PC (Windows 11 / WSL2)",
+      "roles": [
+        "Primary PostgreSQL Database (Port 5432)",
+        "Production Docker Stack & Gitea Remote (Port 2222)",
+        "LM Studio Local Inference (RTX 5070, Port 2065)",
+        "Reverse Proxy Nginx (*.lan SSL wildcard, Port 443/80)",
+        "ChromaDB Remote Vector Store (Port 8000)"
+      ],
+      "ips": {
+        "tailscale_host": "100.104.211.61",
+        "tailscale_sidecar": "100.92.127.1",
+        "tailscale_domain": "lg2025.tailbe4852.ts.net"
+      },
+      "services": {
+        "postgres": { "port": 5432, "db_name": "kenbun_intelligence" },
+        "lm_studio": { "port": 2065 },
+        "gitea": { "port": 2222 },
+        "chromadb": { "port": 8000 },
+        "nginx_ssl": { "port": 443 }
+      }
+    },
+    "p330": {
+      "display_name": "P330 (ThinkStation Tiny)",
+      "hardware_type": "Lenovo ThinkStation P330 SFF Server (Proxmox / Ubuntu)",
+      "roles": [
+        "Autonomous Automation Pipelines (n8n, Port 5678)",
+        "Kanban Task Dispatcher (Planka, Port 1337)",
+        "Local GPU Embeddings & Ollama Worker (RTX 4090 / CPU)",
+        "GUI & Vision Agent Execution Node (Display :0)"
+      ],
+      "ips": {
+        "tailscale": "100.100.199.127",
+        "local_hostname": "kenbunp330.lan"
+      },
+      "services": {
+        "n8n": { "port": 5678 },
+        "planka": { "port": 1337 },
+        "ollama": { "port": 11434 }
+      }
+    },
+    "mac_workstation": {
+      "display_name": "Local Mac (Workstation)",
+      "hardware_type": "Apple Silicon Mac (Development Workstation)",
+      "roles": [
+        "Active IDE & FastMCP Server",
+        "Next.js Dashboard & Observatory UI (Port 3000)",
+        "Local SQLite Intelligence Fallback (brain_health/)",
+        "Sovereign Terminal & Agent Orchestrator"
+      ],
+      "ips": {
+        "loopback": "127.0.0.1",
+        "localhost": "localhost"
+      },
+      "services": {
+        "fastmcp": { "port": 8001 },
+        "dashboard": { "port": 3000 },
+        "sqlite_local": { "path": "brain_health/kenbun_intelligence.db" }
+      }
+    },
+    "sentry": {
+      "display_name": "Legion Sentry (Raspberry Pi)",
+      "hardware_type": "Raspberry Pi Single-Board Computer",
+      "roles": [
+        "Pi-hole Local DNS Sinkhole",
+        "Local .lan Domain Wildcard Resolver",
+        "Network Edge Traffic Inspector"
+      ],
+      "ips": {
+        "local_lan": "192.168.1.183",
+        "tailscale": "100.102.104.66"
+      },
+      "services": {
+        "pihole_web": { "port": 80 },
+        "dns": { "port": 53 }
+      }
+    }
+  }
+}

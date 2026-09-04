@@ -81,14 +81,30 @@ def get_db_status() -> Dict[str, Any]:
         error_msg = str(exc)
 
     fallback_active = not reachable
+
+    # Dynamically resolve the physical hardware node without hardcoding
+    from tools.infrastructure.config import settings
+    node_label = f"Remote Host ({settings.POSTGRES_HOST})"
+    try:
+        from pathlib import Path
+        import sys
+        inv_path = Path(settings.PROJECT_ROOT) / ".agents/skills/cluster-hardware-topology"
+        if str(inv_path) not in sys.path:
+            sys.path.insert(0, str(inv_path))
+        from resolver import format_node_label
+        node_label = format_node_label(settings.POSTGRES_HOST)
+    except Exception:
+        pass
+
     alert_message = (
-        f"⚠️ Remote PostgreSQL unreachable ({error_msg}); operating on local SQLite fallback."
+        f"⚠️ Remote PostgreSQL on {node_label} unreachable ({error_msg}); operating on Local Mac SQLite fallback."
         if fallback_active
-        else "✅ Connected to primary remote PostgreSQL."
+        else f"✅ Connected to primary remote PostgreSQL on {node_label}."
     )
     return {
         "primary_reachable": reachable,
-        "active_source": "postgres (primary)" if reachable else "sqlite (fallback)",
+        "remote_node": node_label,
+        "active_source": f"postgres ({node_label})" if reachable else "sqlite (Local Mac fallback)",
         "fallback_active": fallback_active,
         "last_fallback": _last_db_fallback_event,
         "alert_message": alert_message,

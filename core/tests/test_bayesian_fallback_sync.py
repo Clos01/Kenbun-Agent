@@ -19,8 +19,9 @@ def test_get_db_status_reports_fallback_when_postgres_fails():
         status = get_db_status()
         assert status["primary_reachable"] is False
         assert status["fallback_active"] is True
-        assert status["active_source"] == "sqlite (fallback)"
+        assert "sqlite" in status["active_source"]
         assert "Connection refused" in status["alert_message"]
+        assert "remote_node" in status
 
 
 def test_get_db_status_reports_primary_when_postgres_succeeds():
@@ -34,8 +35,9 @@ def test_get_db_status_reports_primary_when_postgres_succeeds():
         status = get_db_status()
         assert status["primary_reachable"] is True
         assert status["fallback_active"] is False
-        assert status["active_source"] == "postgres (primary)"
+        assert "postgres" in status["active_source"]
         assert "Connected to primary" in status["alert_message"]
+        assert "remote_node" in status
 
 
 def test_record_db_fallback_populates_event_and_logs(caplog):
