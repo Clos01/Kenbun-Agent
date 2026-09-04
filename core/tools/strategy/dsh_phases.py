@@ -88,12 +88,24 @@ DSH_PHASES: List[Dict[str, str]] = [
         "id": "DSH-07",
         "title": "LLM Gateway health-aware failover",
         "status": "done",
-        "commit": "HEAD",
+        "commit": "578632d",
         "blurb": (
             "The general LLM gateway (call_llm_gateway) now routes through a "
             "CapabilityResolver with auto-cooldown demotion and resilience telemetry. "
             "If the primary endpoint is down or hits quota, the swarm falls back "
             "seamlessly without repeated timeout stalls on subsequent turns."
+        ),
+    },
+    {
+        "id": "DSH-08",
+        "title": "Spatiotemporal Reactive Coeffects & Context Engine",
+        "status": "done",
+        "commit": "HEAD",
+        "blurb": (
+            "A pure OOP spatiotemporal context engine (ContextEngine). Capabilities declare "
+            "what they require via reactive coeffects (inject); when a provider appears, updates, "
+            "or fails, the context engine notifies and refreshes dependent fibers automatically. "
+            "Revertible effects clean up LIFO on teardown. Zero hardcoding, cycle-safe."
         ),
     },
 ]
